@@ -112,7 +112,7 @@
 				params: { path: { user_id: user.id } },
 				body: {
 					display_name: editDisplayName.trim() || null,
-					username: editUsername.trim() || null,
+					username: editUsername.trim() || undefined,
 					email: editEmail.trim() || undefined,
 					bio: editBio.trim() || null,
 					avatar_url: editAvatarUrl.trim() || null,
@@ -197,10 +197,13 @@
 		isEditing = false
 		prefsExpanded = false
 		Promise.all([
-			api.GET('/v1/users/{user_id}', { params: { path: { user_id: userId } } }).then((r) => unwrap(r)),
-			api.GET('/v1/users/{user_id}/counts', { params: { path: { user_id: userId } } })
+			api
+				.GET('/v1/users/{user_id}', { params: { path: { user_id: userId } } })
+				.then((r) => unwrap(r)),
+			api
+				.GET('/v1/users/{user_id}/counts', { params: { path: { user_id: userId } } })
 				.then((r) => r.data ?? {})
-				.catch(() => ({}))
+				.catch(() => ({})),
 		])
 			.then(([u, c]) => {
 				user = u
@@ -253,14 +256,7 @@
 					</div>
 				{:else if user}
 					<div class="flex flex-wrap gap-2">
-						{#each [
-							{ key: 'threads', label: 'threads', icon: MessageSquare, route: '/threads' as ResourceRoute },
-							{ key: 'memories', label: 'memories', icon: Brain, route: '/memories' as ResourceRoute },
-							{ key: 'notes', label: 'notes', icon: FileText, route: '/notes' as ResourceRoute },
-							{ key: 'files', label: 'files', icon: FileIcon, route: '/files' as ResourceRoute },
-							{ key: 'groups', label: 'groups', icon: Users, route: '/groups' as ResourceRoute },
-							{ key: 'reminders', label: 'reminders', icon: ListChecks, route: '/reminders' as ResourceRoute },
-						] as resource (resource.key)}
+						{#each [{ key: 'threads', label: 'threads', icon: MessageSquare, route: '/threads' as ResourceRoute }, { key: 'memories', label: 'memories', icon: Brain, route: '/memories' as ResourceRoute }, { key: 'notes', label: 'notes', icon: FileText, route: '/notes' as ResourceRoute }, { key: 'files', label: 'files', icon: FileIcon, route: '/files' as ResourceRoute }, { key: 'groups', label: 'groups', icon: Users, route: '/groups' as ResourceRoute }, { key: 'reminders', label: 'reminders', icon: ListChecks, route: '/reminders' as ResourceRoute }] as resource (resource.key)}
 							<Button
 								variant="outline"
 								class="rounded-xl"
@@ -269,7 +265,9 @@
 								<resource.icon class="mr-1.5 h-3.5 w-3.5" />
 								{resource.label}
 								{#if counts[resource.key] !== undefined}
-									<span class="ml-1 rounded-md bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">
+									<span
+										class="ml-1 rounded-md bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400"
+									>
 										{counts[resource.key]}
 									</span>
 								{/if}

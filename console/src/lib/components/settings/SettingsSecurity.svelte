@@ -30,6 +30,7 @@
 		oidcOnly?: boolean
 		// read-only (write-locked)
 		secretKeyConfigured?: boolean
+		secretKeyUsesDefault?: boolean
 		jwtAlgorithm?: string
 		enableOauth?: boolean
 		corsOrigins?: string
@@ -52,6 +53,7 @@
 		oidcScopes = $bindable(''),
 		oidcOnly = $bindable(false),
 		secretKeyConfigured = false,
+		secretKeyUsesDefault = false,
 		jwtAlgorithm = '',
 		enableOauth = false,
 		corsOrigins = '',
@@ -77,11 +79,23 @@
 				</div>
 				<Input
 					id="secret_key"
-					value={secretKeyConfigured ? '(configured)' : '(not set)'}
+					value={secretKeyUsesDefault
+						? '(default dev key)'
+						: secretKeyConfigured
+							? '(overridden)'
+							: '(not set)'}
 					disabled
 					class="rounded-xl"
 				/>
-				<p class="text-xs text-zinc-500">set via environment variables only.</p>
+				<p
+					class={secretKeyUsesDefault
+						? 'text-xs text-amber-400'
+						: 'text-xs text-zinc-500'}
+				>
+					{secretKeyUsesDefault
+						? 'production startup will fail until this is overridden.'
+						: 'set via environment variables only.'}
+				</p>
 			</div>
 			<div class="space-y-2">
 				<div class="flex items-center justify-between gap-2">

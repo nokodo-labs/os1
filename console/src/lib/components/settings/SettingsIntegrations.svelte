@@ -14,33 +14,25 @@
 	import { Plus, RefreshCw, Save, Trash } from '@lucide/svelte'
 
 	type SettingsResponse = Schemas['SettingsResponse']
-	type Deployment = { name: string; description: string; origin: string }
-	type DeploymentInput = {
-		name?: unknown
-		description?: unknown
-		label?: unknown
-		origin?: unknown
-	}
-	type IntegrationsSettings = {
-		open_webui?: {
-			enabled?: boolean
-			deployments?: DeploymentInput[]
-		}
-	}
-	type SettingsResponseWithIntegrations = SettingsResponse & {
-		data?: NonNullable<SettingsResponse['data']> & {
-			integrations?: IntegrationsSettings
-		}
-		versions?: SettingsResponse['versions'] & { integrations?: number }
-	}
-	type SettingsUpdateWithIntegrations = Omit<
-		Schemas['SettingsUpdateRequest'],
-		'data' | 'expected_versions'
-	> & {
-		data: {
-			integrations: IntegrationsSettings
-		}
-		expected_versions: { integrations: number }
+	type SettingsUpdateRequest = Schemas['SettingsUpdateRequest']
+	type Deployment = Schemas['OpenWebUIDeploymentPatch']
+
+	const emptySettingsVersions: Schemas['SettingsVersions'] = {
+		ui: 0,
+		ai: 0,
+		branding: 0,
+		media: 0,
+		assets: 0,
+		limits: 0,
+		security: 0,
+		notifications: 0,
+		soft_delete: 0,
+		web_search: 0,
+		code_interpreter: 0,
+		default_permissions: 0,
+		integrations: 0,
+		cache: 0,
+		tasks: 0,
 	}
 
 	let enabled = $state(true)
@@ -70,13 +62,13 @@
 			isFetching = false
 			return
 		}
-		const data = result.data as SettingsResponseWithIntegrations
-		const owui = data.data?.integrations?.open_webui
+		const data: SettingsResponse = result.data
+		const owui = data.data.integrations?.open_webui
 		enabled = owui?.enabled ?? true
-		deployments = (owui?.deployments ?? []).map((deployment: DeploymentInput) => ({
-			name: String(deployment.name ?? deployment.label ?? ''),
+		deployments = (owui?.deployments ?? []).map((deployment) => ({
+			name: deployment.name,
 			description: String(deployment.description ?? ''),
-			origin: String(deployment.origin ?? ''),
+			origin: deployment.origin,
 		}))
 		expectedVersion = Number(data.versions?.integrations ?? 0)
 		originalSnapshot = snapshot()
@@ -121,7 +113,7 @@
 		isSaving = true
 		error = null
 		success = null
-		const body: SettingsUpdateWithIntegrations = {
+		const body: SettingsUpdateRequest = {
 			data: {
 				integrations: {
 					open_webui: {
@@ -134,10 +126,10 @@
 					},
 				},
 			},
-			expected_versions: { integrations: expectedVersion },
+			expected_versions: { ...emptySettingsVersions, integrations: expectedVersion },
 		}
 		const result = await api.PATCH('/v1/settings', {
-			body: body as unknown as Schemas['SettingsUpdateRequest'],
+			body,
 		})
 		if (result.error) {
 			if (result.response.status === 409) {
@@ -149,8 +141,8 @@
 			isSaving = false
 			return
 		}
-		const data = result.data as SettingsResponseWithIntegrations
-		expectedVersion = Number(data.versions?.integrations ?? expectedVersion + 1)
+		const data: SettingsResponse | undefined = result.data
+		expectedVersion = Number(data?.versions.integrations ?? expectedVersion + 1)
 		originalSnapshot = snapshot()
 		success = 'saved'
 		isSaving = false

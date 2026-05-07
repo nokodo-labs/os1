@@ -72,7 +72,7 @@
 				params: { path: { note_id: note.id } },
 				body: {
 					title: editTitle.trim(),
-					content: editContent.trim() || null,
+					content: editContent.trim(),
 					labels: editLabels
 						.split(',')
 						.map((l) => l.trim())

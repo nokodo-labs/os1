@@ -132,7 +132,7 @@
 		const inputText =
 			lastUserMsg?.role === 'user'
 				? lastUserMsg.content
-				: messages.findLast((m) => m.role === 'user')?.content ?? ''
+				: (messages.findLast((m) => m.role === 'user')?.content ?? '')
 
 		// add empty assistant to stream into
 		const assistantMsg: PlaygroundMessage = { role: 'assistant', content: '' }
@@ -203,7 +203,10 @@
 							assistantMsg.content += data.delta.text
 							messages = messages
 							scrollToBottom()
-						} else if (data.type === 'message_created' && data.message?.type === 'assistant') {
+						} else if (
+							data.type === 'message_created' &&
+							data.message?.type === 'assistant'
+						) {
 							// new assistant message started - content arrives via deltas
 						} else if (data.type === 'done') {
 							// run completed
@@ -375,8 +378,7 @@
 							<FlaskConical class="mb-4 h-16 w-16 text-zinc-600" />
 							<p class="text-lg font-medium text-zinc-400">ready to experiment</p>
 							<p class="mt-1 max-w-sm text-sm text-zinc-500">
-								add messages below, then click run to start an ephemeral agent
-								run.
+								add messages below, then click run to start an ephemeral agent run.
 							</p>
 						</div>
 					{:else}
@@ -402,14 +404,12 @@
 										oninput={(e) => {
 											const t = e.currentTarget
 											t.style.height = ''
-											t.style.height =
-												Math.min(t.scrollHeight, 400) + 'px'
+											t.style.height = Math.min(t.scrollHeight, 400) + 'px'
 										}}
 										onfocus={(e) => {
 											const t = e.currentTarget
 											t.style.height = ''
-											t.style.height =
-												Math.min(t.scrollHeight, 400) + 'px'
+											t.style.height = Math.min(t.scrollHeight, 400) + 'px'
 										}}
 									></textarea>
 								</div>
@@ -463,8 +463,7 @@
 										? 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20'
 										: 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'}"
 									onclick={() =>
-										(inputRole =
-											inputRole === 'user' ? 'assistant' : 'user')}
+										(inputRole = inputRole === 'user' ? 'assistant' : 'user')}
 								>
 									{#if inputRole === 'user'}
 										<User class="h-3.5 w-3.5" />

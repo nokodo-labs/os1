@@ -153,7 +153,7 @@
 			const r = await api.PATCH('/v1/groups/{group_id}', {
 				params: { path: { group_id: group.id } },
 				body: {
-					name: editName.trim() || null,
+					name: editName.trim() || undefined,
 					description: editDescription.trim() || null,
 				},
 			})

@@ -148,7 +148,7 @@
 
 	function buildUpdatePayload(): RoleUpdate {
 		return {
-			name: name.trim() ? name.trim() : null,
+			name: name.trim() || undefined,
 			description: description.trim() ? description.trim() : null,
 			default_permissions: normalizePermissions(defaultPermissions),
 		}

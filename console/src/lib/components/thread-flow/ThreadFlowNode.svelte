@@ -41,7 +41,9 @@
 		</span>
 		<span class="truncate text-[10px] text-zinc-500">{id.slice(0, 8)}</span>
 	</div>
-	<div class="mt-1.5 max-h-60 overflow-y-auto whitespace-pre-wrap break-all text-xs text-zinc-200">
+	<div
+		class="mt-1.5 max-h-60 overflow-y-auto text-xs break-all whitespace-pre-wrap text-zinc-200"
+	>
 		{data.label || '(empty)'}
 	</div>
 	<div class="mt-1 text-[10px] text-zinc-500">

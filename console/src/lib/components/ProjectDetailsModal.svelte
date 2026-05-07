@@ -76,7 +76,7 @@
 			const r = await api.PATCH('/v1/projects/{project_id}', {
 				params: { path: { project_id: project.id } },
 				body: {
-					name: editName.trim(),
+					name: editName.trim() || undefined,
 					description: editDescription.trim() || null,
 				},
 			})

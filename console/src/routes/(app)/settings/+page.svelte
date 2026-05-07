@@ -8,6 +8,37 @@
 	type Provider = Schemas['Provider']
 	type SettingsResponse = Schemas['SettingsResponse']
 	type SettingsUpdateRequest = Schemas['SettingsUpdateRequest']
+	type SettingsPatch = SettingsUpdateRequest['data']
+	type AISettingsPatch = NonNullable<SettingsPatch['ai']>
+	type AIMediaSettingsPatch = NonNullable<AISettingsPatch['media']>
+	type ImageGenerationSettingsPatch = NonNullable<AIMediaSettingsPatch['images']>
+	type WebSearchSettingsPatch = NonNullable<SettingsPatch['web_search']>
+	type AgenticWebSearchSettingsPatch = NonNullable<WebSearchSettingsPatch['agentic']>
+	type WebLoaderSettingsPatch = NonNullable<WebSearchSettingsPatch['web_loaders']>
+	type TavilySettingsPatch = NonNullable<WebLoaderSettingsPatch['tavily']>
+	type IntegrationsSettingsPatch = NonNullable<SettingsPatch['integrations']>
+	type SearxngSettingsPatch = NonNullable<IntegrationsSettingsPatch['searxng']>
+	type PerplexitySettingsPatch = NonNullable<IntegrationsSettingsPatch['perplexity']>
+	type CodeInterpreterSettingsPatch = NonNullable<SettingsPatch['code_interpreter']>
+	type E2bSettingsPatch = NonNullable<CodeInterpreterSettingsPatch['e2b']>
+	type AssetsSettingsPatch = NonNullable<SettingsPatch['assets']>
+	type VectorDatabaseSettingsPatch = NonNullable<AssetsSettingsPatch['vector_database']>
+	type QdrantVectorDatabaseSettingsPatch = NonNullable<VectorDatabaseSettingsPatch['qdrant']>
+	type ChromaVectorDatabaseSettingsPatch = NonNullable<VectorDatabaseSettingsPatch['chroma']>
+	type PineconeVectorDatabaseSettingsPatch = NonNullable<VectorDatabaseSettingsPatch['pinecone']>
+	type WeaviateVectorDatabaseSettingsPatch = NonNullable<VectorDatabaseSettingsPatch['weaviate']>
+	type MilvusVectorDatabaseSettingsPatch = NonNullable<VectorDatabaseSettingsPatch['milvus']>
+	type RedisVectorDatabaseSettingsPatch = NonNullable<VectorDatabaseSettingsPatch['redis']>
+	type OpensearchVectorDatabaseSettingsPatch = NonNullable<
+		VectorDatabaseSettingsPatch['opensearch']
+	>
+	type VectorSettingsPatch = NonNullable<AssetsSettingsPatch['vector']>
+	type VectorFusionAlgorithm = NonNullable<VectorSettingsPatch['fusion_algorithm']>
+	type EmbeddingsSettingsPatch = NonNullable<AssetsSettingsPatch['embeddings']>
+	type RerankSettingsPatch = NonNullable<AssetsSettingsPatch['rerank']>
+	type RerankDefaultStrategy = NonNullable<RerankSettingsPatch['default_strategy']>
+	type StorageSettingsPatch = NonNullable<AssetsSettingsPatch['storage']>
+	type S3StorageConfigPatch = NonNullable<StorageSettingsPatch['s3']>
 
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import SettingsAI from '$lib/components/settings/SettingsAI.svelte'
@@ -20,6 +51,7 @@
 	import SettingsMedia from '$lib/components/settings/SettingsMedia.svelte'
 	import SettingsSecurity from '$lib/components/settings/SettingsSecurity.svelte'
 	import SettingsSoftDelete from '$lib/components/settings/SettingsSoftDelete.svelte'
+	import SettingsTasks from '$lib/components/settings/SettingsTasks.svelte'
 	import SettingsUI from '$lib/components/settings/SettingsUI.svelte'
 	import SettingsWebSearch from '$lib/components/settings/SettingsWebSearch.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -30,6 +62,7 @@
 		Gauge,
 		Globe,
 		Image as ImageIcon,
+		ListChecks,
 		Paintbrush,
 		Palette,
 		Plug,
@@ -63,6 +96,7 @@
 		| 'section-soft-delete'
 		| 'section-web-search'
 		| 'section-code-interpreter'
+		| 'section-tasks'
 		| 'section-security'
 		| 'section-permissions'
 		| 'section-integrations'
@@ -162,6 +196,15 @@
 			activeBg: 'bg-sky-500/10',
 		},
 		{
+			id: 'section-tasks',
+			label: 'tasks',
+			keywords:
+				'taskiq background task scheduling thread maintenance backfill cron batch lookback inactivity sweep metadata summaries',
+			icon: ListChecks,
+			color: 'text-lime-400',
+			activeBg: 'bg-lime-500/10',
+		},
+		{
 			id: 'section-security',
 			label: 'security',
 			keywords:
@@ -220,6 +263,7 @@
 	let brandingAppVersion = $state<string>('')
 	let brandingAnalyticsKeyConfigured = $state<boolean>(false)
 	let securitySecretKeyConfigured = $state<boolean>(false)
+	let securitySecretKeyUsesDefault = $state<boolean>(false)
 	let securityJwtAlgorithm = $state<string>('')
 	let securityEnableOauth = $state<boolean>(false)
 	let securityCorsOrigins = $state<string>('')
@@ -346,11 +390,11 @@
 	let assetsVectorDatabaseOpensearchApiKey = $state('')
 	let assetsVectorCollectionTemplate = $state('')
 	let assetsVectorSparseEnabled = $state(true)
-	let assetsVectorFusionAlgorithm = $state('rrf')
+	let assetsVectorFusionAlgorithm = $state<VectorFusionAlgorithm>('rrf')
 	let assetsVectorNormalizeScores = $state(true)
 	let assetsEmbeddingsVectorSize = $state<string>('')
 	let assetsEmbeddingsBatchSize = $state<string>('')
-	let assetsRerankDefaultStrategy = $state('native')
+	let assetsRerankDefaultStrategy = $state<RerankDefaultStrategy>('native')
 	let assetsRerankTopK = $state<string>('')
 
 	// assets: storage
@@ -419,6 +463,13 @@
 	let codeInterpreterE2bTemplate = $state<string>('')
 	let codeInterpreterE2bAvailablePackages = $state<string>('')
 	let codeInterpreterTimeout = $state<string>('')
+
+	// task scheduling
+	let taskMaintenanceBackfillEnabled = $state(false)
+	let taskMaintenanceBackfillCron = $state('')
+	let taskMaintenanceBackfillBatchSize = $state<string>('')
+	let taskMaintenanceBackfillMaxLookbackDays = $state<string>('')
+	let taskMaintenanceBackfillMinInactivityHours = $state<string>('')
 
 	let defaultPermissions = $state<DefaultPermissionsSettings>({
 		resource_access: {
@@ -520,11 +571,11 @@
 		assetsVectorDatabaseOpensearchApiKey: '',
 		assetsVectorCollectionTemplate: '',
 		assetsVectorSparseEnabled: true,
-		assetsVectorFusionAlgorithm: 'rrf',
+		assetsVectorFusionAlgorithm: 'rrf' as VectorFusionAlgorithm,
 		assetsVectorNormalizeScores: true,
 		assetsEmbeddingsVectorSize: '',
 		assetsEmbeddingsBatchSize: '',
-		assetsRerankDefaultStrategy: 'native',
+		assetsRerankDefaultStrategy: 'native' as RerankDefaultStrategy,
 		assetsRerankTopK: '',
 		assetsStorageBackend: 'local' as StorageBackend,
 		assetsStorageLocalRootPath: '',
@@ -580,6 +631,11 @@
 		codeInterpreterE2bTemplate: '',
 		codeInterpreterE2bAvailablePackages: '',
 		codeInterpreterTimeout: '',
+		taskMaintenanceBackfillEnabled: false,
+		taskMaintenanceBackfillCron: '',
+		taskMaintenanceBackfillBatchSize: '',
+		taskMaintenanceBackfillMaxLookbackDays: '',
+		taskMaintenanceBackfillMinInactivityHours: '',
 		defaultPermissions: {
 			resource_access: {
 				thread: null,
@@ -749,6 +805,13 @@
 			codeInterpreterE2bTemplate !== original.codeInterpreterE2bTemplate ||
 			codeInterpreterE2bAvailablePackages !== original.codeInterpreterE2bAvailablePackages ||
 			codeInterpreterTimeout !== original.codeInterpreterTimeout ||
+			taskMaintenanceBackfillEnabled !== original.taskMaintenanceBackfillEnabled ||
+			taskMaintenanceBackfillCron !== original.taskMaintenanceBackfillCron ||
+			taskMaintenanceBackfillBatchSize !== original.taskMaintenanceBackfillBatchSize ||
+			taskMaintenanceBackfillMaxLookbackDays !==
+				original.taskMaintenanceBackfillMaxLookbackDays ||
+			taskMaintenanceBackfillMinInactivityHours !==
+				original.taskMaintenanceBackfillMinInactivityHours ||
 			defaultPermissionsKey(defaultPermissions) !== original.defaultPermissionsKey
 	)
 
@@ -785,6 +848,11 @@
 			.split(',')
 			.map((s) => s.trim())
 			.filter(Boolean)
+	}
+
+	function toRerankDefaultStrategy(value: string | undefined): RerankDefaultStrategy {
+		if (value === 'none' || value === 'external' || value === 'native') return value
+		return 'native'
 	}
 
 	function normalizeDefaultPermissions(
@@ -841,12 +909,11 @@
 		aiTaskThreadMaintenanceModelId = tasks?.thread_maintenance_model_id ?? ''
 		aiTaskInputAutocompleteModelId = tasks?.input_autocomplete_model_id ?? ''
 		aiTaskSummarizationModelId = tasks?.summarization_model_id ?? ''
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		aiTaskMemoryPostProcessingModelId = (tasks as any)?.memory_post_processing_model_id ?? ''
+		aiTaskMemoryPostProcessingModelId = tasks?.memory_post_processing_model_id ?? ''
 		aiTaskWebSearchModelId = tasks?.web_search_model_id ?? ''
 
 		aiTaskMaintenanceMaxCharsPerMessage = toStringOrEmpty(
-			(tasks as any)?.maintenance_max_chars_per_message
+			tasks?.maintenance_max_chars_per_message
 		)
 
 		const attachments = ai?.attachments
@@ -872,11 +939,10 @@
 		aiWindowingResponseHeadroom = toStringOrEmpty(windowing?.response_headroom)
 
 		aiWindowingSummarizationMaxCharsPerMessage = toStringOrEmpty(
-			(windowing as any)?.summarization_max_chars_per_message
+			windowing?.summarization_max_chars_per_message
 		)
 
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const aiMedia = (ai as any)?.media
+		const aiMedia = ai?.media
 		const aiMediaImages = aiMedia?.images
 		aiMediaImagesEnabled = aiMediaImages?.enabled ?? true
 		aiMediaImagesModel = aiMediaImages?.model ?? ''
@@ -914,8 +980,7 @@
 		softDeleteNotes = softDelete?.notes ?? true
 		softDeleteFiles = softDelete?.files ?? true
 
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const webSearch = (r.data as any).web_search
+		const webSearch = r.data.web_search
 		webSearchMaxChars = toStringOrEmpty(webSearch?.max_chars)
 		const agentic = webSearch?.agentic
 		webSearchAgenticAgent = (agentic?.agent ?? 'native') as SearchAgent
@@ -951,14 +1016,25 @@
 			perplexity?.max_concurrent_requests
 		)
 
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const ci = (r.data as any).code_interpreter
+		const ci = r.data.code_interpreter
 		codeInterpreterEnabled = ci?.enabled ?? true
 		codeInterpreterEngine = (ci?.engine ?? 'e2b') as CodeInterpreterEngine
 		codeInterpreterE2bApiKey = ci?.e2b?.api_key ?? ''
 		codeInterpreterE2bTemplate = ci?.e2b?.template ?? ''
 		codeInterpreterE2bAvailablePackages = (ci?.e2b?.available_packages ?? []).join(', ')
 		codeInterpreterTimeout = toStringOrEmpty(ci?.timeout)
+
+		const taskSettings = r.data.tasks
+		const maintenanceBackfill = taskSettings?.maintenance_backfill
+		taskMaintenanceBackfillEnabled = maintenanceBackfill?.enabled ?? false
+		taskMaintenanceBackfillCron = maintenanceBackfill?.cron ?? ''
+		taskMaintenanceBackfillBatchSize = toStringOrEmpty(maintenanceBackfill?.batch_size)
+		taskMaintenanceBackfillMaxLookbackDays = toStringOrEmpty(
+			maintenanceBackfill?.max_lookback_days
+		)
+		taskMaintenanceBackfillMinInactivityHours = toStringOrEmpty(
+			maintenanceBackfill?.min_inactivity_hours
+		)
 
 		const limits = r.data.limits
 		limitsMaxThreadsPerUser = toStringOrEmpty(limits?.max_threads_per_user)
@@ -986,6 +1062,7 @@
 		securityOidcOnly = oidc?.only ?? false
 
 		securitySecretKeyConfigured = Boolean(security?.secret_key)
+		securitySecretKeyUsesDefault = security?.secret_key_uses_default ?? false
 		securityJwtAlgorithm = security?.jwt_algorithm ?? ''
 		securityEnableOauth = toBool(security?.enable_oauth)
 		securityCorsOrigins = (security?.cors_origins ?? []).join(', ')
@@ -1037,7 +1114,7 @@
 		assetsEmbeddingsVectorSize = toStringOrEmpty(embeddings?.vector_size)
 		assetsEmbeddingsBatchSize = toStringOrEmpty(embeddings?.batch_size)
 		const rerank = assets?.rerank
-		assetsRerankDefaultStrategy = rerank?.default_strategy ?? 'native'
+		assetsRerankDefaultStrategy = toRerankDefaultStrategy(rerank?.default_strategy)
 		assetsRerankTopK = toStringOrEmpty(rerank?.top_k)
 
 		const storage = assets?.storage
@@ -1209,6 +1286,11 @@
 			codeInterpreterE2bTemplate,
 			codeInterpreterE2bAvailablePackages,
 			codeInterpreterTimeout,
+			taskMaintenanceBackfillEnabled,
+			taskMaintenanceBackfillCron,
+			taskMaintenanceBackfillBatchSize,
+			taskMaintenanceBackfillMaxLookbackDays,
+			taskMaintenanceBackfillMinInactivityHours,
 			defaultPermissions,
 			defaultPermissionsKey: defaultPermissionsKey(defaultPermissions),
 		}
@@ -1412,6 +1494,12 @@
 		codeInterpreterE2bTemplate = original.codeInterpreterE2bTemplate
 		codeInterpreterE2bAvailablePackages = original.codeInterpreterE2bAvailablePackages
 		codeInterpreterTimeout = original.codeInterpreterTimeout
+		taskMaintenanceBackfillEnabled = original.taskMaintenanceBackfillEnabled
+		taskMaintenanceBackfillCron = original.taskMaintenanceBackfillCron
+		taskMaintenanceBackfillBatchSize = original.taskMaintenanceBackfillBatchSize
+		taskMaintenanceBackfillMaxLookbackDays = original.taskMaintenanceBackfillMaxLookbackDays
+		taskMaintenanceBackfillMinInactivityHours =
+			original.taskMaintenanceBackfillMinInactivityHours
 		defaultPermissions = normalizeDefaultPermissions(original.defaultPermissions)
 		saveError = null
 		saveSuccess = null
@@ -1422,6 +1510,13 @@
 		if (!trimmed) return null
 		const n = Number(trimmed)
 		return Number.isFinite(n) ? n : null
+	}
+
+	function asNumberOrUndefined(s: string): number | undefined {
+		const trimmed = s.trim()
+		if (!trimmed) return undefined
+		const n = Number(trimmed)
+		return Number.isFinite(n) ? n : undefined
 	}
 
 	function buildDefaultPermissionsPatch(): DefaultPermissionsSettingsPatch {
@@ -1440,7 +1535,7 @@
 	}
 
 	function buildUpdateRequest(): SettingsUpdateRequest {
-		const data: NonNullable<SettingsUpdateRequest['data']> = {}
+		const data: SettingsPatch = {}
 
 		if (
 			uiDefaultTheme !== original.uiDefaultTheme ||
@@ -1451,9 +1546,9 @@
 			data.ui = {}
 			if (uiDefaultTheme !== original.uiDefaultTheme) data.ui.default_theme = uiDefaultTheme
 			if (uiDefaultBackground !== original.uiDefaultBackground)
-				data.ui.default_background = uiDefaultBackground ?? null
+				data.ui.default_background = uiDefaultBackground ?? 'none'
 			if (uiAuthPagesBackground !== original.uiAuthPagesBackground)
-				data.ui.auth_pages_background = uiAuthPagesBackground ?? null
+				data.ui.auth_pages_background = uiAuthPagesBackground ?? 'none'
 			if (uiSidebarCollapsed !== original.uiSidebarCollapsed)
 				data.ui.sidebar_collapsed = uiSidebarCollapsed
 		}
@@ -1502,9 +1597,9 @@
 			aiMediaVideosEnabled !== original.aiMediaVideosEnabled ||
 			aiMediaAudioEnabled !== original.aiMediaAudioEnabled
 		) {
-			const aiPatch: NonNullable<NonNullable<SettingsUpdateRequest['data']>['ai']> = {}
+			const aiPatch: AISettingsPatch = {}
 			if (JSON.stringify(aiDefaultAgentIds) !== JSON.stringify(original.aiDefaultAgentIds))
-				aiPatch.default_agent_ids = aiDefaultAgentIds.length > 0 ? aiDefaultAgentIds : null
+				aiPatch.default_agent_ids = aiDefaultAgentIds
 
 			if (
 				aiMemoryEnable !== original.aiMemoryEnable ||
@@ -1515,11 +1610,11 @@
 				if (aiMemoryEnable !== original.aiMemoryEnable)
 					aiPatch.memory.enable_memory = aiMemoryEnable
 				if (aiMemorySimilarityThreshold !== original.aiMemorySimilarityThreshold)
-					aiPatch.memory.similarity_threshold = asNumberOrNull(
+					aiPatch.memory.similarity_threshold = asNumberOrUndefined(
 						aiMemorySimilarityThreshold
 					)
 				if (aiMemoryTopK !== original.aiMemoryTopK)
-					aiPatch.memory.top_k = asNumberOrNull(aiMemoryTopK)
+					aiPatch.memory.top_k = asNumberOrUndefined(aiMemoryTopK)
 			}
 
 			if (
@@ -1534,14 +1629,14 @@
 				if (aiChatContextMode !== original.aiChatContextMode)
 					aiPatch.chat_context.mode = aiChatContextMode
 				if (aiChatContextTopK !== original.aiChatContextTopK)
-					aiPatch.chat_context.top_k = asNumberOrNull(aiChatContextTopK)
+					aiPatch.chat_context.top_k = asNumberOrUndefined(aiChatContextTopK)
 				if (aiChatContextSimilarityThreshold !== original.aiChatContextSimilarityThreshold)
-					aiPatch.chat_context.similarity_threshold = asNumberOrNull(
+					aiPatch.chat_context.similarity_threshold = asNumberOrUndefined(
 						aiChatContextSimilarityThreshold
 					)
 			}
 			if (aiRetrievalTurns !== original.aiRetrievalTurns)
-				aiPatch.retrieval_turns = asNumberOrNull(aiRetrievalTurns)
+				aiPatch.retrieval_turns = asNumberOrUndefined(aiRetrievalTurns)
 			if (aiRetrievalPreBuild !== original.aiRetrievalPreBuild)
 				aiPatch.retrieval_pre_build = aiRetrievalPreBuild
 
@@ -1579,8 +1674,7 @@
 				if (
 					aiTaskMemoryPostProcessingModelId !== original.aiTaskMemoryPostProcessingModelId
 				) {
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-					;(aiPatch.tasks as any).memory_post_processing_model_id =
+					aiPatch.tasks.memory_post_processing_model_id =
 						aiTaskMemoryPostProcessingModelId ? aiTaskMemoryPostProcessingModelId : null
 				}
 				if (aiTaskWebSearchModelId !== original.aiTaskWebSearchModelId)
@@ -1591,8 +1685,7 @@
 					aiTaskMaintenanceMaxCharsPerMessage !==
 					original.aiTaskMaintenanceMaxCharsPerMessage
 				) {
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-					;(aiPatch.tasks as any).maintenance_max_chars_per_message = asNumberOrNull(
+					aiPatch.tasks.maintenance_max_chars_per_message = asNumberOrNull(
 						aiTaskMaintenanceMaxCharsPerMessage
 					)
 				}
@@ -1606,19 +1699,19 @@
 			) {
 				aiPatch.attachments = {}
 				if (aiAttachmentImageDecayTurns !== original.aiAttachmentImageDecayTurns)
-					aiPatch.attachments.image_decay_turns = asNumberOrNull(
+					aiPatch.attachments.image_decay_turns = asNumberOrUndefined(
 						aiAttachmentImageDecayTurns
 					)
 				if (aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns)
-					aiPatch.attachments.audio_decay_turns = asNumberOrNull(
+					aiPatch.attachments.audio_decay_turns = asNumberOrUndefined(
 						aiAttachmentAudioDecayTurns
 					)
 				if (aiAttachmentVideoDecayTurns !== original.aiAttachmentVideoDecayTurns)
-					aiPatch.attachments.video_decay_turns = asNumberOrNull(
+					aiPatch.attachments.video_decay_turns = asNumberOrUndefined(
 						aiAttachmentVideoDecayTurns
 					)
 				if (aiAttachmentRevealDecayTurns !== original.aiAttachmentRevealDecayTurns)
-					aiPatch.attachments.reveal_decay_turns = asNumberOrNull(
+					aiPatch.attachments.reveal_decay_turns = asNumberOrUndefined(
 						aiAttachmentRevealDecayTurns
 					)
 			}
@@ -1643,48 +1736,48 @@
 				if (aiWindowingEnabled !== original.aiWindowingEnabled)
 					aiPatch.windowing.enabled = aiWindowingEnabled
 				if (aiWindowingMaxMessages !== original.aiWindowingMaxMessages)
-					aiPatch.windowing.max_messages = asNumberOrNull(aiWindowingMaxMessages)
+					aiPatch.windowing.max_messages = asNumberOrUndefined(aiWindowingMaxMessages)
 				if (aiWindowingTriggerRatio !== original.aiWindowingTriggerRatio)
-					aiPatch.windowing.trigger_ratio = asNumberOrNull(aiWindowingTriggerRatio)
+					aiPatch.windowing.trigger_ratio = asNumberOrUndefined(aiWindowingTriggerRatio)
 				if (aiWindowingHardRatio !== original.aiWindowingHardRatio)
-					aiPatch.windowing.hard_ratio = asNumberOrNull(aiWindowingHardRatio)
+					aiPatch.windowing.hard_ratio = asNumberOrUndefined(aiWindowingHardRatio)
 				if (aiWindowingSummaryBatchSize !== original.aiWindowingSummaryBatchSize)
-					aiPatch.windowing.summary_batch_size = asNumberOrNull(
+					aiPatch.windowing.summary_batch_size = asNumberOrUndefined(
 						aiWindowingSummaryBatchSize
 					)
 				if (
 					aiWindowingMaxSummariesBeforeCondense !==
 					original.aiWindowingMaxSummariesBeforeCondense
 				)
-					aiPatch.windowing.max_summaries_before_condense = asNumberOrNull(
+					aiPatch.windowing.max_summaries_before_condense = asNumberOrUndefined(
 						aiWindowingMaxSummariesBeforeCondense
 					)
 				if (aiWindowingToolResultMaxShare !== original.aiWindowingToolResultMaxShare)
-					aiPatch.windowing.tool_result_max_share = asNumberOrNull(
+					aiPatch.windowing.tool_result_max_share = asNumberOrUndefined(
 						aiWindowingToolResultMaxShare
 					)
 				if (aiWindowingToolResultHardCap !== original.aiWindowingToolResultHardCap)
-					aiPatch.windowing.tool_result_hard_cap = asNumberOrNull(
+					aiPatch.windowing.tool_result_hard_cap = asNumberOrUndefined(
 						aiWindowingToolResultHardCap
 					)
 				if (
 					aiWindowingToolResultsCombinedMaxShare !==
 					original.aiWindowingToolResultsCombinedMaxShare
 				)
-					aiPatch.windowing.tool_results_combined_max_share = asNumberOrNull(
+					aiPatch.windowing.tool_results_combined_max_share = asNumberOrUndefined(
 						aiWindowingToolResultsCombinedMaxShare
 					)
 				if (aiWindowingResponseHeadroom !== original.aiWindowingResponseHeadroom)
-					aiPatch.windowing.response_headroom = asNumberOrNull(
+					aiPatch.windowing.response_headroom = asNumberOrUndefined(
 						aiWindowingResponseHeadroom
 					)
 				if (
 					aiWindowingSummarizationMaxCharsPerMessage !==
 					original.aiWindowingSummarizationMaxCharsPerMessage
 				) {
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-					;(aiPatch.windowing as any).summarization_max_chars_per_message =
-						asNumberOrNull(aiWindowingSummarizationMaxCharsPerMessage)
+					aiPatch.windowing.summarization_max_chars_per_message = asNumberOrNull(
+						aiWindowingSummarizationMaxCharsPerMessage
+					)
 				}
 			}
 
@@ -1698,8 +1791,7 @@
 				aiMediaVideosEnabled !== original.aiMediaVideosEnabled ||
 				aiMediaAudioEnabled !== original.aiMediaAudioEnabled
 			) {
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const mediaPatch = {} as any
+				const mediaPatch: AIMediaSettingsPatch = {}
 				if (
 					aiMediaImagesEnabled !== original.aiMediaImagesEnabled ||
 					aiMediaImagesModel !== original.aiMediaImagesModel ||
@@ -1708,26 +1800,26 @@
 					aiMediaImagesDefaultN !== original.aiMediaImagesDefaultN ||
 					aiMediaImagesMaxN !== original.aiMediaImagesMaxN
 				) {
-					mediaPatch.images = {}
+					const imagesPatch: ImageGenerationSettingsPatch = {}
 					if (aiMediaImagesEnabled !== original.aiMediaImagesEnabled)
-						mediaPatch.images.enabled = aiMediaImagesEnabled
+						imagesPatch.enabled = aiMediaImagesEnabled
 					if (aiMediaImagesModel !== original.aiMediaImagesModel)
-						mediaPatch.images.model = aiMediaImagesModel || null
+						imagesPatch.model = aiMediaImagesModel || null
 					if (aiMediaImagesDefaultSize !== original.aiMediaImagesDefaultSize)
-						mediaPatch.images.default_size = aiMediaImagesDefaultSize || null
+						imagesPatch.default_size = aiMediaImagesDefaultSize || undefined
 					if (aiMediaImagesDefaultSteps !== original.aiMediaImagesDefaultSteps)
-						mediaPatch.images.default_steps = asNumberOrNull(aiMediaImagesDefaultSteps)
+						imagesPatch.default_steps = asNumberOrNull(aiMediaImagesDefaultSteps)
 					if (aiMediaImagesDefaultN !== original.aiMediaImagesDefaultN)
-						mediaPatch.images.default_n = asNumberOrNull(aiMediaImagesDefaultN)
+						imagesPatch.default_n = asNumberOrUndefined(aiMediaImagesDefaultN)
 					if (aiMediaImagesMaxN !== original.aiMediaImagesMaxN)
-						mediaPatch.images.max_n = asNumberOrNull(aiMediaImagesMaxN)
+						imagesPatch.max_n = asNumberOrUndefined(aiMediaImagesMaxN)
+					mediaPatch.images = imagesPatch
 				}
 				if (aiMediaVideosEnabled !== original.aiMediaVideosEnabled)
 					mediaPatch.videos = { enabled: aiMediaVideosEnabled }
 				if (aiMediaAudioEnabled !== original.aiMediaAudioEnabled)
 					mediaPatch.audio = { enabled: aiMediaAudioEnabled }
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				;(aiPatch as any).media = mediaPatch
+				aiPatch.media = mediaPatch
 			}
 
 			data.ai = aiPatch
@@ -1776,13 +1868,15 @@
 		) {
 			data.limits = {}
 			if (limitsMaxThreadsPerUser !== original.limitsMaxThreadsPerUser)
-				data.limits.max_threads_per_user = asNumberOrNull(limitsMaxThreadsPerUser)
+				data.limits.max_threads_per_user = asNumberOrUndefined(limitsMaxThreadsPerUser)
 			if (limitsMaxMessagesPerThread !== original.limitsMaxMessagesPerThread)
-				data.limits.max_messages_per_thread = asNumberOrNull(limitsMaxMessagesPerThread)
+				data.limits.max_messages_per_thread = asNumberOrUndefined(
+					limitsMaxMessagesPerThread
+				)
 			if (limitsMaxFileSizeMb !== original.limitsMaxFileSizeMb)
-				data.limits.max_file_size_mb = asNumberOrNull(limitsMaxFileSizeMb)
+				data.limits.max_file_size_mb = asNumberOrUndefined(limitsMaxFileSizeMb)
 			if (limitsRateLimitRequestsPerMinute !== original.limitsRateLimitRequestsPerMinute)
-				data.limits.rate_limit_requests_per_minute = asNumberOrNull(
+				data.limits.rate_limit_requests_per_minute = asNumberOrUndefined(
 					limitsRateLimitRequestsPerMinute
 				)
 		}
@@ -1806,17 +1900,17 @@
 		) {
 			data.security = {}
 			if (securityAccessTokenExpireMinutes !== original.securityAccessTokenExpireMinutes)
-				data.security.access_token_expire_minutes = asNumberOrNull(
+				data.security.access_token_expire_minutes = asNumberOrUndefined(
 					securityAccessTokenExpireMinutes
 				)
 			if (securityRefreshTokenExpireDays !== original.securityRefreshTokenExpireDays)
-				data.security.refresh_token_expire_days = asNumberOrNull(
+				data.security.refresh_token_expire_days = asNumberOrUndefined(
 					securityRefreshTokenExpireDays
 				)
 			if (securityAuthCookieSecure !== original.securityAuthCookieSecure)
 				data.security.auth_cookie_secure = securityAuthCookieSecure
 			if (securitySessionTimeoutMinutes !== original.securitySessionTimeoutMinutes)
-				data.security.session_timeout_minutes = asNumberOrNull(
+				data.security.session_timeout_minutes = asNumberOrUndefined(
 					securitySessionTimeoutMinutes
 				)
 			if (securityRequireEmailVerification !== original.securityRequireEmailVerification)
@@ -1888,7 +1982,7 @@
 			assetsStorageS3MaxRetries !== original.assetsStorageS3MaxRetries ||
 			assetsStorageS3RetryMode !== original.assetsStorageS3RetryMode
 		) {
-			const assetsPatch: Record<string, unknown> = {}
+			const assetsPatch: AssetsSettingsPatch = {}
 			if (assetsDefaultEmbeddingModelId !== original.assetsDefaultEmbeddingModelId)
 				assetsPatch.default_embedding_model_id = assetsDefaultEmbeddingModelId || null
 
@@ -1907,7 +2001,7 @@
 				assetsVectorDatabaseOpensearchApiKey !==
 					original.assetsVectorDatabaseOpensearchApiKey
 			) {
-				const vectorDatabasePatch: Record<string, unknown> = {}
+				const vectorDatabasePatch: VectorDatabaseSettingsPatch = {}
 				if (assetsVectorDatabaseProvider !== original.assetsVectorDatabaseProvider)
 					vectorDatabasePatch.provider = assetsVectorDatabaseProvider
 				if (
@@ -1918,9 +2012,9 @@
 						assetsVectorDatabaseQdrantApiKey !==
 							original.assetsVectorDatabaseQdrantApiKey)
 				) {
-					const qdrantPatch: Record<string, unknown> = {}
+					const qdrantPatch: QdrantVectorDatabaseSettingsPatch = {}
 					if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
-						qdrantPatch.url = assetsVectorDatabaseUrl || null
+						qdrantPatch.url = assetsVectorDatabaseUrl || undefined
 					if (
 						assetsVectorDatabaseQdrantUseGrpc !==
 						original.assetsVectorDatabaseQdrantUseGrpc
@@ -1940,7 +2034,7 @@
 						assetsVectorDatabaseChromaApiKey !==
 							original.assetsVectorDatabaseChromaApiKey)
 				) {
-					const chromaPatch: Record<string, unknown> = {}
+					const chromaPatch: ChromaVectorDatabaseSettingsPatch = {}
 					if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
 						chromaPatch.url = assetsVectorDatabaseUrl || null
 					if (
@@ -1957,7 +2051,7 @@
 						assetsVectorDatabasePineconeApiKey !==
 							original.assetsVectorDatabasePineconeApiKey)
 				) {
-					const pineconePatch: Record<string, unknown> = {}
+					const pineconePatch: PineconeVectorDatabaseSettingsPatch = {}
 					if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
 						pineconePatch.url = assetsVectorDatabaseUrl || null
 					if (
@@ -1974,7 +2068,7 @@
 						assetsVectorDatabaseWeaviateApiKey !==
 							original.assetsVectorDatabaseWeaviateApiKey)
 				) {
-					const weaviatePatch: Record<string, unknown> = {}
+					const weaviatePatch: WeaviateVectorDatabaseSettingsPatch = {}
 					if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
 						weaviatePatch.url = assetsVectorDatabaseUrl || null
 					if (
@@ -1991,7 +2085,7 @@
 						assetsVectorDatabaseMilvusToken !==
 							original.assetsVectorDatabaseMilvusToken)
 				) {
-					const milvusPatch: Record<string, unknown> = {}
+					const milvusPatch: MilvusVectorDatabaseSettingsPatch = {}
 					if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
 						milvusPatch.url = assetsVectorDatabaseUrl || null
 					if (
@@ -2016,7 +2110,7 @@
 						assetsVectorDatabaseRedisPassword !==
 							original.assetsVectorDatabaseRedisPassword)
 				) {
-					const redisPatch: Record<string, unknown> = {}
+					const redisPatch: RedisVectorDatabaseSettingsPatch = {}
 					if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
 						redisPatch.url = assetsVectorDatabaseUrl || null
 					if (
@@ -2033,7 +2127,7 @@
 						assetsVectorDatabaseOpensearchApiKey !==
 							original.assetsVectorDatabaseOpensearchApiKey)
 				) {
-					const opensearchPatch: Record<string, unknown> = {}
+					const opensearchPatch: OpensearchVectorDatabaseSettingsPatch = {}
 					if (assetsVectorDatabaseUrl !== original.assetsVectorDatabaseUrl)
 						opensearchPatch.url = assetsVectorDatabaseUrl || null
 					if (
@@ -2053,9 +2147,9 @@
 				assetsVectorFusionAlgorithm !== original.assetsVectorFusionAlgorithm ||
 				assetsVectorNormalizeScores !== original.assetsVectorNormalizeScores
 			) {
-				const vectorPatch: Record<string, unknown> = {}
+				const vectorPatch: VectorSettingsPatch = {}
 				if (assetsVectorCollectionTemplate !== original.assetsVectorCollectionTemplate)
-					vectorPatch.collection_template = assetsVectorCollectionTemplate || null
+					vectorPatch.collection_template = assetsVectorCollectionTemplate || undefined
 				if (assetsVectorSparseEnabled !== original.assetsVectorSparseEnabled)
 					vectorPatch.sparse_vectors_enabled = assetsVectorSparseEnabled
 				if (assetsVectorFusionAlgorithm !== original.assetsVectorFusionAlgorithm)
@@ -2069,11 +2163,11 @@
 				assetsEmbeddingsVectorSize !== original.assetsEmbeddingsVectorSize ||
 				assetsEmbeddingsBatchSize !== original.assetsEmbeddingsBatchSize
 			) {
-				const embPatch: Record<string, unknown> = {}
+				const embPatch: EmbeddingsSettingsPatch = {}
 				if (assetsEmbeddingsVectorSize !== original.assetsEmbeddingsVectorSize)
-					embPatch.vector_size = asNumberOrNull(assetsEmbeddingsVectorSize)
+					embPatch.vector_size = asNumberOrUndefined(assetsEmbeddingsVectorSize)
 				if (assetsEmbeddingsBatchSize !== original.assetsEmbeddingsBatchSize)
-					embPatch.batch_size = asNumberOrNull(assetsEmbeddingsBatchSize)
+					embPatch.batch_size = asNumberOrUndefined(assetsEmbeddingsBatchSize)
 				assetsPatch.embeddings = embPatch
 			}
 
@@ -2081,11 +2175,11 @@
 				assetsRerankDefaultStrategy !== original.assetsRerankDefaultStrategy ||
 				assetsRerankTopK !== original.assetsRerankTopK
 			) {
-				const rerankPatch: Record<string, unknown> = {}
+				const rerankPatch: RerankSettingsPatch = {}
 				if (assetsRerankDefaultStrategy !== original.assetsRerankDefaultStrategy)
-					rerankPatch.default_strategy = assetsRerankDefaultStrategy || null
+					rerankPatch.default_strategy = assetsRerankDefaultStrategy || undefined
 				if (assetsRerankTopK !== original.assetsRerankTopK)
-					rerankPatch.top_k = asNumberOrNull(assetsRerankTopK)
+					rerankPatch.top_k = asNumberOrUndefined(assetsRerankTopK)
 				assetsPatch.rerank = rerankPatch
 			}
 
@@ -2104,14 +2198,14 @@
 				assetsStorageS3MaxRetries !== original.assetsStorageS3MaxRetries ||
 				assetsStorageS3RetryMode !== original.assetsStorageS3RetryMode
 			) {
-				const storagePatch: Record<string, unknown> = {}
+				const storagePatch: StorageSettingsPatch = {}
 				if (assetsStorageBackend !== original.assetsStorageBackend)
 					storagePatch.backend = assetsStorageBackend
 				if (
 					assetsStorageLocalRootPath !== original.assetsStorageLocalRootPath &&
 					assetsStorageBackend === 'local'
 				) {
-					storagePatch.local = { root_path: assetsStorageLocalRootPath || null }
+					storagePatch.local = { root_path: assetsStorageLocalRootPath || undefined }
 				}
 				if (
 					(assetsStorageS3EndpointUrl !== original.assetsStorageS3EndpointUrl ||
@@ -2131,37 +2225,39 @@
 						assetsStorageS3RetryMode !== original.assetsStorageS3RetryMode) &&
 					assetsStorageBackend === 's3'
 				) {
-					const s3Patch: Record<string, unknown> = {}
+					const s3Patch: S3StorageConfigPatch = {}
 					if (assetsStorageS3EndpointUrl !== original.assetsStorageS3EndpointUrl)
 						s3Patch.endpoint_url = assetsStorageS3EndpointUrl || null
 					if (assetsStorageS3Bucket !== original.assetsStorageS3Bucket)
-						s3Patch.bucket = assetsStorageS3Bucket || null
+						s3Patch.bucket = assetsStorageS3Bucket || undefined
 					if (assetsStorageS3Region !== original.assetsStorageS3Region)
-						s3Patch.region = assetsStorageS3Region || null
+						s3Patch.region = assetsStorageS3Region || undefined
 					if (assetsStorageS3AccessKeyId !== original.assetsStorageS3AccessKeyId)
 						s3Patch.access_key_id = assetsStorageS3AccessKeyId || null
 					if (assetsStorageS3SecretAccessKey !== original.assetsStorageS3SecretAccessKey)
 						s3Patch.secret_access_key = assetsStorageS3SecretAccessKey || null
 					if (assetsStorageS3Prefix !== original.assetsStorageS3Prefix)
-						s3Patch.prefix = assetsStorageS3Prefix || null
+						s3Patch.prefix = assetsStorageS3Prefix || undefined
 					if (assetsStorageS3PresignedUrlTtl !== original.assetsStorageS3PresignedUrlTtl)
-						s3Patch.presigned_url_ttl = asNumberOrNull(assetsStorageS3PresignedUrlTtl)
+						s3Patch.presigned_url_ttl = asNumberOrUndefined(
+							assetsStorageS3PresignedUrlTtl
+						)
 					if (
 						assetsStorageS3MultipartThreshold !==
 						original.assetsStorageS3MultipartThreshold
 					)
-						s3Patch.multipart_threshold = asNumberOrNull(
+						s3Patch.multipart_threshold = asNumberOrUndefined(
 							assetsStorageS3MultipartThreshold
 						)
 					if (
 						assetsStorageS3MultipartChunkSize !==
 						original.assetsStorageS3MultipartChunkSize
 					)
-						s3Patch.multipart_chunk_size = asNumberOrNull(
+						s3Patch.multipart_chunk_size = asNumberOrUndefined(
 							assetsStorageS3MultipartChunkSize
 						)
 					if (assetsStorageS3MaxRetries !== original.assetsStorageS3MaxRetries)
-						s3Patch.max_retries = asNumberOrNull(assetsStorageS3MaxRetries)
+						s3Patch.max_retries = asNumberOrUndefined(assetsStorageS3MaxRetries)
 					if (assetsStorageS3RetryMode !== original.assetsStorageS3RetryMode)
 						s3Patch.retry_mode = assetsStorageS3RetryMode
 					storagePatch.s3 = s3Patch
@@ -2222,9 +2318,9 @@
 			webSearchTavilyExtractDepth !== original.webSearchTavilyExtractDepth ||
 			webSearchTavilyMaxConcurrentRequests !== original.webSearchTavilyMaxConcurrentRequests
 		) {
-			const wsPatch: Record<string, unknown> = {}
+			const wsPatch: WebSearchSettingsPatch = {}
 			if (webSearchMaxChars !== original.webSearchMaxChars)
-				wsPatch.max_chars = asNumberOrNull(webSearchMaxChars)
+				wsPatch.max_chars = asNumberOrUndefined(webSearchMaxChars)
 			if (webSearchBlacklistedDomains !== original.webSearchBlacklistedDomains)
 				wsPatch.blacklisted_domains = parseCommaList(webSearchBlacklistedDomains)
 
@@ -2235,7 +2331,7 @@
 				webSearchAgenticModelParams !== original.webSearchAgenticModelParams ||
 				webSearchAgenticMaxIterations !== original.webSearchAgenticMaxIterations
 			) {
-				const agenticPatch: Record<string, unknown> = {}
+				const agenticPatch: AgenticWebSearchSettingsPatch = {}
 				if (webSearchAgenticAgent !== original.webSearchAgenticAgent)
 					agenticPatch.agent = webSearchAgenticAgent
 				if (webSearchAgenticModelId !== original.webSearchAgenticModelId)
@@ -2245,7 +2341,7 @@
 				if (webSearchAgenticModelParams !== original.webSearchAgenticModelParams)
 					agenticPatch.model_params = parseJsonObject(webSearchAgenticModelParams)
 				if (webSearchAgenticMaxIterations !== original.webSearchAgenticMaxIterations)
-					agenticPatch.max_iterations = asNumberOrNull(webSearchAgenticMaxIterations)
+					agenticPatch.max_iterations = asNumberOrUndefined(webSearchAgenticMaxIterations)
 				wsPatch.agentic = agenticPatch
 			}
 
@@ -2263,22 +2359,22 @@
 				webSearchTavilyMaxConcurrentRequests !==
 					original.webSearchTavilyMaxConcurrentRequests
 			) {
-				const wlPatch: Record<string, unknown> = {}
+				const wlPatch: WebLoaderSettingsPatch = {}
 				if (webSearchWebLoaderEngine !== original.webSearchWebLoaderEngine)
 					wlPatch.engine = webSearchWebLoaderEngine
 				if (webSearchWebLoaderTimeoutSeconds !== original.webSearchWebLoaderTimeoutSeconds)
-					wlPatch.timeout_seconds = asNumberOrNull(webSearchWebLoaderTimeoutSeconds)
+					wlPatch.timeout_seconds = asNumberOrUndefined(webSearchWebLoaderTimeoutSeconds)
 				if (webSearchWebLoaderUserAgent !== original.webSearchWebLoaderUserAgent)
-					wlPatch.user_agent = webSearchWebLoaderUserAgent || null
+					wlPatch.user_agent = webSearchWebLoaderUserAgent || undefined
 				if (webSearchWebLoaderMaxChars !== original.webSearchWebLoaderMaxChars)
-					wlPatch.max_chars = asNumberOrNull(webSearchWebLoaderMaxChars)
+					wlPatch.max_chars = asNumberOrUndefined(webSearchWebLoaderMaxChars)
 				if (
 					webSearchTavilyApiKey !== original.webSearchTavilyApiKey ||
 					webSearchTavilyExtractDepth !== original.webSearchTavilyExtractDepth ||
 					webSearchTavilyMaxConcurrentRequests !==
 						original.webSearchTavilyMaxConcurrentRequests
 				) {
-					const tavilyPatch: Record<string, unknown> = {}
+					const tavilyPatch: TavilySettingsPatch = {}
 					if (webSearchTavilyApiKey !== original.webSearchTavilyApiKey)
 						tavilyPatch.api_key = webSearchTavilyApiKey || null
 					if (webSearchTavilyExtractDepth !== original.webSearchTavilyExtractDepth)
@@ -2287,7 +2383,7 @@
 						webSearchTavilyMaxConcurrentRequests !==
 						original.webSearchTavilyMaxConcurrentRequests
 					)
-						tavilyPatch.max_concurrent_requests = asNumberOrNull(
+						tavilyPatch.max_concurrent_requests = asNumberOrUndefined(
 							webSearchTavilyMaxConcurrentRequests
 						)
 					wlPatch.tavily = tavilyPatch
@@ -2295,7 +2391,7 @@
 				wsPatch.web_loaders = wlPatch
 			}
 
-			;(data as Record<string, unknown>).web_search = wsPatch
+			data.web_search = wsPatch
 		}
 
 		if (
@@ -2314,7 +2410,7 @@
 			webSearchPerplexityMaxConcurrentRequests !==
 				original.webSearchPerplexityMaxConcurrentRequests
 		) {
-			const integrationsPatch: Record<string, unknown> = {}
+			const integrationsPatch: IntegrationsSettingsPatch = {}
 			if (
 				webSearchSearxngInstanceUrl !== original.webSearchSearxngInstanceUrl ||
 				webSearchSearxngMaxResults !== original.webSearchSearxngMaxResults ||
@@ -2322,20 +2418,22 @@
 					original.webSearchSearxngMaxConcurrentRequests ||
 				webSearchSearxngTimeoutSeconds !== original.webSearchSearxngTimeoutSeconds
 			) {
-				const searxngPatch: Record<string, unknown> = {}
+				const searxngPatch: SearxngSettingsPatch = {}
 				if (webSearchSearxngInstanceUrl !== original.webSearchSearxngInstanceUrl)
-					searxngPatch.instance_url = webSearchSearxngInstanceUrl || null
+					searxngPatch.instance_url = webSearchSearxngInstanceUrl || undefined
 				if (webSearchSearxngMaxResults !== original.webSearchSearxngMaxResults)
-					searxngPatch.max_results = asNumberOrNull(webSearchSearxngMaxResults)
+					searxngPatch.max_results = asNumberOrUndefined(webSearchSearxngMaxResults)
 				if (
 					webSearchSearxngMaxConcurrentRequests !==
 					original.webSearchSearxngMaxConcurrentRequests
 				)
-					searxngPatch.max_concurrent_requests = asNumberOrNull(
+					searxngPatch.max_concurrent_requests = asNumberOrUndefined(
 						webSearchSearxngMaxConcurrentRequests
 					)
 				if (webSearchSearxngTimeoutSeconds !== original.webSearchSearxngTimeoutSeconds)
-					searxngPatch.timeout_seconds = asNumberOrNull(webSearchSearxngTimeoutSeconds)
+					searxngPatch.timeout_seconds = asNumberOrUndefined(
+						webSearchSearxngTimeoutSeconds
+					)
 				integrationsPatch.searxng = searxngPatch
 			}
 
@@ -2350,19 +2448,21 @@
 				webSearchPerplexityMaxConcurrentRequests !==
 					original.webSearchPerplexityMaxConcurrentRequests
 			) {
-				const perplexityPatch: Record<string, unknown> = {}
+				const perplexityPatch: PerplexitySettingsPatch = {}
 				if (webSearchPerplexityApiKey !== original.webSearchPerplexityApiKey)
 					perplexityPatch.api_key = webSearchPerplexityApiKey || null
 				if (webSearchPerplexityModel !== original.webSearchPerplexityModel)
-					perplexityPatch.model = webSearchPerplexityModel || null
+					perplexityPatch.model = webSearchPerplexityModel || undefined
 				if (
 					webSearchPerplexitySearchContextUsage !==
 					original.webSearchPerplexitySearchContextUsage
 				)
 					perplexityPatch.search_context_usage =
-						webSearchPerplexitySearchContextUsage || null
+						webSearchPerplexitySearchContextUsage || undefined
 				if (webSearchPerplexityTemperature !== original.webSearchPerplexityTemperature)
-					perplexityPatch.temperature = asNumberOrNull(webSearchPerplexityTemperature)
+					perplexityPatch.temperature = asNumberOrUndefined(
+						webSearchPerplexityTemperature
+					)
 				if (
 					webSearchPerplexityImageResultsEnabled !==
 					original.webSearchPerplexityImageResultsEnabled
@@ -2372,13 +2472,13 @@
 					webSearchPerplexityMaxConcurrentRequests !==
 					original.webSearchPerplexityMaxConcurrentRequests
 				)
-					perplexityPatch.max_concurrent_requests = asNumberOrNull(
+					perplexityPatch.max_concurrent_requests = asNumberOrUndefined(
 						webSearchPerplexityMaxConcurrentRequests
 					)
 				integrationsPatch.perplexity = perplexityPatch
 			}
 
-			;(data as Record<string, unknown>).integrations = integrationsPatch
+			data.integrations = integrationsPatch
 		}
 
 		if (
@@ -2389,7 +2489,7 @@
 			codeInterpreterE2bAvailablePackages !== original.codeInterpreterE2bAvailablePackages ||
 			codeInterpreterTimeout !== original.codeInterpreterTimeout
 		) {
-			const ciPatch: Record<string, unknown> = {}
+			const ciPatch: CodeInterpreterSettingsPatch = {}
 			if (codeInterpreterEnabled !== original.codeInterpreterEnabled)
 				ciPatch.enabled = codeInterpreterEnabled
 			if (codeInterpreterEngine !== original.codeInterpreterEngine)
@@ -2399,11 +2499,11 @@
 				codeInterpreterE2bTemplate !== original.codeInterpreterE2bTemplate ||
 				codeInterpreterE2bAvailablePackages !== original.codeInterpreterE2bAvailablePackages
 			) {
-				const e2bPatch: Record<string, unknown> = {}
+				const e2bPatch: E2bSettingsPatch = {}
 				if (codeInterpreterE2bApiKey !== original.codeInterpreterE2bApiKey)
 					e2bPatch.api_key = codeInterpreterE2bApiKey || null
 				if (codeInterpreterE2bTemplate !== original.codeInterpreterE2bTemplate)
-					e2bPatch.template = codeInterpreterE2bTemplate || null
+					e2bPatch.template = codeInterpreterE2bTemplate || undefined
 				if (
 					codeInterpreterE2bAvailablePackages !==
 					original.codeInterpreterE2bAvailablePackages
@@ -2414,9 +2514,43 @@
 				ciPatch.e2b = e2bPatch
 			}
 			if (codeInterpreterTimeout !== original.codeInterpreterTimeout)
-				ciPatch.timeout = asNumberOrNull(codeInterpreterTimeout)
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			;(data as any).code_interpreter = ciPatch
+				ciPatch.timeout = asNumberOrUndefined(codeInterpreterTimeout)
+			data.code_interpreter = ciPatch
+		}
+
+		if (
+			taskMaintenanceBackfillEnabled !== original.taskMaintenanceBackfillEnabled ||
+			taskMaintenanceBackfillCron !== original.taskMaintenanceBackfillCron ||
+			taskMaintenanceBackfillBatchSize !== original.taskMaintenanceBackfillBatchSize ||
+			taskMaintenanceBackfillMaxLookbackDays !==
+				original.taskMaintenanceBackfillMaxLookbackDays ||
+			taskMaintenanceBackfillMinInactivityHours !==
+				original.taskMaintenanceBackfillMinInactivityHours
+		) {
+			data.tasks = { maintenance_backfill: {} }
+			const backfillPatch = data.tasks.maintenance_backfill
+			if (backfillPatch) {
+				if (taskMaintenanceBackfillEnabled !== original.taskMaintenanceBackfillEnabled)
+					backfillPatch.enabled = taskMaintenanceBackfillEnabled
+				if (taskMaintenanceBackfillCron !== original.taskMaintenanceBackfillCron)
+					backfillPatch.cron = taskMaintenanceBackfillCron
+				if (taskMaintenanceBackfillBatchSize !== original.taskMaintenanceBackfillBatchSize)
+					backfillPatch.batch_size = asNumberOrUndefined(taskMaintenanceBackfillBatchSize)
+				if (
+					taskMaintenanceBackfillMaxLookbackDays !==
+					original.taskMaintenanceBackfillMaxLookbackDays
+				)
+					backfillPatch.max_lookback_days = asNumberOrUndefined(
+						taskMaintenanceBackfillMaxLookbackDays
+					)
+				if (
+					taskMaintenanceBackfillMinInactivityHours !==
+					original.taskMaintenanceBackfillMinInactivityHours
+				)
+					backfillPatch.min_inactivity_hours = asNumberOrUndefined(
+						taskMaintenanceBackfillMinInactivityHours
+					)
+			}
 		}
 
 		if (defaultPermissionsKey(defaultPermissions) !== original.defaultPermissionsKey) {
@@ -2827,6 +2961,20 @@
 										bind:timeout={codeInterpreterTimeout}
 									/>
 								</section>
+							{:else if activeSection === 'section-tasks'}
+								<section>
+									<SettingsTasks
+										bind:backfillEnabled={taskMaintenanceBackfillEnabled}
+										bind:backfillCron={taskMaintenanceBackfillCron}
+										bind:backfillBatchSize={taskMaintenanceBackfillBatchSize}
+										bind:backfillMaxLookbackDays={
+											taskMaintenanceBackfillMaxLookbackDays
+										}
+										bind:backfillMinInactivityHours={
+											taskMaintenanceBackfillMinInactivityHours
+										}
+									/>
+								</section>
 							{:else if activeSection === 'section-security'}
 								<section>
 									<SettingsSecurity
@@ -2850,6 +2998,7 @@
 										bind:oidcScopes={securityOidcScopes}
 										bind:oidcOnly={securityOidcOnly}
 										secretKeyConfigured={securitySecretKeyConfigured}
+										secretKeyUsesDefault={securitySecretKeyUsesDefault}
 										jwtAlgorithm={securityJwtAlgorithm}
 										enableOauth={securityEnableOauth}
 										corsOrigins={securityCorsOrigins}

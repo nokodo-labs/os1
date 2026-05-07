@@ -121,17 +121,16 @@
 		isLoading = true
 		error = null
 
-		api
-			.GET('/v1/reminder-lists', {
-				params: {
-					query: {
-						include_counts: true,
-						sort_by: sortKey,
-						sort_dir: sortDir,
-						limit: 200,
-					},
+		api.GET('/v1/reminder-lists', {
+			params: {
+				query: {
+					include_counts: true,
+					sort_by: sortKey,
+					sort_dir: sortDir,
+					limit: 200,
 				},
-			})
+			},
+		})
 			.then((r) => unwrap(r))
 			.then((listsResult) => {
 				lists = listsResult

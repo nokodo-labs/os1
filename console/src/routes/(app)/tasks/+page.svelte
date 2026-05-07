@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import { api, unwrap, type Schemas } from '$lib/api'
+	import ManualTaskKickoffModal from '$lib/components/ManualTaskKickoffModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import TaskDetailsModal from '$lib/components/TaskDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
@@ -11,32 +13,29 @@
 		ArrowDown,
 		ArrowUp,
 		Ban,
-		CalendarClock,
 		CheckCircle2,
 		Circle,
 		Clock3,
 		Hash,
-		ListChecks,
 		LoaderCircle,
 		RefreshCw,
 		Search,
 		User,
+		Wrench,
 		XCircle,
 	} from '@lucide/svelte'
-	import { SvelteDate } from 'svelte/reactivity'
 
 	type Task = Schemas['Task']
 	type TaskStatus = Schemas['TaskStatus']
-	type ScheduledItem = Schemas['ScheduledItem']
 	type SortKey = 'updated_at' | 'created_at' | 'status' | 'task_type' | 'stage' | 'last_event_at'
 	type SortDir = 'asc' | 'desc'
-	type ViewMode = 'live' | 'history' | 'all'
-	type StatusFilter = 'all' | TaskStatus
+	type HistoryStatusFilter = 'all' | 'complete' | 'failed' | 'cancelled'
 
-	const viewOptions: Array<{ value: ViewMode; label: string; description: string }> = [
-		{ value: 'live', label: 'live', description: 'running and pending' },
-		{ value: 'history', label: 'history', description: 'completed, failed, cancelled' },
-		{ value: 'all', label: 'all', description: 'latest tasks' },
+	const historyStatusOptions: Array<{ value: HistoryStatusFilter; label: string }> = [
+		{ value: 'all', label: 'all ended statuses' },
+		{ value: 'complete', label: 'complete' },
+		{ value: 'failed', label: 'failed' },
+		{ value: 'cancelled', label: 'cancelled' },
 	]
 
 	const sortOptions: Array<{ value: SortKey; label: string }> = [
@@ -48,80 +47,51 @@
 		{ value: 'stage', label: 'stage' },
 	]
 
-	const liveStatusOptions: Array<{ value: StatusFilter; label: string }> = [
-		{ value: 'all', label: 'all live statuses' },
-		{ value: 'running', label: 'running' },
-		{ value: 'pending', label: 'pending' },
-	]
-
-	const historyStatusOptions: Array<{ value: StatusFilter; label: string }> = [
-		{ value: 'all', label: 'all ended statuses' },
-		{ value: 'complete', label: 'complete' },
-		{ value: 'failed', label: 'failed' },
-		{ value: 'cancelled', label: 'cancelled' },
-	]
-
-	const allStatusOptions: Array<{ value: StatusFilter; label: string }> = [
-		{ value: 'all', label: 'all statuses' },
-		{ value: 'pending', label: 'pending' },
-		{ value: 'running', label: 'running' },
-		{ value: 'complete', label: 'complete' },
-		{ value: 'failed', label: 'failed' },
-		{ value: 'cancelled', label: 'cancelled' },
-	]
-
-	let tasks = $state<Task[]>([])
-	let view = $state<ViewMode>('live')
-	let statusFilter = $state<StatusFilter>('all')
+	let liveTasks = $state<Task[]>([])
+	let historyTasks = $state<Task[]>([])
 	let ownerFilter = $state('')
 	let threadFilter = $state('')
+	let historyStatusFilter = $state<HistoryStatusFilter>('all')
 	let sortKey = $state<SortKey>('last_event_at')
 	let sortDir = $state<SortDir>('desc')
 	let pageIndex = $state(0)
 	let limit = $state(50)
 	let refreshToken = $state(0)
-	let isLoading = $state(false)
-	let error = $state<string | null>(null)
+	let isLoadingLive = $state(false)
+	let isLoadingHistory = $state(false)
+	let liveError = $state<string | null>(null)
+	let historyError = $state<string | null>(null)
 	let hasNext = $state(false)
-	let cancellingTaskId = $state<string | null>(null)
-	let scheduledItems = $state<ScheduledItem[]>([])
-	let isLoadingScheduledItems = $state(false)
-	let scheduledItemsError = $state<string | null>(null)
+	let taskDetailsOpen = $state(false)
+	let selectedTaskId = $state<string | null>(null)
+	let selectedTask = $state<Task | null>(null)
+	let manualTasksOpen = $state(false)
 
-	const statusOptions = $derived.by(() => {
-		if (view === 'live') return liveStatusOptions
-		if (view === 'history') return historyStatusOptions
-		return allStatusOptions
-	})
+	const liveCount = $derived(liveTasks.length)
+	const endedCount = $derived(historyTasks.length)
+	const isLoading = $derived(isLoadingLive || isLoadingHistory)
 
-	const loadedActiveCount = $derived(
-		tasks.filter((task) => task.status === 'pending' || task.status === 'running').length
-	)
-	const loadedEndedCount = $derived(tasks.length - loadedActiveCount)
+	function refresh() {
+		refreshToken += 1
+	}
 
-	function setView(next: ViewMode) {
-		view = next
-		statusFilter = 'all'
+	function resetHistoryPage() {
 		pageIndex = 0
 	}
 
 	function setStatusFilter(next: string) {
-		statusFilter = next as StatusFilter
-		pageIndex = 0
+		historyStatusFilter = next as HistoryStatusFilter
+		resetHistoryPage()
 	}
 
 	function setSort(next: string) {
 		sortKey = next as SortKey
-		pageIndex = 0
+		resetHistoryPage()
 	}
 
 	function toggleSortDir() {
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc'
-		pageIndex = 0
-	}
-
-	function refresh() {
-		refreshToken += 1
+		resetHistoryPage()
 	}
 
 	function metadataString(task: Task, key: string): string | null {
@@ -136,14 +106,10 @@
 	function taskContext(task: Task): string | null {
 		return (
 			task.spawned_thread_id ??
-			metadataString(task, 'integration') ??
 			metadataString(task, 'thread_id') ??
+			metadataString(task, 'integration') ??
 			metadataString(task, 'deployment_origin')
 		)
-	}
-
-	function isActiveStatus(statusValue: TaskStatus): boolean {
-		return statusValue === 'pending' || statusValue === 'running'
 	}
 
 	function progressValue(task: Task): number {
@@ -183,94 +149,61 @@
 		return null
 	}
 
-	function scheduledWindow(): { startAt: string; endAt: string } {
-		const start = new SvelteDate()
-		start.setHours(0, 0, 0, 0)
-		const end = new SvelteDate(start.getTime())
-		end.setDate(end.getDate() + 14)
-		end.setHours(23, 59, 59, 999)
-		return { startAt: start.toISOString(), endAt: end.toISOString() }
+	function openTaskDetails(task: Task) {
+		selectedTask = task
+		selectedTaskId = task.id
+		taskDetailsOpen = true
 	}
 
-	function scheduledKindLabel(item: ScheduledItem): string {
-		return item.kind === 'event' ? 'calendar event' : 'reminder'
-	}
-
-	function scheduledKindClass(item: ScheduledItem): string {
-		return item.kind === 'event'
-			? 'border-rose-500/20 bg-rose-500/10 text-rose-300'
-			: 'border-sky-500/20 bg-sky-500/10 text-sky-300'
-	}
-
-	function scheduledContainerLabel(item: ScheduledItem): string {
-		if (item.calendar_id) return `calendar ${item.calendar_id}`
-		if (item.reminder_list_id) return `reminder list ${item.reminder_list_id}`
-		return item.container_id
-	}
-
-	async function cancelTask(task: Task) {
-		if (!isActiveStatus(task.status)) return
-		cancellingTaskId = task.id
-		error = null
-		try {
-			const updated = unwrap(
-				await api.POST('/v1/tasks/{task_id}/cancel', {
-					params: { path: { task_id: task.id } },
-					body: { reason: 'cancelled from console' },
-				})
-			)
-			tasks = tasks.map((item) => (item.id === updated.id ? updated : item))
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'failed to cancel task'
-		} finally {
-			cancellingTaskId = null
-		}
+	function replaceTask(updated: Task) {
+		liveTasks = liveTasks.map((task) => (task.id === updated.id ? updated : task))
+		historyTasks = historyTasks.map((task) => (task.id === updated.id ? updated : task))
+		if (selectedTaskId === updated.id) selectedTask = updated
 	}
 
 	$effect(() => {
 		if (!browser) return
 		void refreshToken
-		const window = scheduledWindow()
-
-		isLoadingScheduledItems = true
-		scheduledItemsError = null
-		api.GET('/v1/scheduled-items', {
-			params: {
-				query: {
-					start_at: window.startAt,
-					end_at: window.endAt,
-					include_completed: false,
-					limit: 12,
-				},
-			},
-		})
-			.then((result) => unwrap(result))
-			.then((loaded) => {
-				scheduledItems = loaded
-			})
-			.catch((err: unknown) => {
-				scheduledItemsError =
-					err instanceof Error ? err.message : 'failed to load scheduled tasks'
-				scheduledItems = []
-			})
-			.finally(() => {
-				isLoadingScheduledItems = false
-			})
 
 		const userId = ownerFilter.trim()
 		const threadId = threadFilter.trim()
-		const stateFilter = view === 'live' ? 'active' : view === 'history' ? 'ended' : undefined
 
-		isLoading = true
-		error = null
-
+		isLoadingLive = true
+		liveError = null
 		api.GET('/v1/tasks', {
 			params: {
 				query: {
 					user_id: userId || undefined,
 					spawned_thread_id: threadId || undefined,
-					status_filter: statusFilter === 'all' ? undefined : statusFilter,
-					state_filter: stateFilter,
+					state_filter: 'active',
+					skip: 0,
+					limit: 20,
+					sort_by: 'last_event_at',
+					sort_dir: 'desc',
+				},
+			},
+		})
+			.then((result) => unwrap(result))
+			.then((loaded) => {
+				liveTasks = loaded
+			})
+			.catch((err: unknown) => {
+				liveError = err instanceof Error ? err.message : 'failed to load live tasks'
+				liveTasks = []
+			})
+			.finally(() => {
+				isLoadingLive = false
+			})
+
+		isLoadingHistory = true
+		historyError = null
+		api.GET('/v1/tasks', {
+			params: {
+				query: {
+					user_id: userId || undefined,
+					spawned_thread_id: threadId || undefined,
+					status_filter: historyStatusFilter === 'all' ? undefined : historyStatusFilter,
+					state_filter: 'ended',
 					skip: pageIndex * limit,
 					limit,
 					sort_by: sortKey,
@@ -280,16 +213,16 @@
 		})
 			.then((result) => unwrap(result))
 			.then((loaded) => {
-				tasks = loaded
+				historyTasks = loaded
 				hasNext = loaded.length === limit
 			})
 			.catch((err: unknown) => {
-				error = err instanceof Error ? err.message : 'failed to load tasks'
-				tasks = []
+				historyError = err instanceof Error ? err.message : 'failed to load task history'
+				historyTasks = []
 				hasNext = false
 			})
 			.finally(() => {
-				isLoading = false
+				isLoadingHistory = false
 			})
 	})
 </script>
@@ -300,71 +233,11 @@
 			<h2 class="text-2xl font-bold tracking-tight">tasks</h2>
 			<p class="text-zinc-400">monitor live work and ended task history.</p>
 		</div>
-		<div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
-			<div class="relative w-full sm:w-auto sm:flex-1">
-				<Search
-					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
-				/>
-				<Input
-					placeholder="filter by user id..."
-					bind:value={ownerFilter}
-					class="w-full pl-8 sm:w-56 lg:w-72"
-					oninput={() => (pageIndex = 0)}
-				/>
-			</div>
-			<div class="relative w-full sm:w-auto sm:flex-1">
-				<Hash
-					class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
-				/>
-				<Input
-					placeholder="filter by thread id..."
-					bind:value={threadFilter}
-					class="w-full pl-8 sm:w-56 lg:w-72"
-					oninput={() => (pageIndex = 0)}
-				/>
-			</div>
-			<Select value={statusFilter} onValueChange={setStatusFilter}>
-				<SelectTrigger class="w-full rounded-xl sm:w-56">
-					<span class="truncate text-left">
-						{statusOptions.find((option) => option.value === statusFilter)?.label ??
-							statusFilter}
-					</span>
-				</SelectTrigger>
-				<SelectContent>
-					{#each statusOptions as option (option.value)}
-						<SelectItem value={option.value}>{option.label}</SelectItem>
-					{/each}
-				</SelectContent>
-			</Select>
-			<div class="flex w-full items-center gap-2 sm:w-auto">
-				<Select value={sortKey} onValueChange={setSort}>
-					<SelectTrigger class="w-full flex-1 rounded-xl sm:w-44">
-						<span class="truncate text-left">
-							{sortOptions.find((option) => option.value === sortKey)?.label ??
-								sortKey}
-						</span>
-					</SelectTrigger>
-					<SelectContent>
-						{#each sortOptions as option (option.value)}
-							<SelectItem value={option.value}>{option.label}</SelectItem>
-						{/each}
-					</SelectContent>
-				</Select>
-				<Button
-					variant="outline"
-					class="shrink-0 rounded-xl px-3"
-					onclick={toggleSortDir}
-					disabled={isLoading}
-					aria-label="toggle sort direction"
-					title="toggle sort direction"
-				>
-					{#if sortDir === 'asc'}
-						<ArrowUp class="h-4 w-4" />
-					{:else}
-						<ArrowDown class="h-4 w-4" />
-					{/if}
-				</Button>
-			</div>
+		<div class="flex flex-wrap items-center gap-2">
+			<Button variant="outline" class="rounded-xl" onclick={() => (manualTasksOpen = true)}>
+				<Wrench class="mr-1.5 h-4 w-4" />
+				manual kickoff
+			</Button>
 			<Button variant="outline" class="rounded-xl" onclick={refresh} disabled={isLoading}>
 				<RefreshCw class="mr-1.5 h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
 				{isLoading ? 'loading...' : 'refresh'}
@@ -372,104 +245,160 @@
 		</div>
 	</div>
 
-	<div class="grid gap-2 sm:grid-cols-3">
-		{#each viewOptions as option (option.value)}
-			<button
-				type="button"
-				class="rounded-2xl border p-4 text-left transition-colors {view === option.value
-					? 'border-lime-500/30 bg-lime-500/10 text-zinc-100'
-					: 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800/60'}"
-				onclick={() => setView(option.value)}
-			>
-				<div class="flex items-center gap-2 text-sm font-medium">
-					<Activity class="h-4 w-4 text-lime-400" />
-					{option.label}
-				</div>
-				<div class="mt-1 text-xs text-zinc-500">{option.description}</div>
-			</button>
-		{/each}
+	<div class="grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto_auto]">
+		<div class="relative">
+			<Search
+				class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+			/>
+			<Input
+				placeholder="filter by user id..."
+				bind:value={ownerFilter}
+				class="w-full rounded-xl pl-8"
+				oninput={resetHistoryPage}
+			/>
+		</div>
+		<div class="relative">
+			<Hash
+				class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+			/>
+			<Input
+				placeholder="filter by thread id..."
+				bind:value={threadFilter}
+				class="w-full rounded-xl pl-8"
+				oninput={resetHistoryPage}
+			/>
+		</div>
+		<Select value={historyStatusFilter} onValueChange={setStatusFilter}>
+			<SelectTrigger class="w-full rounded-xl lg:w-56">
+				<span class="truncate text-left">
+					{historyStatusOptions.find((option) => option.value === historyStatusFilter)
+						?.label ?? historyStatusFilter}
+				</span>
+			</SelectTrigger>
+			<SelectContent>
+				{#each historyStatusOptions as option (option.value)}
+					<SelectItem value={option.value}>{option.label}</SelectItem>
+				{/each}
+			</SelectContent>
+		</Select>
+		<Select value={sortKey} onValueChange={setSort}>
+			<SelectTrigger class="w-full rounded-xl lg:w-44">
+				<span class="truncate text-left">
+					{sortOptions.find((option) => option.value === sortKey)?.label ?? sortKey}
+				</span>
+			</SelectTrigger>
+			<SelectContent>
+				{#each sortOptions as option (option.value)}
+					<SelectItem value={option.value}>{option.label}</SelectItem>
+				{/each}
+			</SelectContent>
+		</Select>
+		<Button
+			variant="outline"
+			class="rounded-xl px-3"
+			onclick={toggleSortDir}
+			disabled={isLoadingHistory}
+			aria-label="toggle sort direction"
+			title="toggle sort direction"
+		>
+			{#if sortDir === 'asc'}
+				<ArrowUp class="h-4 w-4" />
+			{:else}
+				<ArrowDown class="h-4 w-4" />
+			{/if}
+		</Button>
 	</div>
 
-	<section class="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-		<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-			<div>
-				<div class="flex items-center gap-2 text-sm font-medium text-zinc-100">
-					<CalendarClock class="h-4 w-4 text-rose-400" />
-					upcoming scheduled tasks
-				</div>
-				<div class="mt-1 text-xs text-zinc-500">calendar events and reminders due soon</div>
-			</div>
-			<span class="text-xs text-zinc-500">
-				{scheduledItems.length} item{scheduledItems.length === 1 ? '' : 's'} in 14 days
-			</span>
-		</div>
-
-		{#if isLoadingScheduledItems && scheduledItems.length === 0}
-			<div class="flex items-center justify-center py-8">
-				<NokodoLoader />
-			</div>
-		{:else if scheduledItemsError}
-			<div class="mt-4 rounded-xl border border-red-900/50 bg-red-900/10 p-3 text-sm text-red-200">
-				{scheduledItemsError}
-			</div>
-		{:else if scheduledItems.length === 0}
-			<div class="mt-4 rounded-xl border border-dashed border-zinc-800 p-6 text-center text-sm text-zinc-500">
-				no scheduled tasks in the next 14 days
-			</div>
-		{:else}
-			<div class="mt-4 grid gap-2 lg:grid-cols-2">
-				{#each scheduledItems as item (item.id)}
-					<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-						<div class="flex items-start justify-between gap-3">
-							<div class="min-w-0 flex-1">
-								<div class="flex items-center gap-2">
-									{#if item.kind === 'event'}
-										<CalendarClock class="h-4 w-4 shrink-0 text-rose-400" />
-									{:else}
-										<ListChecks class="h-4 w-4 shrink-0 text-sky-400" />
-									{/if}
-									<span class="truncate text-sm font-medium text-zinc-100">{item.title}</span>
-								</div>
-								{#if item.description}
-									<div class="mt-1 line-clamp-1 text-xs text-zinc-400">{item.description}</div>
-								{/if}
-							</div>
-							<span class="shrink-0 rounded-md border px-2 py-0.5 text-xs {scheduledKindClass(item)}">
-								{scheduledKindLabel(item)}
-							</span>
-						</div>
-						<div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-							<span class="inline-flex items-center gap-1.5">
-								<Clock3 class="h-3.5 w-3.5" />
-								{formatDate(item.effective_start_at)}
-							</span>
-							<span class="truncate">{scheduledContainerLabel(item)}</span>
-							<span>{item.status}</span>
-						</div>
+	{#if liveTasks.length > 0 || isLoadingLive || liveError}
+		<section class="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+			<div class="flex items-center justify-between gap-3">
+				<div>
+					<div class="flex items-center gap-2 text-sm font-medium text-zinc-100">
+						<Activity class="h-4 w-4 text-lime-400" />
+						live tasks
 					</div>
-				{/each}
+					<div class="mt-1 text-xs text-zinc-500">pending and running work</div>
+				</div>
+				<span class="text-xs text-zinc-500">{liveCount} live</span>
 			</div>
-		{/if}
-	</section>
 
-	{#if error}
-		<div
-			class="shrink-0 rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
-		>
-			{error}
-		</div>
+			{#if isLoadingLive && liveTasks.length === 0}
+				<div class="flex items-center justify-center py-8">
+					<NokodoLoader />
+				</div>
+			{:else if liveError}
+				<div
+					class="mt-4 rounded-xl border border-red-900/50 bg-red-900/10 p-3 text-sm text-red-200"
+				>
+					{liveError}
+				</div>
+			{:else}
+				<div class="mt-4 grid gap-2 xl:grid-cols-2">
+					{#each liveTasks as task (task.id)}
+						{@const progress = progressValue(task)}
+						{@const context = taskContext(task)}
+						<button
+							type="button"
+							class="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-900"
+							onclick={() => openTaskDetails(task)}
+						>
+							<div class="flex items-start gap-3">
+								<div
+									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-lime-500/15 text-lime-400"
+								>
+									{#if task.status === 'running'}
+										<LoaderCircle class="h-4 w-4 animate-spin" />
+									{:else}
+										<Clock3 class="h-4 w-4" />
+									{/if}
+								</div>
+								<div class="min-w-0 flex-1 space-y-2">
+									<div class="flex flex-wrap items-center gap-2">
+										<span class="truncate text-sm font-medium text-zinc-100"
+											>{taskName(task)}</span
+										>
+										<span
+											class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs {statusClass(
+												task.status
+											)}"
+										>
+											{task.status}
+										</span>
+									</div>
+									<div class="h-2 overflow-hidden rounded-full bg-zinc-900">
+										<div
+											class="h-full rounded-full bg-lime-400"
+											style:width={`${progress}%`}
+										></div>
+									</div>
+									<div class="flex flex-wrap gap-3 text-xs text-zinc-500">
+										<span>{progress}%</span>
+										<span
+											>last event {formatDate(
+												task.last_event_at ?? task.updated_at
+											)}</span
+										>
+										{#if context}<span class="truncate">{context}</span>{/if}
+									</div>
+								</div>
+							</div>
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</section>
 	{/if}
 
-	<div class="flex flex-col gap-4">
+	<section class="flex flex-col gap-4">
 		<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 			<div class="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
 				<span class="inline-flex items-center gap-1.5 rounded-md bg-zinc-900 px-2 py-1">
 					<LoaderCircle class="h-3.5 w-3.5 text-lime-400" />
-					{loadedActiveCount} live
+					{liveCount} live
 				</span>
 				<span class="inline-flex items-center gap-1.5 rounded-md bg-zinc-900 px-2 py-1">
 					<CheckCircle2 class="h-3.5 w-3.5 text-emerald-400" />
-					{loadedEndedCount} ended
+					{endedCount} shown
 				</span>
 			</div>
 			<div class="flex items-center gap-2">
@@ -477,78 +406,84 @@
 					variant="outline"
 					class="rounded-xl"
 					onclick={() => (pageIndex = Math.max(0, pageIndex - 1))}
-					disabled={pageIndex === 0 || isLoading}
+					disabled={pageIndex === 0 || isLoadingHistory}
 				>
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{tasks.length > 0 ? ` - ${tasks.length} items` : ''}
+					page {pageIndex + 1}{historyTasks.length > 0
+						? ` - ${historyTasks.length} items`
+						: ''}
 				</span>
 				<Button
 					variant="outline"
 					class="rounded-xl"
 					onclick={() => (pageIndex += 1)}
-					disabled={!hasNext || isLoading}
+					disabled={!hasNext || isLoadingHistory}
 				>
 					next
 				</Button>
 			</div>
 		</div>
 
-		<div class="flex flex-col space-y-2">
-			{#if isLoading && tasks.length === 0}
+		{#if historyError}
+			<div
+				class="rounded-2xl border border-red-900/50 bg-red-900/10 p-4 text-sm text-red-200"
+			>
+				{historyError}
+			</div>
+		{/if}
+
+		<div class="flex flex-col gap-2">
+			{#if isLoadingHistory && historyTasks.length === 0}
 				<div
-					class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
+					class="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
 				>
 					<NokodoLoader />
 				</div>
-			{/if}
-
-			{#if tasks.length === 0 && !isLoading}
+			{:else if historyTasks.length === 0 && !isLoadingHistory}
 				<div
 					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
 				>
-					no tasks found
+					no task history found
 				</div>
 			{/if}
 
-			{#each tasks as task (task.id)}
-				{@const progress = progressValue(task)}
-				{@const active = isActiveStatus(task.status)}
+			{#each historyTasks as task (task.id)}
 				{@const context = taskContext(task)}
 				{@const summary = resultSummary(task)}
-				<div
-					class="flex flex-col gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50 lg:flex-row lg:items-center lg:justify-between"
+				<button
+					type="button"
+					class="flex flex-col gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/50 lg:flex-row lg:items-center lg:justify-between"
+					onclick={() => openTaskDetails(task)}
 				>
 					<div class="flex min-w-0 flex-1 gap-4">
 						<div
-							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-lime-500/15 text-lime-400"
+							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-zinc-300"
 						>
-							{#if task.status === 'running'}
-								<LoaderCircle class="h-5 w-5 animate-spin" />
-							{:else if task.status === 'pending'}
-								<Clock3 class="h-5 w-5" />
-							{:else if task.status === 'complete'}
-								<CheckCircle2 class="h-5 w-5" />
+							{#if task.status === 'complete'}
+								<CheckCircle2 class="h-5 w-5 text-emerald-400" />
 							{:else if task.status === 'failed'}
-								<AlertTriangle class="h-5 w-5" />
+								<AlertTriangle class="h-5 w-5 text-red-400" />
+							{:else if task.status === 'cancelled'}
+								<Ban class="h-5 w-5 text-zinc-400" />
+							{:else if task.status === 'running'}
+								<LoaderCircle class="h-5 w-5 animate-spin text-lime-400" />
 							{:else}
-								<Ban class="h-5 w-5" />
+								<Clock3 class="h-5 w-5 text-sky-400" />
 							{/if}
 						</div>
 						<div class="min-w-0 flex-1 space-y-2">
 							<div class="flex flex-wrap items-center gap-2">
-								<span class="truncate text-base font-medium text-zinc-100">
-									{taskName(task)}
-								</span>
+								<span class="truncate text-base font-medium text-zinc-100"
+									>{taskName(task)}</span
+								>
 								<span
 									class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs {statusClass(
 										task.status
 									)}"
 								>
-									{#if task.status === 'running'}
-										<LoaderCircle class="h-3 w-3 animate-spin" />
-									{:else if task.status === 'complete'}
+									{#if task.status === 'complete'}
 										<CheckCircle2 class="h-3 w-3" />
 									{:else if task.status === 'failed'}
 										<XCircle class="h-3 w-3" />
@@ -562,34 +497,18 @@
 							</div>
 
 							<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-								<span class="inline-flex items-center gap-1.5">
+								<span class="inline-flex items-center gap-1.5 break-all">
 									<Hash class="h-3.5 w-3.5" />
 									{task.id}
 								</span>
-								<span class="inline-flex items-center gap-1.5">
+								<span class="inline-flex items-center gap-1.5 break-all">
 									<User class="h-3.5 w-3.5" />
 									{task.user_id}
 								</span>
 								<span>{task.task_type.replaceAll('_', ' ')}</span>
-								{#if task.stage}
-									<span>{task.stage}</span>
-								{/if}
-								{#if context}
-									<span class="truncate">{context}</span>
-								{/if}
+								{#if task.stage}<span>{task.stage}</span>{/if}
+								{#if context}<span class="truncate">{context}</span>{/if}
 							</div>
-
-							{#if active || task.progress != null}
-								<div class="max-w-2xl space-y-1">
-									<div class="h-2 overflow-hidden rounded-full bg-zinc-950">
-										<div
-											class="h-full rounded-full bg-lime-400 transition-all"
-											style:width={`${progress}%`}
-										></div>
-									</div>
-									<div class="text-xs text-zinc-500">{progress}%</div>
-								</div>
-							{/if}
 
 							{#if summary}
 								<div class="line-clamp-2 text-sm text-red-200/90">{summary}</div>
@@ -597,32 +516,24 @@
 						</div>
 					</div>
 
-					<div class="flex shrink-0 flex-col gap-3 lg:items-end">
-						<div
-							class="grid gap-1 text-xs text-zinc-500 sm:grid-cols-3 lg:grid-cols-1 lg:text-right"
-						>
-							<span>created {formatDate(task.created_at)}</span>
-							<span
-								>last event {formatDate(
-									task.last_event_at ?? task.updated_at
-								)}</span
-							>
-							<span>ended {formatDate(task.completed_at ?? task.cancelled_at)}</span>
-						</div>
-						{#if active}
-							<Button
-								variant="outline"
-								class="rounded-xl border-red-900/60 text-red-200 hover:bg-red-950/40"
-								onclick={() => cancelTask(task)}
-								disabled={cancellingTaskId === task.id}
-							>
-								<Ban class="mr-1.5 h-4 w-4" />
-								{cancellingTaskId === task.id ? 'cancelling...' : 'cancel'}
-							</Button>
-						{/if}
+					<div
+						class="grid shrink-0 gap-1 text-xs text-zinc-500 sm:grid-cols-3 lg:grid-cols-1 lg:text-right"
+					>
+						<span>created {formatDate(task.created_at)}</span>
+						<span>last event {formatDate(task.last_event_at ?? task.updated_at)}</span>
+						<span>ended {formatDate(task.completed_at ?? task.cancelled_at)}</span>
 					</div>
-				</div>
+				</button>
 			{/each}
 		</div>
-	</div>
+	</section>
 </div>
+
+<TaskDetailsModal
+	bind:open={taskDetailsOpen}
+	taskId={selectedTaskId}
+	initialTask={selectedTask}
+	onUpdated={replaceTask}
+/>
+
+<ManualTaskKickoffModal bind:open={manualTasksOpen} onComplete={refresh} />
