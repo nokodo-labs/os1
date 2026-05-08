@@ -823,6 +823,7 @@ async def test_run_agent_schedules_new_thread_maintenance_before_done(
 		scheduled_thread_id: TypeID,
 		task_session: AsyncSession | None = None,
 	) -> bool:
+		terminal_order.append("schedule")
 		if task_session is None:
 			scheduled_thread_ids.append("missing-session")
 			scheduled_threads_needed_maintenance.append(False)
@@ -853,6 +854,18 @@ async def test_run_agent_schedules_new_thread_maintenance_before_done(
 		"schedule_thread_inactivity_maintenance",
 		capture_schedule,
 	)
+	terminal_order: list[str] = []
+	original_complete_run = chat_agents.run_status_store.complete_run
+
+	async def capture_complete_run(run_id: TypeID) -> object | None:
+		terminal_order.append("complete")
+		return await original_complete_run(run_id)
+
+	monkeypatch.setattr(
+		chat_agents.run_status_store,
+		"complete_run",
+		capture_complete_run,
+	)
 
 	frames: list[bytes] = []
 	async for frame in chat_agents.run_agent(
@@ -869,6 +882,139 @@ async def test_run_agent_schedules_new_thread_maintenance_before_done(
 	assert any(b"event: done" in frame for frame in frames)
 	assert scheduled_thread_ids == [str(thread_id)]
 	assert scheduled_threads_needed_maintenance == [True]
+	assert terminal_order == ["schedule", "complete"]
+
+
+@pytest.mark.asyncio
+async def test_run_agent_schedules_regenerated_thread_maintenance(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""a completed regenerate on missing metadata starts maintenance promptly."""
+	user = await user_service.create_user(
+		UserCreate(
+			email="thread_regen_schedule@example.com",
+			username="thread_regen_schedule",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	thread = await _create_thread_with_current_message(
+		db_session,
+		TypeID(user.id),
+		datetime.now(tz=UTC),
+	)
+	parent_id = TypeID(thread.current_message_id)
+	agent = await agent_service.create_agent(
+		AgentCreate(
+			name=f"thread-regen-scheduler-{new_typeid('agent')[-12:]}",
+			plugin_ids=[],
+			config=AgentConfig(),
+		),
+		db_session,
+		principal=principal,
+	)
+	await db_session.commit()
+
+	fake_run_agent = _FakeCompletedRunAgent()
+	scheduled_current_message_ids: list[str | None] = []
+	scheduled_threads_needed_maintenance: list[bool] = []
+	terminal_order: list[str] = []
+
+	async def fake_load_agent(
+		*_args: object,
+		**_kwargs: object,
+	) -> object:
+		return agent
+
+	async def fake_build_agent_from_orm(
+		*_args: object,
+		**_kwargs: object,
+	) -> _FakeCompletedRunAgent:
+		return fake_run_agent
+
+	async def fake_prepare_steering(
+		**kwargs: object,
+	) -> tuple[_FakeCompletedRunAgent, None]:
+		assert kwargs["sdk_agent"] is fake_run_agent
+		return fake_run_agent, None
+
+	async def fake_broadcast_run_event(
+		*_args: object,
+		**_kwargs: object,
+	) -> None:
+		return None
+
+	async def capture_schedule(
+		scheduled_thread_id: TypeID,
+		task_session: AsyncSession | None = None,
+	) -> bool:
+		terminal_order.append("schedule")
+		if task_session is None:
+			scheduled_current_message_ids.append(None)
+			scheduled_threads_needed_maintenance.append(False)
+			return False
+		thread_row = await task_session.get(Thread, scheduled_thread_id)
+		scheduled_current_message_ids.append(
+			str(thread_row.current_message_id) if thread_row else None
+		)
+		scheduled_threads_needed_maintenance.append(
+			bool(
+				thread_row is not None
+				and await thread_maintenance_service.thread_needs_maintenance(
+					thread_row,
+					task_session,
+				)
+			)
+		)
+		return True
+
+	original_complete_run = chat_agents.run_status_store.complete_run
+
+	async def capture_complete_run(run_id: TypeID) -> object | None:
+		terminal_order.append("complete")
+		return await original_complete_run(run_id)
+
+	monkeypatch.setattr(chat_agents, "_load_agent", fake_load_agent)
+	monkeypatch.setattr(
+		chat_agents,
+		"build_agent_from_orm",
+		fake_build_agent_from_orm,
+	)
+	monkeypatch.setattr(chat_agents, "prepare_steering", fake_prepare_steering)
+	monkeypatch.setattr(chat_agents, "broadcast_run_event", fake_broadcast_run_event)
+	monkeypatch.setattr(
+		chat_agents,
+		"schedule_thread_inactivity_maintenance",
+		capture_schedule,
+	)
+	monkeypatch.setattr(
+		chat_agents.run_status_store,
+		"complete_run",
+		capture_complete_run,
+	)
+
+	frames: list[bytes] = []
+	async for frame in chat_agents.run_agent(
+		TypeID(thread.id),
+		TypeID(agent.id),
+		principal,
+		input=None,
+		parent_id=parent_id,
+		persist=True,
+	):
+		frames.append(frame)
+		if b"event: done" in frame:
+			break
+
+	assert any(b"event: done" in frame for frame in frames)
+	assert len(scheduled_current_message_ids) == 1
+	assert scheduled_current_message_ids[0] is not None
+	assert scheduled_current_message_ids[0] != str(parent_id)
+	assert scheduled_threads_needed_maintenance == [True]
+	assert terminal_order == ["schedule", "complete"]
 
 
 @pytest.mark.asyncio

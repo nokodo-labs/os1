@@ -980,12 +980,6 @@ async def run_agent(
 			if steering_subscriber is not None and not steering_subscriber.done():
 				steering_subscriber.cancel()
 
-		rs_terminated = await run_status_store.complete_run(run_id)
-		dropped = rs_terminated.in_flight_steering() if rs_terminated else []
-		_schedule_terminate_broadcast(
-			thread_id, agent_id, run_id, error=False, dropped_steering=dropped
-		)
-
 		if persist:
 			assert thread_id is not None  # persist=True requires a thread_id
 			if worker_task is not None:
@@ -1003,5 +997,11 @@ async def run_agent(
 					)
 			except Exception:
 				logger.exception("failed to schedule thread inactivity maintenance")
+
+		rs_terminated = await run_status_store.complete_run(run_id)
+		dropped = rs_terminated.in_flight_steering() if rs_terminated else []
+		_schedule_terminate_broadcast(
+			thread_id, agent_id, run_id, error=False, dropped_steering=dropped
+		)
 
 		yield sse_event(event="done", data={})
