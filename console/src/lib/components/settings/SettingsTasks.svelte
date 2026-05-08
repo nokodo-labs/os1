@@ -11,13 +11,21 @@
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'
 
-	type BackfillFrequency = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'custom'
+	type BackfillFrequency =
+		| 'hourly'
+		| 'daily'
+		| 'weekdays'
+		| 'weekly'
+		| 'monthly'
+		| 'yearly'
+		| 'custom'
 	type ParsedSchedule = {
 		frequency: Exclude<BackfillFrequency, 'custom'>
 		minute: string
 		time: string
 		weekday: string
 		monthDay: string
+		month: string
 	}
 
 	const weekdays = [
@@ -28,6 +36,21 @@
 		{ value: '5', label: 'friday' },
 		{ value: '6', label: 'saturday' },
 		{ value: '0', label: 'sunday' },
+	]
+
+	const months = [
+		{ value: '1', label: 'january' },
+		{ value: '2', label: 'february' },
+		{ value: '3', label: 'march' },
+		{ value: '4', label: 'april' },
+		{ value: '5', label: 'may' },
+		{ value: '6', label: 'june' },
+		{ value: '7', label: 'july' },
+		{ value: '8', label: 'august' },
+		{ value: '9', label: 'september' },
+		{ value: '10', label: 'october' },
+		{ value: '11', label: 'november' },
+		{ value: '12', label: 'december' },
 	]
 
 	type Props = {
@@ -51,6 +74,7 @@
 	let backfillMinute = $state('0')
 	let backfillWeekday = $state('1')
 	let backfillMonthDay = $state('1')
+	let backfillMonth = $state('1')
 	let lastAppliedCron = $state<string | null>(null)
 
 	function isIntInRange(value: string, min: number, max: number): boolean {
@@ -63,8 +87,10 @@
 		return (
 			value === 'hourly' ||
 			value === 'daily' ||
+			value === 'weekdays' ||
 			value === 'weekly' ||
 			value === 'monthly' ||
+			value === 'yearly' ||
 			value === 'custom'
 		)
 	}
@@ -72,8 +98,10 @@
 	function frequencyLabel(value: BackfillFrequency): string {
 		if (value === 'hourly') return 'hourly'
 		if (value === 'daily') return 'daily'
+		if (value === 'weekdays') return 'business days'
 		if (value === 'weekly') return 'weekly'
 		if (value === 'monthly') return 'monthly'
+		if (value === 'yearly') return 'annually'
 		return 'custom'
 	}
 
@@ -86,20 +114,39 @@
 		const parts = cron.trim().split(/\s+/)
 		if (parts.length !== 5) return null
 		const [minute, hour, monthDay, month, weekday] = parts
-		if (month !== '*') return null
 		if (hour === '*' && monthDay === '*' && weekday === '*' && isIntInRange(minute, 0, 59)) {
-			return { frequency: 'hourly', minute, time: '04:00', weekday: '1', monthDay: '1' }
+			return {
+				frequency: 'hourly',
+				minute,
+				time: '04:00',
+				weekday: '1',
+				monthDay: '1',
+				month: '1',
+			}
 		}
 		const time = timeFromParts(hour, minute)
 		if (!time) return null
-		if (monthDay === '*' && weekday === '*') {
-			return { frequency: 'daily', minute, time, weekday: '1', monthDay: '1' }
+		if (month === '*' && monthDay === '*' && weekday === '*') {
+			return { frequency: 'daily', minute, time, weekday: '1', monthDay: '1', month: '1' }
 		}
-		if (monthDay === '*' && isIntInRange(weekday, 0, 6)) {
-			return { frequency: 'weekly', minute, time, weekday, monthDay: '1' }
+		if (month === '*' && monthDay === '*' && weekday === '1-5') {
+			return {
+				frequency: 'weekdays',
+				minute,
+				time,
+				weekday: '1',
+				monthDay: '1',
+				month: '1',
+			}
 		}
-		if (weekday === '*' && isIntInRange(monthDay, 1, 28)) {
-			return { frequency: 'monthly', minute, time, weekday: '1', monthDay }
+		if (month === '*' && monthDay === '*' && isIntInRange(weekday, 0, 6)) {
+			return { frequency: 'weekly', minute, time, weekday, monthDay: '1', month: '1' }
+		}
+		if (month === '*' && weekday === '*' && isIntInRange(monthDay, 1, 28)) {
+			return { frequency: 'monthly', minute, time, weekday: '1', monthDay, month: '1' }
+		}
+		if (weekday === '*' && isIntInRange(monthDay, 1, 28) && isIntInRange(month, 1, 12)) {
+			return { frequency: 'yearly', minute, time, weekday: '1', monthDay, month }
 		}
 		return null
 	}
@@ -115,12 +162,19 @@
 		const normalizedMinute = String(Number(minute))
 		const normalizedHour = String(Number(hour))
 		if (backfillFrequency === 'daily') return `${normalizedMinute} ${normalizedHour} * * *`
+		if (backfillFrequency === 'weekdays') return `${normalizedMinute} ${normalizedHour} * * 1-5`
 		if (backfillFrequency === 'weekly') {
 			if (!isIntInRange(backfillWeekday, 0, 6)) return null
 			return `${normalizedMinute} ${normalizedHour} * * ${backfillWeekday}`
 		}
-		if (!isIntInRange(backfillMonthDay, 1, 28)) return null
-		return `${normalizedMinute} ${normalizedHour} ${backfillMonthDay} * *`
+		if (backfillFrequency === 'monthly') {
+			if (!isIntInRange(backfillMonthDay, 1, 28)) return null
+			return `${normalizedMinute} ${normalizedHour} ${backfillMonthDay} * *`
+		}
+		if (!isIntInRange(backfillMonthDay, 1, 28) || !isIntInRange(backfillMonth, 1, 12)) {
+			return null
+		}
+		return `${normalizedMinute} ${normalizedHour} ${backfillMonthDay} ${backfillMonth} *`
 	}
 
 	function applyParsedSchedule(parsed: ParsedSchedule | null, cron: string) {
@@ -134,6 +188,7 @@
 		backfillMinute = parsed.minute
 		backfillWeekday = parsed.weekday
 		backfillMonthDay = parsed.monthDay
+		backfillMonth = parsed.month
 		lastAppliedCron = cron
 	}
 
@@ -168,6 +223,16 @@
 	function setBackfillMonthDay(value: string) {
 		backfillMonthDay = value
 		updateCronFromControls()
+	}
+
+	function setBackfillMonth(value: string) {
+		backfillMonth = value
+		updateCronFromControls()
+	}
+
+	function setBackfillCustomCron(value: string) {
+		backfillCron = value
+		lastAppliedCron = value
 	}
 
 	$effect(() => {
@@ -210,8 +275,10 @@
 					<SelectContent>
 						<SelectItem value="hourly">hourly</SelectItem>
 						<SelectItem value="daily">daily</SelectItem>
+						<SelectItem value="weekdays">business days</SelectItem>
 						<SelectItem value="weekly">weekly</SelectItem>
 						<SelectItem value="monthly">monthly</SelectItem>
+						<SelectItem value="yearly">annually</SelectItem>
 						{#if backfillFrequency === 'custom'}
 							<SelectItem value="custom">custom</SelectItem>
 						{/if}
@@ -233,12 +300,16 @@
 					/>
 				</div>
 			{:else if backfillFrequency === 'custom'}
-				<div class="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-					<Label>custom schedule</Label>
-					<p class="text-xs text-zinc-500">
-						this schedule was configured outside the console. choose a cadence to
-						replace it.
-					</p>
+				<div class="space-y-2">
+					<Label for="maintenance_backfill_custom_cron">custom cron</Label>
+					<p class="text-xs text-zinc-500">five-field cron expression in UTC.</p>
+					<Input
+						id="maintenance_backfill_custom_cron"
+						value={backfillCron}
+						oninput={(event) => setBackfillCustomCron(event.currentTarget.value)}
+						class="rounded-xl font-mono"
+						placeholder="0 4 * * 1-5"
+					/>
 				</div>
 			{:else}
 				<div class="space-y-2">
@@ -270,7 +341,7 @@
 						</SelectContent>
 					</Select>
 				</div>
-			{:else if backfillFrequency === 'monthly'}
+			{:else if backfillFrequency === 'monthly' || backfillFrequency === 'yearly'}
 				<div class="space-y-2">
 					<Label for="maintenance_backfill_month_day">day</Label>
 					<p class="text-xs text-zinc-500">day of month, capped at 28 for safety.</p>
@@ -283,6 +354,23 @@
 						oninput={(event) => setBackfillMonthDay(event.currentTarget.value)}
 						class="rounded-xl"
 					/>
+				</div>
+			{/if}
+			{#if backfillFrequency === 'yearly'}
+				<div class="space-y-2">
+					<Label for="maintenance_backfill_month">month</Label>
+					<p class="text-xs text-zinc-500">month of year in UTC.</p>
+					<Select value={backfillMonth} onValueChange={setBackfillMonth}>
+						<SelectTrigger id="maintenance_backfill_month" class="rounded-xl">
+							{months.find((month) => month.value === backfillMonth)?.label ??
+								'january'}
+						</SelectTrigger>
+						<SelectContent>
+							{#each months as month (month.value)}
+								<SelectItem value={month.value}>{month.label}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
 				</div>
 			{/if}
 			<div class="space-y-2">
