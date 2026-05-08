@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from api.schemas.common import MISSING, MissingType, TimestampedModel
+from api.schemas.common import MISSING, MissingType, ORMModel, TimestampedModel
 from api.schemas.preferences import UserPreferences
 from api.schemas.privacy import UserPrivacy
 from api.schemas.sorting import CommonSortBy
@@ -109,6 +109,21 @@ class UserUpdate(BaseModel):
 	@classmethod
 	def check_username(cls, v: str) -> str:
 		return _validate_username(v)
+
+
+class UserBulkLookupRequest(BaseModel):
+	"""request visible user summaries by ID."""
+
+	user_ids: list[TypeID] = Field(default_factory=list, max_length=100)
+
+
+class UserSummary(ORMModel):
+	"""minimal user identity for allowed lookup results."""
+
+	id: TypeID
+	username: str | None = None
+	display_name: str | None = None
+	avatar_url: str | None = None
 
 
 class User(UserBase, TimestampedModel):

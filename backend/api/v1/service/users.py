@@ -23,6 +23,7 @@ from api.permissions import ActionPermission
 from api.schemas.user import UserCreate, UserUpdate
 from api.settings import settings
 from api.v1.service import events as event_service
+from api.v1.service import friends as friends_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import invalidate_accessible_users_for_subject
 from api.v1.service.sorting import SortDir, apply_sort
@@ -79,6 +80,44 @@ async def get_user(
 		)
 
 	return user
+
+
+async def get_accessible_user_summaries(
+	user_ids: list[TypeID],
+	session: AsyncSession,
+	principal: Principal,
+) -> list[User]:
+	"""return requested users the principal is allowed to identify."""
+	requested: list[TypeID] = []
+	seen: set[str] = set()
+	for user_id in user_ids:
+		key = str(user_id)
+		if key in seen:
+			continue
+		seen.add(key)
+		requested.append(user_id)
+
+	if not requested:
+		return []
+
+	if principal.is_admin:
+		allowed_ids = requested
+	else:
+		friends = await friends_service.list_friends(session, principal=principal)
+		visible_ids: set[str] = {str(principal.user_id)}
+		visible_ids.update(str(friend.id) for friend, _friendship_id in friends)
+		allowed_ids = [user_id for user_id in requested if str(user_id) in visible_ids]
+
+	if not allowed_ids:
+		return []
+
+	result = await session.execute(select(User).where(User.id.in_(allowed_ids)))
+	users_by_id = {str(user.id): user for user in result.scalars().all()}
+	return [
+		users_by_id[str(user_id)]
+		for user_id in requested
+		if str(user_id) in users_by_id
+	]
 
 
 async def get_user_counts(

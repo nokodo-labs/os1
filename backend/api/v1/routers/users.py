@@ -10,7 +10,14 @@ from api.models.user import User
 from api.schemas.friendship import UserSearchResult
 from api.schemas.sorting import SortDir
 from api.schemas.user import User as UserSchema
-from api.schemas.user import UserCreate, UserPermissions, UserSortBy, UserUpdate
+from api.schemas.user import (
+	UserBulkLookupRequest,
+	UserCreate,
+	UserPermissions,
+	UserSortBy,
+	UserSummary,
+	UserUpdate,
+)
 from api.v1.routers import friends as friends_router
 from api.v1.service import friends as friends_service
 from api.v1.service import users as user_service
@@ -77,6 +84,20 @@ async def search_users(
 	"""search users by name, username, or email."""
 	return await friends_service.search_users(
 		q, db, principal=principal, limit=min(limit, 50)
+	)
+
+
+@router.post("/bulk", response_model=list[UserSummary])
+async def read_user_summaries(
+	body: UserBulkLookupRequest,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> list[User]:
+	"""look up visible user summaries by ID."""
+	return await user_service.get_accessible_user_summaries(
+		body.user_ids,
+		db,
+		principal=principal,
 	)
 
 

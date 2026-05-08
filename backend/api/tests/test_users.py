@@ -143,6 +143,73 @@ async def test_get_nonexistent_user(
 
 
 @pytest.mark.asyncio
+async def test_bulk_user_lookup_omits_inaccessible_users(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""bulk lookup only returns users visible to the caller."""
+	admin_headers = auth_headers(admin_auth)
+	user_headers = auth_headers(user_auth)
+	current_user = auth_user(user_auth)
+	other_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": "bulk-private@example.com",
+			"username": "bulk_private",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert other_resp.status_code == 201
+
+	response = await client.post(
+		"/v1/users/bulk",
+		headers=user_headers,
+		json={"user_ids": [current_user["id"], other_resp.json()["id"]]},
+	)
+
+	assert response.status_code == 200
+	data = response.json()
+	assert [user["id"] for user in data] == [current_user["id"]]
+	assert "email" not in data[0]
+
+
+@pytest.mark.asyncio
+async def test_admin_bulk_user_lookup_returns_requested_users(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+) -> None:
+	"""admins can resolve requested user summaries in bulk."""
+	headers = auth_headers(admin_auth)
+	admin_user = auth_user(admin_auth)
+	other_resp = await client.post(
+		"/v1/users",
+		headers=headers,
+		json={
+			"email": "bulk-admin-visible@example.com",
+			"username": "bulk_admin_visible",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert other_resp.status_code == 201
+
+	response = await client.post(
+		"/v1/users/bulk",
+		headers=headers,
+		json={"user_ids": [other_resp.json()["id"], admin_user["id"]]},
+	)
+
+	assert response.status_code == 200
+	assert [user["id"] for user in response.json()] == [
+		other_resp.json()["id"],
+		admin_user["id"],
+	]
+
+
+@pytest.mark.asyncio
 async def test_create_duplicate_user(
 	client: AsyncClient,
 	admin_auth: dict[str, object],
