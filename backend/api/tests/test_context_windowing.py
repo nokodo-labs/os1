@@ -14,6 +14,7 @@ from api.v1.service.chat.windowing import (
 	_COMPACTED_NOTICE,
 	enforce_combined_tool_budget,
 )
+from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
 	AssistantMessage,
@@ -106,7 +107,10 @@ def _thread(*msgs: Message) -> Thread:
 
 
 def _agent_context(thread: Thread) -> AgentContext:
-	return AgentContext(thread=thread)
+	return AgentContext(
+		thread=thread,
+		model=ChatModel.model_construct(model_name="test"),
+	)
 
 
 _TID = TypeID("th_123")

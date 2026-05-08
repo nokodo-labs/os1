@@ -404,7 +404,10 @@ async def test_filters_and_hooks_not_implemented_raise_async() -> None:
 	f = MyFilter(name="f")
 	h = MyHook(name="h")
 	thread = Thread()
-	agent_context = AgentContext(thread=thread)
+	agent_context = AgentContext(
+		thread=thread,
+		model=ChatModel.model_construct(model_name="test"),
+	)
 
 	with pytest.raises(NotImplementedError, match="process method must be"):
 		await f.process(thread, agent_context, None)

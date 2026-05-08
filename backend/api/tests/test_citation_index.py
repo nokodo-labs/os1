@@ -19,6 +19,7 @@ from api.v1.service.chat.filters.citation_index import (
 	resolve_assistant_citations,
 )
 from api.v1.service.prompt_runtime import SENTINEL_CITATION_SOURCES
+from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
 	AssistantMessage,
@@ -89,7 +90,10 @@ def _mock_app_ctx(entries: list[Citation] | None = None) -> MagicMock:
 
 
 def _agent_context(thread: Thread) -> AgentContext:
-	return AgentContext(thread=thread)
+	return AgentContext(
+		thread=thread,
+		model=ChatModel.model_construct(model_name="test"),
+	)
 
 
 # _next_index

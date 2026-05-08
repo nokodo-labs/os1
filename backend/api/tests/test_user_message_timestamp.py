@@ -7,6 +7,7 @@ import pytest
 from api.v1.service.chat.filters.user_message_timestamp import (
 	UserMessageTimestampFilter,
 )
+from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
 	AssistantMessage,
@@ -22,7 +23,10 @@ def _make_filter() -> UserMessageTimestampFilter:
 
 
 def _ctx(thread: Thread) -> AgentContext:
-	return AgentContext(thread=thread)
+	return AgentContext(
+		thread=thread,
+		model=ChatModel.model_construct(model_name="test"),
+	)
 
 
 def _user(text: str, created_at: str | None = None) -> UserMessage:

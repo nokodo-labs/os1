@@ -11,6 +11,7 @@ from api.v1.service.chat.filters.tool_result_truncation import (
 	_compute_char_limit,
 	_truncate_text,
 )
+from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
 	AssistantMessage,
@@ -30,7 +31,10 @@ def _mock_app_ctx(context_window: int | None = 128_000) -> MagicMock:
 
 
 def _agent_context(thread: Thread) -> AgentContext:
-	return AgentContext(thread=thread)
+	return AgentContext(
+		thread=thread,
+		model=ChatModel.model_construct(model_name="test"),
+	)
 
 
 # -- _truncate_text --
