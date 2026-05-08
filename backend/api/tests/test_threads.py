@@ -664,6 +664,18 @@ async def test_get_thread_not_found(
 
 
 @pytest.mark.asyncio
+async def test_get_thread_invalid_id_not_found(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
+	"""Test malformed thread paths are treated as missing threads."""
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	resp = await client.get("/v1/threads/undefined", headers=headers)
+	assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_update_thread_owner(
 	client: AsyncClient,
 	admin_auth: dict[str, object],

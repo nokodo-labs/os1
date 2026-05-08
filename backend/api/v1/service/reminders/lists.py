@@ -163,7 +163,11 @@ async def list_reminder_lists(
 			columns=_REMINDER_LIST_SORT_COLUMNS,
 		)
 		stmt = (
-			stmt.offset(skip).limit(limit).options(selectinload(ReminderList.projects))
+			stmt.offset(skip)
+			.limit(limit)
+			.options(
+				selectinload(ReminderList.projects),
+			)
 		)
 		result = await session.execute(stmt)
 		no_count_lists = result.scalars().all()

@@ -60,10 +60,23 @@ from api.v1.service.threads import summaries as thread_summary_service
 from api.v1.tasks.threads import run_thread_maintenance_backfill_sweep
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.sse import sse_response
-from nokodo_ai.utils.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID, assert_typeid
 
 
 router = APIRouter(prefix="/threads", tags=["threads"])
+
+
+def resolve_thread_id(thread_id: str) -> TypeID:
+	try:
+		return TypeID(assert_typeid(thread_id))
+	except ValueError as exc:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="thread not found",
+		) from exc
+
+
+ThreadIDPath = Annotated[TypeID, Depends(resolve_thread_id)]
 
 
 @router.post("", response_model=ThreadSchema, status_code=status.HTTP_201_CREATED)
@@ -212,7 +225,7 @@ async def get_unread_counts(
 
 @router.get("/{thread_id}", response_model=ThreadSchema)
 async def get_thread(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	include_hidden: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -228,7 +241,7 @@ async def get_thread(
 
 @router.patch("/{thread_id}", response_model=ThreadSchema)
 async def update_thread(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	thread_in: ThreadUpdate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -246,7 +259,7 @@ async def update_thread(
 
 @router.post("/{thread_id}/metadata/generate", response_model=ThreadSchema)
 async def generate_thread_metadata(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	req: ThreadMetadataGenerateRequest | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -269,7 +282,7 @@ async def generate_thread_metadata(
 
 @router.get("/{thread_id}/summaries", response_model=list[ThreadSummaryRecord])
 async def list_thread_summaries(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	include_superseded: bool = True,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -291,7 +304,7 @@ async def list_thread_summaries(
 
 @router.delete("/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_thread(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	permanent: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -309,7 +322,7 @@ async def delete_thread(
 
 @router.get("/{thread_id}/messages", response_model=list[MessageSchema])
 async def list_messages(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	skip: int = 0,
 	limit: int = 100,
 	sort_by: CommonSortBy = "created_at",
@@ -338,7 +351,7 @@ async def list_messages(
 	response_model=list[EventSchema],
 )
 async def list_events_for_message_ids(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	req: EventsByMessageIDsRequest,
 	include_hidden: bool = False,
 	principal: Principal = Depends(get_current_principal),
@@ -356,7 +369,7 @@ async def list_events_for_message_ids(
 
 @router.get("/{thread_id}/branch", response_model=list[MessageSchema])
 async def get_current_branch(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	include_hidden: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -372,7 +385,7 @@ async def get_current_branch(
 
 @router.get("/{thread_id}/tree", response_model=list[MessageSchema])
 async def get_message_tree(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	include_hidden: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -392,7 +405,7 @@ async def get_message_tree(
 	status_code=status.HTTP_201_CREATED,
 )
 async def create_message(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	message_in: MessageCreate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -413,7 +426,7 @@ async def create_message(
 	response_model=MessageSchema,
 )
 async def update_user_message(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	message_id: TypeID,
 	message_in: MessageUpdate,
 	principal: Principal = Depends(get_current_principal),
@@ -436,7 +449,7 @@ async def update_user_message(
 	status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_user_message_turn(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	message_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -458,7 +471,7 @@ async def delete_user_message_turn(
 
 @router.post("/{thread_id}/switch", response_model=ThreadSwitchResponse)
 async def switch_branch(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	req: ThreadSwitchRequest,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -477,7 +490,7 @@ async def switch_branch(
 
 @router.get("/{thread_id}/access-rules", response_model=list[AccessRuleResponse])
 async def list_thread_access_rules(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[AccessRule]:
@@ -489,7 +502,7 @@ async def list_thread_access_rules(
 
 @router.put("/{thread_id}/access-rules", response_model=list[AccessRuleResponse])
 async def set_thread_access_rules(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	rules: list[AccessRuleCreate],
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -502,7 +515,7 @@ async def set_thread_access_rules(
 
 @router.get("/{thread_id}/access-level", response_model=AccessLevel)
 async def get_thread_access_level(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> AccessLevel:
@@ -526,7 +539,7 @@ async def get_thread_access_level(
 	response_model=ThreadParticipantSchema,
 )
 async def mark_thread_read(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
