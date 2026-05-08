@@ -2,6 +2,7 @@
 
 ARG PYTHON_VERSION=3.13
 FROM python:${PYTHON_VERSION}-slim
+ARG INSTALL_DEBUGPY=false
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -24,6 +25,8 @@ COPY pyproject.toml ./
 # Install Python dependencies (library + API deps for production)
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -e .[api]
+
+RUN if [ "$INSTALL_DEBUGPY" = "true" ]; then pip install debugpy; fi
 
 # Copy application code
 COPY . .

@@ -43,12 +43,8 @@
 			"label": "backend: ensure dev deps",
 			"type": "shell",
 			"command": "echo backend dev deps ready",
-			"dependsOn": [
-				"Docker: ensure dev deps",
-				"backend: taskiq worker",
-				"backend: taskiq scheduler"
-			],
-			"dependsOrder": "parallel",
+			"dependsOn": ["Docker: ensure dev deps", "Docker: TaskIQ up"],
+			"dependsOrder": "sequence",
 			"problemMatcher": [],
 			"presentation": {
 				"reveal": "silent",
@@ -58,7 +54,7 @@
 			}
 		},
 		{
-			"label": "backend: taskiq worker",
+			"label": "TaskIQ: worker",
 			"type": "shell",
 			"command": "uv run python -m api.taskiq worker api.taskiq:broker api.tasks.registry --workers 1 --max-async-tasks 25",
 			"options": {
@@ -82,7 +78,7 @@
 			}
 		},
 		{
-			"label": "backend: taskiq scheduler",
+			"label": "TaskIQ: scheduler",
 			"type": "shell",
 			"command": "uv run python -m api.taskiq scheduler api.taskiq:scheduler api.tasks.registry",
 			"options": {
@@ -421,6 +417,82 @@
 				"reveal": "always",
 				"panel": "shared"
 			}
+		},
+		{
+			"label": "Docker: build TaskIQ",
+			"type": "shell",
+			"command": "docker compose -f docker-compose.local.yml --profile local build taskiq-worker taskiq-scheduler",
+			"options": {
+				"cwd": "${workspaceFolder}/.docker"
+			},
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Docker: TaskIQ up",
+			"type": "shell",
+			"command": "docker compose -f docker-compose.local.yml --profile local up -d --build taskiq-worker taskiq-scheduler",
+			"options": {
+				"cwd": "${workspaceFolder}/.docker"
+			},
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": true,
+				"close": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Docker: stop TaskIQ",
+			"type": "shell",
+			"command": "docker compose -f docker-compose.local.yml --profile local rm -sf taskiq-worker taskiq-scheduler",
+			"options": {
+				"cwd": "${workspaceFolder}/.docker"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": false,
+				"close": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Docker: debug API + TaskIQ",
+			"type": "shell",
+			"command": "docker compose -f docker-compose.local.yml --profile debug up -d --build backend-debug taskiq-worker-debug taskiq-scheduler-debug",
+			"options": {
+				"cwd": "${workspaceFolder}/.docker"
+			},
+			"dependsOn": "Docker: stop TaskIQ",
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Docker: stop debug API + TaskIQ",
+			"type": "shell",
+			"command": "docker compose -f docker-compose.local.yml --profile debug rm -sf backend-debug taskiq-worker-debug taskiq-scheduler-debug",
+			"options": {
+				"cwd": "${workspaceFolder}/.docker"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
 		},
 		{
 			"label": "Docker: up",

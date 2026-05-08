@@ -1,18 +1,29 @@
 name: os1
 
+x-backend-env-file: &backend-env-file
+  - path: ../backend/.env
+    required: false
+
 x-backend-env: &backend-env
   DATABASE_URL: postgresql+psycopg://nokodo-ai-admin:nokodo-ai@db:5432/nokodo-ai-dev
-  ENV: dev
-  DEBUG: "true"
-  NOKODO__SECURITY__SECRET_KEY: dev-secret-key-change-in-production
-  NOKODO__SECURITY__CORS_ORIGINS: "http://localhost:888,http://localhost:8383,http://localhost:3000"
-  NOKODO__SECURITY__AUTH_COOKIE_SECURE: "false"
-  NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN: "http://localhost:888"
-  NOKODO__BRANDING__PUBLIC_CONSOLE_ORIGIN: "http://localhost:8383"
   NOKODO__ASSETS__STORAGE__S3__ENDPOINT_URL: http://minio:9000
-  NOKODO__ASSETS__STORAGE__S3__ACCESS_KEY_ID: minioadmin
-  NOKODO__ASSETS__STORAGE__S3__SECRET_ACCESS_KEY: minioadmin
+  NOKODO__ASSETS__VECTOR_DATABASE__QDRANT__URL: qdrant:6334
   NOKODO__CACHE__REDIS__URL: redis://valkey:6379/0
+
+x-backend-build: &backend-build
+  context: ../backend
+  dockerfile: ../.docker/Dockerfile.backend
+
+x-backend-debug-build: &backend-debug-build
+  context: ../backend
+  dockerfile: ../.docker/Dockerfile.backend
+  args:
+    INSTALL_DEBUGPY: "true"
+
+x-backend-volumes: &backend-volumes
+  - ../backend:/app
+  - ../backend/data:/app/data
+  - /app/__pycache__
 
 services:
   db:
@@ -28,11 +39,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U nokodo-ai-admin" ]
+      test: ["CMD-SHELL", "pg_isready -U nokodo-ai-admin"]
       interval: 10s
       timeout: 5s
       retries: 5
-    profiles: [ "deps", "local" ]
+    profiles: ["deps", "local", "debug"]
 
   qdrant:
     image: qdrant/qdrant:v1.17.1
@@ -43,21 +54,21 @@ services:
       - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
-    profiles: [ "deps", "local" ]
+    profiles: ["deps", "local", "debug"]
 
   valkey:
     image: valkey/valkey:9-alpine
     container_name: os1-valkey
     restart: unless-stopped
-    command: [ "valkey-server", "--appendonly", "no", "--save", "" ]
+    command: ["valkey-server", "--appendonly", "no", "--save", ""]
     ports:
       - "6380:6379"
     healthcheck:
-      test: [ "CMD", "valkey-cli", "ping" ]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
-    profiles: [ "deps", "local" ]
+    profiles: ["deps", "local", "debug"]
 
   minio:
     image: minio/minio:latest
@@ -73,20 +84,19 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: [ "CMD", "mc", "ready", "local" ]
+      test: ["CMD", "mc", "ready", "local"]
       interval: 10s
       timeout: 5s
       retries: 5
-    profiles: [ "deps", "local" ]
+    profiles: ["deps", "local", "debug"]
 
   backend:
-    build:
-      context: ../backend
-      dockerfile: ../.docker/Dockerfile.backend
+    build: *backend-build
     container_name: os1-backend
     restart: unless-stopped
     ports:
       - "1383:1383"
+    env_file: *backend-env-file
     environment: *backend-env
     depends_on:
       db:
@@ -97,23 +107,19 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
-      backend-worker:
+      taskiq-worker:
         condition: service_started
-      backend-scheduler:
+      taskiq-scheduler:
         condition: service_started
-    volumes:
-      - ../backend:/app
-      - ../backend/data:/app/data
-      - /app/__pycache__
+    volumes: *backend-volumes
     command: uvicorn api.main:app --host 0.0.0.0 --port 1383 --reload
-    profiles: [ "local" ]
+    profiles: ["local"]
 
-  backend-worker:
-    build:
-      context: ../backend
-      dockerfile: ../.docker/Dockerfile.backend
-    container_name: os1-backend-worker
+  taskiq-worker:
+    build: *backend-build
+    container_name: os1-taskiq-worker
     restart: unless-stopped
+    env_file: *backend-env-file
     environment: *backend-env
     depends_on:
       db:
@@ -124,20 +130,16 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
-    volumes:
-      - ../backend:/app
-      - ../backend/data:/app/data
-      - /app/__pycache__
+    volumes: *backend-volumes
     command: python -m api.taskiq worker api.taskiq:broker api.tasks.registry
       --workers 1 --max-async-tasks 25
-    profiles: [ "local" ]
+    profiles: ["local"]
 
-  backend-scheduler:
-    build:
-      context: ../backend
-      dockerfile: ../.docker/Dockerfile.backend
-    container_name: os1-backend-scheduler
+  taskiq-scheduler:
+    build: *backend-build
+    container_name: os1-taskiq-scheduler
     restart: unless-stopped
+    env_file: *backend-env-file
     environment: *backend-env
     depends_on:
       db:
@@ -148,12 +150,90 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
-    volumes:
-      - ../backend:/app
-      - ../backend/data:/app/data
-      - /app/__pycache__
+    volumes: *backend-volumes
     command: python -m api.taskiq scheduler api.taskiq:scheduler api.tasks.registry
-    profiles: [ "local" ]
+    profiles: ["local"]
+
+  backend-debug:
+    build: *backend-debug-build
+    container_name: os1-backend-debug
+    restart: "no"
+    ports:
+      - "1383:1383"
+      - "5678:5678"
+    env_file: *backend-env-file
+    environment:
+      <<: *backend-env
+      PYTHONPATH: /app
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      minio:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      taskiq-worker-debug:
+        condition: service_started
+      taskiq-scheduler-debug:
+        condition: service_started
+    volumes: *backend-volumes
+    command: >-
+      python -m debugpy --listen 0.0.0.0:5678 --wait-for-client
+      -m uvicorn api.main:app --host 0.0.0.0 --port 1383
+    profiles: ["debug"]
+
+  taskiq-worker-debug:
+    build: *backend-debug-build
+    container_name: os1-taskiq-worker-debug
+    restart: "no"
+    ports:
+      - "5679:5679"
+    env_file: *backend-env-file
+    environment:
+      <<: *backend-env
+      PYTHONPATH: /app
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      minio:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    volumes: *backend-volumes
+    command: >-
+      python -m debugpy --listen 0.0.0.0:5679 --wait-for-client
+      -m api.taskiq worker api.taskiq:broker api.tasks.registry
+      --workers 1 --max-async-tasks 25
+    profiles: ["debug"]
+
+  taskiq-scheduler-debug:
+    build: *backend-debug-build
+    container_name: os1-taskiq-scheduler-debug
+    restart: "no"
+    ports:
+      - "5680:5680"
+    env_file: *backend-env-file
+    environment:
+      <<: *backend-env
+      PYTHONPATH: /app
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      minio:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    volumes: *backend-volumes
+    command: >-
+      python -m debugpy --listen 0.0.0.0:5680 --wait-for-client
+      -m api.taskiq scheduler api.taskiq:scheduler api.tasks.registry
+    profiles: ["debug"]
 
   frontend:
     build:
@@ -168,7 +248,7 @@ services:
     depends_on:
       backend:
         condition: service_started
-    profiles: [ "local" ]
+    profiles: ["local"]
 
   console:
     build:
@@ -183,7 +263,7 @@ services:
     depends_on:
       backend:
         condition: service_started
-    profiles: [ "local" ]
+    profiles: ["local"]
 
 volumes:
   postgres_data:
