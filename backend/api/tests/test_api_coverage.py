@@ -37,9 +37,9 @@ from api.v1.routers import prompts as prompts_router
 from api.v1.routers import runs as runs_router
 from api.v1.routers import threads as threads_router
 from api.v1.service import authorization, prompt_runtime
-from api.v1.service import chat as chat_service
 from api.v1.service import prompts as prompt_service
 from api.v1.service.chat import agents as chat_runner
+from api.v1.service.chat import models as chat_service
 from api.v1.service.threads.core import _ensure_admin_for_hidden
 from nokodo_ai.messages import (
 	AssistantMessage,
