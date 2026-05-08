@@ -202,9 +202,12 @@ def test_prompt_schema_validates_and_normalizes() -> None:
 		PromptCreate(command="not ok!", content="bad")
 
 
-def test_prompt_schema_none_and_blank_commands() -> None:
-	update = PromptUpdate(command=None, content=None)
-	assert update.command is None
+def test_prompt_schema_omits_and_rejects_null_commands() -> None:
+	update = PromptUpdate()
+	assert update.model_dump(exclude_unset=True) == {}
+
+	with pytest.raises(ValueError):
+		PromptUpdate(command=None, content=None)
 
 	with pytest.raises(ValueError):
 		PromptCreate(command="   ", content="x")

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal, Self
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, Field, model_validator
+from dateutil.rrule import rrulestr
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from api.models.reminder import ReminderStatus
 from api.schemas.common import MISSING, MissingType
@@ -31,11 +33,45 @@ class Recurrence(BaseModel):
 	exdate: list[datetime] = Field(default_factory=list, max_length=256)
 	timezone: str | None = Field(default=None, max_length=64)
 
+	@field_validator("rrule")
+	@classmethod
+	def _validate_rrules(cls, value: list[str]) -> list[str]:
+		validated: list[str] = []
+		for rule in value:
+			trimmed = rule.strip()
+			if not trimmed:
+				raise ValueError("rrule entries cannot be empty")
+			try:
+				rrulestr(_normalize_rrule(trimmed), dtstart=datetime.now(tz=UTC))
+			except (TypeError, ValueError) as exc:
+				raise ValueError(f"invalid rrule: {trimmed}") from exc
+			validated.append(trimmed)
+		return validated
+
+	@field_validator("timezone")
+	@classmethod
+	def _validate_timezone(cls, value: str | None) -> str | None:
+		if value is None:
+			return None
+		trimmed = value.strip()
+		if not trimmed:
+			return None
+		try:
+			ZoneInfo(trimmed)
+		except ZoneInfoNotFoundError as exc:
+			raise ValueError(f"invalid timezone: {trimmed}") from exc
+		return trimmed
+
 	@model_validator(mode="after")
 	def _validate_not_empty(self) -> Self:
 		if not self.rrule and not self.rdate:
 			raise ValueError("recurrence requires at least one rrule or rdate")
 		return self
+
+
+def _normalize_rrule(rule_text: str) -> str:
+	rule = rule_text.strip()
+	return rule if rule.upper().startswith("RRULE:") else f"RRULE:{rule}"
 
 
 class ScheduledItem(BaseModel):
