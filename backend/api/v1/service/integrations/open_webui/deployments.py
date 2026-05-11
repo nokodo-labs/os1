@@ -55,4 +55,6 @@ def _require_sources_access(principal: Principal) -> None:
 		return
 	if principal.has_permission(ActionPermission.MEMORIES_CREATE.value):
 		return
+	if principal.has_permission(ActionPermission.NOTES_CREATE.value):
+		return
 	raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
