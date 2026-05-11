@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.models.prompt import Prompt
 from api.schemas.prompt import Prompt as PromptSchema
-from api.schemas.prompt import PromptCreate, PromptSortBy, PromptUpdate
+from api.schemas.prompt import (
+	PromptCreate,
+	PromptListFilters,
+	PromptSortBy,
+	PromptUpdate,
+)
 from api.schemas.sorting import SortDir
 from api.v1.service import prompts as prompt_service
 from api.v1.service.auth import Principal, get_current_principal
@@ -33,6 +40,7 @@ async def create_prompt(
 
 @router.get("", response_model=list[PromptSchema])
 async def list_prompts(
+	filters: Annotated[PromptListFilters, Depends()],
 	skip: int = 0,
 	limit: int = 50,
 	sort_by: PromptSortBy = "command",
@@ -48,7 +56,18 @@ async def list_prompts(
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
+		q=filters.q,
 	)
+
+
+@router.get("/count", response_model=int)
+async def count_prompts(
+	filters: Annotated[PromptListFilters, Depends()],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> int:
+	"""count prompts matching the list filters."""
+	return await prompt_service.count_prompts(db, principal=principal, q=filters.q)
 
 
 @router.get("/{prompt_id}", response_model=PromptSchema)

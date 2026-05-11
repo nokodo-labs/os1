@@ -6,17 +6,12 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
-from api.models.access_rule import AccessRule
 from api.models.project import Project
 from api.permissions import ResourceType
-from api.schemas.access_rule import (
-	AccessRuleCreate,
-	AccessRuleResponse,
-)
 from api.schemas.project import Project as ProjectSchema
 from api.schemas.project import ProjectCreate, ProjectSortBy, ProjectUpdate
 from api.schemas.sorting import SortDir
-from api.v1.service import access_rules as access_rules_service
+from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import projects as project_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.events import SessionId
@@ -24,6 +19,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+router.include_router(create_resource_access_router(ResourceType.PROJECT, "project_id"))
 
 
 @router.post("", response_model=ProjectSchema, status_code=status.HTTP_201_CREATED)
@@ -105,36 +101,4 @@ async def delete_project(
 		db,
 		principal=principal,
 		origin_session_id=x_session_id,
-	)
-
-
-# ---- access rules ----
-
-
-@router.get("/{project_id}/access-rules", response_model=list[AccessRuleResponse])
-async def list_project_access_rules(
-	project_id: TypeID,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[AccessRule]:
-	"""list access rules for a project."""
-	return await access_rules_service.list_access_rules(
-		ResourceType.PROJECT, project_id, db, principal=principal
-	)
-
-
-@router.put("/{project_id}/access-rules", response_model=list[AccessRuleResponse])
-async def set_project_access_rules(
-	project_id: TypeID,
-	rules: list[AccessRuleCreate],
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[AccessRule]:
-	"""replace access rules for a project."""
-	return await access_rules_service.set_access_rules(
-		ResourceType.PROJECT,
-		project_id,
-		rules,
-		db,
-		principal=principal,
 	)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.schemas.common import (
@@ -11,7 +13,17 @@ from api.schemas.common import (
 	MissingType,
 	TimestampedModel,
 )
+from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
+
+
+type AgentSortBy = CommonSortBy | Literal["name"]
+
+
+class AgentListFilters(BaseModel):
+	"""filters for listing agents."""
+
+	q: str | None = Field(default=None, min_length=1, max_length=500)
 
 
 # typed config sub-models

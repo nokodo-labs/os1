@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from api.models.access_rule import AccessLevel
 from api.models.calendar import Calendar, CalendarEvent, CalendarEventOverride
@@ -38,13 +39,13 @@ from api.v1.service.calendar.common import (
 	validate_calendar_event_range,
 )
 from api.v1.service.calendar.search import CALENDAR_EVENT_SPEC
+from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.scheduling.recurrence import (
 	expand_occurrence_starts,
 	occurrence_exists,
 	recurrence_after_split,
 	recurrence_to_storage,
 )
-from api.v1.service.sorting import SortDir, apply_sort
 from api.v1.service.vectorize import remove_vectorized_resource, vectorize_resource
 from api.v1.tasks.calendar import (
 	cancel_calendar_event_notifications,
@@ -62,6 +63,26 @@ _CALENDAR_EVENT_SORT_COLUMNS = {
 	"created_at": CalendarEvent.created_at,
 	"updated_at": CalendarEvent.updated_at,
 }
+
+
+def _apply_calendar_event_filters(
+	stmt: Select,
+	event_filters: CalendarEventListFilters,
+) -> Select:
+	"""apply calendar event list filters."""
+	if event_filters.start_at is not None:
+		stmt = stmt.where(CalendarEvent.end_at >= event_filters.start_at)
+	if event_filters.end_at is not None:
+		stmt = stmt.where(CalendarEvent.start_at <= event_filters.end_at)
+	if event_filters.q is not None and event_filters.q.strip():
+		pattern = contains_pattern(event_filters.q.strip())
+		stmt = stmt.where(
+			or_(
+				CalendarEvent.title.ilike(pattern, escape="\\"),
+				CalendarEvent.description.ilike(pattern, escape="\\"),
+			)
+		)
+	return stmt
 
 
 async def list_calendar_events(
@@ -83,21 +104,10 @@ async def list_calendar_events(
 			resource_access_predicate(principal, ResourceType.CALENDAR),
 		)
 	)
-	if event_filters.start_at is not None:
-		stmt = stmt.where(CalendarEvent.end_at >= event_filters.start_at)
-	if event_filters.end_at is not None:
-		stmt = stmt.where(CalendarEvent.start_at <= event_filters.end_at)
+	stmt = _apply_calendar_event_filters(stmt, event_filters)
 	if calendar_id is not None:
 		await get_accessible_calendar(calendar_id, session, principal)
 		stmt = stmt.where(CalendarEvent.calendar_id == calendar_id)
-	if event_filters.q is not None and event_filters.q.strip():
-		pattern = contains_pattern(event_filters.q.strip())
-		stmt = stmt.where(
-			or_(
-				CalendarEvent.title.ilike(pattern, escape="\\"),
-				CalendarEvent.description.ilike(pattern, escape="\\"),
-			)
-		)
 	stmt = apply_sort(
 		stmt,
 		sort_by=sort_by,

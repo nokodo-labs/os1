@@ -8,10 +8,8 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
-from api.models.access_rule import AccessRule
 from api.models.group import Group, GroupMembership
 from api.permissions import ResourceType
-from api.schemas.access_rule import AccessRuleCreate, AccessRuleResponse
 from api.schemas.group import Group as GroupSchema
 from api.schemas.group import (
 	GroupCreate,
@@ -22,7 +20,7 @@ from api.schemas.group import (
 	GroupUpdate,
 )
 from api.schemas.sorting import SortDir
-from api.v1.service import access_rules as access_rules_service
+from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import groups as groups_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.events import SessionId
@@ -30,6 +28,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/groups", tags=["groups"])
+router.include_router(create_resource_access_router(ResourceType.GROUP, "group_id"))
 
 
 @router.get("", response_model=list[GroupSchema])
@@ -50,6 +49,20 @@ async def read_groups(
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
+		filters=filters,
+	)
+
+
+@router.get("/count", response_model=int)
+async def count_groups(
+	filters: Annotated[GroupListFilters, Depends()],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> int:
+	"""count groups matching the list filters."""
+	return await groups_service.count_groups(
+		db,
+		principal=principal,
 		filters=filters,
 	)
 
@@ -157,38 +170,4 @@ async def remove_member(
 		db,
 		principal=principal,
 		origin_session_id=x_session_id,
-	)
-
-
-# ---- access rules sub-routes ----
-
-
-@router.get(
-	"/{group_id}/access-rules",
-	response_model=list[AccessRuleResponse],
-)
-async def list_group_access_rules(
-	group_id: TypeID,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[AccessRule]:
-	"""list access rules for a group."""
-	return await access_rules_service.list_access_rules(
-		ResourceType.GROUP, group_id, db, principal=principal
-	)
-
-
-@router.put(
-	"/{group_id}/access-rules",
-	response_model=list[AccessRuleResponse],
-)
-async def set_group_access_rules(
-	group_id: TypeID,
-	rules: list[AccessRuleCreate],
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[AccessRule]:
-	"""replace access rules for a group."""
-	return await access_rules_service.set_access_rules(
-		ResourceType.GROUP, group_id, rules, db, principal=principal
 	)

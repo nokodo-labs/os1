@@ -18,8 +18,8 @@ from api.settings.settings import AIChatContextSettings
 from api.v1.service import threads as thread_service
 from api.v1.service.authorization import thread_access_predicate
 from api.v1.service.chat.filters.base import Filter
+from api.v1.service.listing import apply_sort
 from api.v1.service.prompt_runtime import SENTINEL_CHAT_CONTEXT
-from api.v1.service.sorting import apply_sort
 from nokodo_ai.context import AgentContext
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID

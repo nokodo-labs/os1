@@ -26,6 +26,7 @@ class GroupListFilters(BaseModel):
 	"""filters for listing groups."""
 
 	user_id: TypeID | None = None
+	q: str | None = None
 
 
 class GroupBase(MetadataModel):

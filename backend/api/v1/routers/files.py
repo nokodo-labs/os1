@@ -10,17 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
 from api.database import get_db
-from api.models.access_rule import AccessRule
 from api.models.file import File, FileSource
 from api.permissions import ResourceType
-from api.schemas.access_rule import (
-	AccessRuleCreate,
-	AccessRuleResponse,
-)
 from api.schemas.file import File as FileSchema
 from api.schemas.file import FileCreate, FileListFilters, FileSortBy, FileUpdate
 from api.schemas.sorting import SortDir
-from api.v1.service import access_rules as access_rules_service
+from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import files as file_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.events import SessionId
@@ -39,6 +34,7 @@ def _is_inline_type(content_type: str | None) -> bool:
 
 
 router = APIRouter(prefix="/files", tags=["files"])
+router.include_router(create_resource_access_router(ResourceType.FILE, "file_id"))
 
 
 @router.post("", response_model=FileSchema, status_code=status.HTTP_201_CREATED)
@@ -194,36 +190,4 @@ async def delete_file(
 		db,
 		principal=principal,
 		origin_session_id=x_session_id,
-	)
-
-
-# ---- access rules ----
-
-
-@router.get("/{file_id}/access-rules", response_model=list[AccessRuleResponse])
-async def list_file_access_rules(
-	file_id: TypeID,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[AccessRule]:
-	"""list access rules for a file."""
-	return await access_rules_service.list_access_rules(
-		ResourceType.FILE, file_id, db, principal=principal
-	)
-
-
-@router.put("/{file_id}/access-rules", response_model=list[AccessRuleResponse])
-async def set_file_access_rules(
-	file_id: TypeID,
-	rules: list[AccessRuleCreate],
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[AccessRule]:
-	"""replace access rules for a file."""
-	return await access_rules_service.set_access_rules(
-		ResourceType.FILE,
-		file_id,
-		rules,
-		db,
-		principal=principal,
 	)

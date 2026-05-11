@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from api.schemas.common import (
 	MISSING,
@@ -18,6 +18,12 @@ from api.schemas.sorting import CommonSortBy
 
 
 type PromptSortBy = CommonSortBy | Literal["command"]
+
+
+class PromptListFilters(BaseModel):
+	"""filters for listing prompts."""
+
+	q: str | None = Field(default=None, min_length=1, max_length=500)
 
 
 _COMMAND_PATTERN = r"^[a-zA-Z0-9][a-zA-Z0-9-_]*$"

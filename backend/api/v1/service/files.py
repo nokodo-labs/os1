@@ -42,12 +42,12 @@ from api.v1.service.authorization import (
 	require_resource_access,
 	resource_access_predicate,
 )
+from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.projects import load_projects
 from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
 	invalidate_resource_payload_cache,
 )
-from api.v1.service.sorting import SortDir, apply_sort
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 

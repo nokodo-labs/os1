@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
-from api.models.prompt import Prompt
+from api.models.prompt import PROMPT_TYPEID_PREFIX, Prompt
 from api.permissions import ResourceType
 from api.schemas.prompt import Prompt as PromptOut
 from api.schemas.prompt import PromptCreate, PromptUpdate
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
+from api.v1.service.listing import SortDir, apply_sort, exact_typeid_filter
 from api.v1.service.prompt_runtime import (
 	PromptValidationError,
 	http_error_from_validation,
@@ -22,8 +24,22 @@ from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
 	invalidate_resource_payload_cache,
 )
-from api.v1.service.sorting import SortDir, apply_sort
+from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
+
+
+def _apply_prompt_search(stmt: Select, q: str | None) -> Select:
+	"""apply prompt search filters."""
+	if not q or not q.strip():
+		return stmt
+	pattern = contains_pattern(q.strip())
+	return stmt.where(
+		or_(
+			Prompt.command.ilike(pattern, escape="\\"),
+			Prompt.content.ilike(pattern, escape="\\"),
+			exact_typeid_filter(Prompt.id, q, PROMPT_TYPEID_PREFIX),
+		)
+	)
 
 
 async def _ensure_unique_command(
@@ -132,11 +148,13 @@ async def list_prompts(
 	limit: int = 50,
 	sort_by: str = "command",
 	sort_dir: SortDir = "asc",
+	q: str | None = None,
 ) -> list[Prompt]:
 	require_permission(principal, "prompts:read")
+	stmt = _apply_prompt_search(select(Prompt), q)
 	stmt = (
 		apply_sort(
-			select(Prompt),
+			stmt,
 			sort_by=sort_by,
 			sort_dir=sort_dir,
 			columns={
@@ -151,6 +169,16 @@ async def list_prompts(
 	)
 	result = await session.execute(stmt)
 	return list(result.scalars().all())
+
+
+async def count_prompts(
+	session: AsyncSession,
+	principal: Principal,
+	q: str | None = None,
+) -> int:
+	require_permission(principal, "prompts:read")
+	stmt = _apply_prompt_search(select(func.count()).select_from(Prompt), q)
+	return await session.scalar(stmt) or 0
 
 
 async def get_prompt(

@@ -8,10 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
-from api.models.access_rule import AccessRule
 from api.models.reminder import Reminder, ReminderList
 from api.permissions import ResourceType
-from api.schemas.access_rule import AccessRuleCreate, AccessRuleResponse
 from api.schemas.reminder import (
 	Reminder as ReminderSchema,
 )
@@ -36,7 +34,7 @@ from api.schemas.scheduled_item import (
 )
 from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
 from api.schemas.sorting import SortDir
-from api.v1.service import access_rules as access_rules_service
+from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import reminders as reminder_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.authorization import require_admin
@@ -45,6 +43,9 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/reminder-lists", tags=["reminder-lists"])
+router.include_router(
+	create_resource_access_router(ResourceType.REMINDER_LIST, "list_id")
+)
 reminders_router = APIRouter(prefix="/reminders", tags=["reminders"])
 
 
@@ -68,6 +69,15 @@ async def list_reminder_lists(
 		sort_by=sort_by,
 		sort_dir=sort_dir,
 	)
+
+
+@router.get("/count", response_model=int)
+async def count_reminder_lists(
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> int:
+	"""count reminder lists accessible to the current user."""
+	return await reminder_service.count_reminder_lists(db, principal=principal)
 
 
 @router.post("", response_model=ReminderListSchema, status_code=status.HTTP_201_CREATED)
@@ -172,38 +182,6 @@ async def get_reminder_list_counts(
 		db,
 		principal=principal,
 		list_id=list_id,
-	)
-
-
-@router.get("/{list_id}/access-rules", response_model=list[AccessRuleResponse])
-async def list_reminder_list_access_rules(
-	list_id: TypeID,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[AccessRule]:
-	"""list access rules for a reminder list."""
-	return await access_rules_service.list_access_rules(
-		ResourceType.REMINDER_LIST,
-		list_id,
-		db,
-		principal=principal,
-	)
-
-
-@router.put("/{list_id}/access-rules", response_model=list[AccessRuleResponse])
-async def set_reminder_list_access_rules(
-	list_id: TypeID,
-	rules: list[AccessRuleCreate],
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[AccessRule]:
-	"""replace access rules for a reminder list."""
-	return await access_rules_service.set_access_rules(
-		ResourceType.REMINDER_LIST,
-		list_id,
-		rules,
-		db,
-		principal=principal,
 	)
 
 

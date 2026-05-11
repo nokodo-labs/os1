@@ -34,7 +34,7 @@ from api.v1.service.chat.models import (
 	run_chat_model_json_schema,
 )
 from api.v1.service.embeddings import embed_text, embed_texts
-from api.v1.service.sorting import SortDir, apply_sort
+from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.vectorize import (
 	VectorSpec,
 	build_chunk,

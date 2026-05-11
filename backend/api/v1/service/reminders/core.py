@@ -31,6 +31,7 @@ from api.settings import settings
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import resource_access_predicate
+from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.reminders.cache import (
 	get_cached_reminder_items,
 	invalidate_reminder_scheduled_items,
@@ -47,7 +48,6 @@ from api.v1.service.scheduling.recurrence import (
 	recurrence_after_split,
 	recurrence_to_storage,
 )
-from api.v1.service.sorting import SortDir, apply_sort
 from api.v1.service.vectorize import remove_vectorized_resource, vectorize_resource
 from api.v1.tasks.reminders import (
 	cancel_reminder_notifications,

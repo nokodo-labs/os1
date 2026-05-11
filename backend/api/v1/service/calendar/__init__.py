@@ -3,6 +3,7 @@
 from api.models.calendar import Calendar, CalendarEvent, CalendarEventOverride
 from api.schemas.calendar import CalendarEventUpdate, CalendarUpdate
 from api.v1.service.calendar.calendars import (
+	count_calendars,
 	create_calendar,
 	delete_calendar,
 	get_calendar,
@@ -35,6 +36,7 @@ __all__ = [
 	"CalendarEventUpdate",
 	"CalendarUpdate",
 	"cancel_calendar_event_occurrence",
+	"count_calendars",
 	"create_calendar",
 	"create_calendar_event",
 	"delete_calendar",

@@ -38,12 +38,12 @@ from api.v1.service.authorization import (
 	resource_access_predicate,
 )
 from api.v1.service.embeddings import embed_text, embed_texts
+from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.projects import load_projects
 from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
 	invalidate_resource_payload_cache,
 )
-from api.v1.service.sorting import SortDir, apply_sort
 from api.v1.service.vectorize import (
 	VectorSpec,
 	build_chunk,
@@ -186,6 +186,27 @@ async def list_notes(
 
 	result = await session.execute(stmt)
 	return list(result.scalars().all())
+
+
+async def count_notes(
+	session: AsyncSession,
+	principal: Principal,
+	filters: NoteListFilters | None = None,
+) -> int:
+	note_filters = filters or NoteListFilters()
+	stmt = (
+		select(func.count())
+		.select_from(Note)
+		.where(
+			Note.deleted_at.is_(None),
+			resource_access_predicate(principal, ResourceType.NOTE),
+		)
+	)
+	if note_filters.user_id is not None:
+		stmt = stmt.where(Note.user_id == note_filters.user_id)
+	if note_filters.labels:
+		stmt = stmt.where(Note.labels.contains(note_filters.labels))
+	return await session.scalar(stmt) or 0
 
 
 async def get_note(

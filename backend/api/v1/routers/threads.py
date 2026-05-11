@@ -9,16 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
 from api.database import get_db
-from api.models.access_rule import AccessLevel, AccessRule
 from api.models.event import Event
 from api.models.message import Message
 from api.models.thread import Thread
 from api.models.thread_summary import ThreadSummary
 from api.permissions import ResourceType
-from api.schemas.access_rule import (
-	AccessRuleCreate,
-	AccessRuleResponse,
-)
 from api.schemas.event import Event as EventSchema
 from api.schemas.event import EventsByMessageIDsRequest
 from api.schemas.message import Message as MessageSchema
@@ -47,14 +42,11 @@ from api.schemas.thread_participant import (
 from api.schemas.thread_participant import (
 	ThreadUnreadCount,
 )
-from api.v1.service import access_rules as access_rules_service
+from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import runs as runs_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
-from api.v1.service.authorization import (
-	get_effective_access_level,
-	require_admin,
-)
+from api.v1.service.authorization import require_admin
 from api.v1.service.events import SessionId
 from api.v1.service.threads import summaries as thread_summary_service
 from api.v1.tasks.threads import run_thread_maintenance_backfill_sweep
@@ -77,6 +69,14 @@ def resolve_thread_id(thread_id: str) -> TypeID:
 
 
 ThreadIDPath = Annotated[TypeID, Depends(resolve_thread_id)]
+
+router.include_router(
+	create_resource_access_router(
+		ResourceType.THREAD,
+		"thread_id",
+		resolve_resource_id=resolve_thread_id,
+	)
+)
 
 
 @router.post("", response_model=ThreadSchema, status_code=status.HTTP_201_CREATED)
@@ -152,6 +152,20 @@ async def list_threads(
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
+	)
+
+
+@router.get("/count", response_model=int)
+async def count_threads(
+	filters: Annotated[ThreadListFilters, Depends()],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> int:
+	"""count threads matching the list filters."""
+	return await thread_service.count_threads(
+		db,
+		principal=principal,
+		filters=filters,
 	)
 
 
@@ -486,52 +500,6 @@ async def switch_branch(
 		origin_session_id=x_session_id,
 	)
 	return ThreadSwitchResponse(ok=True, current_message_id=thread.current_message_id)
-
-
-@router.get("/{thread_id}/access-rules", response_model=list[AccessRuleResponse])
-async def list_thread_access_rules(
-	thread_id: ThreadIDPath,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[AccessRule]:
-	"""list access rules for a thread."""
-	return await access_rules_service.list_access_rules(
-		ResourceType.THREAD, thread_id, db, principal=principal
-	)
-
-
-@router.put("/{thread_id}/access-rules", response_model=list[AccessRuleResponse])
-async def set_thread_access_rules(
-	thread_id: ThreadIDPath,
-	rules: list[AccessRuleCreate],
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[AccessRule]:
-	"""replace access rules for a thread."""
-	return await access_rules_service.set_access_rules(
-		ResourceType.THREAD, thread_id, rules, db, principal=principal
-	)
-
-
-@router.get("/{thread_id}/access-level", response_model=AccessLevel)
-async def get_thread_access_level(
-	thread_id: ThreadIDPath,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> AccessLevel:
-	"""return the requester's effective access level on a thread."""
-	level = await get_effective_access_level(
-		db,
-		principal,
-		ResourceType.THREAD,
-		thread_id,
-	)
-	if level is None:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="thread not found",
-		)
-	return level
 
 
 @router.post(

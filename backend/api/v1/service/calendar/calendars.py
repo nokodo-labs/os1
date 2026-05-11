@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -25,7 +25,7 @@ from api.v1.service.calendar.common import (
 	publish_calendar_event,
 )
 from api.v1.service.calendar.search import CALENDAR_EVENT_SPEC
-from api.v1.service.sorting import SortDir, apply_sort
+from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.vectorize import remove_vectorized_resource
 from api.v1.tasks.calendar import cancel_calendar_event_notifications
 from nokodo_ai.utils.typeid import TypeID
@@ -65,6 +65,22 @@ async def list_calendars(
 	)
 	result = await session.execute(stmt.offset(skip).limit(limit))
 	return list(result.scalars().all())
+
+
+async def count_calendars(
+	session: AsyncSession,
+	principal: Principal,
+) -> int:
+	"""count calendars accessible to the principal."""
+	await get_or_create_default_calendar(session, principal)
+	stmt = (
+		select(func.count())
+		.select_from(Calendar)
+		.where(
+			resource_access_predicate(principal, ResourceType.CALENDAR),
+		)
+	)
+	return await session.scalar(stmt) or 0
 
 
 async def create_calendar(

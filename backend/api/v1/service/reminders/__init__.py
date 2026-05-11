@@ -15,6 +15,7 @@ from api.v1.service.reminders.core import (
 	update_reminder,
 )
 from api.v1.service.reminders.lists import (
+	count_reminder_lists,
 	create_reminder_list,
 	delete_reminder_list,
 	get_list_counts,
@@ -40,6 +41,7 @@ __all__ = [
 	"ReminderUpdate",
 	"complete_reminder",
 	"complete_reminder_occurrence",
+	"count_reminder_lists",
 	"create_reminder",
 	"create_reminder_list",
 	"delete_reminder",

@@ -26,12 +26,12 @@ from api.v1.service.authorization import (
 	require_resource_access,
 	resource_access_predicate,
 )
+from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.projects import load_projects
 from api.v1.service.reminders.cache import (
 	invalidate_reminder_list_scheduled_items,
 )
 from api.v1.service.reminders.search import REMINDER_SPEC, vectorize_reminders_for_list
-from api.v1.service.sorting import SortDir, apply_sort
 from api.v1.service.vectorize import remove_vectorized_resource
 from api.v1.tasks.reminders import cancel_reminder_notifications
 from nokodo_ai.utils.typeid import TypeID
@@ -227,6 +227,22 @@ async def list_reminder_lists(
 		)
 		for row in rows
 	]
+
+
+async def count_reminder_lists(
+	session: AsyncSession,
+	principal: Principal,
+) -> int:
+	"""count reminder lists accessible to the principal."""
+	await get_or_create_default_reminder_list(session, principal)
+	stmt = (
+		select(func.count())
+		.select_from(ReminderList)
+		.where(
+			resource_access_predicate(principal, ResourceType.REMINDER_LIST),
+		)
+	)
+	return await session.scalar(stmt) or 0
 
 
 async def get_list_counts(

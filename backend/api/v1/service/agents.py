@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.agent import Agent
+from api.models.agent import AGENT_TYPEID_PREFIX, Agent
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
-from api.models.model import Model
+from api.models.model import MODEL_TYPEID_PREFIX, Model
 from api.permissions import ResourceType
 from api.schemas.access_rule import AccessRuleCreate
 from api.schemas.agent import Agent as AgentSchema
 from api.schemas.agent import AgentCreate, AgentUpdate
+from api.schemas.sorting import SortDir
 from api.v1.service import access_rules as access_rules_service
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
@@ -22,10 +23,12 @@ from api.v1.service.authorization import (
 	require_resource_access,
 	resource_access_predicate,
 )
+from api.v1.service.listing import apply_sort, exact_typeid_filter
 from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
 	invalidate_resource_payload_cache,
 )
+from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -96,21 +99,63 @@ async def create_agent(
 async def list_agents(
 	session: AsyncSession,
 	principal: Principal,
+	skip: int = 0,
+	limit: int = 100,
+	sort_by: str = "created_at",
+	sort_dir: SortDir = "desc",
+	q: str | None = None,
 ) -> list[Agent]:
 	"""list agents visible to principal.
 
 	managers see all agents. readers see only agents they have
 	explicit access to via access rules.
 	"""
-	base = select(Agent).order_by(Agent.created_at.desc())
+	stmt = select(Agent)
 
-	if _can_manage(principal):
-		result = await session.execute(base)
-		return list(result.scalars().all())
+	if not _can_manage(principal):
+		stmt = stmt.where(resource_access_predicate(principal, ResourceType.AGENT))
 
-	predicate = resource_access_predicate(principal, ResourceType.AGENT)
-	result = await session.execute(base.where(predicate))
+	stmt = _apply_agent_search(stmt, q)
+	stmt = apply_sort(
+		stmt,
+		sort_by,
+		sort_dir,
+		{
+			"name": Agent.name,
+			"created_at": Agent.created_at,
+			"updated_at": Agent.updated_at,
+		},
+		tie_breaker=Agent.id,
+	)
+	result = await session.execute(stmt.offset(skip).limit(limit))
 	return list(result.scalars().all())
+
+
+def _apply_agent_search(stmt, q: str | None):
+	if not q or not q.strip():
+		return stmt
+	pattern = contains_pattern(q.strip())
+	return stmt.where(
+		or_(
+			Agent.name.ilike(pattern, escape="\\"),
+			Agent.description.ilike(pattern, escape="\\"),
+			exact_typeid_filter(Agent.id, q, AGENT_TYPEID_PREFIX),
+			exact_typeid_filter(Agent.model_id, q, MODEL_TYPEID_PREFIX),
+		)
+	)
+
+
+async def count_agents(
+	session: AsyncSession,
+	principal: Principal,
+	q: str | None = None,
+) -> int:
+	"""count agents visible to principal."""
+	stmt = select(func.count()).select_from(Agent)
+	if not _can_manage(principal):
+		stmt = stmt.where(resource_access_predicate(principal, ResourceType.AGENT))
+	stmt = _apply_agent_search(stmt, q)
+	return await session.scalar(stmt) or 0
 
 
 async def get_agent(

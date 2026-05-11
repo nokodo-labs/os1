@@ -8,10 +8,8 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
-from api.models.access_rule import AccessRule
 from api.models.calendar import Calendar, CalendarEvent
 from api.permissions import ResourceType
-from api.schemas.access_rule import AccessRuleCreate, AccessRuleResponse
 from api.schemas.calendar import (
 	Calendar as CalendarSchema,
 )
@@ -35,7 +33,7 @@ from api.schemas.scheduled_item import (
 )
 from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
 from api.schemas.sorting import SortDir
-from api.v1.service import access_rules as access_rules_service
+from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import calendar as calendar_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.authorization import require_admin
@@ -44,6 +42,9 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/calendars", tags=["calendars"])
+router.include_router(
+	create_resource_access_router(ResourceType.CALENDAR, "calendar_id")
+)
 
 
 @router.get("", response_model=list[CalendarSchema])
@@ -64,6 +65,15 @@ async def list_calendars(
 		sort_by=sort_by,
 		sort_dir=sort_dir,
 	)
+
+
+@router.get("/count", response_model=int)
+async def count_calendars(
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> int:
+	"""count calendars accessible to the current user."""
+	return await calendar_service.count_calendars(db, principal)
 
 
 @router.post(
@@ -158,44 +168,6 @@ async def delete_calendar(
 		db,
 		principal=principal,
 		origin_session_id=x_session_id,
-	)
-
-
-@router.get(
-	"/{calendar_id}/access-rules",
-	response_model=list[AccessRuleResponse],
-)
-async def list_calendar_access_rules(
-	calendar_id: TypeID,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[AccessRule]:
-	"""list access rules for a calendar."""
-	return await access_rules_service.list_access_rules(
-		ResourceType.CALENDAR,
-		calendar_id,
-		db,
-		principal=principal,
-	)
-
-
-@router.put(
-	"/{calendar_id}/access-rules",
-	response_model=list[AccessRuleResponse],
-)
-async def set_calendar_access_rules(
-	calendar_id: TypeID,
-	rules: list[AccessRuleCreate],
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[AccessRule]:
-	"""replace access rules for a calendar."""
-	return await access_rules_service.set_access_rules(
-		ResourceType.CALENDAR,
-		calendar_id,
-		rules,
-		db,
-		principal=principal,
 	)
 
 

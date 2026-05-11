@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import Select
 
 from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
-from api.models.group import Group, GroupMembership
+from api.models.group import GROUP_TYPEID_PREFIX, Group, GroupMembership
 from api.permissions import ResourceType
 from api.schemas.group import (
 	GroupCreate,
@@ -26,8 +27,28 @@ from api.v1.service.authorization import (
 	require_resource_access,
 	resource_access_predicate,
 )
-from api.v1.service.sorting import SortDir, apply_sort
+from api.v1.service.listing import SortDir, apply_sort, exact_typeid_filter
+from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
+
+
+def _apply_group_filters(stmt: Select, group_filters: GroupListFilters) -> Select:
+	"""apply group list/count filters."""
+	if group_filters.user_id is not None:
+		stmt = stmt.join(
+			GroupMembership,
+			GroupMembership.group_id == Group.id,
+		).where(GroupMembership.user_id == group_filters.user_id)
+	if group_filters.q and group_filters.q.strip():
+		pattern = contains_pattern(group_filters.q.strip())
+		stmt = stmt.where(
+			or_(
+				Group.name.ilike(pattern, escape="\\"),
+				Group.description.ilike(pattern, escape="\\"),
+				exact_typeid_filter(Group.id, group_filters.q, GROUP_TYPEID_PREFIX),
+			)
+		)
+	return stmt
 
 
 async def list_groups(
@@ -48,11 +69,7 @@ async def list_groups(
 			required_level=AccessLevel.READER,
 		)
 	)
-	if group_filters.user_id is not None:
-		stmt = stmt.join(
-			GroupMembership,
-			GroupMembership.group_id == Group.id,
-		).where(GroupMembership.user_id == group_filters.user_id)
+	stmt = _apply_group_filters(stmt, group_filters)
 	stmt = apply_sort(
 		stmt,
 		sort_by=sort_by,
@@ -68,6 +85,28 @@ async def list_groups(
 		stmt.offset(skip).limit(limit).options(selectinload(Group.memberships))
 	)
 	return list(result.scalars().all())
+
+
+async def count_groups(
+	session: AsyncSession,
+	principal: Principal,
+	filters: GroupListFilters | None = None,
+) -> int:
+	"""count groups accessible by the principal."""
+	group_filters = filters or GroupListFilters()
+	stmt = (
+		select(func.count())
+		.select_from(Group)
+		.where(
+			resource_access_predicate(
+				principal,
+				ResourceType.GROUP,
+				required_level=AccessLevel.READER,
+			)
+		)
+	)
+	stmt = _apply_group_filters(stmt, group_filters)
+	return await session.scalar(stmt) or 0
 
 
 async def get_group(
