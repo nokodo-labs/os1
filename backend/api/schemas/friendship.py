@@ -41,7 +41,7 @@ class FriendResponse(ORMModel):
 	friendship_id: TypeID
 	username: str | None = None
 	display_name: str | None = None
-	email: str
+	email: str | None = None
 	avatar_url: str | None = None
 
 
@@ -60,5 +60,5 @@ class UserSearchResult(ORMModel):
 	id: TypeID
 	username: str | None = None
 	display_name: str | None = None
-	email: str
+	email: str | None = None
 	avatar_url: str | None = None
