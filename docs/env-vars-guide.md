@@ -78,6 +78,7 @@ These settings are write-locked because API, worker, and scheduler processes mus
 | `NOKODO__TASKS__TASKIQ__QUEUE_NAME`         | string | `nokodo-ai:taskiq:queue`     | write-locked | TaskIQ queue shared by API, worker, and scheduler. |
 | `NOKODO__TASKS__TASKIQ__RESULT_TTL_SECONDS` | int    | `86400`                      | write-locked | Seconds to retain TaskIQ result backend entries.   |
 | `NOKODO__TASKS__TASKIQ__MAX_CONNECTIONS`    | int    | `32`                         | write-locked | Maximum Redis connections used by TaskIQ.          |
+| `NOKODO__TASKS__TASKIQ__AUTO_WORKERS_MAX`   | int    | unset                        | write-locked | Optional max worker processes for `--workers auto`. |
 | `NOKODO__TASKS__TASKIQ__SCHEDULE_PREFIX`    | string | `nokodo-ai:taskiq:schedules` | write-locked | Redis key prefix for dynamic TaskIQ schedules.     |
 
 ---
