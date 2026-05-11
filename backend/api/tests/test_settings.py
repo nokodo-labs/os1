@@ -70,30 +70,41 @@ def test_settings_reload_updates_imported_singleton(
 
 
 def test_settings_field_flags_and_private_dump() -> None:
-	assert get_field_flags(SecuritySettings, "secret_key") == {
-		"private": True,
-		"write_locked": True,
-	}
+	assert get_field_flags(SecuritySettings, "secret_key") == {"write_locked": True}
+	assert get_field_flags(BrandingSettings, "site_name") == {"public": True}
 	assert get_field_flags(BrandingSettings, "analytics_key") == {
-		"private": True,
 		"write_locked": True,
 	}
+	assert get_field_flags(SecuritySettings, "secret_key_uses_default") == {}
 
 	full = settings.custom_dump(exclude_private=False)
 	assert "secret_key" in full["security"]
 	assert "analytics_key" in full["branding"]
 	assert "api_key" in full["assets"]["vector_database"]["qdrant"]
 	assert "url" in full["cache"]["redis"]
+	assert "web_search" in full
+	assert "tasks" in full
 
 	public = settings.custom_dump(exclude_private=True)
+	assert "ui" in public
+	assert "branding" in public
+	assert "media" in public
+	assert "assets" not in public
+	assert "limits" not in public
+	assert "notifications" not in public
+	assert "soft_delete" not in public
+	assert "web_search" not in public
+	assert "code_interpreter" not in public
+	assert "default_permissions" not in public
+	assert "integrations" not in public
+	assert "cache" not in public
+	assert "tasks" not in public
+	assert set(public["ai"]) == {"default_agent_ids"}
 	assert "secret_key" not in public["security"]
-	assert (
-		public["security"]["secret_key_uses_default"]
-		is settings.security.secret_key_uses_default
-	)
+	assert "secret_key_uses_default" not in public["security"]
+	assert set(public["security"]) == {"allow_signups", "oidc"}
+	assert set(public["security"]["oidc"]) == {"only"}
 	assert "analytics_key" not in public["branding"]
-	assert "api_key" not in public["assets"]["vector_database"]["qdrant"]
-	assert "url" not in public["cache"]["redis"]
 
 	# exercise both branches of the cors_origins validator
 	security_from_list = SecuritySettings.model_validate({"cors_origins": ["http://x"]})
@@ -116,23 +127,48 @@ def test_get_field_flags_empty_cases() -> None:
 def test_settings_field_helper_sets_flags() -> None:
 	class M(BaseModel):
 		no_flags: str = settings_field(default="x")
+		public: str = settings_field(default="x", public=True)
 		locked: str = settings_field(default="x", write_locked=True)
-		private: str = settings_field(default="x", private=True)
-		private_locked: str = settings_field(
+		public_locked: str = settings_field(
 			default="x",
-			private=True,
+			public=True,
 			write_locked=True,
-			json_schema_extra=None,
+		)
+		with_extra: str = settings_field(
+			default="x",
+			json_schema_extra={"x-custom": "kept"},
+			public=True,
 		)
 
 	assert M.model_fields["no_flags"].json_schema_extra is None
+	assert M.model_fields["public"].json_schema_extra == {"public": True}
 	assert M.model_fields["locked"].json_schema_extra == {"write_locked": True}
 	assert M.model_fields["locked"].frozen is True
-	assert M.model_fields["private"].json_schema_extra == {"private": True}
-	assert M.model_fields["private"].frozen is False
-	assert M.model_fields["private_locked"].json_schema_extra == {
-		"private": True,
+	assert M.model_fields["public"].frozen is False
+	assert M.model_fields["public_locked"].json_schema_extra == {
+		"public": True,
 		"write_locked": True,
+	}
+	assert M.model_fields["with_extra"].json_schema_extra == {
+		"x-custom": "kept",
+		"public": True,
+	}
+
+
+def test_public_settings_visibility_is_leaf_based() -> None:
+	class Child(BaseModel):
+		visible: str = settings_field(default="visible", public=True)
+		hidden: str = settings_field(default="hidden")
+
+	class Root(BaseModel):
+		child: Child = settings_field(default_factory=Child)
+		parent_public_child: Child = settings_field(default_factory=Child, public=True)
+
+	data = Root().model_dump(exclude=Settings._build_public_exclude(Root))
+
+	assert data == {
+		"child": {"visible": "visible"},
+		"parent_public_child": {"visible": "visible"},
 	}
 
 

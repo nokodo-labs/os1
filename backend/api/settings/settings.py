@@ -4,20 +4,23 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from enum import StrEnum
 from functools import cache as functools_cache
-from typing import Any, Final, Literal, Self
+from typing import Any, Final, Literal, Self, overload
 
 from pydantic import (
 	BaseModel,
-	Field,
 	HttpUrl,
 	computed_field,
 	field_validator,
 	model_validator,
 )
+from pydantic import (
+	Field as PydanticField,
+)
 from pydantic.fields import FieldInfo
+from pydantic_core import PydanticUndefined
 from pydantic_settings import (
 	BaseSettings,
 	DotEnvSettingsSource,
@@ -35,7 +38,7 @@ from api.schemas.preferences import BackgroundType
 from nokodo_ai.utils.typing import extract_literal_values
 
 
-FieldFlag = Literal["private", "write_locked"]
+FieldFlag = Literal["public", "write_locked"]
 
 
 _settings_logger = logging.getLogger(__name__)
@@ -53,36 +56,96 @@ UNSAFE_SECRET_KEYS: Final[frozenset[str]] = frozenset(
 )
 
 
+@overload
 def settings_field[T](
 	default: T,
 	description: str | None = None,
 	ge: int | float | None = None,
+	le: int | float | None = None,
+	min_length: int | None = None,
+	max_length: int | None = None,
+	examples: list[object] | None = None,
 	json_schema_extra: dict[str, object] | None = None,
-	private: bool = False,
+	default_factory: None = None,
+	public: bool = False,
 	write_locked: bool = False,
-) -> T:
+) -> T: ...
+
+
+@overload
+def settings_field[T](
+	default: object = PydanticUndefined,
+	description: str | None = None,
+	ge: int | float | None = None,
+	le: int | float | None = None,
+	min_length: int | None = None,
+	max_length: int | None = None,
+	examples: list[object] | None = None,
+	json_schema_extra: dict[str, object] | None = None,
+	default_factory: Callable[[], T] = ...,
+	public: bool = False,
+	write_locked: bool = False,
+) -> T: ...
+
+
+def settings_field[T](
+	default: T | object = PydanticUndefined,
+	description: str | None = None,
+	ge: int | float | None = None,
+	le: int | float | None = None,
+	min_length: int | None = None,
+	max_length: int | None = None,
+	examples: list[object] | None = None,
+	json_schema_extra: dict[str, object] | None = None,
+	default_factory: Callable[[], T] | None = None,
+	public: bool = False,
+	write_locked: bool = False,
+) -> Any:
 	"""field with access flags.
 	args:
-		private: if True, excluded from non-admin API responses
+		public: if True, included in non-admin API responses
 		write_locked: if True, cannot be updated via API (env-only)
 	"""
+	if default is not PydanticUndefined and default_factory is not None:
+		raise TypeError("settings_field cannot use both default and default_factory")
 	extra = dict(json_schema_extra or {})
-	if private:
-		extra["private"] = True
+	if public:
+		extra["public"] = True
 	if write_locked:
 		extra["write_locked"] = True
-	return Field(
+	return PydanticField(
 		default=default,
+		default_factory=default_factory,
 		description=description,
 		ge=ge,
+		le=le,
+		min_length=min_length,
+		max_length=max_length,
+		examples=examples,
 		json_schema_extra=extra or None,
 		frozen=write_locked,
+	)
+
+
+def settings_computed_field(
+	description: str | None = None,
+	public: bool = False,
+) -> Any:
+	"""computed field with access flags."""
+	extra: dict[str, object] = {}
+	if public:
+		extra["public"] = True
+	return computed_field(
+		description=description,
+		json_schema_extra=extra or None,
 	)
 
 
 def get_field_flags(schema: type[BaseModel], field_name: str) -> dict[FieldFlag, bool]:
 	"""get access flags for a field."""
 	info = schema.model_fields.get(field_name)
+	if not info:
+		info = schema.model_computed_fields.get(field_name)
 	if not info:
 		return {}
 	extra = info.json_schema_extra
@@ -101,23 +164,27 @@ def get_field_flags(schema: type[BaseModel], field_name: str) -> dict[FieldFlag,
 
 
 class UISettings(BaseModel):
-	default_theme: str = Field(
-		default="system", description="'light', 'dark', or 'system'"
+	default_theme: str = settings_field(
+		default="system", public=True, description="'light', 'dark', or 'system'"
 	)
-	default_background: BackgroundType = Field(
+	default_background: BackgroundType = settings_field(
 		default="darkveil",
+		public=True,
 		description="default background for the app",
 	)
-	auth_pages_background: BackgroundType = Field(
+	auth_pages_background: BackgroundType = settings_field(
 		default="lightrays",
+		public=True,
 		description="background for auth pages (login, signup)",
 	)
-	sidebar_collapsed: bool = Field(default=False, description="collapse sidebar")
+	sidebar_collapsed: bool = settings_field(
+		default=False, public=True, description="collapse sidebar"
+	)
 
 
 class AIMemorySettings(BaseModel):
-	enable_memory: bool = Field(default=True, description="enable memory")
-	similarity_threshold: float = Field(
+	enable_memory: bool = settings_field(default=True, description="enable memory")
+	similarity_threshold: float = settings_field(
 		default=0.65,
 		ge=0.0,
 		le=1.0,
@@ -125,7 +192,7 @@ class AIMemorySettings(BaseModel):
 		"how similar a memory must be to be considered relevant. "
 		"0.0 = all memories, 1.0 = exact match",
 	)
-	top_k: int = Field(
+	top_k: int = settings_field(
 		default=15,
 		ge=1,
 		description="number of relevant memories to retrieve",
@@ -133,22 +200,22 @@ class AIMemorySettings(BaseModel):
 
 
 class AIChatContextSettings(BaseModel):
-	enabled: bool = Field(
+	enabled: bool = settings_field(
 		default=True,
 		description="enable cross-chat context enrichment",
 	)
-	mode: Literal["recent", "relevant"] = Field(
+	mode: Literal["recent", "relevant"] = settings_field(
 		default="relevant",
 		description="how chats are selected for Agent context enrichment. "
 		"recent: top K by last_activity_at. "
 		"relevant: top K by semantic similarity to the current conversation.",
 	)
-	top_k: int = Field(
+	top_k: int = settings_field(
 		default=3,
 		ge=1,
 		description="number of chats to use for context enrichment",
 	)
-	similarity_threshold: float = Field(
+	similarity_threshold: float = settings_field(
 		default=0.65,
 		ge=0.0,
 		le=1.0,
@@ -164,35 +231,35 @@ class AITaskSettings(BaseModel):
 	resolution order: per-task model_id -> default_model_id -> error.
 	"""
 
-	default_model_id: str | None = Field(
+	default_model_id: str | None = settings_field(
 		default=None,
 		description="fallback model id for all background tasks",
 	)
-	thread_metadata_model_id: str | None = Field(
+	thread_metadata_model_id: str | None = settings_field(
 		default=None,
 		description="model for thread metadata generation (title, tags)",
 	)
-	thread_maintenance_model_id: str | None = Field(
+	thread_maintenance_model_id: str | None = settings_field(
 		default=None,
 		description="model for inactive thread metadata and summary maintenance",
 	)
-	input_autocomplete_model_id: str | None = Field(
+	input_autocomplete_model_id: str | None = settings_field(
 		default=None,
 		description="model for input autocomplete suggestions",
 	)
-	summarization_model_id: str | None = Field(
+	summarization_model_id: str | None = settings_field(
 		default=None,
 		description="model for thread context summarization",
 	)
-	memory_post_processing_model_id: str | None = Field(
+	memory_post_processing_model_id: str | None = settings_field(
 		default=None,
 		description="model for memory post-processing (dedup, update, delete)",
 	)
-	web_search_model_id: str | None = Field(
+	web_search_model_id: str | None = settings_field(
 		default=None,
 		description="model for native agentic web search",
 	)
-	maintenance_max_chars_per_message: int | None = Field(
+	maintenance_max_chars_per_message: int | None = settings_field(
 		default=2000,
 		ge=1,
 		description=(
@@ -209,22 +276,22 @@ class AIAttachmentSettings(BaseModel):
 	to reference state. a 'turn' is one user-assistant exchange.
 	"""
 
-	image_decay_turns: int = Field(
+	image_decay_turns: int = settings_field(
 		default=4,
 		ge=1,
 		description="turns before image attachments decay to reference",
 	)
-	audio_decay_turns: int = Field(
+	audio_decay_turns: int = settings_field(
 		default=3,
 		ge=1,
 		description="turns before audio attachments decay to reference",
 	)
-	video_decay_turns: int = Field(
+	video_decay_turns: int = settings_field(
 		default=2,
 		ge=1,
 		description="turns before video attachments decay to reference",
 	)
-	reveal_decay_turns: int = Field(
+	reveal_decay_turns: int = settings_field(
 		default=3,
 		ge=1,
 		description="turns before a revealed attachment decays again",
@@ -239,11 +306,11 @@ class AIWindowingSettings(BaseModel):
 	are based on estimated token weight, not naive message counts.
 	"""
 
-	enabled: bool = Field(
+	enabled: bool = settings_field(
 		default=True,
 		description="enable context window management and summarization",
 	)
-	max_messages: int = Field(
+	max_messages: int = settings_field(
 		default=50,
 		ge=1,
 		description=(
@@ -251,7 +318,7 @@ class AIWindowingSettings(BaseModel):
 			"cap at this many unsummarized messages"
 		),
 	)
-	trigger_ratio: float = Field(
+	trigger_ratio: float = settings_field(
 		default=0.70,
 		ge=0.1,
 		le=0.95,
@@ -260,7 +327,7 @@ class AIWindowingSettings(BaseModel):
 			"consume this fraction of the available token budget"
 		),
 	)
-	hard_ratio: float = Field(
+	hard_ratio: float = settings_field(
 		default=0.90,
 		ge=0.5,
 		le=1.0,
@@ -269,12 +336,12 @@ class AIWindowingSettings(BaseModel):
 			"fraction of the available budget (last resort if no summary is ready)"
 		),
 	)
-	summary_batch_size: int = Field(
+	summary_batch_size: int = settings_field(
 		default=20,
 		ge=1,
 		description="number of oldest unsummarized messages per summary batch",
 	)
-	max_summaries_before_condense: int = Field(
+	max_summaries_before_condense: int = settings_field(
 		default=4,
 		ge=2,
 		description=(
@@ -282,7 +349,7 @@ class AIWindowingSettings(BaseModel):
 			"summaries accumulate. enables truly unlimited threads"
 		),
 	)
-	tool_result_max_share: float = Field(
+	tool_result_max_share: float = settings_field(
 		default=0.25,
 		ge=0.05,
 		le=0.75,
@@ -291,12 +358,12 @@ class AIWindowingSettings(BaseModel):
 			"may consume. results exceeding this are truncated"
 		),
 	)
-	tool_result_hard_cap: int = Field(
+	tool_result_hard_cap: int = settings_field(
 		default=100_000,
 		ge=1000,
 		description="absolute character ceiling per tool result",
 	)
-	tool_results_combined_max_share: float = Field(
+	tool_results_combined_max_share: float = settings_field(
 		default=0.50,
 		ge=0.10,
 		le=0.95,
@@ -306,12 +373,12 @@ class AIWindowingSettings(BaseModel):
 			"oldest tool results are compacted first (Layer 2 guard)"
 		),
 	)
-	response_headroom: int = Field(
+	response_headroom: int = settings_field(
 		default=4096,
 		ge=256,
 		description="tokens reserved for the model's response",
 	)
-	summarization_max_chars_per_message: int | None = Field(
+	summarization_max_chars_per_message: int | None = settings_field(
 		default=2000,
 		ge=1,
 		description=(
@@ -327,14 +394,13 @@ class E2bSettings(BaseModel):
 
 	api_key: str | None = settings_field(
 		default=None,
-		private=True,
 		description="E2B API key for code execution",
 	)
-	template: str = Field(
+	template: str = settings_field(
 		default="code-interpreter-v1",
 		description="E2B sandbox template to use for code execution",
 	)
-	available_packages: list[str] = Field(
+	available_packages: list[str] = settings_field(
 		default_factory=list,
 		description="pre-installed Python packages available in the sandbox",
 	)
@@ -346,34 +412,34 @@ CodeInterpreterEngine = Literal["native", "e2b"]
 class CodeInterpreterSettings(BaseModel):
 	"""code interpreter (sandbox) configuration."""
 
-	enabled: bool = Field(
+	enabled: bool = settings_field(
 		default=True,
 		description="enable code interpreter capabilities",
 	)
-	engine: CodeInterpreterEngine = Field(
+	engine: CodeInterpreterEngine = settings_field(
 		default="e2b",
 		description="sandbox engine to use",
 	)
-	e2b: E2bSettings = Field(
+	e2b: E2bSettings = settings_field(
 		default_factory=E2bSettings,
 		description="E2B sandbox settings",
 	)
-	timeout: int = Field(
+	timeout: int = settings_field(
 		default=60,
 		ge=5,
 		description="execution timeout in seconds",
 	)
-	max_file_download_mb: int = Field(
+	max_file_download_mb: int = settings_field(
 		default=10,
 		ge=1,
 		description="max file size downloadable from sandbox in MB",
 	)
-	max_output_chars: int = Field(
+	max_output_chars: int = settings_field(
 		default=500_000,
 		ge=1000,
 		description="max output characters returned from code interpreter",
 	)
-	truncation_lines: int = Field(
+	truncation_lines: int = settings_field(
 		default=50,
 		ge=5,
 		description="lines kept at head and tail when truncating output",
@@ -383,30 +449,30 @@ class CodeInterpreterSettings(BaseModel):
 class ImageGenerationSettings(BaseModel):
 	"""image generation engine configuration."""
 
-	enabled: bool = Field(
+	enabled: bool = settings_field(
 		default=True,
 		description="enable image generation capabilities",
 	)
-	model: str | None = Field(
+	model: str | None = settings_field(
 		default=None,
 		description="model ID referencing a Model ORM record with IMAGE type",
 	)
-	default_size: str = Field(
+	default_size: str = settings_field(
 		default="1024x1024",
 		description="default image size in WIDTHxHEIGHT format",
 	)
-	default_steps: int | None = Field(
+	default_steps: int | None = settings_field(
 		default=None,
 		ge=1,
 		description=("default number of generation steps (if supported by the engine)"),
 	)
-	default_n: int = Field(
+	default_n: int = settings_field(
 		default=1,
 		ge=1,
 		le=10,
 		description="default number of images to generate per prompt",
 	)
-	max_n: int = Field(
+	max_n: int = settings_field(
 		default=4,
 		ge=1,
 		le=10,
@@ -417,11 +483,11 @@ class ImageGenerationSettings(BaseModel):
 class VideoGenerationSettings(BaseModel):
 	"""video generation engine configuration (scaffold)."""
 
-	enabled: bool = Field(
+	enabled: bool = settings_field(
 		default=False,
 		description="enable video generation capabilities",
 	)
-	model: str | None = Field(
+	model: str | None = settings_field(
 		default=None,
 		description="model ID referencing a Model ORM record with VIDEO type",
 	)
@@ -430,11 +496,11 @@ class VideoGenerationSettings(BaseModel):
 class AudioGenerationSettings(BaseModel):
 	"""audio generation engine configuration (scaffold)."""
 
-	enabled: bool = Field(
+	enabled: bool = settings_field(
 		default=False,
 		description="enable audio generation capabilities",
 	)
-	model: str | None = Field(
+	model: str | None = settings_field(
 		default=None,
 		description="model ID referencing a Model ORM record with AUDIO type",
 	)
@@ -443,122 +509,140 @@ class AudioGenerationSettings(BaseModel):
 class AIMediaSettings(BaseModel):
 	"""AI media generation settings."""
 
-	images: ImageGenerationSettings = Field(
+	images: ImageGenerationSettings = settings_field(
 		default_factory=ImageGenerationSettings,
 		description="image generation settings",
 	)
-	videos: VideoGenerationSettings = Field(
+	videos: VideoGenerationSettings = settings_field(
 		default_factory=VideoGenerationSettings,
 		description="video generation settings (future)",
 	)
-	audio: AudioGenerationSettings = Field(
+	audio: AudioGenerationSettings = settings_field(
 		default_factory=AudioGenerationSettings,
 		description="audio generation settings (future)",
 	)
 
 
 class AISettings(BaseModel):
-	default_agent_ids: list[str] = Field(
+	default_agent_ids: list[str] = settings_field(
 		default_factory=list,
+		public=True,
 		description="ordered list of default agent ids (tried in order)",
 	)
-	retrieval_turns: int = Field(
+	retrieval_turns: int = settings_field(
 		default=3,
 		ge=1,
 		description="number of recent conversation turns to use when building "
 		"retrieval queries for memory and chat context enrichment. "
 		"a turn is a contiguous block of user or assistant messages.",
 	)
-	retrieval_pre_build: bool = Field(
+	retrieval_pre_build: bool = settings_field(
 		default=True,
 		description="pre-build the retrieval query (text + embedding) in agents.py "
 		"before the filter loop. when disabled each filter builds its own query, "
 		"which avoids the upfront embed cost if no retrieval filter is active.",
 	)
-	memory: AIMemorySettings = Field(
-		default_factory=AIMemorySettings, description="AI memory settings"
+	memory: AIMemorySettings = settings_field(
+		default_factory=AIMemorySettings,
+		description="AI memory settings",
 	)
-	chat_context: AIChatContextSettings = Field(
-		default_factory=AIChatContextSettings, description="chat context settings"
+	chat_context: AIChatContextSettings = settings_field(
+		default_factory=AIChatContextSettings,
+		description="chat context settings",
 	)
-	tasks: AITaskSettings = Field(
-		default_factory=AITaskSettings, description="background task model settings"
+	tasks: AITaskSettings = settings_field(
+		default_factory=AITaskSettings,
+		description="background task model settings",
 	)
-	attachments: AIAttachmentSettings = Field(
+	attachments: AIAttachmentSettings = settings_field(
 		default_factory=AIAttachmentSettings,
 		description="native attachment decay settings",
 	)
-	windowing: AIWindowingSettings = Field(
+	windowing: AIWindowingSettings = settings_field(
 		default_factory=AIWindowingSettings,
 		description="message window and summarization settings",
 	)
-	media: AIMediaSettings = Field(
+	media: AIMediaSettings = settings_field(
 		default_factory=AIMediaSettings,
 		description="AI media generation settings",
 	)
 
 
 class BrandingSettings(BaseModel):
-	site_name: str = Field(default="OS1", description="site name")
+	site_name: str = settings_field(default="OS1", public=True, description="site name")
 	app_version: str = settings_field(
 		default="0.1.0",
+		public=True,
 		write_locked=True,
 		description="backend version",
 	)
-	logo_url: HttpUrl | None = Field(default=None, description="logo url")
-	favicon_url: HttpUrl | None = Field(default=None, description="favicon url")
-	primary_color: str = Field(default="#6366f1", description="primary color hex")
-	support_email: str | None = Field(
+	logo_url: HttpUrl | None = settings_field(
+		default=None, public=True, description="logo url"
+	)
+	favicon_url: HttpUrl | None = settings_field(
+		default=None, public=True, description="favicon url"
+	)
+	primary_color: str = settings_field(
+		default="#6366f1", public=True, description="primary color hex"
+	)
+	support_email: str | None = settings_field(
 		default=None,
+		public=True,
 		description="support email shown to users awaiting approval",
 	)
-	admin_email: str | None = Field(
+	admin_email: str | None = settings_field(
 		default=None,
+		public=True,
 		description="admin email for internal / escalation contact",
 	)
-	public_frontend_origin: HttpUrl | None = Field(
+	public_frontend_origin: HttpUrl | None = settings_field(
 		default=None,
+		public=True,
 		description="public frontend origin",
 	)
-	public_cdn_origin: HttpUrl | None = Field(
+	public_cdn_origin: HttpUrl | None = settings_field(
 		default=None,
+		public=True,
 		description="public cdn origin",
 	)
-	public_console_origin: HttpUrl | None = Field(
+	public_console_origin: HttpUrl | None = settings_field(
 		default=None,
+		public=True,
 		description="public admin console origin",
 	)
-	pwa_manifest_url: HttpUrl | None = Field(
+	pwa_manifest_url: HttpUrl | None = settings_field(
 		default=None,
+		public=True,
 		description="external pwa manifest.json url",
 	)
 	analytics_key: str | None = settings_field(
 		default=None,
-		private=True,
 		write_locked=True,
 		description="analytics key (env-only)",
 	)
 
 
 class LimitsSettings(BaseModel):
-	max_threads_per_user: int = Field(
+	max_threads_per_user: int = settings_field(
 		default=100, ge=1, description="max threads per user"
 	)
-	max_messages_per_thread: int = Field(
+	max_messages_per_thread: int = settings_field(
 		default=1000, ge=1, description="max messages per thread"
 	)
-	max_file_size_mb: int = Field(default=50, ge=1, description="max file size mb")
-	max_reminder_hierarchy_depth: int = Field(
+	max_file_size_mb: int = settings_field(
+		default=50, ge=1, description="max file size mb"
+	)
+	max_reminder_hierarchy_depth: int = settings_field(
 		default=8,
 		ge=1,
 		description="maximum nesting depth for sub-reminders",
 	)
-	max_scheduled_items_window_days: int = Field(
+	max_scheduled_items_window_days: int = settings_field(
 		default=366,
 		ge=1,
 		description="maximum time window in days for scheduled items queries",
 	)
-	rate_limit_requests_per_minute: int = Field(
+	rate_limit_requests_per_minute: int = settings_field(
 		default=1500, ge=1, description="rate limit/min"
 	)
 
@@ -575,28 +659,33 @@ class MediaSettings(BaseModel):
 		favicon.ico, apple-touch-icon.png, sidebar-logo.svg, splash-logo.svg
 	"""
 
-	base_url: HttpUrl | None = Field(
+	base_url: HttpUrl | None = settings_field(
 		default=None,
+		public=True,
 		description="base url for all media assets",
 		examples=[
 			"https://cdn.example.com/brand/",
 			"https://raw.githubusercontent.com/org/repo/branch/path/to/assets/",
 		],
 	)
-	favicon_url: HttpUrl | None = Field(
+	favicon_url: HttpUrl | None = settings_field(
 		default=None,
+		public=True,
 		description="favicon url override",
 	)
-	apple_touch_icon_url: HttpUrl | None = Field(
+	apple_touch_icon_url: HttpUrl | None = settings_field(
 		default=None,
+		public=True,
 		description="apple touch icon url override",
 	)
-	sidebar_logo_url: HttpUrl | None = Field(
+	sidebar_logo_url: HttpUrl | None = settings_field(
 		default=None,
+		public=True,
 		description="sidebar banner logo url override",
 	)
-	splash_logo_url: HttpUrl | None = Field(
+	splash_logo_url: HttpUrl | None = settings_field(
 		default=None,
+		public=True,
 		description="splash screen logo url override",
 	)
 
@@ -604,21 +693,21 @@ class MediaSettings(BaseModel):
 class VectorSettings(BaseModel):
 	"""vector database collection and search tuning."""
 
-	collection_template: str = Field(
+	collection_template: str = settings_field(
 		default="{model}_bm25",
 		description="collection name template. '{model}' is replaced with "
 		"the slugified embedding model name at runtime",
 	)
-	sparse_vectors_enabled: bool = Field(
+	sparse_vectors_enabled: bool = settings_field(
 		default=True,
 		description="enable BM25 sparse vectors for hybrid search",
 	)
-	fusion_algorithm: Literal["rrf", "dbsf"] = Field(
+	fusion_algorithm: Literal["rrf", "dbsf"] = settings_field(
 		default="rrf",
 		description="score fusion algorithm: rrf (reciprocal rank fusion) or "
 		"dbsf (distribution-based score fusion)",
 	)
-	normalize_scores: bool = Field(
+	normalize_scores: bool = settings_field(
 		default=True,
 		description="normalize fused scores to 0-1 range",
 	)
@@ -627,12 +716,12 @@ class VectorSettings(BaseModel):
 class EmbeddingsSettings(BaseModel):
 	"""embedding model configuration."""
 
-	vector_size: int = Field(
+	vector_size: int = settings_field(
 		default=1536,
 		ge=1,
 		description="default vector dimension for the embedding model",
 	)
-	batch_size: int = Field(
+	batch_size: int = settings_field(
 		default=64,
 		ge=1,
 		le=4096,
@@ -643,11 +732,11 @@ class EmbeddingsSettings(BaseModel):
 class RerankSettings(BaseModel):
 	"""default reranking behavior."""
 
-	default_strategy: str = Field(
+	default_strategy: str = settings_field(
 		default="native",
 		description="default reranking strategy: none, native, or external",
 	)
-	top_k: int = Field(
+	top_k: int = settings_field(
 		default=10,
 		ge=1,
 		le=100,
@@ -671,17 +760,16 @@ class VectorDatabaseProvider(StrEnum):
 class QdrantVectorDatabaseSettings(BaseModel):
 	"""qdrant provider settings."""
 
-	url: str = Field(
+	url: str = settings_field(
 		default="qdrant:6334",
 		description="qdrant endpoint. host:port targets gRPC when use_grpc is enabled",
 	)
-	use_grpc: bool = Field(
+	use_grpc: bool = settings_field(
 		default=True,
 		description="use qdrant gRPC transport when available",
 	)
 	api_key: str | None = settings_field(
 		default=None,
-		private=True,
 		description="api key for qdrant",
 	)
 
@@ -689,10 +777,9 @@ class QdrantVectorDatabaseSettings(BaseModel):
 class ChromaVectorDatabaseSettings(BaseModel):
 	"""chroma provider settings stub."""
 
-	url: str | None = Field(default=None, description="chroma endpoint url")
+	url: str | None = settings_field(default=None, description="chroma endpoint url")
 	api_key: str | None = settings_field(
 		default=None,
-		private=True,
 		description="api key for chroma",
 	)
 
@@ -700,10 +787,9 @@ class ChromaVectorDatabaseSettings(BaseModel):
 class PineconeVectorDatabaseSettings(BaseModel):
 	"""pinecone provider settings stub."""
 
-	url: str | None = Field(default=None, description="pinecone endpoint url")
+	url: str | None = settings_field(default=None, description="pinecone endpoint url")
 	api_key: str | None = settings_field(
 		default=None,
-		private=True,
 		description="api key for pinecone",
 	)
 
@@ -711,10 +797,9 @@ class PineconeVectorDatabaseSettings(BaseModel):
 class WeaviateVectorDatabaseSettings(BaseModel):
 	"""weaviate provider settings stub."""
 
-	url: str | None = Field(default=None, description="weaviate endpoint url")
+	url: str | None = settings_field(default=None, description="weaviate endpoint url")
 	api_key: str | None = settings_field(
 		default=None,
-		private=True,
 		description="api key for weaviate",
 	)
 
@@ -722,10 +807,9 @@ class WeaviateVectorDatabaseSettings(BaseModel):
 class MilvusVectorDatabaseSettings(BaseModel):
 	"""milvus provider settings stub."""
 
-	url: str | None = Field(default=None, description="milvus endpoint url")
+	url: str | None = settings_field(default=None, description="milvus endpoint url")
 	token: str | None = settings_field(
 		default=None,
-		private=True,
 		description="token for milvus",
 	)
 
@@ -733,16 +817,17 @@ class MilvusVectorDatabaseSettings(BaseModel):
 class PgvectorVectorDatabaseSettings(BaseModel):
 	"""pgvector provider settings stub."""
 
-	url: str | None = Field(default=None, description="pgvector connection url")
+	url: str | None = settings_field(
+		default=None, description="pgvector connection url"
+	)
 
 
 class RedisVectorDatabaseSettings(BaseModel):
 	"""redis provider settings stub."""
 
-	url: str | None = Field(default=None, description="redis endpoint url")
+	url: str | None = settings_field(default=None, description="redis endpoint url")
 	password: str | None = settings_field(
 		default=None,
-		private=True,
 		description="password for redis",
 	)
 
@@ -750,10 +835,11 @@ class RedisVectorDatabaseSettings(BaseModel):
 class OpensearchVectorDatabaseSettings(BaseModel):
 	"""opensearch provider settings stub."""
 
-	url: str | None = Field(default=None, description="opensearch endpoint url")
+	url: str | None = settings_field(
+		default=None, description="opensearch endpoint url"
+	)
 	api_key: str | None = settings_field(
 		default=None,
-		private=True,
 		description="api key for opensearch",
 	)
 
@@ -761,39 +847,39 @@ class OpensearchVectorDatabaseSettings(BaseModel):
 class VectorDatabaseSettings(BaseModel):
 	"""vector database connection settings."""
 
-	provider: VectorDatabaseProvider = Field(
+	provider: VectorDatabaseProvider = settings_field(
 		default=VectorDatabaseProvider.QDRANT,
 		description="vector database provider",
 	)
-	qdrant: QdrantVectorDatabaseSettings = Field(
+	qdrant: QdrantVectorDatabaseSettings = settings_field(
 		default_factory=QdrantVectorDatabaseSettings,
 		description="qdrant provider settings",
 	)
-	chroma: ChromaVectorDatabaseSettings = Field(
+	chroma: ChromaVectorDatabaseSettings = settings_field(
 		default_factory=ChromaVectorDatabaseSettings,
 		description="chroma provider settings stub",
 	)
-	pinecone: PineconeVectorDatabaseSettings = Field(
+	pinecone: PineconeVectorDatabaseSettings = settings_field(
 		default_factory=PineconeVectorDatabaseSettings,
 		description="pinecone provider settings stub",
 	)
-	weaviate: WeaviateVectorDatabaseSettings = Field(
+	weaviate: WeaviateVectorDatabaseSettings = settings_field(
 		default_factory=WeaviateVectorDatabaseSettings,
 		description="weaviate provider settings stub",
 	)
-	milvus: MilvusVectorDatabaseSettings = Field(
+	milvus: MilvusVectorDatabaseSettings = settings_field(
 		default_factory=MilvusVectorDatabaseSettings,
 		description="milvus provider settings stub",
 	)
-	pgvector: PgvectorVectorDatabaseSettings = Field(
+	pgvector: PgvectorVectorDatabaseSettings = settings_field(
 		default_factory=PgvectorVectorDatabaseSettings,
 		description="pgvector provider settings stub",
 	)
-	redis: RedisVectorDatabaseSettings = Field(
+	redis: RedisVectorDatabaseSettings = settings_field(
 		default_factory=RedisVectorDatabaseSettings,
 		description="redis provider settings stub",
 	)
-	opensearch: OpensearchVectorDatabaseSettings = Field(
+	opensearch: OpensearchVectorDatabaseSettings = settings_field(
 		default_factory=OpensearchVectorDatabaseSettings,
 		description="opensearch provider settings stub",
 	)
@@ -802,7 +888,7 @@ class VectorDatabaseSettings(BaseModel):
 class LocalStorageConfig(BaseModel):
 	"""local filesystem storage configuration."""
 
-	root_path: str = Field(
+	root_path: str = settings_field(
 		default="data/uploads",
 		description="root directory for local file storage",
 	)
@@ -815,35 +901,35 @@ class S3StorageConfig(BaseModel):
 	for production, override via environment variables or DB settings.
 	"""
 
-	endpoint_url: str | None = Field(
+	endpoint_url: str | None = settings_field(
 		default="http://localhost:9000",
 		description="S3-compatible endpoint (MinIO, R2, etc.). set to None for AWS S3.",
 	)
-	bucket: str = Field(
+	bucket: str = settings_field(
 		default="nokodo-ai",
 		description="S3 bucket name. must be globally unique per deployment.",
 	)
-	region: str = Field(default="us-east-1", description="AWS region")
+	region: str = settings_field(default="us-east-1", description="AWS region")
 	access_key_id: str | None = settings_field(
-		default="minioadmin", private=True, description="S3 access key id"
+		default="minioadmin", description="S3 access key id"
 	)
 	secret_access_key: str | None = settings_field(
-		default="minioadmin", private=True, description="S3 secret access key"
+		default="minioadmin", description="S3 secret access key"
 	)
-	prefix: str = Field(default="", description="key prefix within the bucket")
-	presigned_url_ttl: int = Field(
+	prefix: str = settings_field(default="", description="key prefix within the bucket")
+	presigned_url_ttl: int = settings_field(
 		default=3600, description="presigned URL expiration in seconds"
 	)
-	multipart_threshold: int = Field(
+	multipart_threshold: int = settings_field(
 		default=100 * 1024 * 1024,
 		description="bytes above which multipart upload kicks in",
 	)
-	multipart_chunk_size: int = Field(
+	multipart_chunk_size: int = settings_field(
 		default=10 * 1024 * 1024,
 		description="multipart upload chunk size in bytes",
 	)
-	max_retries: int = Field(default=3, description="max retry attempts")
-	retry_mode: Literal["legacy", "standard", "adaptive"] = Field(
+	max_retries: int = settings_field(default=3, description="max retry attempts")
+	retry_mode: Literal["legacy", "standard", "adaptive"] = settings_field(
 		default="adaptive", description="botocore retry mode"
 	)
 
@@ -855,36 +941,36 @@ class StorageSettings(BaseModel):
 	only the selected backend is instantiated at startup.
 	"""
 
-	backend: Literal["local", "s3"] = Field(
+	backend: Literal["local", "s3"] = settings_field(
 		default="local",
 		description="active storage backend: 'local' or 's3'",
 	)
-	local: LocalStorageConfig = Field(default_factory=LocalStorageConfig)
-	s3: S3StorageConfig = Field(default_factory=S3StorageConfig)
+	local: LocalStorageConfig = settings_field(default_factory=LocalStorageConfig)
+	s3: S3StorageConfig = settings_field(default_factory=S3StorageConfig)
 
 
 class AssetsSettings(BaseModel):
-	default_embedding_model_id: str | None = Field(
+	default_embedding_model_id: str | None = settings_field(
 		default=None,
 		description="default embedding model id (Model.id)",
 	)
-	vector_database: VectorDatabaseSettings = Field(
+	vector_database: VectorDatabaseSettings = settings_field(
 		default_factory=VectorDatabaseSettings,
 		description="vector database provider and connection settings",
 	)
-	vector: VectorSettings = Field(
+	vector: VectorSettings = settings_field(
 		default_factory=VectorSettings,
 		description="vector database collection and search tuning",
 	)
-	embeddings: EmbeddingsSettings = Field(
+	embeddings: EmbeddingsSettings = settings_field(
 		default_factory=EmbeddingsSettings,
 		description="embedding model configuration",
 	)
-	rerank: RerankSettings = Field(
+	rerank: RerankSettings = settings_field(
 		default_factory=RerankSettings,
 		description="default reranking behavior",
 	)
-	storage: StorageSettings = Field(
+	storage: StorageSettings = settings_field(
 		default_factory=StorageSettings,
 		description="file storage backend configuration",
 	)
@@ -893,30 +979,33 @@ class AssetsSettings(BaseModel):
 class OIDCSettings(BaseModel):
 	"""openid connect provider configuration."""
 
-	enabled: bool = Field(default=False, description="enable oidc authentication")
-	issuer_url: HttpUrl | None = Field(
+	enabled: bool = settings_field(
+		default=False,
+		description="enable oidc authentication",
+	)
+	issuer_url: HttpUrl | None = settings_field(
 		default=None,
 		description="oidc issuer url",
 	)
-	client_id: str | None = Field(
+	client_id: str | None = settings_field(
 		default=None,
 		description="oidc client id",
 	)
 	client_secret: str | None = settings_field(
 		default=None,
-		private=True,
 		description="oidc client secret",
 	)
-	redirect_uri: HttpUrl | None = Field(
+	redirect_uri: HttpUrl | None = settings_field(
 		default=None,
 		description="oidc redirect uri",
 	)
-	scopes: list[str] = Field(
+	scopes: list[str] = settings_field(
 		default_factory=lambda: ["openid", "profile", "email"],
 		description="oidc scopes",
 	)
-	only: bool = Field(
+	only: bool = settings_field(
 		default=False,
+		public=True,
 		description="only allow login via oidc (disables password login)",
 	)
 
@@ -946,13 +1035,12 @@ class OIDCSettings(BaseModel):
 class SecuritySettings(BaseModel):
 	secret_key: str = settings_field(
 		default=DEFAULT_SECRET_KEY,
-		private=True,
 		write_locked=True,
 		description="application secret key (env-only)",
 	)
 
-	@computed_field(
-		description="whether the application secret key is still a built-in default."
+	@settings_computed_field(
+		description="whether the application secret key is still a built-in default.",
 	)
 	@property
 	def secret_key_uses_default(self) -> bool:
@@ -960,7 +1048,6 @@ class SecuritySettings(BaseModel):
 
 	previous_secret_keys: list[str] = settings_field(
 		[],
-		private=True,
 		write_locked=True,
 		description=(
 			"previous secret keys for decryption fallback "
@@ -968,11 +1055,12 @@ class SecuritySettings(BaseModel):
 			"set as comma-separated string or JSON array."
 		),
 	)
-	allow_signups: bool = Field(
+	allow_signups: bool = settings_field(
 		default=True,
+		public=True,
 		description="allow new user signups",
 	)
-	auto_signup_role_ids: list[str] | None = Field(
+	auto_signup_role_ids: list[str] | None = settings_field(
 		default=None,
 		description="role ids auto-applied to new signups",
 	)
@@ -981,30 +1069,34 @@ class SecuritySettings(BaseModel):
 		write_locked=True,
 		description="jwt algorithm",
 	)
-	access_token_expire_minutes: int = Field(
+	access_token_expire_minutes: int = settings_field(
 		default=30,
 		ge=1,
 		description="access token expire minutes",
 	)
-	refresh_token_expire_days: int = Field(
+	refresh_token_expire_days: int = settings_field(
 		default=90,
 		ge=1,
 		description="refresh token expire days",
 	)
-	auth_cookie_secure: bool = Field(
+	auth_cookie_secure: bool = settings_field(
 		default=True,
 		description="set secure cookies",
 	)
-	session_timeout_minutes: int = Field(
-		default=30, ge=5, description="session timeout"
+	session_timeout_minutes: int = settings_field(
+		default=30,
+		ge=5,
+		description="session timeout",
 	)
-	require_email_verification: bool = Field(
-		default=True, description="require email verification"
+	require_email_verification: bool = settings_field(
+		default=True,
+		description="require email verification",
 	)
-	allowed_email_domains: list[str] = Field(
-		default_factory=list, description="allowed domains"
+	allowed_email_domains: list[str] = settings_field(
+		default_factory=list,
+		description="allowed domains",
 	)
-	oidc: OIDCSettings = Field(
+	oidc: OIDCSettings = settings_field(
 		default_factory=OIDCSettings,
 		description="openid connect provider settings",
 	)
@@ -1056,21 +1148,21 @@ class SecuritySettings(BaseModel):
 class SearxngSettings(BaseModel):
 	"""searxng-specific settings for web search."""
 
-	instance_url: HttpUrl = Field(
+	instance_url: HttpUrl = settings_field(
 		default=HttpUrl("http://searxng:8080"),
 		description="base url for the searxng instance",
 	)
-	max_results: int = Field(
+	max_results: int = settings_field(
 		default=20,
 		description="max results to return from searxng",
 		ge=1,
 	)
-	max_concurrent_requests: int = Field(
+	max_concurrent_requests: int = settings_field(
 		default=5,
 		description="max concurrent requests to searxng (queue excess)",
 		ge=1,
 	)
-	timeout_seconds: int = Field(
+	timeout_seconds: int = settings_field(
 		default=10,
 		ge=1,
 		description="timeout for searxng API calls in seconds",
@@ -1080,16 +1172,15 @@ class SearxngSettings(BaseModel):
 class TavilySettings(BaseModel):
 	"""tavily-specific settings for web loading."""
 
-	extract_depth: Literal["basic", "advanced"] = Field(
+	extract_depth: Literal["basic", "advanced"] = settings_field(
 		default="advanced",
 		description=("depth of content extraction for tavily web loader."),
 	)
 	api_key: str | None = settings_field(
 		default=None,
-		private=True,
 		description="api key for tavily web loader",
 	)
-	max_concurrent_requests: int = Field(
+	max_concurrent_requests: int = settings_field(
 		default=10,
 		description="max concurrent requests to tavily (queue excess)",
 		ge=1,
@@ -1099,25 +1190,25 @@ class TavilySettings(BaseModel):
 class WebLoaderSettings(BaseModel):
 	"""web loader configuration for fetching and processing web content."""
 
-	engine: Literal["native", "tavily", "playwright"] = Field(
+	engine: Literal["native", "tavily", "playwright"] = settings_field(
 		default="native",
 		description="web loader engine to use",
 	)
-	timeout_seconds: int = Field(
+	timeout_seconds: int = settings_field(
 		default=10,
 		ge=1,
 		description="timeout for web loader fetch operations in seconds",
 	)
-	user_agent: str = Field(
+	user_agent: str = settings_field(
 		default="Mozilla/5.0 (compatible; NokodoAI/1.0; +https://nokodo.ai)",
 		description="user agent string for web loader requests",
 	)
-	max_chars: int = Field(
+	max_chars: int = settings_field(
 		default=50_000,
 		ge=100,
 		description="maximum characters returned per fetched URL",
 	)
-	tavily: TavilySettings = Field(
+	tavily: TavilySettings = settings_field(
 		default_factory=TavilySettings,
 		description="tavily-specific settings for web loading",
 	)
@@ -1129,7 +1220,7 @@ SearchEngine = Literal["perplexity", "searxng", "bing", "google"]
 class SearchEngineSettings(BaseModel):
 	"""search engine configuration for web search"""
 
-	engine: SearchEngine = Field(
+	engine: SearchEngine = settings_field(
 		default="perplexity",
 		description="web search engine",
 	)
@@ -1167,31 +1258,30 @@ class PerplexitySettings(BaseModel):
 
 	api_key: str | None = settings_field(
 		default=None,
-		private=True,
 		description="api key for the perplexity integration",
 	)
-	model: PerplexityModel = Field(
+	model: PerplexityModel = settings_field(
 		default="sonar",
 		description="perplexity model to use for agentic search",
 	)
-	search_context_usage: SearchContextUsage = Field(
+	search_context_usage: SearchContextUsage = settings_field(
 		default="medium",
 		description=(
 			"how much search context perplexity should use. "
 			"low = faster/cheaper, high = more thorough"
 		),
 	)
-	temperature: float = Field(
+	temperature: float = settings_field(
 		default=0.2,
 		ge=0.0,
 		le=2.0,
 		description="sampling temperature",
 	)
-	image_results_enabled: bool = Field(
+	image_results_enabled: bool = settings_field(
 		default=False,
 		description="allow web search tools to request image URLs from perplexity",
 	)
-	max_concurrent_requests: int = Field(
+	max_concurrent_requests: int = settings_field(
 		default=10,
 		description="max concurrent requests to perplexity (queue excess)",
 		ge=1,
@@ -1201,23 +1291,23 @@ class PerplexitySettings(BaseModel):
 class AgenticWebSearchSettings(BaseModel):
 	"""agentic web search configuration."""
 
-	agent: SearchAgent = Field(
+	agent: SearchAgent = settings_field(
 		default="native",
 		description="agent provider to use for agentic web search",
 	)
-	model_id: str | None = Field(
+	model_id: str | None = settings_field(
 		default=None,
 		description="model id for the native agentic web search agent",
 	)
-	system_prompt: str = Field(
+	system_prompt: str = settings_field(
 		default=_DEFAULT_AGENTIC_WEB_SEARCH_PROMPT,
 		description="system prompt for the native agentic web search agent",
 	)
-	model_params: dict[str, object] = Field(
+	model_params: dict[str, object] = settings_field(
 		default_factory=dict,
 		description="chat model parameters for the native agentic web search agent",
 	)
-	max_iterations: int = Field(
+	max_iterations: int = settings_field(
 		default=4,
 		ge=1,
 		le=20,
@@ -1228,24 +1318,24 @@ class AgenticWebSearchSettings(BaseModel):
 class WebSearchSettings(BaseModel):
 	"""web search provider configuration."""
 
-	agentic: AgenticWebSearchSettings = Field(
+	agentic: AgenticWebSearchSettings = settings_field(
 		default_factory=AgenticWebSearchSettings,
 		description="agentic web search configuration",
 	)
-	max_chars: int = Field(
+	max_chars: int = settings_field(
 		default=50_000,
 		ge=100,
 		description="maximum characters returned in web search result summaries",
 	)
-	blacklisted_domains: list[str] = Field(
+	blacklisted_domains: list[str] = settings_field(
 		default_factory=list,
 		description="domains to exclude from web search results (e.g. 'twitter.com')",
 	)
-	search_engines: SearchEngineSettings = Field(
+	search_engines: SearchEngineSettings = settings_field(
 		default_factory=SearchEngineSettings,
 		description="configuration for the supported web search engines",
 	)
-	web_loaders: WebLoaderSettings = Field(
+	web_loaders: WebLoaderSettings = settings_field(
 		default_factory=WebLoaderSettings,
 		description="configuration for fetching and processing web content",
 	)
@@ -1254,17 +1344,19 @@ class WebSearchSettings(BaseModel):
 class OpenWebUIDeployment(BaseModel):
 	"""an admin-allowlisted Open WebUI deployment users can import from."""
 
-	name: str = Field(
+	name: str = settings_field(
 		min_length=1,
 		max_length=128,
 		description="human-friendly name shown to users",
 	)
-	description: str = Field(
+	description: str = settings_field(
 		min_length=1,
 		max_length=512,
 		description="short description shown to users",
 	)
-	origin: HttpUrl = Field(description="base origin of the Open WebUI instance")
+	origin: HttpUrl = settings_field(
+		description="base origin of the Open WebUI instance"
+	)
 
 	@model_validator(mode="before")
 	@classmethod
@@ -1282,8 +1374,8 @@ class OpenWebUIDeployment(BaseModel):
 class OpenWebUIIntegrationSettings(BaseModel):
 	"""Open WebUI import integration."""
 
-	enabled: bool = Field(default=True, description="enable Open WebUI import")
-	deployments: list[OpenWebUIDeployment] = Field(
+	enabled: bool = settings_field(default=True, description="enable Open WebUI import")
+	deployments: list[OpenWebUIDeployment] = settings_field(
 		default_factory=list,
 		description="admin-allowlisted Open WebUI deployments users can import from",
 	)
@@ -1305,15 +1397,15 @@ class OpenWebUIIntegrationSettings(BaseModel):
 class IntegrationsSettings(BaseModel):
 	"""third-party integration configuration."""
 
-	open_webui: OpenWebUIIntegrationSettings = Field(
+	open_webui: OpenWebUIIntegrationSettings = settings_field(
 		default_factory=OpenWebUIIntegrationSettings,
 		description="Open WebUI integration",
 	)
-	perplexity: PerplexitySettings = Field(
+	perplexity: PerplexitySettings = settings_field(
 		default_factory=PerplexitySettings,
 		description="perplexity integration",
 	)
-	searxng: SearxngSettings = Field(
+	searxng: SearxngSettings = settings_field(
 		default_factory=SearxngSettings,
 		description="searxng integration",
 	)
@@ -1322,12 +1414,12 @@ class IntegrationsSettings(BaseModel):
 class NotificationSettings(BaseModel):
 	"""notification delivery tuning."""
 
-	missed_grace_days: int = Field(
+	missed_grace_days: int = settings_field(
 		default=7,
 		ge=1,
 		description="days to look back for missed notifications",
 	)
-	lookahead_days: int = Field(
+	lookahead_days: int = settings_field(
 		default=366,
 		ge=1,
 		description="days ahead to schedule notifications",
@@ -1341,9 +1433,9 @@ class SoftDeleteSettings(BaseModel):
 	instead of removing the row from the database.
 	"""
 
-	threads: bool = Field(default=True, description="soft-delete threads")
-	notes: bool = Field(default=True, description="soft-delete notes")
-	files: bool = Field(default=True, description="soft-delete files")
+	threads: bool = settings_field(default=True, description="soft-delete threads")
+	notes: bool = settings_field(default=True, description="soft-delete notes")
+	files: bool = settings_field(default=True, description="soft-delete files")
 
 
 class CacheRedisSettings(BaseModel):
@@ -1351,7 +1443,6 @@ class CacheRedisSettings(BaseModel):
 
 	url: str = settings_field(
 		default="redis://127.0.0.1:6380/0",
-		private=True,
 		write_locked=True,
 		description=(
 			"Redis / Valkey URL used for cross-worker pub/sub and shared state."
@@ -1367,21 +1458,25 @@ class CacheRedisSettings(BaseModel):
 class CacheSettings(BaseModel):
 	"""cache subsystem configuration."""
 
-	redis: CacheRedisSettings = Field(
+	redis: CacheRedisSettings = settings_field(
 		default_factory=CacheRedisSettings,
-		json_schema_extra={"write_locked": True},
-		frozen=True,
+		write_locked=True,
 		description="Redis / Valkey cache and pub/sub settings",
 	)
-	scheduled_items_ttl_seconds: int = Field(
+	scheduled_items_ttl_seconds: int = settings_field(
 		default=30,
 		ge=1,
 		description="TTL for scheduled items cache entries",
 	)
-	resource_payload_ttl_seconds: int = Field(
+	resource_payload_ttl_seconds: int = settings_field(
 		default=30,
 		ge=1,
 		description="TTL for resource payload cache entries",
+	)
+	accessible_users_ttl_seconds: int = settings_field(
+		default=60 * 60 * 24,
+		ge=1,
+		description="TTL for accessible user recipient cache entries",
 	)
 
 
@@ -1404,6 +1499,15 @@ class TaskiqSettings(BaseModel):
 		ge=1,
 		write_locked=True,
 		description="maximum Redis connections used by TaskIQ components.",
+	)
+	auto_workers_max: int | None = settings_field(
+		default=None,
+		ge=1,
+		write_locked=True,
+		description=(
+			"optional maximum worker processes when TaskIQ is started with "
+			"--workers auto."
+		),
 	)
 	schedule_prefix: str = settings_field(
 		default="nokodo-ai:taskiq:schedules",
@@ -1470,13 +1574,12 @@ class ThreadMaintenanceBackfillSettings(BaseModel):
 class TasksSettings(BaseModel):
 	"""task execution settings."""
 
-	taskiq: TaskiqSettings = Field(
+	taskiq: TaskiqSettings = settings_field(
 		default_factory=TaskiqSettings,
-		json_schema_extra={"write_locked": True},
-		frozen=True,
+		write_locked=True,
 		description="TaskIQ execution and scheduling settings",
 	)
-	maintenance_backfill: ThreadMaintenanceBackfillSettings = Field(
+	maintenance_backfill: ThreadMaintenanceBackfillSettings = settings_field(
 		default_factory=ThreadMaintenanceBackfillSettings,
 		description=(
 			"retroactive thread maintenance backfill settings. "
@@ -1493,11 +1596,11 @@ class DefaultPermissionsSettings(BaseModel):
 	"""global default permissions applied when no role or
 	explicit rule grants access."""
 
-	resource_access: DefaultResourceAccess = Field(
+	resource_access: DefaultResourceAccess = settings_field(
 		default_factory=DefaultResourceAccess,
 		description="per-resource-type default access levels",
 	)
-	action_permissions: list[ActionPermission] = Field(
+	action_permissions: list[ActionPermission] = settings_field(
 		default_factory=lambda: [
 			ActionPermission.SETTINGS_READ,
 			ActionPermission.THREADS_CREATE,
@@ -1570,73 +1673,98 @@ class Settings(BaseSettings):
 		validate_assignment=True,
 		extra="ignore",
 	)
-	ui: UISettings = Field(default_factory=UISettings)
-	ai: AISettings = Field(default_factory=AISettings)
-	branding: BrandingSettings = Field(default_factory=BrandingSettings)
-	media: MediaSettings = Field(default_factory=MediaSettings)
-	assets: AssetsSettings = Field(default_factory=AssetsSettings)
-	limits: LimitsSettings = Field(default_factory=LimitsSettings)
-	security: SecuritySettings = Field(default_factory=SecuritySettings)
-	notifications: NotificationSettings = Field(
+	ui: UISettings = settings_field(default_factory=UISettings)
+	ai: AISettings = settings_field(default_factory=AISettings)
+	branding: BrandingSettings = settings_field(
+		default_factory=BrandingSettings,
+	)
+	media: MediaSettings = settings_field(default_factory=MediaSettings)
+	assets: AssetsSettings = settings_field(
+		default_factory=AssetsSettings,
+	)
+	limits: LimitsSettings = settings_field(
+		default_factory=LimitsSettings,
+	)
+	security: SecuritySettings = settings_field(
+		default_factory=SecuritySettings,
+	)
+	notifications: NotificationSettings = settings_field(
 		default_factory=NotificationSettings,
 		description="notification delivery settings",
 	)
-	soft_delete: SoftDeleteSettings = Field(default_factory=SoftDeleteSettings)
-	web_search: WebSearchSettings = Field(
+	soft_delete: SoftDeleteSettings = settings_field(
+		default_factory=SoftDeleteSettings,
+	)
+	web_search: WebSearchSettings = settings_field(
 		default_factory=WebSearchSettings,
 		description="web search provider settings",
 	)
-	code_interpreter: CodeInterpreterSettings = Field(
+	code_interpreter: CodeInterpreterSettings = settings_field(
 		default_factory=CodeInterpreterSettings,
 		description="code interpreter sandbox settings",
 	)
-	default_permissions: DefaultPermissionsSettings = Field(
-		default_factory=DefaultPermissionsSettings
+	default_permissions: DefaultPermissionsSettings = settings_field(
+		default_factory=DefaultPermissionsSettings,
 	)
-	integrations: IntegrationsSettings = Field(
+	integrations: IntegrationsSettings = settings_field(
 		default_factory=IntegrationsSettings,
 		description="third-party integration settings",
 	)
-	cache: CacheSettings = Field(
+	cache: CacheSettings = settings_field(
 		default_factory=CacheSettings,
 		description="cache and Redis settings",
 	)
-	tasks: TasksSettings = Field(
+	tasks: TasksSettings = settings_field(
 		default_factory=TasksSettings,
 		description="task execution settings",
 	)
 
 	@staticmethod
 	@functools_cache
-	def _build_custom_exclude(
-		schema: type[BaseModel], exclude_flags: tuple[FieldFlag, ...]
-	) -> dict[str, Any]:
-		"""build model_dump exclude dict based on field flags."""
+	def _build_public_exclude_state(
+		schema: type[BaseModel],
+	) -> tuple[dict[str, Any], bool]:
+		"""build public exclude dict and report whether public leaves exist."""
 		exclude: dict[str, Any] = {}
+		has_public = False
 		for field_name, field_info in schema.model_fields.items():
+			annotation = field_info.annotation
+			if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+				nested_exclude, nested_has_public = (
+					Settings._build_public_exclude_state(annotation)
+				)
+				if nested_has_public:
+					has_public = True
+					if nested_exclude:
+						exclude[field_name] = nested_exclude
+				else:
+					exclude[field_name] = True
+				continue
+
 			flags = get_field_flags(schema, field_name)
-			if any(flags.get(flag) for flag in exclude_flags):
+			if flags.get("public"):
+				has_public = True
+			else:
+				exclude[field_name] = True
+		for field_name in schema.model_computed_fields:
+			flags = get_field_flags(schema, field_name)
+			if not flags.get("public"):
 				exclude[field_name] = True
 				continue
-			annotation = field_info.annotation
+			has_public = True
+		return exclude, has_public
 
-			if isinstance(annotation, type) and issubclass(annotation, BaseModel):
-				nested_exclude = Settings._build_custom_exclude(
-					annotation, exclude_flags
-				)
-				if nested_exclude:
-					exclude[field_name] = nested_exclude
+	@staticmethod
+	def _build_public_exclude(schema: type[BaseModel]) -> dict[str, Any]:
+		"""build model_dump exclude dict for explicit public leaf fields."""
+		exclude, _has_public = Settings._build_public_exclude_state(schema)
 		return exclude
 
 	def custom_dump(self, exclude_private: bool = False) -> dict[str, Any]:
 		"""model_dump with custom excludes."""
 		exclude = {}
 		if exclude_private:
-			exclude.update(
-				self._build_custom_exclude(
-					schema=type(self), exclude_flags=("private",)
-				)
-			)
+			exclude.update(self._build_public_exclude(schema=type(self)))
 
 		return self.model_dump(exclude=exclude or None)
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,9 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.setting import SettingsDocument
+from api.permissions import DEFAULT_ACCESS_RESOURCE_TYPES
 from api.settings import Settings, check_writable
 from api.v1.schemas.settings import SettingsPatch, SettingsVersions
 from api.v1.service import events as event_service
+from api.v1.service.authorization import invalidate_accessible_users_for_resource_types
 from nokodo_ai.utils.dicts import deep_merge
 
 
@@ -36,6 +40,14 @@ async def get_versions(db: AsyncSession) -> SettingsVersions:
 	return SettingsVersions.model_validate(values)
 
 
+def _updates_default_resource_access(updates: Mapping[str, object]) -> bool:
+	default_permissions = updates.get("default_permissions")
+	return (
+		isinstance(default_permissions, Mapping)
+		and "resource_access" in default_permissions
+	)
+
+
 async def update(
 	db: AsyncSession,
 	patch: SettingsPatch,
@@ -47,11 +59,17 @@ async def update(
 	# exclude_unset=True: only include fields present in the request body.
 	# this lets callers explicitly send null to clear a nullable field,
 	# while omitted fields stay default (None) and are excluded.
-	updates = {
-		section: fields
-		for section, fields in patch.model_dump(exclude_unset=True).items()
-		if isinstance(fields, dict) and fields
-	}
+	raw_updates = patch.model_dump(exclude_unset=True)
+	updates: dict[str, dict[str, object]] = {}
+	for section, fields in raw_updates.items():
+		if not isinstance(section, str) or not isinstance(fields, dict) or not fields:
+			continue
+		normalized_fields: dict[str, object] = {}
+		for field_name, value in fields.items():
+			if isinstance(field_name, str):
+				normalized_fields[field_name] = value
+		if normalized_fields:
+			updates[section] = normalized_fields
 
 	expected = expected_versions.model_dump() if expected_versions else {}
 	new_versions: dict[str, int] = {}
@@ -107,5 +125,10 @@ async def update(
 	await event_service.publish_event(
 		db, event=event, origin_session_id=origin_session_id
 	)
+	if _updates_default_resource_access(updates):
+		# default recipients changed.
+		await invalidate_accessible_users_for_resource_types(
+			list(DEFAULT_ACCESS_RESOURCE_TYPES), db
+		)
 
 	return versions_out

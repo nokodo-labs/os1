@@ -1033,6 +1033,11 @@ class CacheSettingsPatch(BaseModel):
 		ge=1,
 		description="TTL for resource payload cache entries",
 	)
+	accessible_users_ttl_seconds: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="TTL for accessible user recipient cache entries",
+	)
 
 
 class TaskiqSettingsPatch(BaseModel):
