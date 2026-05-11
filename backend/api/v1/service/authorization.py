@@ -28,7 +28,11 @@ from api.models.role import Role
 from api.models.task import Task
 from api.models.thread import Thread
 from api.models.user import User
-from api.permissions import ResourceType
+from api.permissions import (
+	DEFAULT_ACCESS_RESOURCE_TYPES,
+	DefaultResourceAccess,
+	ResourceType,
+)
 from api.redis import cache
 from api.settings import settings
 from api.v1.service.auth import Principal
@@ -139,6 +143,40 @@ def _allowed_levels(required: AccessLevel) -> tuple[AccessLevel, ...]:
 			return (AccessLevel.ADMIN,)
 		case _:
 			return (AccessLevel.ADMIN,)
+
+
+def changed_default_access_resource_types(
+	previous: DefaultResourceAccess,
+	current: DefaultResourceAccess,
+) -> list[ResourceType]:
+	"""return resource types whose default access level changed."""
+	return [
+		resource_type
+		for resource_type in DEFAULT_ACCESS_RESOURCE_TYPES
+		if previous.get(resource_type) != current.get(resource_type)
+	]
+
+
+def _default_access_resource_types(
+	defaults: DefaultResourceAccess,
+) -> list[ResourceType]:
+	return [
+		resource_type
+		for resource_type in DEFAULT_ACCESS_RESOURCE_TYPES
+		if defaults.get(resource_type) is not None
+	]
+
+
+def _unique_resource_types(resource_types: list[ResourceType]) -> list[ResourceType]:
+	result: list[ResourceType] = []
+	for resource_type in resource_types:
+		if resource_type not in result:
+			result.append(resource_type)
+	return result
+
+
+def accessible_users_tag(resource_type: ResourceType, resource_id: TypeID) -> str:
+	return f"resource:{resource_type.value}:{resource_id}"
 
 
 def _false() -> ColumnElement[bool]:
@@ -257,8 +295,8 @@ async def list_accessible_user_ids(
 ) -> list[TypeID]:
 	"""return all user IDs that have at least *required_level* access to a resource.
 
-	results are cached in redis for 5 minutes and tagged by resource for
-	invalidation on access rule changes. the long TTL is safe because
+	results are cached in redis and tagged by resource for invalidation on
+	access changes. a generous TTL is safe because
 	every mutation path that affects the result set (access_rules service,
 	role membership, group membership) busts the tag explicitly. the TTL
 	is only a safety net for entries that never get explicitly invalidated
@@ -278,10 +316,18 @@ async def list_accessible_user_ids(
 	await cache.set(
 		cache_key,
 		[str(uid) for uid in result],
-		ttl=300,
-		tags=[f"resource:{resource_type.value}:{resource_id}"],
+		ttl=settings.cache.accessible_users_ttl_seconds,
+		tags=[accessible_users_tag(resource_type, resource_id)],
 	)
 	return result
+
+
+async def invalidate_accessible_users_for_resource(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+) -> None:
+	"""invalidate accessible_users cache entries for one resource."""
+	await cache.invalidate_tag(accessible_users_tag(resource_type, resource_id))
 
 
 async def invalidate_accessible_users_for_subject(
@@ -308,11 +354,49 @@ async def invalidate_accessible_users_for_subject(
 	for row in rows:
 		for value, (_col, rtype) in zip(row, fk_cols, strict=True):
 			if value is not None:
-				tags.append(f"resource:{rtype.value}:{value}")
+				tags.append(accessible_users_tag(rtype, TypeID(str(value))))
 	# fan out the tag invalidations concurrently - each is an independent
 	# redis round trip and there is no ordering requirement between them.
 	if tags:
 		await asyncio.gather(*(cache.invalidate_tag(tag) for tag in tags))
+
+
+async def invalidate_accessible_users_for_resource_types(
+	resource_types: list[ResourceType],
+	session: AsyncSession,
+) -> None:
+	"""invalidate accessible_users cache entries for every resource of each type."""
+	tags: list[str] = []
+	for resource_type in _unique_resource_types(resource_types):
+		config = RESOURCE_CONFIG[resource_type]
+		rows = (await session.execute(select(config.id_col))).all()
+		tags.extend(
+			accessible_users_tag(resource_type, TypeID(str(row[0]))) for row in rows
+		)
+	if tags:
+		await asyncio.gather(*(cache.invalidate_tag(tag) for tag in tags))
+
+
+async def invalidate_accessible_users_for_role_defaults(
+	role_ids: list[TypeID],
+	session: AsyncSession,
+) -> None:
+	"""invalidate default-access resource caches affected by role membership."""
+	if not role_ids:
+		return
+	roles = (
+		(await session.execute(select(Role).where(Role.id.in_(role_ids))))
+		.scalars()
+		.all()
+	)
+	resource_types: list[ResourceType] = []
+	for role in roles:
+		resource_types.extend(
+			_default_access_resource_types(
+				role.get_default_permissions().resource_access
+			)
+		)
+	await invalidate_accessible_users_for_resource_types(resource_types, session)
 
 
 async def _list_accessible_user_ids_uncached(

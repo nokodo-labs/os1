@@ -6,7 +6,9 @@ from pydantic import Field, model_validator
 from pydantic_core import PydanticCustomError
 
 from api.models.access_rule import AccessLevel
+from api.permissions import ResourceType
 from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -60,6 +62,14 @@ class AccessRuleResponse(MetadataModel, TimestampedModel, ORMModel):
 	calendar_id: TypeID | None = None
 
 
+class AccessRuleUpdate(ORMModel):
+	"""payload for updating one access rule on a resource."""
+
+	level: AccessLevel | None = None
+	order_index: int | None = Field(default=None, ge=0)
+	metadata: JSONObject | None = Field(default=None, alias="metadata_")
+
+
 class AccessRulesUpdate(ORMModel):
 	"""payload for replacing all access rules on a resource."""
 
@@ -70,3 +80,18 @@ class AccessRulesResponse(ORMModel):
 	"""response containing all access rules for a resource."""
 
 	rules: list[AccessRuleResponse] = Field(default_factory=list)
+
+
+class AccessLevelResolveRequest(ORMModel):
+	"""request explicit effective access levels for a resource."""
+
+	subject_user_ids: list[TypeID] = Field(min_length=1, max_length=100)
+
+
+class AccessLevelResolution(ORMModel):
+	"""effective access level for one subject on one resource."""
+
+	resource_type: ResourceType
+	resource_id: TypeID
+	user_id: TypeID
+	level: AccessLevel | None = None

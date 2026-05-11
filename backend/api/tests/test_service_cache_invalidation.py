@@ -7,9 +7,16 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.event import Event
+from api.models.event_types import EventType
 from api.models.file import File, FileSource, FileStatus
 from api.models.user import User
-from api.permissions import ResourceType
+from api.permissions import (
+	AccessLevel,
+	DefaultPermissions,
+	DefaultResourceAccess,
+	ResourceType,
+)
 from api.schemas.agent import AgentConfig, AgentCreate, AgentUpdate
 from api.schemas.calendar import (
 	CalendarCreate,
@@ -28,17 +35,21 @@ from api.schemas.reminder import (
 	ReminderListUpdate,
 	ReminderUpdate,
 )
+from api.schemas.role import RoleCreate, RoleUpdate
 from api.schemas.scheduled_item import (
 	CalendarOccurrenceEdit,
 	CalendarSeriesEdit,
 	Recurrence,
 	ReminderSeriesEdit,
 )
+from api.schemas.user import UserUpdate
 from api.v1.service import agents as agent_service
 from api.v1.service import files as file_service
 from api.v1.service import notes as note_service
 from api.v1.service import projects as project_service
 from api.v1.service import prompts as prompt_service
+from api.v1.service import roles as role_service
+from api.v1.service import users as user_service
 from api.v1.service.auth import Principal
 from api.v1.service.calendar import calendars as calendar_service
 from api.v1.service.calendar import events as calendar_event_service
@@ -63,8 +74,343 @@ async def _admin_principal(session: AsyncSession, label: str) -> Principal:
 	return Principal(user=user, group_ids=(), permissions=frozenset())
 
 
+async def _regular_user(session: AsyncSession, label: str) -> User:
+	user_id = new_typeid("user")
+	user = User(
+		email=f"{label}-{user_id}@example.com",
+		username=f"{label}_{user_id.replace('_', '')[:16]}",
+		hashed_password="x",
+		is_active=True,
+		is_superuser=False,
+	)
+	session.add(user)
+	await session.flush()
+	await session.refresh(user)
+	return user
+
+
 def _utc(year: int, month: int, day: int, hour: int = 9) -> datetime:
 	return datetime(year, month, day, hour, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_superuser_toggle_invalidates_all_accessible_user_caches(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	principal = await _admin_principal(db_session, "superuser-cache-admin")
+	user = await _regular_user(db_session, "superuser-cache-user")
+	calls: list[list[ResourceType]] = []
+
+	async def record_resource_types(
+		resource_types: list[ResourceType],
+		session: AsyncSession,
+	) -> None:
+		_ = session
+		calls.append(resource_types)
+
+	monkeypatch.setattr(
+		user_service,
+		"invalidate_accessible_users_for_resource_types",
+		record_resource_types,
+	)
+
+	await user_service.update_user(
+		user.id,
+		UserUpdate(is_superuser=True),
+		db_session,
+		principal=principal,
+	)
+
+	assert len(calls) == 1
+	assert set(calls[0]) == set(ResourceType)
+
+
+@pytest.mark.asyncio
+async def test_thread_owner_transfer_invalidates_accessible_users_resource(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	principal = await _admin_principal(db_session, "owner-cache-admin")
+	new_owner = await _regular_user(db_session, "owner-cache-user")
+	calls: list[tuple[ResourceType, TypeID]] = []
+
+	async def record_resource(
+		resource_type: ResourceType,
+		resource_id: TypeID,
+	) -> None:
+		calls.append((resource_type, resource_id))
+
+	monkeypatch.setattr(
+		thread_service,
+		"invalidate_accessible_users_for_resource",
+		record_resource,
+	)
+
+	thread = await thread_service.create_thread(
+		thread_service.ThreadCreate(owner_id=principal.user_id, title="owner cache"),
+		db_session,
+		principal=principal,
+	)
+	calls.clear()
+
+	await thread_service.update_thread(
+		thread.id,
+		thread_service.ThreadUpdate(owner_id=new_owner.id),
+		db_session,
+		principal=principal,
+	)
+
+	assert calls == [(ResourceType.THREAD, thread.id)]
+
+
+@pytest.mark.asyncio
+async def test_role_default_update_notifies_members_and_invalidates_defaults(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	principal = await _admin_principal(db_session, "role-cache-admin")
+	member = await _regular_user(db_session, "role-cache-member")
+	role_id = new_typeid("role")
+	role = await role_service.create_role(
+		RoleCreate(name=f"role-cache-{role_id.replace('_', '')[:16]}"),
+		db_session,
+		principal=principal,
+	)
+	await role_service.set_role_members(
+		role.id,
+		[member.id],
+		db_session,
+		principal=principal,
+	)
+	subject_calls: list[tuple[str, TypeID]] = []
+	type_calls: list[list[ResourceType]] = []
+	sent: list[tuple[list[TypeID] | None, str]] = []
+
+	async def record_subject(
+		subject_kind: str,
+		subject_id: TypeID,
+		session: AsyncSession,
+	) -> None:
+		_ = session
+		subject_calls.append((subject_kind, subject_id))
+
+	async def record_resource_types(
+		resource_types: list[ResourceType],
+		session: AsyncSession,
+	) -> None:
+		_ = session
+		type_calls.append(resource_types)
+
+	async def record_publish_event(
+		session: AsyncSession,
+		event: Event,
+		origin_session_id: str | None = None,
+		*,
+		recipient_ids: list[TypeID] | None = None,
+	) -> Event:
+		_ = session
+		_ = origin_session_id
+		sent.append((recipient_ids, event.type))
+		return event
+
+	monkeypatch.setattr(
+		role_service,
+		"invalidate_accessible_users_for_subject",
+		record_subject,
+	)
+	monkeypatch.setattr(
+		role_service,
+		"invalidate_accessible_users_for_resource_types",
+		record_resource_types,
+	)
+	monkeypatch.setattr(
+		role_service.event_service,
+		"publish_event",
+		record_publish_event,
+	)
+
+	await role_service.update_role(
+		role.id,
+		RoleUpdate(
+			default_permissions=DefaultPermissions(
+				resource_access=DefaultResourceAccess(thread=AccessLevel.READER)
+			)
+		),
+		db_session,
+		principal=principal,
+	)
+
+	assert subject_calls == [("role", role.id)]
+	assert type_calls == [[ResourceType.THREAD]]
+	assert len(sent) == 1
+	assert sent[0][0] == [member.id]
+	assert sent[0][1] == EventType.ROLE_UPDATED
+
+
+@pytest.mark.asyncio
+async def test_role_member_update_invalidates_role_default_resource_types(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	principal = await _admin_principal(db_session, "role-member-cache-admin")
+	member = await _regular_user(db_session, "role-member-member")
+	role_id = new_typeid("role")
+	role = await role_service.create_role(
+		RoleCreate(
+			name=f"role-member-cache-{role_id.replace('_', '')[:16]}",
+			default_permissions=DefaultPermissions(
+				resource_access=DefaultResourceAccess(
+					thread=AccessLevel.READER,
+					calendar=AccessLevel.EDITOR,
+				)
+			),
+		),
+		db_session,
+		principal=principal,
+	)
+	subject_calls: list[tuple[str, TypeID]] = []
+	type_calls: list[list[ResourceType]] = []
+	sent: list[tuple[list[TypeID] | None, str]] = []
+
+	async def record_subject(
+		subject_kind: str,
+		subject_id: TypeID,
+		session: AsyncSession,
+	) -> None:
+		_ = session
+		subject_calls.append((subject_kind, subject_id))
+
+	async def record_resource_types(
+		resource_types: list[ResourceType],
+		session: AsyncSession,
+	) -> None:
+		_ = session
+		type_calls.append(resource_types)
+
+	async def record_publish_event(
+		session: AsyncSession,
+		event: Event,
+		origin_session_id: str | None = None,
+		*,
+		recipient_ids: list[TypeID] | None = None,
+	) -> Event:
+		_ = session
+		_ = origin_session_id
+		sent.append((recipient_ids, event.type))
+		return event
+
+	monkeypatch.setattr(
+		role_service,
+		"invalidate_accessible_users_for_subject",
+		record_subject,
+	)
+	monkeypatch.setattr(
+		role_service,
+		"invalidate_accessible_users_for_resource_types",
+		record_resource_types,
+	)
+	monkeypatch.setattr(
+		role_service.event_service,
+		"publish_event",
+		record_publish_event,
+	)
+
+	await role_service.set_role_members(
+		role.id,
+		[member.id],
+		db_session,
+		principal=principal,
+	)
+
+	assert subject_calls == [("role", role.id)]
+	assert len(type_calls) == 1
+	assert set(type_calls[0]) == {ResourceType.THREAD, ResourceType.CALENDAR}
+	assert sent == [([member.id], EventType.ROLE_UPDATED)]
+
+
+@pytest.mark.asyncio
+async def test_role_priority_update_does_not_invalidate_default_access(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	principal = await _admin_principal(db_session, "role-priority-admin")
+	member = await _regular_user(db_session, "role-priority-member")
+	role_id = new_typeid("role")
+	role = await role_service.create_role(
+		RoleCreate(
+			name=f"role-priority-{role_id.replace('_', '')[:16]}",
+			default_permissions=DefaultPermissions(
+				resource_access=DefaultResourceAccess(thread=AccessLevel.READER)
+			),
+			priority=1,
+		),
+		db_session,
+		principal=principal,
+	)
+	await role_service.set_role_members(
+		role.id,
+		[member.id],
+		db_session,
+		principal=principal,
+	)
+	subject_calls: list[tuple[str, TypeID]] = []
+	type_calls: list[list[ResourceType]] = []
+	sent: list[tuple[list[TypeID] | None, str]] = []
+
+	async def record_subject(
+		subject_kind: str,
+		subject_id: TypeID,
+		session: AsyncSession,
+	) -> None:
+		_ = session
+		subject_calls.append((subject_kind, subject_id))
+
+	async def record_resource_types(
+		resource_types: list[ResourceType],
+		session: AsyncSession,
+	) -> None:
+		_ = session
+		type_calls.append(resource_types)
+
+	async def record_publish_event(
+		session: AsyncSession,
+		event: Event,
+		origin_session_id: str | None = None,
+		*,
+		recipient_ids: list[TypeID] | None = None,
+	) -> Event:
+		_ = session
+		_ = origin_session_id
+		sent.append((recipient_ids, event.type))
+		return event
+
+	monkeypatch.setattr(
+		role_service,
+		"invalidate_accessible_users_for_subject",
+		record_subject,
+	)
+	monkeypatch.setattr(
+		role_service,
+		"invalidate_accessible_users_for_resource_types",
+		record_resource_types,
+	)
+	monkeypatch.setattr(
+		role_service.event_service,
+		"publish_event",
+		record_publish_event,
+	)
+
+	await role_service.update_role(
+		role.id,
+		RoleUpdate(priority=99),
+		db_session,
+		principal=principal,
+	)
+
+	assert subject_calls == []
+	assert type_calls == []
+	assert sent == []
 
 
 @pytest.mark.asyncio

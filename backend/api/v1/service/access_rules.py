@@ -10,13 +10,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.access_rule import AccessLevel, AccessRule
 from api.permissions import ResourceType
 from api.redis import cache
-from api.schemas.access_rule import AccessRuleCreate
-from api.v1.service.auth import Principal
+from api.schemas.access_rule import (
+	AccessLevelResolution,
+	AccessRuleCreate,
+	AccessRuleUpdate,
+)
+from api.v1.service.auth import Principal, load_principal_for_user
 from api.v1.service.authorization import (
 	RESOURCE_CONFIG,
+	list_accessible_user_ids,
 	require_resource_access,
 	resolve_effective_level,
 )
+from api.v1.service.events import event_connections
 from api.v1.service.vectorize import sync_resource_vector_acl
 from nokodo_ai.utils.typeid import TypeID
 
@@ -152,6 +158,138 @@ async def list_access_rules(
 	return rules
 
 
+async def get_access_level(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+) -> AccessLevel:
+	"""return the requester's effective access level on a resource."""
+	config = RESOURCE_CONFIG[resource_type]
+	stmt = select(config.id_col)
+	if config.owner_fk is not None:
+		stmt = select(config.id_col, config.owner_fk)
+	stmt = stmt.where(config.id_col == resource_id)
+
+	result = await session.execute(stmt)
+	row = result.one_or_none()
+	if row is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail=f"{resource_type.value} not found",
+		)
+
+	owner_id: TypeID | None = (
+		row[1] if config.owner_fk is not None and len(row) > 1 else None
+	)
+	rules = await _list_rules_for_resource(resource_type, resource_id, session)
+	effective = resolve_effective_level(
+		principal,
+		resource_type,
+		rules,
+		owner_id=owner_id,
+	)
+	if effective is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail=f"{resource_type.value} not found",
+		)
+	return effective
+
+
+async def resolve_access_levels(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	subject_user_ids: list[TypeID],
+	session: AsyncSession,
+	principal: Principal,
+) -> list[AccessLevelResolution]:
+	"""resolve explicit effective access levels for one resource."""
+	owner_id = await _get_resource_owner_id(resource_type, resource_id, session)
+	rules = await _list_rules_for_resource(resource_type, resource_id, session)
+	requester_level = resolve_effective_level(
+		principal,
+		resource_type,
+		rules,
+		owner_id=owner_id,
+	)
+	if requester_level is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail=f"{resource_type.value} not found",
+		)
+
+	requested_user_ids = _unique_typeids(subject_user_ids)
+	if not requested_user_ids:
+		raise HTTPException(
+			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			detail="subject_user_ids is required",
+		)
+	has_other_subject = any(
+		user_id != principal.user.id for user_id in requested_user_ids
+	)
+	if has_other_subject and requester_level != AccessLevel.ADMIN:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
+
+	target_principals: dict[TypeID, Principal] = {}
+	for user_id in requested_user_ids:
+		target_principals[user_id] = (
+			principal
+			if user_id == principal.user.id
+			else await load_principal_for_user(user_id, session)
+		)
+	return [
+		AccessLevelResolution(
+			resource_type=resource_type,
+			resource_id=resource_id,
+			user_id=user_id,
+			level=resolve_effective_level(
+				target_principals[user_id],
+				resource_type,
+				rules,
+				owner_id=owner_id,
+			),
+		)
+		for user_id in requested_user_ids
+	]
+
+
+async def _get_resource_owner_id(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	session: AsyncSession,
+) -> TypeID | None:
+	config = RESOURCE_CONFIG[resource_type]
+	stmt = select(config.id_col)
+	if config.owner_fk is not None:
+		stmt = select(config.id_col, config.owner_fk)
+	if config.deleted_at_col is not None:
+		stmt = stmt.where(config.deleted_at_col.is_(None))
+	stmt = stmt.where(config.id_col == resource_id)
+
+	result = await session.execute(stmt)
+	row = result.one_or_none()
+	if row is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail=f"{resource_type.value} not found",
+		)
+	if config.owner_fk is None or len(row) < 2:
+		return None
+	return row[1]
+
+
+def _unique_typeids(values: list[TypeID]) -> list[TypeID]:
+	result: list[TypeID] = []
+	for value in values:
+		if value not in result:
+			result.append(value)
+	return result
+
+
 async def set_access_rules(
 	resource_type: ResourceType,
 	resource_id: TypeID,
@@ -190,6 +328,130 @@ async def set_access_rules_unchecked(
 	return await _set_rules_impl(resource_type, resource_id, rules, session)
 
 
+async def create_access_rule(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	rule: AccessRuleCreate,
+	session: AsyncSession,
+	principal: Principal,
+) -> AccessRule:
+	"""create one access rule for a resource."""
+	await require_resource_access(
+		resource_id,
+		session,
+		principal,
+		resource_type,
+		required_level=AccessLevel.ADMIN,
+	)
+	existing = await _list_rules_for_resource(resource_type, resource_id, session)
+	rule_key = _rule_key(rule)
+	if any(_access_rule_key(existing_rule) == rule_key for existing_rule in existing):
+		raise HTTPException(
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+			detail="duplicate subject in access rules",
+		)
+	previous_recipient_ids = await list_accessible_user_ids(
+		resource_type, resource_id, session
+	)
+
+	access_rule = AccessRule(
+		subject_user_id=rule.subject_user_id,
+		subject_group_id=rule.subject_group_id,
+		subject_role_id=rule.subject_role_id,
+		level=rule.level,
+		order_index=rule.order_index if rule.order_index != 0 else len(existing),
+		metadata_=rule.metadata,
+	)
+	_apply_resource_fk(access_rule, resource_type, resource_id)
+	session.add(access_rule)
+	await _commit_rules_mutation(
+		resource_type, resource_id, session, previous_recipient_ids
+	)
+	return access_rule
+
+
+async def get_access_rule(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	rule_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+) -> AccessRule:
+	"""get one access rule for a resource."""
+	await require_resource_access(
+		resource_id,
+		session,
+		principal,
+		resource_type,
+		required_level=AccessLevel.ADMIN,
+	)
+	return await _get_rule_for_resource(resource_type, resource_id, rule_id, session)
+
+
+async def update_access_rule(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	rule_id: TypeID,
+	update: AccessRuleUpdate,
+	session: AsyncSession,
+	principal: Principal,
+) -> AccessRule:
+	"""update one access rule for a resource."""
+	await require_resource_access(
+		resource_id,
+		session,
+		principal,
+		resource_type,
+		required_level=AccessLevel.ADMIN,
+	)
+	access_rule = await _get_rule_for_resource(
+		resource_type, resource_id, rule_id, session
+	)
+	previous_recipient_ids = await list_accessible_user_ids(
+		resource_type, resource_id, session
+	)
+	level = update.level
+	if level is not None:
+		access_rule.level = level
+	order_index = update.order_index
+	if order_index is not None:
+		access_rule.order_index = order_index
+	metadata = update.metadata
+	if metadata is not None:
+		access_rule.metadata_ = metadata
+	await _commit_rules_mutation(
+		resource_type, resource_id, session, previous_recipient_ids
+	)
+	return access_rule
+
+
+async def delete_access_rule(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	rule_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+) -> None:
+	"""delete one access rule for a resource."""
+	await require_resource_access(
+		resource_id,
+		session,
+		principal,
+		resource_type,
+		required_level=AccessLevel.ADMIN,
+	)
+	access_rule = await _get_rule_for_resource(
+		resource_type, resource_id, rule_id, session
+	)
+	previous_recipient_ids = await list_accessible_user_ids(
+		resource_type, resource_id, session
+	)
+	await session.delete(access_rule)
+	await _commit_rules_mutation(
+		resource_type, resource_id, session, previous_recipient_ids
+	)
+
+
 async def _set_rules_impl(
 	resource_type: ResourceType,
 	resource_id: TypeID,
@@ -198,6 +460,9 @@ async def _set_rules_impl(
 ) -> list[AccessRule]:
 	"""shared implementation for replacing access rules on a resource."""
 	existing = await _list_rules_for_resource(resource_type, resource_id, session)
+	previous_recipient_ids = await list_accessible_user_ids(
+		resource_type, resource_id, session
+	)
 	existing_by_key = {_access_rule_key(r): r for r in existing}
 	desired_keys: set[str] = set()
 
@@ -233,6 +498,41 @@ async def _set_rules_impl(
 		if key not in desired_keys:
 			await session.delete(existing_rule)
 
+	await _commit_rules_mutation(
+		resource_type, resource_id, session, previous_recipient_ids
+	)
+
+	return await _list_rules_for_resource(resource_type, resource_id, session)
+
+
+async def _get_rule_for_resource(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	rule_id: TypeID,
+	session: AsyncSession,
+) -> AccessRule:
+	config = RESOURCE_CONFIG[resource_type]
+	result = await session.execute(
+		select(AccessRule).where(
+			AccessRule.id == rule_id,
+			config.rule_fk == resource_id,
+		)
+	)
+	access_rule = result.scalar_one_or_none()
+	if access_rule is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="access rule not found",
+		)
+	return access_rule
+
+
+async def _commit_rules_mutation(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	session: AsyncSession,
+	previous_recipient_ids: list[TypeID],
+) -> None:
 	try:
 		await session.commit()
 	except IntegrityError:
@@ -242,10 +542,32 @@ async def _set_rules_impl(
 			detail="invalid subject reference - user, group, or role not found",
 		)
 
-	# sync acl metadata to qdrant (no-op if resource has no chunks)
 	await sync_resource_vector_acl(resource_id, resource_type, session)
-
-	# bust the cached accessible-user-ids for this resource
 	await cache.invalidate_tag(f"resource:{resource_type.value}:{resource_id}")
+	await _publish_access_updated(
+		resource_type, resource_id, session, previous_recipient_ids
+	)
 
-	return await _list_rules_for_resource(resource_type, resource_id, session)
+
+async def _publish_access_updated(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	session: AsyncSession,
+	previous_recipient_ids: list[TypeID],
+) -> None:
+	current_recipient_ids = await list_accessible_user_ids(
+		resource_type, resource_id, session
+	)
+	recipient_ids = _unique_typeids([*previous_recipient_ids, *current_recipient_ids])
+	if not recipient_ids:
+		return
+	await event_connections.send_to_users(
+		recipient_ids,
+		{
+			"type": "access.updated",
+			"data": {
+				"resource_type": resource_type.value,
+				"resource_id": str(resource_id),
+			},
+		},
+	)
