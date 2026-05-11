@@ -36,7 +36,7 @@
 				"api.taskiq:broker",
 				"api.tasks.registry",
 				"--workers",
-				"1",
+				"auto",
 				"--max-async-tasks",
 				"25"
 			],

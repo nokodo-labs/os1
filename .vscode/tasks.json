@@ -56,7 +56,7 @@
 		{
 			"label": "TaskIQ: worker",
 			"type": "shell",
-			"command": "uv run python -m api.taskiq worker api.taskiq:broker api.tasks.registry --workers 1 --max-async-tasks 25",
+			"command": "uv run python -m api.taskiq worker api.taskiq:broker api.tasks.registry --workers auto --max-async-tasks 25",
 			"options": {
 				"cwd": "${workspaceFolder}/backend"
 			},

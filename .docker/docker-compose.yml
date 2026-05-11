@@ -88,7 +88,7 @@ services:
     volumes:
       - backend_data:/app/data
     command: python -m api.taskiq worker api.taskiq:broker api.tasks.registry
-      --workers 1 --max-async-tasks 25
+      --workers auto --max-async-tasks 25
 
   taskiq-scheduler:
     image: ghcr.io/nokodo-labs/os1-backend:latest

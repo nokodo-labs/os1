@@ -132,7 +132,7 @@ services:
         condition: service_healthy
     volumes: *backend-volumes
     command: python -m api.taskiq worker api.taskiq:broker api.tasks.registry
-      --workers 1 --max-async-tasks 25
+      --workers auto --max-async-tasks 25
     profiles: ["local"]
 
   taskiq-scheduler:
@@ -207,7 +207,7 @@ services:
     command: >-
       python -m debugpy --listen 0.0.0.0:5679 --wait-for-client
       -m api.taskiq worker api.taskiq:broker api.tasks.registry
-      --workers 1 --max-async-tasks 25
+      --workers auto --max-async-tasks 25
     profiles: ["debug"]
 
   taskiq-scheduler-debug:
