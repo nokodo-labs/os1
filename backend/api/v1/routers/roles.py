@@ -44,6 +44,20 @@ async def read_roles(
 	)
 
 
+@router.get("/count", response_model=int)
+async def count_roles(
+	filters: Annotated[RoleListFilters, Depends()],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> int:
+	"""count roles matching the list filters."""
+	return await roles_service.count_roles(
+		db,
+		principal=principal,
+		filters=filters,
+	)
+
+
 @router.get("/{role_id}", response_model=RoleSchema)
 async def read_role(
 	role_id: TypeID,

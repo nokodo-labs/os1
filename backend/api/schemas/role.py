@@ -26,6 +26,7 @@ class RoleListFilters(BaseModel):
 	"""filters for listing roles."""
 
 	user_id: TypeID | None = None
+	q: str | None = None
 
 
 class RoleBase(MetadataModel):

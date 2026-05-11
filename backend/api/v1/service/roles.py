@@ -3,23 +3,31 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, func, insert, select
+from sqlalchemy import delete, func, insert, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.many_to_many import user_role_association
-from api.models.role import Role
+from api.models.role import ROLE_TYPEID_PREFIX, Role
 from api.models.user import User
-from api.permissions import DefaultPermissions
+from api.permissions import (
+	DEFAULT_ACCESS_RESOURCE_TYPES,
+	DefaultPermissions,
+	ResourceType,
+)
 from api.schemas.role import RoleCreate, RoleListFilters, RoleUpdate
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	changed_default_access_resource_types,
+	invalidate_accessible_users_for_resource_types,
 	invalidate_accessible_users_for_subject,
 	require_permission,
 )
-from api.v1.service.sorting import SortDir, apply_sort
+from api.v1.service.listing import SortDir, apply_sort, exact_typeid_filter
+from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -30,7 +38,59 @@ async def _role_member_ids(role_id: TypeID, session: AsyncSession) -> list[TypeI
 			user_role_association.c.role_id == role_id,
 		)
 	)
+	# association columns are plain strings; normalize at the service boundary.
 	return [TypeID(str(uid)) for uid in result.scalars().all()]
+
+
+async def _notify_role_members(
+	role_id: TypeID,
+	member_ids: list[TypeID],
+	session: AsyncSession,
+	principal: Principal,
+	event_type: EventType = EventType.ROLE_UPDATED,
+) -> None:
+	if not member_ids:
+		return
+	event = Event(
+		scope=EventScope.SYSTEM,
+		type=event_type,
+		data={"role_id": role_id},
+		user_id=principal.user_id,
+	)
+	await event_service.publish_event(
+		session,
+		event=event,
+		recipient_ids=member_ids,
+	)
+
+
+def _role_default_resource_types(role: Role) -> list[ResourceType]:
+	"""return resource types touched by a role's default access."""
+	defaults = role.get_default_permissions().resource_access
+	return [
+		resource_type
+		for resource_type in DEFAULT_ACCESS_RESOURCE_TYPES
+		if defaults.get(resource_type) is not None
+	]
+
+
+def _apply_role_filters(stmt: Select, role_filters: RoleListFilters) -> Select:
+	"""apply role list/count filters."""
+	if role_filters.user_id is not None:
+		stmt = stmt.join(
+			user_role_association,
+			user_role_association.c.role_id == Role.id,
+		).where(user_role_association.c.user_id == role_filters.user_id)
+	if role_filters.q and role_filters.q.strip():
+		pattern = contains_pattern(role_filters.q.strip())
+		stmt = stmt.where(
+			or_(
+				Role.name.ilike(pattern, escape="\\"),
+				Role.description.ilike(pattern, escape="\\"),
+				exact_typeid_filter(Role.id, role_filters.q, ROLE_TYPEID_PREFIX),
+			)
+		)
+	return stmt
 
 
 async def list_roles(
@@ -45,12 +105,7 @@ async def list_roles(
 	"""list all roles (requires roles:read permission)."""
 	require_permission(principal, "roles:read")
 	role_filters = filters or RoleListFilters()
-	stmt = select(Role)
-	if role_filters.user_id is not None:
-		stmt = stmt.join(
-			user_role_association,
-			user_role_association.c.role_id == Role.id,
-		).where(user_role_association.c.user_id == role_filters.user_id)
+	stmt = _apply_role_filters(select(Role), role_filters)
 	stmt = (
 		apply_sort(
 			stmt,
@@ -69,6 +124,18 @@ async def list_roles(
 	)
 	result = await session.execute(stmt)
 	return list(result.scalars().all())
+
+
+async def count_roles(
+	session: AsyncSession,
+	principal: Principal,
+	filters: RoleListFilters | None = None,
+) -> int:
+	"""count roles matching the list filters."""
+	require_permission(principal, "roles:read")
+	role_filters = filters or RoleListFilters()
+	stmt = _apply_role_filters(select(func.count()).select_from(Role), role_filters)
+	return await session.scalar(stmt) or 0
 
 
 async def get_role(
@@ -130,6 +197,8 @@ async def update_role(
 			detail="role not found",
 		)
 	changed = role_in.model_fields_set
+	member_ids = await _role_member_ids(role_id, session)
+	changed_default_resource_types: list[ResourceType] = []
 	update_data = role_in.model_dump(
 		exclude_unset=True,
 		by_alias=True,
@@ -139,15 +208,27 @@ async def update_role(
 	for key, value in update_data.items():
 		setattr(role, key, value)
 	if "default_permissions" in changed:
+		previous_default_permissions = role.get_default_permissions()
 		default_permissions = role_in.default_permissions
 		if not isinstance(default_permissions, DefaultPermissions):
 			raise ValueError("invalid default permissions")
 		role.set_default_permissions(default_permissions)
+		changed_default_resource_types = changed_default_access_resource_types(
+			previous_default_permissions.resource_access,
+			default_permissions.resource_access,
+		)
 		default_permissions_changed = True
 	await session.commit()
 	await session.refresh(role)
 	if default_permissions_changed:
+		# role defaults changed.
 		await invalidate_accessible_users_for_subject("role", role_id, session)
+		await invalidate_accessible_users_for_resource_types(
+			changed_default_resource_types, session
+		)
+		await _notify_role_members(role_id, member_ids, session, principal)
+	# priority only affects role ordering in admin views. resource defaults merge by
+	# highest access level, so priority-only updates do not change effective access.
 	return role
 
 
@@ -166,20 +247,24 @@ async def delete_role(
 		)
 	# resolve affected users before deletion
 	member_ids = await _role_member_ids(role_id, session)
+	changed_default_resource_types = changed_default_access_resource_types(
+		role.get_default_permissions().resource_access,
+		DefaultPermissions().resource_access,
+	)
 	await invalidate_accessible_users_for_subject("role", role_id, session)
+	await invalidate_accessible_users_for_resource_types(
+		changed_default_resource_types, session
+	)
 	await session.delete(role)
 	await session.commit()
 
-	# notify affected users so frontends refresh permissions
-	if member_ids:
-		event = Event(
-			scope=EventScope.SYSTEM,
-			type=EventType.ROLE_DELETED,
-			data={"role_id": role_id},
-			user_id=principal.user_id,
-		)
-		event_data = event_service._build_event_data(event)
-		await event_service.event_connections.send_to_users(member_ids, event_data)
+	await _notify_role_members(
+		role_id,
+		member_ids,
+		session,
+		principal,
+		event_type=EventType.ROLE_DELETED,
+	)
 
 
 # role members
@@ -243,22 +328,16 @@ async def set_role_members(
 			insert(user_role_association),
 			[{"role_id": role_id, "user_id": uid} for uid in user_ids],
 		)
+	default_resource_types = _role_default_resource_types(role)
 	await session.commit()
 	await invalidate_accessible_users_for_subject("role", role_id, session)
+	await invalidate_accessible_users_for_resource_types(
+		default_resource_types, session
+	)
 
 	# notify all affected users (old + new members) so frontends refresh
 	all_affected = set(old_member_ids) | set(user_ids)
-	if all_affected:
-		event = Event(
-			scope=EventScope.SYSTEM,
-			type=EventType.ROLE_UPDATED,
-			data={"role_id": role_id},
-			user_id=principal.user_id,
-		)
-		event_data = event_service._build_event_data(event)
-		await event_service.event_connections.send_to_users(
-			list(all_affected), event_data
-		)
+	await _notify_role_members(role_id, list(all_affected), session, principal)
 
 	# return updated member list
 	return await list_role_members(
