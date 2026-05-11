@@ -9,8 +9,8 @@ this module owns three orthogonal concerns:
 2. dynamic, per-thread post-run maintenance. when a run completes, the chat
 	service calls `schedule_thread_inactivity_maintenance`. missing mandatory
 	metadata starts maintenance immediately; summary-only work writes a one-shot
-	redis schedule for `last_activity_at + THREAD_INACTIVITY_HOURS`. the API
-	process never enqueues retroactive maintenance on its own.
+	redis schedule for `last_activity_at + THREAD_INACTIVITY_HOURS`. API startup
+	does not scan threads to recreate these timers.
 3. an explicit, off-by-default retroactive backfill sweep. administrators can
    enable a periodic sweep via `settings.tasks.maintenance_backfill` or run
    one manually through the admin endpoint. each sweep is bounded by an
@@ -23,7 +23,6 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.boot_settings import boot_settings
@@ -201,11 +200,15 @@ async def start_thread_maintenance_task(
 	replace_metadata: bool = False,
 	origin_session_id: str | None = None,
 	stage: str = "queued",
+	source: str = "direct",
+	reason: str = "requested",
 ) -> Task:
 	"""enqueue durable metadata/summary maintenance for one thread."""
 	metadata: JSONObject = {
 		"thread_id": str(thread_id),
 		"replace_metadata": replace_metadata,
+		"maintenance_source": source,
+		"maintenance_reason": reason,
 	}
 	if observed_last_activity_at is not None:
 		metadata["observed_last_activity_at"] = observed_last_activity_at.isoformat()
@@ -217,7 +220,25 @@ async def start_thread_maintenance_task(
 	)
 	if existing is not None:
 		if not _active_task_is_stale(existing, THREAD_MAINTENANCE_STALE_AFTER):
+			logger.info(
+				"thread maintenance enqueue skipped; active task exists "
+				"thread_id=%s existing_task_id=%s user_id=%s source=%s reason=%s",
+				thread_id,
+				existing.id,
+				principal.user.id,
+				source,
+				reason,
+			)
 			return existing
+		logger.warning(
+			"thread maintenance active task is stale; superseding "
+			"thread_id=%s stale_task_id=%s user_id=%s source=%s reason=%s",
+			thread_id,
+			existing.id,
+			principal.user.id,
+			source,
+			reason,
+		)
 		await task_service.update_task_execution(
 			TypeID(existing.id),
 			status_value=TaskStatus.FAILED,
@@ -228,6 +249,19 @@ async def start_thread_maintenance_task(
 				"thread_id": str(thread_id),
 			},
 		)
+	logger.info(
+		"thread maintenance enqueue requested thread_id=%s user_id=%s "
+		"source=%s reason=%s stage=%s replace_metadata=%s observed_last_activity_at=%s",
+		thread_id,
+		principal.user.id,
+		source,
+		reason,
+		stage,
+		replace_metadata,
+		observed_last_activity_at.isoformat()
+		if observed_last_activity_at is not None
+		else None,
+	)
 	return await task_service.start_task(
 		session,
 		principal,
@@ -244,6 +278,8 @@ async def start_thread_inactivity_maintenance_task(
 	session: AsyncSession,
 	principal: Principal,
 	thread: Thread,
+	source: str = "inactivity_timer",
+	reason: str = "inactivity_timer",
 ) -> Task:
 	"""enqueue maintenance for one inactive thread observed by the timer."""
 	return await start_thread_maintenance_task(
@@ -251,12 +287,15 @@ async def start_thread_inactivity_maintenance_task(
 		principal,
 		TypeID(thread.id),
 		observed_last_activity_at=thread.last_activity_at,
+		source=source,
+		reason=reason,
 	)
 
 
 async def schedule_thread_inactivity_maintenance(
 	thread_id: TypeID,
 	session: AsyncSession | None = None,
+	source: str = "post_run",
 ) -> bool:
 	"""start mandatory work now or reset the deferred inactivity timer."""
 	if boot_settings.TESTING:
@@ -280,6 +319,8 @@ async def schedule_thread_inactivity_maintenance(
 				principal,
 				TypeID(thread.id),
 				stage="queued mandatory metadata",
+				source=source,
+				reason="mandatory_metadata",
 			)
 			return True
 		if not await thread_service.thread_needs_deferred_maintenance(
@@ -301,6 +342,15 @@ async def schedule_thread_inactivity_maintenance(
 				last_activity_at.isoformat(),
 			)
 		)
+		logger.info(
+			"thread inactivity maintenance timer scheduled thread_id=%s "
+			"schedule_id=%s source=%s due_at=%s observed_last_activity_at=%s",
+			thread.id,
+			schedule_id,
+			source,
+			_ceil_to_minute(due_at).isoformat(),
+			last_activity_at.isoformat(),
+		)
 		return True
 
 	if session is not None:
@@ -316,27 +366,6 @@ async def delete_thread_inactivity_maintenance_schedule(thread_id: TypeID) -> No
 	await redis_schedule_source.delete_schedule(
 		_thread_inactivity_schedule_id(thread_id)
 	)
-
-
-async def reconcile_thread_inactivity_maintenance_schedules() -> int:
-	"""reconcile recent post-run maintenance after API boot."""
-	if boot_settings.TESTING:
-		return 0
-	now = datetime.now(tz=UTC)
-	window_start = now - timedelta(hours=THREAD_INACTIVITY_HOURS)
-	stmt = select(Thread).where(
-		Thread.deleted_at.is_(None),
-		Thread.is_temporary.is_(False),
-		Thread.current_message_id.is_not(None),
-		Thread.last_activity_at > window_start,
-	)
-	scheduled = 0
-	async with async_session_local() as session:
-		result = await session.execute(stmt)
-		for thread in result.scalars().all():
-			if await schedule_thread_inactivity_maintenance(TypeID(thread.id), session):
-				scheduled += 1
-	return scheduled
 
 
 async def fail_stale_thread_related_tasks() -> int:
@@ -560,8 +589,16 @@ async def run_thread_maintenance_backfill_sweep(
 	dispatched, how many were skipped because they already had an active
 	maintenance task, and the parameters used.
 	"""
+	if respect_enabled:
+		settings.reload()
 	backfill_settings = settings.tasks.maintenance_backfill
 	if respect_enabled and not backfill_settings.enabled:
+		logger.info(
+			"thread maintenance backfill sweep skipped reason=disabled "
+			"respect_enabled=%s schedule_id=%s",
+			respect_enabled,
+			THREAD_MAINTENANCE_BACKFILL_SCHEDULE_ID,
+		)
 		return {"skipped": True, "reason": "disabled", "dispatched": 0}
 
 	effective_batch = (
@@ -578,6 +615,13 @@ async def run_thread_maintenance_backfill_sweep(
 		else backfill_settings.min_inactivity_hours
 	)
 	if effective_batch <= 0 or effective_lookback <= 0 or effective_inactivity <= 0:
+		logger.warning(
+			"thread maintenance backfill sweep skipped reason=invalid_bounds "
+			"batch_size=%d lookback_days=%d min_inactivity_hours=%d",
+			effective_batch,
+			effective_lookback,
+			effective_inactivity,
+		)
 		return {
 			"skipped": True,
 			"reason": "invalid_bounds",
@@ -604,10 +648,22 @@ async def run_thread_maintenance_backfill_sweep(
 				session, THREAD_MAINTENANCE_TASK, metadata
 			)
 			if existing is not None:
+				logger.info(
+					"thread maintenance backfill skipped active task "
+					"thread_id=%s task_id=%s",
+					thread.id,
+					existing.id,
+				)
 				skipped_existing += 1
 				continue
 			principal = await load_principal_for_user(TypeID(thread.owner_id), session)
-			await start_thread_inactivity_maintenance_task(session, principal, thread)
+			await start_thread_inactivity_maintenance_task(
+				session,
+				principal,
+				thread,
+				source="backfill_sweep",
+				reason="backfill_sweep",
+			)
 			dispatched += 1
 			dispatched_thread_ids.append(str(thread.id))
 
@@ -650,6 +706,7 @@ async def reconcile_thread_maintenance_backfill_schedule() -> bool:
 	"""
 	if boot_settings.TESTING:
 		return False
+	settings.reload()
 	await redis_schedule_source.delete_schedule(THREAD_MAINTENANCE_BACKFILL_SCHEDULE_ID)
 	backfill_settings = settings.tasks.maintenance_backfill
 	if not backfill_settings.enabled:
@@ -674,6 +731,23 @@ async def reconcile_thread_maintenance_backfill_schedule() -> bool:
 		backfill_settings.cron,
 		backfill_settings.batch_size,
 		backfill_settings.max_lookback_days,
+	)
+	return True
+
+
+async def clear_disabled_thread_maintenance_backfill_schedule() -> bool:
+	"""remove any persisted backfill schedule before TaskIQ startup when disabled."""
+	if boot_settings.TESTING:
+		return False
+	settings.reload()
+	backfill_settings = settings.tasks.maintenance_backfill
+	if backfill_settings.enabled:
+		return False
+	await redis_schedule_source.delete_schedule(THREAD_MAINTENANCE_BACKFILL_SCHEDULE_ID)
+	logger.info(
+		"thread maintenance backfill schedule cleared before taskiq startup "
+		"reason=disabled schedule_id=%s",
+		THREAD_MAINTENANCE_BACKFILL_SCHEDULE_ID,
 	)
 	return True
 

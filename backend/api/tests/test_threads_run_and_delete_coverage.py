@@ -154,7 +154,7 @@ async def test_delete_thread_forbidden_when_editor_not_owner(
 
 	# grant EDITOR access via access rules, but they are not the owner.
 	acl_resp = await client.put(
-		f"/v1/threads/{thread_id}/access-rules",
+		f"/v1/threads/{thread_id}/access/rules",
 		headers=owner_headers,
 		json=[{"subject_user_id": other_user_id, "level": "editor"}],
 	)

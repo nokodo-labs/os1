@@ -143,8 +143,8 @@ async def list_threads_due_for_maintenance(
 			omitted, no lower bound is applied and arbitrarily old threads
 			are eligible.
 
-	results are ordered oldest-first to keep the work queue stable across
-	successive sweep batches and to drain the oldest stale items first.
+	results are ordered oldest-first and SQL-limited before running the
+	maintenance predicate so each sweep inspects at most one configured batch.
 	"""
 	stmt = select(Thread).where(
 		Thread.deleted_at.is_(None),

@@ -287,6 +287,20 @@ async def test_soft_deleted_threads_hidden(
 	user_get = await client.get(f"/v1/threads/{thread_id}", headers=user_headers)
 	assert user_get.status_code == 404
 
+	user_hidden_list = await client.get(
+		"/v1/threads",
+		headers=user_headers,
+		params={"include_hidden": True},
+	)
+	assert user_hidden_list.status_code == 403
+
+	user_get_hidden = await client.get(
+		f"/v1/threads/{thread_id}",
+		headers=user_headers,
+		params={"include_hidden": True},
+	)
+	assert user_get_hidden.status_code == 403
+
 	admin_headers = admin_auth["headers"]
 	assert isinstance(admin_headers, dict)
 

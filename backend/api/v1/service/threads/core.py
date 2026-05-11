@@ -6,7 +6,7 @@ import logging
 from typing import overload
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -25,15 +25,16 @@ from api.v1.service import events as event_service
 from api.v1.service import projects as project_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	invalidate_accessible_users_for_resource,
 	require_permission,
 	require_thread_access,
 	thread_access_predicate,
 )
+from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
 	invalidate_resource_payload_cache,
 )
-from api.v1.service.sorting import SortDir, apply_sort
 from api.v1.service.threads.participants import ensure_participant
 from api.v1.service.threads.search import THREAD_SPEC
 from api.v1.service.vectorize import (
@@ -261,6 +262,35 @@ async def list_threads(
 	return list(result.scalars().unique().all())
 
 
+async def count_threads(
+	session: AsyncSession,
+	principal: Principal,
+	filters: ThreadListFilters | None = None,
+) -> int:
+	thread_filters = filters or ThreadListFilters()
+	_ensure_admin_for_hidden(thread_filters.include_hidden, principal)
+	stmt = (
+		select(func.count())
+		.select_from(Thread)
+		.where(
+			thread_access_predicate(
+				principal,
+				required_level=AccessLevel.READER,
+				include_hidden=thread_filters.include_hidden,
+			)
+		)
+	)
+	if thread_filters.owner_id is not None:
+		stmt = stmt.where(Thread.owner_id == thread_filters.owner_id)
+	if not thread_filters.include_hidden:
+		stmt = stmt.where(Thread.is_temporary.is_(False))
+	if thread_filters.is_archived is not None:
+		stmt = stmt.where(Thread.is_archived == thread_filters.is_archived)
+	if thread_filters.include_hidden:
+		stmt = stmt.execution_options(include_deleted=True)
+	return await session.scalar(stmt) or 0
+
+
 async def get_thread(
 	thread_id: TypeID,
 	session: AsyncSession,
@@ -399,6 +429,9 @@ async def update_thread(
 			session, event=event, origin_session_id=origin_session_id
 		)
 	await invalidate_resource_payload_cache(ResourceType.THREAD, thread_id)
+	if owner_changed:
+		# owner recipients changed.
+		await invalidate_accessible_users_for_resource(ResourceType.THREAD, thread_id)
 
 	# re-index if searchable fields changed
 	if await THREAD_SPEC.should_revectorize(thread, thread_in, session):

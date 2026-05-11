@@ -3,6 +3,7 @@
 from api.models.thread import Thread
 from api.schemas.thread import ThreadUpdate
 from api.v1.service.threads.core import (
+	count_threads,
 	create_thread,
 	delete_thread,
 	get_thread,
@@ -50,6 +51,7 @@ __all__ = [
 	"THREAD_SPEC",
 	"Thread",
 	"ThreadUpdate",
+	"count_threads",
 	"create_message",
 	"create_thread",
 	"delete_thread",

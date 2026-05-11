@@ -25,8 +25,8 @@ from api.v1.service.authorization import (
 	require_thread_access,
 	thread_access_predicate,
 )
+from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.resource_payload_cache import invalidate_resource_payload_cache
-from api.v1.service.sorting import SortDir, apply_sort
 from api.v1.service.threads.core import (
 	_ensure_admin_for_hidden,
 	_load_thread,
