@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, func, insert, select
+from sqlalchemy import delete, func, insert, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
@@ -18,17 +19,54 @@ from api.models.memory import Memory
 from api.models.note import Note
 from api.models.reminder import Reminder, ReminderList
 from api.models.thread import Thread
-from api.models.user import User
-from api.permissions import ActionPermission
-from api.schemas.user import UserCreate, UserUpdate
+from api.models.user import USER_TYPEID_PREFIX, User
+from api.permissions import (
+	DEFAULT_ACCESS_RESOURCE_TYPES,
+	ActionPermission,
+	ResourceType,
+)
+from api.schemas.user import UserCreate, UserSummary, UserUpdate
 from api.settings import settings
 from api.v1.service import events as event_service
-from api.v1.service import friends as friends_service
 from api.v1.service.auth import Principal
-from api.v1.service.authorization import invalidate_accessible_users_for_subject
-from api.v1.service.sorting import SortDir, apply_sort
+from api.v1.service.authorization import (
+	invalidate_accessible_users_for_resource_types,
+	invalidate_accessible_users_for_role_defaults,
+	invalidate_accessible_users_for_subject,
+)
+from api.v1.service.listing import SortDir, apply_sort, exact_typeid_filter
+from api.v1.service.social import privacy as privacy_service
+from api.v1.service.social.visibility import user_visibility_predicate
+from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.security import hash_password
 from nokodo_ai.utils.typeid import TypeID
+
+
+def _apply_admin_user_filters(stmt: Select, q: str | None) -> Select:
+	"""apply admin-only user list filters."""
+	if not q or not q.strip():
+		return stmt
+	pattern = contains_pattern(q.strip())
+	return stmt.where(
+		or_(
+			User.email.ilike(pattern, escape="\\"),
+			User.username.ilike(pattern, escape="\\"),
+			User.display_name.ilike(pattern, escape="\\"),
+			exact_typeid_filter(User.id, q, USER_TYPEID_PREFIX),
+		)
+	)
+
+
+def _build_user_summary(
+	redacted: privacy_service.RedactedUser,
+) -> UserSummary:
+	"""build a user summary without leaking hidden profile fields."""
+	return UserSummary(
+		id=redacted.id,
+		username=redacted.username,
+		display_name=redacted.display_name,
+		avatar_url=redacted.avatar_url,
+	)
 
 
 async def list_users(
@@ -38,11 +76,13 @@ async def list_users(
 	limit: int = 100,
 	sort_by: str = "updated_at",
 	sort_dir: SortDir = "desc",
+	q: str | None = None,
 ) -> list[User]:
 	if not principal.is_admin:
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+	stmt = _apply_admin_user_filters(select(User), q)
 	stmt = apply_sort(
-		select(User),
+		stmt,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
 		columns={
@@ -57,6 +97,17 @@ async def list_users(
 	)
 	result = await session.execute(stmt.offset(skip).limit(limit))
 	return list(result.scalars().all())
+
+
+async def count_users(
+	session: AsyncSession,
+	principal: Principal,
+	q: str | None = None,
+) -> int:
+	if not principal.is_admin:
+		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+	stmt = _apply_admin_user_filters(select(func.count()).select_from(User), q)
+	return await session.scalar(stmt) or 0
 
 
 async def get_user(
@@ -86,7 +137,7 @@ async def get_accessible_user_summaries(
 	user_ids: list[TypeID],
 	session: AsyncSession,
 	principal: Principal,
-) -> list[User]:
+) -> list[UserSummary]:
 	"""return requested users the principal is allowed to identify."""
 	requested: list[TypeID] = []
 	seen: set[str] = set()
@@ -100,24 +151,24 @@ async def get_accessible_user_summaries(
 	if not requested:
 		return []
 
-	if principal.is_admin:
-		allowed_ids = requested
-	else:
-		friends = await friends_service.list_friends(session, principal=principal)
-		visible_ids: set[str] = {str(principal.user_id)}
-		visible_ids.update(str(friend.id) for friend, _friendship_id in friends)
-		allowed_ids = [user_id for user_id in requested if str(user_id) in visible_ids]
-
-	if not allowed_ids:
-		return []
-
-	result = await session.execute(select(User).where(User.id.in_(allowed_ids)))
-	users_by_id = {str(user.id): user for user in result.scalars().all()}
-	return [
-		users_by_id[str(user_id)]
-		for user_id in requested
-		if str(user_id) in users_by_id
-	]
+	result = await session.execute(
+		select(User).where(
+			User.id.in_(requested),
+			user_visibility_predicate(
+				principal,
+				include_inactive=principal.is_admin,
+			),
+		)
+	)
+	users = list(result.scalars().all())
+	users_by_id = {str(user.id): user for user in users}
+	redacted = await privacy_service.redact_users(users, session, principal)
+	summaries: list[UserSummary] = []
+	for user_id in requested:
+		user = users_by_id.get(str(user_id))
+		if user is not None:
+			summaries.append(_build_user_summary(redacted[user.id]))
+	return summaries
 
 
 async def get_user_counts(
@@ -293,6 +344,9 @@ async def create_user(
 				for rid in role_ids
 			)
 		)
+		await invalidate_accessible_users_for_role_defaults(
+			[TypeID(rid) for rid in role_ids], session
+		)
 	return user
 
 
@@ -312,6 +366,7 @@ async def update_user(
 			"email",
 			"password",
 			"is_active",
+			"is_superuser",
 			"integration_tokens",
 			"usage_quotas",
 			"role_ids",
@@ -431,12 +486,28 @@ async def update_user(
 	# precise cache invalidation: only the subjects whose effective access
 	# could have changed. avoids a coarse 'invalidate everything' tag.
 	if principal.is_admin:
+		if "is_superuser" in changed:
+			# superuser recipients changed.
+			await invalidate_accessible_users_for_resource_types(
+				list(ResourceType), session
+			)
 		if "is_active" in changed:
 			# direct user-rule grants for this user can flip in/out of the
 			# accessible_users list. invalidate per-subject:user.
 			await invalidate_accessible_users_for_subject(
 				subject_kind="user", subject_id=user.id, session=session
 			)
+			# default recipients changed.
+			default_resource_types = [
+				resource_type
+				for resource_type in DEFAULT_ACCESS_RESOURCE_TYPES
+				if settings.default_permissions.resource_access.get(resource_type)
+				is not None
+			]
+			if default_resource_types:
+				await invalidate_accessible_users_for_resource_types(
+					default_resource_types, session
+				)
 		if "role_ids" in changed:
 			role_ids_changed = old_role_ids ^ new_role_ids
 			if role_ids_changed:
@@ -449,6 +520,9 @@ async def update_user(
 						)
 						for changed_role_id in role_ids_changed
 					)
+				)
+				await invalidate_accessible_users_for_role_defaults(
+					list(role_ids_changed), session
 				)
 
 	# emit user.preferences_updated event when preferences changed

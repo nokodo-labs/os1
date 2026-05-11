@@ -1,10 +1,15 @@
 """Tests for user endpoints."""
 
+from datetime import UTC, datetime
+from uuid import uuid4
+
 import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.block import Block
+from api.models.friendship import Friendship, FriendshipStatus
 from api.schemas.user import UserCreate
 from api.v1.service import users as user_service
 from api.v1.service.auth import Principal
@@ -148,7 +153,7 @@ async def test_bulk_user_lookup_omits_inaccessible_users(
 	admin_auth: dict[str, object],
 	user_auth: dict[str, object],
 ) -> None:
-	"""bulk lookup only returns users visible to the caller."""
+	"""bulk lookup returns active unblocked users with privacy redaction."""
 	admin_headers = auth_headers(admin_auth)
 	user_headers = auth_headers(user_auth)
 	current_user = auth_user(user_auth)
@@ -163,17 +168,19 @@ async def test_bulk_user_lookup_omits_inaccessible_users(
 		},
 	)
 	assert other_resp.status_code == 201
+	other_id = other_resp.json()["id"]
 
 	response = await client.post(
 		"/v1/users/bulk",
 		headers=user_headers,
-		json={"user_ids": [current_user["id"], other_resp.json()["id"]]},
+		json={"user_ids": [current_user["id"], other_id]},
 	)
 
 	assert response.status_code == 200
 	data = response.json()
-	assert [user["id"] for user in data] == [current_user["id"]]
+	assert [user["id"] for user in data] == [current_user["id"], other_id]
 	assert "email" not in data[0]
+	assert "email" not in data[1]
 
 
 @pytest.mark.asyncio
@@ -207,6 +214,477 @@ async def test_admin_bulk_user_lookup_returns_requested_users(
 		other_resp.json()["id"],
 		admin_user["id"],
 	]
+
+
+@pytest.mark.asyncio
+async def test_admin_user_list_q_matches_exact_id_only(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+) -> None:
+	"""admin q filters match IDs exactly, not by substring."""
+	headers = auth_headers(admin_auth)
+	unique = uuid4().hex[:10]
+	other_resp = await client.post(
+		"/v1/users",
+		headers=headers,
+		json={
+			"email": f"exact-id-{unique}@example.com",
+			"username": f"exactid{unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert other_resp.status_code == 201
+	target = other_resp.json()
+
+	exact_resp = await client.get(
+		"/v1/users",
+		headers=headers,
+		params={"q": target["id"]},
+	)
+	assert exact_resp.status_code == 200
+	assert target["id"] in [user["id"] for user in exact_resp.json()]
+
+	partial_resp = await client.get(
+		"/v1/users",
+		headers=headers,
+		params={"q": target["id"][-10:]},
+	)
+	assert partial_resp.status_code == 200
+	assert target["id"] not in [user["id"] for user in partial_resp.json()]
+
+
+@pytest.mark.asyncio
+async def test_user_search_respects_email_discoverability(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""email search only matches users that explicitly allow email discovery."""
+	admin_headers = auth_headers(admin_auth)
+	user_headers = auth_headers(user_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"hidden-email-{unique}@example.com",
+			"username": f"hiddenemail{unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={
+			"find_by_email": False,
+			"privacy": {
+				"allow_friend_requests": "private",
+			},
+		},
+	)
+	assert patch_resp.status_code == 200
+
+	hidden_resp = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": target["email"]},
+	)
+	assert hidden_resp.status_code == 200
+	assert target["id"] not in [user["id"] for user in hidden_resp.json()]
+
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={"find_by_email": True},
+	)
+	assert patch_resp.status_code == 200
+
+	visible_resp = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": target["email"]},
+	)
+	assert visible_resp.status_code == 200
+	results = [user for user in visible_resp.json() if user["id"] == target["id"]]
+	assert len(results) == 1
+	assert results[0]["email"] is None
+
+
+@pytest.mark.asyncio
+async def test_admin_social_search_bypasses_profile_privacy(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	db_session: AsyncSession,
+) -> None:
+	"""admins can search and view users despite privacy or block settings."""
+	admin_headers = auth_headers(admin_auth)
+	admin_user = auth_user(admin_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"admin-social-hidden-{unique}@example.com",
+			"username": f"adminsocial{unique}",
+			"display_name": f"Admin Hidden {unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={
+			"find_by_email": False,
+			"privacy": {"real_name": "private", "bio": "private"},
+		},
+	)
+	assert patch_resp.status_code == 200
+
+	name_resp = await client.get(
+		"/v1/users/search",
+		headers=admin_headers,
+		params={"q": target["display_name"]},
+	)
+	assert name_resp.status_code == 200
+	name_results = [user for user in name_resp.json() if user["id"] == target["id"]]
+	assert len(name_results) == 1
+	assert name_results[0]["display_name"] == target["display_name"]
+	assert name_results[0]["email"] == target["email"]
+
+	email_resp = await client.get(
+		"/v1/users/search",
+		headers=admin_headers,
+		params={"q": target["email"]},
+	)
+	assert email_resp.status_code == 200
+	assert target["id"] in [user["id"] for user in email_resp.json()]
+
+	username_resp = await client.get(
+		"/v1/users/search",
+		headers=admin_headers,
+		params={"q": target["username"]},
+	)
+	assert username_resp.status_code == 200
+	username_results = [
+		user for user in username_resp.json() if user["id"] == target["id"]
+	]
+	assert len(username_results) == 1
+	assert username_results[0]["display_name"] == target["display_name"]
+	assert username_results[0]["email"] == target["email"]
+
+	db_session.add(
+		Block(blocker_id=str(target["id"]), blocked_id=str(admin_user["id"]))
+	)
+	await db_session.commit()
+	blocked_resp = await client.get(
+		"/v1/users/search",
+		headers=admin_headers,
+		params={"q": target["username"]},
+	)
+	assert blocked_resp.status_code == 200
+	blocked_results = [
+		user for user in blocked_resp.json() if user["id"] == target["id"]
+	]
+	assert len(blocked_results) == 1
+	assert blocked_results[0]["display_name"] == target["display_name"]
+	assert blocked_results[0]["email"] == target["email"]
+
+
+@pytest.mark.asyncio
+async def test_user_search_username_is_baseline_when_profile_is_private(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""username search is available even when other discovery is private."""
+	admin_headers = auth_headers(admin_auth)
+	user_headers = auth_headers(user_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"baseline-private-{unique}@example.com",
+			"username": f"baselineprivate{unique}",
+			"display_name": f"Baseline Private {unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={
+			"find_by_email": False,
+			"privacy": {
+				"real_name": "private",
+				"bio": "private",
+				"email": "private",
+				"allow_friend_requests": "private",
+			},
+		},
+	)
+	assert patch_resp.status_code == 200
+
+	response = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": target["username"]},
+	)
+	assert response.status_code == 200
+	results = [user for user in response.json() if user["id"] == target["id"]]
+	assert len(results) == 1
+	assert results[0]["display_name"] is None
+	assert results[0]["email"] is None
+
+
+@pytest.mark.asyncio
+async def test_user_search_respects_bio_privacy(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""bio text is searchable only when the bio field is visible."""
+	admin_headers = auth_headers(admin_auth)
+	user_headers = auth_headers(user_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"bio-search-{unique}@example.com",
+			"username": f"biosearch{unique}",
+			"bio": f"needle biography {unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={"bio": f"needle biography {unique}"},
+	)
+	assert patch_resp.status_code == 200
+
+	visible_resp = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": f"needle biography {unique}"},
+	)
+	assert visible_resp.status_code == 200
+	assert target["id"] in [user["id"] for user in visible_resp.json()]
+
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={"privacy": {"bio": "private"}},
+	)
+	assert patch_resp.status_code == 200
+
+	hidden_resp = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": f"needle biography {unique}"},
+	)
+	assert hidden_resp.status_code == 200
+	assert target["id"] not in [user["id"] for user in hidden_resp.json()]
+
+
+@pytest.mark.asyncio
+async def test_friend_email_visibility_is_privacy_controlled(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+	db_session: AsyncSession,
+) -> None:
+	"""accepted friends only see email when the target's email setting allows it."""
+	admin_headers = auth_headers(admin_auth)
+	user_headers = auth_headers(user_auth)
+	current_user = auth_user(user_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"friend-email-{unique}@example.com",
+			"username": f"friendemail{unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+	db_session.add(
+		Friendship(
+			requester_id=str(current_user["id"]),
+			addressee_id=str(target["id"]),
+			status=FriendshipStatus.ACCEPTED,
+			accepted_at=datetime.now(UTC),
+		)
+	)
+	await db_session.commit()
+
+	private_resp = await client.get(
+		f"/v1/users/{current_user['id']}/friends",
+		headers=user_headers,
+	)
+	assert private_resp.status_code == 200
+	private_results = [
+		user for user in private_resp.json() if user["id"] == target["id"]
+	]
+	assert len(private_results) == 1
+	assert private_results[0]["email"] is None
+
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={"privacy": {"email": "friends"}},
+	)
+	assert patch_resp.status_code == 200
+
+	visible_resp = await client.get(
+		f"/v1/users/{current_user['id']}/friends",
+		headers=user_headers,
+	)
+	assert visible_resp.status_code == 200
+	visible_results = [
+		user for user in visible_resp.json() if user["id"] == target["id"]
+	]
+	assert len(visible_results) == 1
+	assert visible_results[0]["email"] == target["email"]
+
+
+@pytest.mark.asyncio
+async def test_user_search_respects_display_name_privacy_and_friendship(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+	db_session: AsyncSession,
+) -> None:
+	"""display names are searchable only when visible to the requester."""
+	admin_headers = auth_headers(admin_auth)
+	user_headers = auth_headers(user_auth)
+	current_user = auth_user(user_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"display-private-{unique}@example.com",
+			"username": f"displayprivate{unique}",
+			"display_name": f"Private Name {unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={"privacy": {"real_name": "private"}},
+	)
+	assert patch_resp.status_code == 200
+
+	private_name_resp = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": target["display_name"]},
+	)
+	assert private_name_resp.status_code == 200
+	assert target["id"] not in [user["id"] for user in private_name_resp.json()]
+
+	username_resp = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": target["username"]},
+	)
+	assert username_resp.status_code == 200
+	username_results = [
+		user for user in username_resp.json() if user["id"] == target["id"]
+	]
+	assert len(username_results) == 1
+	assert username_results[0]["display_name"] is None
+
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={"privacy": {"real_name": "friends"}},
+	)
+	assert patch_resp.status_code == 200
+	db_session.add(
+		Friendship(
+			requester_id=str(current_user["id"]),
+			addressee_id=str(target["id"]),
+			status=FriendshipStatus.ACCEPTED,
+			accepted_at=datetime.now(UTC),
+		)
+	)
+	await db_session.commit()
+
+	friend_name_resp = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": target["display_name"]},
+	)
+	assert friend_name_resp.status_code == 200
+	friend_results = [
+		user for user in friend_name_resp.json() if user["id"] == target["id"]
+	]
+	assert len(friend_results) == 1
+	assert friend_results[0]["display_name"] == target["display_name"]
+
+
+@pytest.mark.asyncio
+async def test_user_search_excludes_blocked_users(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+	db_session: AsyncSession,
+) -> None:
+	"""blocked users are excluded from user discovery."""
+	admin_headers = auth_headers(admin_auth)
+	user_headers = auth_headers(user_auth)
+	current_user = auth_user(user_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"blocked-{unique}@example.com",
+			"username": f"blocked{unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+	db_session.add(
+		Block(blocker_id=str(target["id"]), blocked_id=str(current_user["id"]))
+	)
+	await db_session.commit()
+
+	response = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": target["username"]},
+	)
+	assert response.status_code == 200
+	assert target["id"] not in [user["id"] for user in response.json()]
 
 
 @pytest.mark.asyncio

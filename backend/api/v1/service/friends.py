@@ -11,19 +11,98 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import Select
 
-from api.models.block import Block
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.friendship import Friendship, FriendshipEvent, FriendshipStatus
 from api.models.user import User
+from api.schemas.friendship import FriendResponse, UserSearchResult
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
+from api.v1.service.social import friendship as relationship_service
+from api.v1.service.social import privacy as privacy_service
+from api.v1.service.social.visibility import (
+	user_bio_filter_predicate,
+	user_display_name_filter_predicate,
+	user_email_filter_predicate,
+	user_search_candidate_predicate,
+	user_username_filter_predicate,
+)
 from nokodo_ai.utils.search import contains_pattern
+from nokodo_ai.utils.typeid import TypeID
+
+
+def _apply_user_search_filters(
+	stmt: Select,
+	query: str,
+	principal: Principal,
+) -> Select:
+	"""apply privacy-aware user search filters."""
+	pattern = contains_pattern(query.strip())
+	return stmt.where(
+		User.id != principal.user_id,
+		user_search_candidate_predicate(principal),
+		or_(
+			and_(
+				user_username_filter_predicate(principal),
+				User.username.ilike(pattern, escape="\\"),
+			),
+			and_(
+				user_display_name_filter_predicate(principal),
+				User.display_name.ilike(pattern, escape="\\"),
+			),
+			and_(
+				user_email_filter_predicate(principal),
+				User.email.ilike(pattern, escape="\\"),
+			),
+			and_(
+				user_bio_filter_predicate(principal),
+				User.bio.ilike(pattern, escape="\\"),
+			),
+		),
+	)
+
+
+async def build_friend_response(
+	user: User,
+	friendship_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+	is_friend: bool | None = None,
+) -> FriendResponse:
+	"""build a sanitized accepted-friend response."""
+	redacted = await privacy_service.redact_user(
+		user,
+		session,
+		principal,
+		is_friend=is_friend,
+	)
+	return FriendResponse(
+		id=user.id,
+		friendship_id=friendship_id,
+		username=user.username,
+		display_name=redacted.display_name,
+		email=redacted.email,
+		avatar_url=redacted.avatar_url,
+	)
+
+
+def _build_user_search_result(
+	redacted: privacy_service.RedactedUser,
+) -> UserSearchResult:
+	"""build a sanitized user search result."""
+	return UserSearchResult(
+		id=redacted.id,
+		username=redacted.username,
+		display_name=redacted.display_name,
+		email=redacted.email,
+		avatar_url=redacted.avatar_url,
+	)
 
 
 async def send_friend_request(
@@ -50,7 +129,7 @@ async def send_friend_request(
 		)
 
 	# block check - prevent requests when either party has blocked the other
-	if await _is_blocked(requester_id, addressee_id, session):
+	if await relationship_service.is_blocked(requester_id, addressee_id, session):
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="cannot send friend request",
@@ -71,6 +150,14 @@ async def send_friend_request(
 				status_code=status.HTTP_409_CONFLICT,
 				detail="friend request already pending",
 			)
+
+	if not await privacy_service.can_send_friend_request(target, session, principal):
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="cannot send friend request",
+		)
+
+	if existing:
 		# if previously declined or removed, allow re-request
 		if existing.status in (
 			FriendshipStatus.DECLINED,
@@ -199,7 +286,7 @@ async def remove_friend(
 async def list_friends(
 	session: AsyncSession,
 	principal: Principal,
-) -> list[tuple[User, str]]:
+) -> list[tuple[User, TypeID]]:
 	"""list all accepted friends of the current user.
 
 	returns (friend_user, friendship_id) tuples. uses an OR-query across
@@ -223,10 +310,20 @@ async def list_friends(
 	)
 	result = await session.execute(stmt)
 	friendships = result.scalars().all()
-	friends: list[tuple[User, str]] = []
+	friends: list[tuple[User, TypeID]] = []
+	blocked_ids = await relationship_service.blocked_user_ids(
+		user_id,
+		[
+			f.addressee_id if f.requester_id == user_id else f.requester_id
+			for f in friendships
+		],
+		session,
+	)
 	for f in friendships:
 		friend = f.addressee if f.requester_id == user_id else f.requester
-		friends.append((friend, str(f.id)))
+		if friend.id in blocked_ids:
+			continue
+		friends.append((friend, f.id))
 	return friends
 
 
@@ -271,28 +368,15 @@ async def search_users(
 	session: AsyncSession,
 	principal: Principal,
 	limit: int = 20,
-) -> list[User]:
-	"""search users by username, display_name, or email.
-
-	username and display_name are always searched. email is only matched
-	when the target user has find_by_email enabled (privacy control).
-	"""
-	q = contains_pattern(query)
-	stmt = (
-		select(User)
-		.where(
-			User.id != principal.user_id,
-			User.is_active.is_(True),
-			or_(
-				User.username.ilike(q, escape="\\"),
-				User.display_name.ilike(q, escape="\\"),
-				User.find_by_email.is_(True) & User.email.ilike(q, escape="\\"),
-			),
-		)
-		.limit(limit)
-	)
+) -> list[UserSearchResult]:
+	"""search users by username or privacy-visible profile fields."""
+	if not query.strip():
+		return []
+	stmt = _apply_user_search_filters(select(User), query, principal).limit(limit)
 	result = await session.execute(stmt)
-	return list(result.scalars().all())
+	users = list(result.scalars().all())
+	redacted = await privacy_service.redact_users(users, session, principal)
+	return [_build_user_search_result(redacted[user.id]) for user in users]
 
 
 async def _find_friendship(
@@ -327,26 +411,6 @@ async def _get_friendship(
 			detail="friend request not found",
 		)
 	return friendship
-
-
-async def _is_blocked(
-	user_a: str,
-	user_b: str,
-	session: AsyncSession,
-) -> bool:
-	"""check whether a block exists between two users in either direction."""
-	stmt = (
-		select(Block.id)
-		.where(
-			or_(
-				(Block.blocker_id == user_a) & (Block.blocked_id == user_b),
-				(Block.blocker_id == user_b) & (Block.blocked_id == user_a),
-			)
-		)
-		.limit(1)
-	)
-	result = await session.execute(stmt)
-	return result.scalar_one_or_none() is not None
 
 
 async def _record_event(

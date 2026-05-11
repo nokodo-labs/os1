@@ -24,6 +24,12 @@ type UserSortBy = (
 )
 
 
+class UserListFilters(BaseModel):
+	"""filters for listing users."""
+
+	q: str | None = Field(default=None, min_length=1, max_length=500)
+
+
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._]{1,28}[a-zA-Z0-9]$")
 
 Username = Annotated[
@@ -95,6 +101,7 @@ class UserUpdate(BaseModel):
 	password: str | MissingType = MISSING
 	username: Username | MissingType = MISSING
 	is_active: bool | MissingType = MISSING
+	is_superuser: bool | MissingType = MISSING
 	display_name: str | None | MissingType = MISSING
 	bio: str | None | MissingType = Field(default=MISSING, max_length=500)
 	avatar_url: str | None | MissingType = MISSING

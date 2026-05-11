@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +15,7 @@ from api.schemas.user import User as UserSchema
 from api.schemas.user import (
 	UserBulkLookupRequest,
 	UserCreate,
+	UserListFilters,
 	UserPermissions,
 	UserSortBy,
 	UserSummary,
@@ -44,6 +47,7 @@ def _user_with_online(user: User, active_ids: set[str]) -> UserSchema:
 
 @router.get("", response_model=list[UserSchema])
 async def read_users(
+	filters: Annotated[UserListFilters, Depends()],
 	skip: int = 0,
 	limit: int = 100,
 	sort_by: UserSortBy = "updated_at",
@@ -59,9 +63,20 @@ async def read_users(
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
+		q=filters.q,
 	)
 	active_ids = set(await user_activity_store.get_active_user_ids())
 	return [_user_with_online(u, active_ids) for u in users]
+
+
+@router.get("/count", response_model=int)
+async def count_users(
+	filters: Annotated[UserListFilters, Depends()],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> int:
+	"""count users matching the list filters."""
+	return await user_service.count_users(db, principal=principal, q=filters.q)
 
 
 @router.get("/active", response_model=list[str])
@@ -80,8 +95,8 @@ async def search_users(
 	limit: int = 20,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> list[User]:
-	"""search users by name, username, or email."""
+) -> list[UserSearchResult]:
+	"""search users by username or privacy-visible profile fields."""
 	return await friends_service.search_users(
 		q, db, principal=principal, limit=min(limit, 50)
 	)
@@ -92,7 +107,7 @@ async def read_user_summaries(
 	body: UserBulkLookupRequest,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> list[User]:
+) -> list[UserSummary]:
 	"""look up visible user summaries by ID."""
 	return await user_service.get_accessible_user_summaries(
 		body.user_ids,

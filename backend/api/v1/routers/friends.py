@@ -36,20 +36,19 @@ async def list_friends(
 	user_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> list[dict]:
+) -> list[FriendResponse]:
 	"""list all accepted friends."""
 	_check_self(str(user_id), principal)
 	pairs = await friends_service.list_friends(db, principal=principal)
 	return [
-		{
-			"id": u.id,
-			"friendship_id": fid,
-			"username": u.username,
-			"display_name": u.display_name,
-			"email": u.email,
-			"avatar_url": u.avatar_url,
-		}
-		for u, fid in pairs
+		await friends_service.build_friend_response(
+			friend,
+			friendship_id,
+			db,
+			principal=principal,
+			is_friend=True,
+		)
+		for friend, friendship_id in pairs
 	]
 
 
