@@ -23,7 +23,7 @@ from api.v1.service import events as event_service
 from api.v1.service import task_bus
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
-from api.v1.service.sorting import SortDir, apply_sort
+from api.v1.service.listing import SortDir, apply_sort
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.sse import sse_encode
 from nokodo_ai.utils.typeid import TypeID
