@@ -17,6 +17,9 @@ from api.models.mixins import (
 from api.schemas.agent import AgentConfig
 
 
+AGENT_TYPEID_PREFIX = "agent"
+
+
 if TYPE_CHECKING:
 	from api.models.access_rule import AccessRule
 	from api.models.file import File
@@ -29,7 +32,7 @@ class Agent(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""User-facing AI persona with configuration."""
 
 	__tablename__ = "agents"
-	__typeid_prefix__ = "agent"
+	__typeid_prefix__ = AGENT_TYPEID_PREFIX
 
 	name: Mapped[str] = mapped_column(String(100), unique=True)
 	description: Mapped[str | None] = mapped_column(Text())

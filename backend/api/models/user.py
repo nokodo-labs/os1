@@ -14,6 +14,9 @@ from api.models.many_to_many import user_role_association
 from api.models.mixins import TypeIDPrimaryKeyMixin
 
 
+USER_TYPEID_PREFIX = "user"
+
+
 if TYPE_CHECKING:
 	from api.models.access_rule import AccessRule
 	from api.models.calendar import Calendar, CalendarEvent
@@ -36,7 +39,7 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	"""User model."""
 
 	__tablename__ = "users"
-	__typeid_prefix__ = "user"
+	__typeid_prefix__ = USER_TYPEID_PREFIX
 
 	email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
 	username: Mapped[str] = mapped_column(String(40), unique=True, index=True)

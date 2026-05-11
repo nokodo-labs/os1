@@ -14,6 +14,9 @@ from api.models.mixins import MetadataJSONMixin, TimestampMixin, TypeIDPrimaryKe
 from api.permissions import DefaultPermissions
 
 
+ROLE_TYPEID_PREFIX = "role"
+
+
 if TYPE_CHECKING:
 	from api.models.user import User
 
@@ -22,7 +25,7 @@ class Role(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""role model for permissions and resource access defaults."""
 
 	__tablename__ = "roles"
-	__typeid_prefix__ = "role"
+	__typeid_prefix__ = ROLE_TYPEID_PREFIX
 
 	name: Mapped[str] = mapped_column(String(50), unique=True, index=True)
 	description: Mapped[str | None] = mapped_column(Text)

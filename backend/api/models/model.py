@@ -17,6 +17,9 @@ from api.models.mixins import (
 )
 
 
+MODEL_TYPEID_PREFIX = "model"
+
+
 if TYPE_CHECKING:
 	from api.models.agent import Agent
 	from api.models.provider import Provider
@@ -45,7 +48,7 @@ class Model(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""Model entry tied to an upstream provider."""
 
 	__tablename__ = "models"
-	__typeid_prefix__ = "model"
+	__typeid_prefix__ = MODEL_TYPEID_PREFIX
 
 	provider_id: Mapped[str] = mapped_column(
 		String(TYPEID_LENGTH),
