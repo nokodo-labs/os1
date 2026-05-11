@@ -9,15 +9,18 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.access_rule import AccessRule
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.notification import Notification
 from api.models.task import Task, TaskType
 from api.models.thread import Thread
 from api.models.user import User
+from api.permissions import AccessLevel
 from api.schemas.event import EventCreate, EventListFilters
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
+from nokodo_ai.utils.typeid import new_typeid
 
 
 def _admin_principal() -> Principal:
@@ -240,6 +243,147 @@ async def test_publish_event_routes_user_scope_to_scope_id(
 	)
 
 	assert captured == [(None, target.id, False)]
+
+
+@pytest.mark.asyncio
+async def test_publish_task_event_routes_by_user_scope(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""Task events use user scope before task access caches exist."""
+	user = User(
+		email="task_event_route@example.com",
+		username="task_event_route",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add(user)
+	await db_session.commit()
+	await db_session.refresh(user)
+
+	captured: list[tuple[object, object, bool]] = []
+
+	async def fake_fanout_event_data(
+		event_data: dict[str, object],
+		recipient_ids: object,
+		user_id: object,
+		broadcast: bool,
+	) -> None:
+		_ = event_data
+		captured.append((recipient_ids, user_id, broadcast))
+
+	monkeypatch.setattr(
+		event_service,
+		"_fanout_event_data",
+		fake_fanout_event_data,
+	)
+
+	await event_service.publish_event(
+		db_session,
+		Event(
+			scope=EventScope.USER,
+			scope_id=user.id,
+			type=EventType.TASK_UPDATED,
+			data={"task_id": new_typeid("task")},
+			user_id=user.id,
+		),
+	)
+
+	assert captured == [(None, user.id, False)]
+
+
+@pytest.mark.asyncio
+async def test_tool_progress_routes_to_thread_readers(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""Tool progress events use thread ACL fan-out, including readers."""
+	owner = User(
+		email="tool_owner@example.com",
+		username="tool_owner",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	reader = User(
+		email="tool_reader@example.com",
+		username="tool_reader",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	outsider = User(
+		email="tool_outsider@example.com",
+		username="tool_outsider",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add_all([owner, reader, outsider])
+	await db_session.flush()
+
+	thread = Thread(owner_id=owner.id, title="shared tool thread")
+	db_session.add(thread)
+	await db_session.flush()
+	db_session.add(
+		AccessRule(
+			thread_id=thread.id,
+			subject_user_id=reader.id,
+			level=AccessLevel.READER,
+		)
+	)
+	await db_session.commit()
+
+	captured: list[tuple[object, object, bool]] = []
+
+	async def fake_fanout_event_data(
+		event_data: dict[str, object],
+		recipient_ids: object,
+		user_id: object,
+		broadcast: bool,
+	) -> None:
+		_ = event_data
+		captured.append((recipient_ids, user_id, broadcast))
+
+	monkeypatch.setattr(
+		event_service,
+		"_fanout_event_data",
+		fake_fanout_event_data,
+	)
+
+	await event_service.publish_event(
+		db_session,
+		Event(
+			scope=EventScope.THREAD,
+			scope_id=thread.id,
+			type=EventType.TOOL_PROGRESS,
+			data={"thread_id": str(thread.id), "tool_call_id": "call_1"},
+			user_id=owner.id,
+			thread_id=thread.id,
+		),
+	)
+
+	assert len(captured) == 1
+	recipient_ids = captured[0][0]
+	assert isinstance(recipient_ids, list)
+	recipient_id_values = {str(value) for value in recipient_ids}
+	assert str(owner.id) in recipient_id_values
+	assert str(reader.id) in recipient_id_values
+	assert str(outsider.id) not in recipient_id_values
+	assert captured[0][1:] == (None, False)
 
 
 @pytest.mark.asyncio

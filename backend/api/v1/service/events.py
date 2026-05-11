@@ -6,6 +6,12 @@ resource events (note.*, thread.*, file.*, etc.) are automatically routed
 to all users with at least READER access to the affected resource.
 non-resource events route by scope: user scope targets scope_id, and system
 scope broadcasts globally.
+
+task lifecycle events are intentionally user-scoped instead of resource-routed.
+the task API currently defines task visibility as owner/admin only, and task
+create events are emitted before the creating transaction has committed the
+Task row. routing those events through ResourceType.TASK can cache an empty
+recipient set and suppress later live updates for the same task.
 """
 
 from __future__ import annotations
@@ -139,11 +145,6 @@ _EVENT_ROUTING_TARGETS: dict[str, _EventResourceTarget] = {
 		ResourceType.THREAD,
 		("thread_id",),
 	),
-	EventType.TASK_CREATED: _event_target(ResourceType.TASK, ("task_id",)),
-	EventType.TASK_UPDATED: _event_target(ResourceType.TASK, ("task_id",)),
-	EventType.TASK_COMPLETED: _event_target(ResourceType.TASK, ("task_id",)),
-	EventType.TASK_FAILED: _event_target(ResourceType.TASK, ("task_id",)),
-	EventType.TASK_CANCELLED: _event_target(ResourceType.TASK, ("task_id",)),
 	EventType.TOOL_PROGRESS: _event_target(ResourceType.THREAD, ("thread_id",)),
 	EventType.TOOL_CUSTOM: _event_target(ResourceType.THREAD, ("thread_id",)),
 	EventType.TOOL_NOTIFICATION: _event_target(ResourceType.THREAD, ("thread_id",)),
@@ -470,27 +471,30 @@ async def publish_event(
 	session: AsyncSession,
 	event: Event,
 	origin_session_id: str | None = None,
+	recipient_ids: list[TypeID] | None = None,
 ) -> Event:
-	"""persist an event and deliver it through its explicit route.
+	"""persist an event and deliver it through its resolved route.
 
-	resource events are sent to users with access. non-resource events route by
-	scope: user scope targets scope_id, system scope broadcasts, and other
-	unroutable scopes are persisted without live delivery.
+	explicit recipients override route resolution. otherwise, resource events are
+	sent to users with access. non-resource events route by scope: user scope
+	targets scope_id, system scope broadcasts, and other unroutable scopes are
+	persisted without live delivery.
 
 	recipient resolution uses a separate read-only session so that
 	pending hard-deletes in the caller's transaction don't hide the
 	resource row.
 	"""
-	# resolve recipients before commit (separate session)
-	recipient_ids = await _resolve_recipient_ids(event)
+	resolved_recipient_ids = recipient_ids
+	if resolved_recipient_ids is None:
+		resolved_recipient_ids = await _resolve_recipient_ids(event)
 
 	session.add(event)
 	await session.commit()
 
 	event_data = _build_event_data(event, origin_session_id)
 
-	if recipient_ids is not None:
-		await _fanout_event_data(event_data, recipient_ids, None, False)
+	if resolved_recipient_ids is not None:
+		await _fanout_event_data(event_data, resolved_recipient_ids, None, False)
 	else:
 		await _fanout_scope_event_data(event, event_data)
 
