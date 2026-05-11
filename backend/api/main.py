@@ -30,17 +30,15 @@ from api.routers import system as system_router
 from api.runtime import configure_psycopg_asyncio_event_loop_policy
 from api.settings import settings
 from api.storage import close_all as close_storage
-from api.storage import register as register_storage
-from api.storage.local import LocalStorageBackend
-from api.storage.s3 import S3StorageBackend
+from api.storage import configure_storage_backends
 from api.taskiq import shutdown_taskiq, startup_taskiq
 from api.v1.router import api_router
 from api.v1.service.events import start_event_subscriber
 from api.v1.tasks.calendar import reconcile_calendar_event_notification_schedules
 from api.v1.tasks.reminders import reconcile_reminder_notification_schedules
 from api.v1.tasks.threads import (
+	clear_disabled_thread_maintenance_backfill_schedule,
 	fail_stale_thread_related_tasks,
-	reconcile_thread_inactivity_maintenance_schedules,
 	reconcile_thread_maintenance_backfill_schedule,
 )
 
@@ -67,11 +65,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 	if not boot_settings.TESTING:
 		await init_db()
 		await redis_client.connect()
+		await clear_disabled_thread_maintenance_backfill_schedule()
 		await startup_taskiq()
 		await fail_stale_thread_related_tasks()
 		await reconcile_calendar_event_notification_schedules()
 		await reconcile_reminder_notification_schedules()
-		await reconcile_thread_inactivity_maintenance_schedules()
 		await reconcile_thread_maintenance_backfill_schedule()
 
 	# start the cross-worker cache invalidation subscriber. handlers are
@@ -83,27 +81,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 		invalidation_task = await start_invalidation_subscriber()
 		event_task = await start_event_subscriber()
 
-	storage_cfg = settings.assets.storage
-	if storage_cfg.backend == "s3":
-		s3 = S3StorageBackend(
-			bucket=storage_cfg.s3.bucket,
-			region=storage_cfg.s3.region,
-			endpoint_url=storage_cfg.s3.endpoint_url,
-			access_key_id=storage_cfg.s3.access_key_id,
-			secret_access_key=storage_cfg.s3.secret_access_key,
-			prefix=storage_cfg.s3.prefix,
-			presigned_url_ttl=storage_cfg.s3.presigned_url_ttl,
-			multipart_threshold=storage_cfg.s3.multipart_threshold,
-			multipart_chunk_size=storage_cfg.s3.multipart_chunk_size,
-			max_retries=storage_cfg.s3.max_retries,
-			retry_mode=storage_cfg.s3.retry_mode,
-		)
-		await s3.ensure_bucket()
-		register_storage("s3", s3)
-	else:
-		register_storage(
-			"local", LocalStorageBackend(root_path=storage_cfg.local.root_path)
-		)
+	await configure_storage_backends()
 
 	logger.info("startup complete")
 	yield

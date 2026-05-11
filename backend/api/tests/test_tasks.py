@@ -32,9 +32,11 @@ from api.v1.tasks import threads as thread_tasks
 from api.v1.tasks.threads import (
 	THREAD_INACTIVITY_DISPATCH_TASK,
 	THREAD_INACTIVITY_HOURS,
+	THREAD_MAINTENANCE_BACKFILL_SCHEDULE_ID,
 	THREAD_MAINTENANCE_BACKFILL_TASK,
 	THREAD_MAINTENANCE_STALE_AFTER,
 	THREAD_MAINTENANCE_TASK,
+	clear_disabled_thread_maintenance_backfill_schedule,
 	fail_stale_thread_related_tasks,
 	run_thread_maintenance_backfill_sweep,
 	run_thread_maintenance_task,
@@ -1360,6 +1362,39 @@ def test_taskiq_status_change_does_not_log_healthy_snapshots(
 	assert caplog.records == []
 
 
+def test_taskiq_auto_worker_count_uses_optional_cap() -> None:
+	"""auto worker count scales with CPUs and honors the configured cap."""
+	from api import taskiq
+
+	assert taskiq._auto_worker_count(0) == 1
+	assert taskiq._auto_worker_count(1) == 1
+	assert taskiq._auto_worker_count(4) == 2
+	assert taskiq._auto_worker_count(32) == 16
+	assert taskiq._auto_worker_count(32, auto_workers_max=8) == 8
+
+
+def test_taskiq_auto_worker_args_expand_in_place() -> None:
+	"""TaskIQ receives an integer worker count after the backend shim runs."""
+	from api import taskiq
+
+	argv = [
+		"python",
+		"-m",
+		"api.taskiq",
+		"worker",
+		"api.taskiq:broker",
+		"api.tasks.registry",
+		"--workers",
+		"auto",
+	]
+	taskiq._expand_auto_worker_args(argv, worker_count=3)
+	assert argv[-2:] == ["--workers", "3"]
+
+	inline_argv = ["python", "-m", "api.taskiq", "worker", "--workers=auto"]
+	taskiq._expand_auto_worker_args(inline_argv, worker_count=5)
+	assert inline_argv[-1] == "--workers=5"
+
+
 def test_taskiq_and_bus_redis_keys_are_namespaced() -> None:
 	"""redis task/run keys stay under the shared nokodo_ai namespace."""
 	from api import taskiq
@@ -1546,6 +1581,21 @@ async def test_backfill_sweep_disabled_by_default_returns_skipped() -> None:
 
 
 @pytest.mark.asyncio
+async def test_disabled_backfill_schedule_cleared_before_taskiq_startup(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""API boot clears stale backfill schedules before waiting on TaskIQ."""
+	monkeypatch.setattr(boot_settings, "TESTING", False)
+	fake_source = _FakeThreadScheduleSource()
+	monkeypatch.setattr(thread_tasks, "redis_schedule_source", fake_source)
+
+	cleared = await clear_disabled_thread_maintenance_backfill_schedule()
+
+	assert cleared is True
+	assert fake_source.deleted == [THREAD_MAINTENANCE_BACKFILL_SCHEDULE_ID]
+
+
+@pytest.mark.asyncio
 async def test_backfill_sweep_dispatches_eligible_threads(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
@@ -1597,6 +1647,63 @@ async def test_backfill_sweep_dispatches_eligible_threads(
 	assert result["batch_size"] == 5
 	assert result["dispatched_thread_ids"] == [str(stale_thread.id)]
 	assert len(enqueued) == 1
+
+
+@pytest.mark.asyncio
+async def test_backfill_sweep_limits_candidate_inspection(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""backfill sweeps inspect no more than the configured batch size."""
+	user = await user_service.create_user(
+		UserCreate(
+			email="backfill_batch_limit@example.com",
+			username="backfill_batch_limit",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	for offset in range(4):
+		await _create_thread_with_current_message(
+			db_session,
+			TypeID(user.id),
+			datetime.now(tz=UTC)
+			- timedelta(hours=THREAD_INACTIVITY_HOURS + 4 - offset),
+		)
+	await db_session.commit()
+
+	checked_thread_ids: list[str] = []
+
+	async def _needs_maintenance(thread: Thread, session: AsyncSession) -> bool:
+		_ = session
+		checked_thread_ids.append(str(thread.id))
+		return True
+
+	monkeypatch.setattr(
+		thread_maintenance_service,
+		"thread_needs_maintenance",
+		_needs_maintenance,
+	)
+
+	enqueued: list[str] = []
+
+	async def _enqueue(task_id: TypeID, runtime_payload: JSONObject) -> None:
+		_ = runtime_payload
+		enqueued.append(str(task_id))
+
+	monkeypatch.setattr(task_service, "enqueue_started_task", _enqueue)
+
+	result = await run_thread_maintenance_backfill_sweep(
+		batch_size=2,
+		max_lookback_days=30,
+		min_inactivity_hours=THREAD_INACTIVITY_HOURS,
+		respect_enabled=False,
+	)
+
+	assert result["dispatched"] == 2
+	assert len(checked_thread_ids) == 2
+	assert len(enqueued) == 2
 
 
 @pytest.mark.asyncio

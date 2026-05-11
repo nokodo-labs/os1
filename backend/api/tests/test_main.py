@@ -126,3 +126,10 @@ async def test_public_settings_endpoint(client: AsyncClient) -> None:
 	assert "public_frontend_origin" in data["data"]["branding"]
 	assert "public_cdn_origin" in data["data"]["branding"]
 	assert "public_console_origin" in data["data"]["branding"]
+	assert "assets" not in data["data"]
+	assert "cache" not in data["data"]
+	assert "tasks" not in data["data"]
+	assert "web_search" not in data["data"]
+	assert set(data["data"]["ai"]) == {"default_agent_ids"}
+	assert set(data["data"]["security"]) == {"allow_signups", "oidc"}
+	assert set(data["data"]["security"]["oidc"]) == {"only"}

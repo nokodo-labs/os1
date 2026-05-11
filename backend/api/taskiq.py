@@ -37,6 +37,8 @@ from taskiq_redis import (
 from api.redis import redis_client
 from api.runtime import configure_psycopg_asyncio_event_loop_policy
 from api.settings import settings
+from api.storage import close_all as close_storage
+from api.storage import configure_storage_backends
 
 
 configure_psycopg_asyncio_event_loop_policy()
@@ -56,6 +58,7 @@ _REQUIRED_PROCESS_STARTUP_TIMEOUT_SECONDS = 30.0
 _REQUIRED_PROCESS_STARTUP_POLL_SECONDS = 0.5
 _REQUIRED_PROCESS_ROLES: tuple[TaskiqProcessRole, ...] = ("worker", "scheduler")
 _PROCESS_ID = f"{socket.gethostname()}:{os.getpid()}"
+_AUTO_WORKERS_VALUE = "auto"
 
 _monitor_task: asyncio.Task[None] | None = None
 _worker_status_task: asyncio.Task[None] | None = None
@@ -101,6 +104,52 @@ def _redacted_redis_url() -> str:
 	prefix, suffix = url.rsplit("@", 1)
 	scheme = prefix.split(":", 1)[0]
 	return f"{scheme}://***@{suffix}"
+
+
+def _available_cpu_count() -> int:
+	"""return the cgroup-aware CPU count when the runtime exposes it."""
+	cpu_count = os.process_cpu_count() or os.cpu_count()
+	if cpu_count is None or cpu_count < 1:
+		return 1
+	return cpu_count
+
+
+def _auto_worker_count(
+	cpu_count: int | None = None,
+	auto_workers_max: int | None = None,
+) -> int:
+	"""derive a conservative TaskIQ worker-process count from logical CPUs."""
+	available_cpus = cpu_count if cpu_count is not None else _available_cpu_count()
+	if available_cpus < 1:
+		available_cpus = 1
+	worker_count = max(1, available_cpus // 2 or 1)
+	if auto_workers_max is not None:
+		worker_count = min(auto_workers_max, worker_count)
+	return worker_count
+
+
+def _expand_auto_worker_args(
+	argv: list[str], worker_count: int | None = None
+) -> None:
+	"""replace --workers auto with the resolved worker count in-place."""
+	resolved_worker_count = str(
+		worker_count
+		if worker_count is not None
+		else _auto_worker_count(auto_workers_max=_taskiq_settings.auto_workers_max)
+	)
+	for arg_index, arg_value in enumerate(argv):
+		if arg_value == "--workers" and arg_index + 1 < len(argv):
+			if argv[arg_index + 1].lower() == _AUTO_WORKERS_VALUE:
+				argv[arg_index + 1] = resolved_worker_count
+				logger.info("taskiq auto workers resolved to %s", resolved_worker_count)
+			return
+		prefix = "--workers="
+		if arg_value.startswith(prefix):
+			worker_value = arg_value[len(prefix) :]
+			if worker_value.lower() == _AUTO_WORKERS_VALUE:
+				argv[arg_index] = f"{prefix}{resolved_worker_count}"
+				logger.info("taskiq auto workers resolved to %s", resolved_worker_count)
+			return
 
 
 def _status_key(role: TaskiqProcessRole) -> str:
@@ -338,11 +387,14 @@ async def _start_worker_process_dependencies() -> None:
 	"""open dependencies used by task runners in a worker process."""
 	try:
 		await redis_client.connect()
+		await configure_storage_backends()
 		await _start_process_status("worker")
 	except Exception as exc:
 		logger.critical("taskiq worker startup failed: %s", exc, exc_info=True)
 		with suppress(Exception):
 			await _stop_process_status("worker")
+		with suppress(Exception):
+			await close_storage()
 		with suppress(Exception):
 			await redis_client.aclose()
 		raise
@@ -351,6 +403,7 @@ async def _start_worker_process_dependencies() -> None:
 async def _stop_worker_process_dependencies() -> None:
 	"""close dependencies used by task runners in a worker process."""
 	await _stop_process_status("worker")
+	await close_storage()
 	await redis_client.aclose()
 
 
@@ -450,6 +503,7 @@ async def shutdown_taskiq() -> None:
 def main() -> None:
 	"""run the TaskIQ CLI with the backend runtime policy applied first."""
 	configure_psycopg_asyncio_event_loop_policy()
+	_expand_auto_worker_args(sys.argv)
 	sys.modules.setdefault("api.taskiq", sys.modules[__name__])
 	from taskiq.__main__ import main as taskiq_main
 
