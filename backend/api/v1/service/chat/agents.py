@@ -771,13 +771,6 @@ async def run_agent(
 				on_parent_advanced=_advance_parent_after_steering,
 			)
 
-			stream = await run_agent_instance.run(
-				thread,
-				app_context=ctx,
-				tool_choice=tool_choice or "auto",
-				stream=True,
-			)
-
 			def _alloc_message_id() -> TypeID:
 				"""allocate a deterministic message id and persistence wait handle."""
 				message_id = TypeID(new_typeid("msg"))
@@ -804,130 +797,175 @@ async def run_agent(
 			_streaming_text = ""
 			_streaming_tc: list[dict[str, object]] = []
 
-			async for delta in stream:
-				message_id: TypeID | None = None
+			# outer loop: re-invoke the agent if steering arrived after the
+			# last filter pass. the SDK's SteeringFilter only runs between
+			# agent iterations; if a user steers during the final iteration
+			# (or while the agent is producing its terminal message), the
+			# inbox would otherwise be dropped on natural completion. by
+			# kicking off another agent.run() we let the filter drain the
+			# queue and the agent respond to the queued user message(s).
+			steering_continuation_count = 0
+			max_steering_continuations = 8
+			while True:
+				stream = await run_agent_instance.run(
+					thread,
+					app_context=ctx,
+					tool_choice=tool_choice or "auto",
+					stream=True,
+				)
 
-				if delta.chat is not None:
-					if current_assistant_id is None:
-						current_assistant_id = _alloc_message_id()
-						_chat_deltas = []
-						_streaming_text = ""
-						_streaming_tc = []
-					message_id = current_assistant_id
-					_chat_deltas.append(delta.chat.message)
+				async for delta in stream:
+					message_id: TypeID | None = None
 
-					if persist:
-						# incremental text accumulation
-						delta_text = delta.chat.message.text
-						if delta_text:
-							_streaming_text += delta_text
+					if delta.chat is not None:
+						if current_assistant_id is None:
+							current_assistant_id = _alloc_message_id()
+							_chat_deltas = []
+							_streaming_text = ""
+							_streaming_tc = []
+						message_id = current_assistant_id
+						_chat_deltas.append(delta.chat.message)
 
-						# incremental tool call accumulation
-						tc_update: list[dict[str, object]] | None = None
-						if delta.chat.message.tool_calls:
-							for tc in delta.chat.message.tool_calls:
-								existing = next(
-									(t for t in _streaming_tc if t.get("id") == tc.id),
-									None,
-								)
-								if existing is not None:
-									if isinstance(tc.arguments, str) and tc.arguments:
-										existing["arguments"] = (
-											str(existing.get("arguments", ""))
-											+ tc.arguments
-										)
-									if tc.name:
-										existing["name"] = tc.name
-								else:
-									_streaming_tc.append(
-										{
-											"id": tc.id,
-											"name": tc.name,
-											"arguments": (
-												tc.arguments
-												if isinstance(tc.arguments, str)
-												else ""
-											),
-										}
+						if persist:
+							# incremental text accumulation
+							delta_text = delta.chat.message.text
+							if delta_text:
+								_streaming_text += delta_text
+
+							# incremental tool call accumulation
+							tc_update: list[dict[str, object]] | None = None
+							if delta.chat.message.tool_calls:
+								for tc in delta.chat.message.tool_calls:
+									existing = next(
+										(
+											t
+											for t in _streaming_tc
+											if t.get("id") == tc.id
+										),
+										None,
 									)
-							tc_update = _streaming_tc
+									if existing is not None:
+										if (
+											isinstance(tc.arguments, str)
+											and tc.arguments
+										):
+											existing["arguments"] = (
+												str(existing.get("arguments", ""))
+												+ tc.arguments
+											)
+										if tc.name:
+											existing["name"] = tc.name
+									else:
+										_streaming_tc.append(
+											{
+												"id": tc.id,
+												"name": tc.name,
+												"arguments": (
+													tc.arguments
+													if isinstance(tc.arguments, str)
+													else ""
+												),
+											}
+										)
+								tc_update = _streaming_tc
 
-						await run_status_store.update_streaming(
-							run_id,
-							message_id=current_assistant_id,
-							content=_streaming_text,
-							tool_calls=tc_update,
-						)
+							await run_status_store.update_streaming(
+								run_id,
+								message_id=current_assistant_id,
+								content=_streaming_text,
+								tool_calls=tc_update,
+							)
 
-					if delta.chat.done:
-						# deferred merge - build full message only on completion
-						assistant_accum = SDKAssistantMessage()
-						for dm in _chat_deltas:
-							assistant_accum = assistant_accum.merge(dm)
-						content_parts: list[dict[str, object]] = []
-						for part in assistant_accum.content or []:
-							if isinstance(part, TextContent):
-								content_parts.append(
-									{"type": "text", "text": part.text}
+						if delta.chat.done:
+							# deferred merge - build full message only on completion
+							assistant_accum = SDKAssistantMessage()
+							for dm in _chat_deltas:
+								assistant_accum = assistant_accum.merge(dm)
+							content_parts: list[dict[str, object]] = []
+							for part in assistant_accum.content or []:
+								if isinstance(part, TextContent):
+									content_parts.append(
+										{"type": "text", "text": part.text}
+									)
+							tc_data = (
+								[
+									tc.model_dump(mode="json")
+									for tc in assistant_accum.tool_calls
+								]
+								if assistant_accum.tool_calls
+								else []
+							)
+							await run_status_store.add_message(
+								run_id,
+								message_id=current_assistant_id,
+								message_type="assistant",
+								content=content_parts,
+								sender_agent_id=agent_id,
+								tool_calls=tc_data,
+							)
+							if persist:
+								active_message_id_for_events = current_assistant_id
+								await message_queue.put(
+									(current_assistant_id, assistant_accum)
 								)
-						tc_data = (
-							[
-								tc.model_dump(mode="json")
-								for tc in assistant_accum.tool_calls
-							]
-							if assistant_accum.tool_calls
-							else []
-						)
+							current_assistant_id = None
+
+					if delta.tool is not None:
+						tool_message_id = _alloc_message_id()
+						message_id = tool_message_id
+						if delta.tool.metadata is None:
+							delta.tool.metadata = {}
+						delta.tool.metadata[MESSAGE_ID_KEY] = str(tool_message_id)
+						output = delta.tool.tool_output or ""
+						tool_content: list[dict[str, object]] = [
+							{"type": "text", "text": output}
+						]
+						for att in delta.tool.attachments:
+							tool_content.append(att.model_dump(mode="json"))
 						await run_status_store.add_message(
 							run_id,
-							message_id=current_assistant_id,
-							message_type="assistant",
-							content=content_parts,
-							sender_agent_id=agent_id,
-							tool_calls=tc_data,
+							message_id=tool_message_id,
+							message_type="tool",
+							content=tool_content,
 						)
 						if persist:
-							active_message_id_for_events = current_assistant_id
-							await message_queue.put(
-								(current_assistant_id, assistant_accum)
-							)
-						current_assistant_id = None
+							await message_queue.put((tool_message_id, delta.tool))
 
-				if delta.tool is not None:
-					tool_message_id = _alloc_message_id()
-					message_id = tool_message_id
-					if delta.tool.metadata is None:
-						delta.tool.metadata = {}
-					delta.tool.metadata[MESSAGE_ID_KEY] = str(tool_message_id)
-					output = delta.tool.tool_output or ""
-					tool_content: list[dict[str, object]] = [
-						{"type": "text", "text": output}
-					]
-					for att in delta.tool.attachments:
-						tool_content.append(att.model_dump(mode="json"))
-					await run_status_store.add_message(
-						run_id,
-						message_id=tool_message_id,
-						message_type="tool",
-						content=tool_content,
+					if delta.done:
+						message_id = None
+
+					frame = sse_event(
+						event="delta",
+						data=_delta_envelope(message_id=message_id, delta=delta),
 					)
-					if persist:
-						await message_queue.put((tool_message_id, delta.tool))
+					await run_status_store.publish(run_id, frame)
+					yield frame
 
-				if delta.done:
-					message_id = None
+					if delta.chat is not None and delta.chat.done and message_id:
+						streaming_parent_id = message_id
+					if delta.tool is not None and message_id:
+						streaming_parent_id = message_id
 
-				frame = sse_event(
-					event="delta",
-					data=_delta_envelope(message_id=message_id, delta=delta),
-				)
-				await run_status_store.publish(run_id, frame)
-				yield frame
-
-				if delta.chat is not None and delta.chat.done and message_id:
-					streaming_parent_id = message_id
-				if delta.tool is not None and message_id:
-					streaming_parent_id = message_id
+				# the SDK agent loop terminated naturally. if steering arrived
+				# in the meantime (during the final iteration or after the
+				# last filter pass), the SteeringFilter never got a chance to
+				# drain the inbox. re-invoke agent.run so the filter runs and
+				# the agent processes the queued user message(s).
+				if not await run_status_store.has_in_flight_steering(run_id):
+					break
+				if steering_continuation_count >= max_steering_continuations:
+					logger.warning(
+						"max steering continuations reached for run %s,"
+						" dropping leftover steering",
+						run_id,
+					)
+					break
+				steering_continuation_count += 1
+				# reset per-stream accumulator state for the next agent.run() pass.
+				current_assistant_id = None
+				_chat_deltas = []
+				_streaming_text = ""
+				_streaming_tc = []
 
 		except (GeneratorExit, asyncio.CancelledError):
 			# explicit cancellation (cancel_run endpoint, task.cancel(), or
