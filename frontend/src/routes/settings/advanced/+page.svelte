@@ -116,7 +116,7 @@
 
 	const svgLiquidGlassEnabled = $derived(preferences.data.advanced.svgLiquidGlass ?? false)
 	const svgLiquidGlassIslandEnabled = $derived(
-		preferences.data.advanced.svgLiquidGlassIsland ?? true
+		preferences.data.advanced.svgLiquidGlassIsland ?? false
 	)
 	const svgLiquidMetalEnabled = $derived(preferences.data.advanced.svgLiquidMetal ?? false)
 
