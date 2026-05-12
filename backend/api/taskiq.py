@@ -128,9 +128,7 @@ def _auto_worker_count(
 	return worker_count
 
 
-def _expand_auto_worker_args(
-	argv: list[str], worker_count: int | None = None
-) -> None:
+def _expand_auto_worker_args(argv: list[str], worker_count: int | None = None) -> None:
 	"""replace --workers auto with the resolved worker count in-place."""
 	resolved_worker_count = str(
 		worker_count

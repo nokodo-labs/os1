@@ -1,4 +1,4 @@
-"""File model."""
+"""file model."""
 
 from __future__ import annotations
 
