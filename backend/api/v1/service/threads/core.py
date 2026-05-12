@@ -26,6 +26,7 @@ from api.v1.service import projects as project_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	invalidate_accessible_users_for_resource,
+	list_accessible_user_ids,
 	require_permission,
 	require_thread_access,
 	thread_access_predicate,
@@ -198,7 +199,7 @@ async def create_thread(
 		user_id=str(owner_id),
 		thread_id=thread.id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	await _invalidate_project_payload_caches({project.id for project in projects})
@@ -345,7 +346,7 @@ async def update_thread(
 	thread_in: ThreadUpdate,
 	session: AsyncSession,
 	principal: Principal,
-	emit_event: bool = True,
+	create_event: bool = True,
 	origin_session_id: str | None = None,
 ) -> Thread:
 	thread = await _load_thread(
@@ -400,8 +401,8 @@ async def update_thread(
 
 	await session.flush()
 
-	# emit thread.updated event
-	if emit_event:
+	# create thread.updated event
+	if create_event:
 		await session.refresh(
 			thread, attribute_names=["updated_at", "last_activity_at"]
 		)
@@ -425,7 +426,7 @@ async def update_thread(
 			user_id=str(thread.owner_id),
 			thread_id=thread.id,
 		)
-		await event_service.publish_event(
+		await event_service.persist_and_fanout_event(
 			session, event=event, origin_session_id=origin_session_id
 		)
 	await invalidate_resource_payload_cache(ResourceType.THREAD, thread_id)
@@ -492,7 +493,16 @@ async def delete_thread(
 	owner_id = str(thread.owner_id)
 	project_ids = {project.id for project in thread.projects}
 
-	if permanent or not settings.soft_delete.threads:
+	hard_delete = permanent or not settings.soft_delete.threads
+	# resolve recipients before the row is gone so hard-deletes still notify
+	# everyone who had access. soft-deletes can resolve post-commit normally.
+	delete_recipients: list[TypeID] | None = None
+	if hard_delete:
+		delete_recipients = await list_accessible_user_ids(
+			ResourceType.THREAD, thread_id, session
+		)
+
+	if hard_delete:
 		await session.delete(thread)
 	else:
 		thread.soft_delete()
@@ -507,8 +517,11 @@ async def delete_thread(
 		user_id=owner_id,
 		thread_id=str(thread_id),
 	)
-	await event_service.publish_event(
-		session, event=event, origin_session_id=origin_session_id
+	await event_service.persist_and_fanout_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+		recipient_ids=delete_recipients,
 	)
 	await invalidate_resource_payload_cache(ResourceType.THREAD, thread_id)
 

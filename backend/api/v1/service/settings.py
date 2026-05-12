@@ -122,7 +122,7 @@ async def update(
 			"updated_by_id": changed_by_id,
 		},
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		db, event=event, origin_session_id=origin_session_id
 	)
 	if _updates_default_resource_access(updates):

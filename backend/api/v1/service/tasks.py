@@ -163,7 +163,7 @@ async def _publish_task_event(
 		user_id=task.user_id,
 		task_id=task.id,
 	)
-	await event_service.publish_event(session, event=event)
+	await event_service.persist_and_fanout_event(session, event=event)
 	await task_bus.mirror_frame(TypeID(task.id), _task_frame(task, event_type, data))
 
 

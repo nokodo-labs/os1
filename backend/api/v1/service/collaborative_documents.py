@@ -107,8 +107,7 @@ async def handle_join(
 	# notify other participants
 	other_ids = list({p.user_id for p in participants if p.session_id != ws_session_id})
 	if other_ids:
-		await event_service.event_connections.send_to_users(
-			other_ids,
+		await event_service.fanout_live_payload(
 			{
 				"type": "doc.participant_joined",
 				"document_id": document_id,
@@ -117,6 +116,9 @@ async def handle_join(
 				"user_name": user_name,
 				"avatar_url": user_avatar,
 			},
+			other_ids,
+			None,
+			False,
 		)
 
 	return JoinResult(
@@ -134,14 +136,16 @@ async def handle_leave(
 	remaining = await document_session_store.leave(document_id, ws_session_id)
 	other_ids = list({p.user_id for p in remaining})
 	if other_ids:
-		await event_service.event_connections.send_to_users(
-			other_ids,
+		await event_service.fanout_live_payload(
 			{
 				"type": "doc.participant_left",
 				"document_id": document_id,
 				"user_id": user_id,
 				"session_id": ws_session_id,
 			},
+			other_ids,
+			None,
+			False,
 		)
 
 
@@ -159,14 +163,16 @@ async def handle_update(
 	participants = await document_session_store.get_participants(document_id)
 	peer_ids = list({p.user_id for p in participants})
 	if peer_ids:
-		await event_service.event_connections.send_to_users(
-			peer_ids,
+		await event_service.fanout_live_payload(
 			{
 				"type": "doc.update",
 				"document_id": document_id,
 				"update": update_b64,
 				"sender_session_id": ws_session_id,
 			},
+			peer_ids,
+			None,
+			False,
 		)
 
 
@@ -185,8 +191,7 @@ async def handle_awareness(
 	participants = await document_session_store.get_participants(document_id)
 	peer_ids = list({p.user_id for p in participants if p.session_id != ws_session_id})
 	if peer_ids:
-		await event_service.event_connections.send_to_users(
-			peer_ids,
+		await event_service.fanout_live_payload(
 			{
 				"type": "doc.awareness",
 				"document_id": document_id,
@@ -194,6 +199,9 @@ async def handle_awareness(
 				"user_id": user_id,
 				"data": awareness_data,
 			},
+			peer_ids,
+			None,
+			False,
 		)
 
 
@@ -207,12 +215,14 @@ async def handle_disconnect(
 		remaining = await document_session_store.get_participants(doc_id)
 		other_ids = list({p.user_id for p in remaining})
 		if other_ids:
-			await event_service.event_connections.send_to_users(
-				other_ids,
+			await event_service.fanout_live_payload(
 				{
 					"type": "doc.participant_left",
 					"document_id": doc_id,
 					"user_id": user_id,
 					"session_id": ws_session_id,
 				},
+				other_ids,
+				None,
+				False,
 			)

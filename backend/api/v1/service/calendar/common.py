@@ -66,7 +66,7 @@ async def publish_calendar_event(
 		user_id=calendar_event.owner_id,
 		calendar_event_id=calendar_event.id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -87,7 +87,7 @@ async def publish_calendar(
 		user_id=calendar.owner_id,
 		calendar_id=calendar.id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,

@@ -58,7 +58,7 @@ from api.v1.service.chat.steering import (
 from api.v1.service.chat.tools.registry import resolve_tools
 from api.v1.service.chat.user_message import create_run_user_message, resolve_run_input
 from api.v1.service.embeddings import embed_text
-from api.v1.service.events import build_event_emitter
+from api.v1.service.events import build_live_persisting_event_emitter
 from api.v1.tasks.threads import schedule_thread_inactivity_maintenance
 from nokodo_ai import Agent as SDKAgent
 from nokodo_ai import Filter as SDKFilter
@@ -681,7 +681,7 @@ async def run_agent(
 				)
 
 		if persist:
-			emitter = build_event_emitter(
+			emitter = build_live_persisting_event_emitter(
 				message_id_provider=_message_id_provider,
 				before_persist=_before_persist_event,
 			)

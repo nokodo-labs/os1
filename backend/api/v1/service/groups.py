@@ -23,6 +23,7 @@ from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	invalidate_accessible_users_for_subject,
+	list_accessible_user_ids,
 	require_permission,
 	require_resource_access,
 	resource_access_predicate,
@@ -170,7 +171,7 @@ async def create_group(
 		data={"id": group_id, "name": group.name},
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -207,7 +208,7 @@ async def update_group(
 		data={"id": str(group_id), "name": group.name},
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -230,10 +231,15 @@ async def delete_group(
 		required_level=AccessLevel.ADMIN,
 	)
 	group = await _load_group(group_id, session)
-	# invalidate BEFORE publish_event commits - the CASCADE delete of
+	# invalidate BEFORE persist_and_fanout_event commits - the CASCADE delete of
 	# access rules means the rows are gone after commit and the query
 	# inside invalidate_accessible_users_for_subject would find nothing.
 	await invalidate_accessible_users_for_subject("group", group_id, session)
+	delete_recipients = await list_accessible_user_ids(
+		ResourceType.GROUP,
+		group_id,
+		session,
+	)
 	await session.delete(group)
 	event = Event(
 		scope=EventScope.USER,
@@ -242,10 +248,11 @@ async def delete_group(
 		data={"id": str(group_id)},
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
+		recipient_ids=delete_recipients,
 	)
 
 
@@ -297,7 +304,7 @@ async def add_member(
 		},
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -348,7 +355,7 @@ async def remove_member(
 		},
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,

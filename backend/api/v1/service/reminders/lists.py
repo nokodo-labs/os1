@@ -27,7 +27,7 @@ from api.v1.service.authorization import (
 	resource_access_predicate,
 )
 from api.v1.service.listing import SortDir, apply_sort
-from api.v1.service.projects import load_projects
+from api.v1.service.projects import invalidate_project_payload_caches, load_projects
 from api.v1.service.reminders.cache import (
 	invalidate_reminder_list_scheduled_items,
 )
@@ -134,9 +134,10 @@ async def create_reminder_list(
 		user_id=principal.user_id,
 		reminder_list_id=reminder_list.id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
+	await invalidate_project_payload_caches(set(data.project_ids))
 
 	return reminder_list
 
@@ -319,8 +320,10 @@ async def update_reminder_list(
 			owner_id=reminder_list.owner_id,
 		)
 	update_data = data.model_dump(exclude_unset=True, by_alias=True)
-	new_project_ids = update_data.pop("project_ids", None)
+	new_project_ids: list[TypeID] | None = update_data.pop("project_ids", None)
+	changed_project_ids: set[TypeID] = set()
 	if new_project_ids is not None:
+		old_project_ids = {project.id for project in reminder_list.projects}
 		for pid in new_project_ids:
 			await require_project_access(
 				pid,
@@ -331,6 +334,7 @@ async def update_reminder_list(
 		reminder_list.projects = await load_projects(
 			new_project_ids, session, principal
 		)
+		changed_project_ids = old_project_ids | set(new_project_ids)
 	for key, value in update_data.items():
 		setattr(reminder_list, key, value)
 	await session.flush()
@@ -347,10 +351,11 @@ async def update_reminder_list(
 		user_id=principal.user_id,
 		reminder_list_id=reminder_list.id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	await invalidate_reminder_list_scheduled_items(reminder_list.id)
+	await invalidate_project_payload_caches(changed_project_ids)
 
 	_list_search_fields = {"name", "description"}
 	if _list_search_fields & update_data.keys():
@@ -372,6 +377,7 @@ async def delete_reminder_list(
 			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
 			detail="default reminder list cannot be deleted",
 		)
+	project_ids = {project.id for project in reminder_list.projects}
 	list_id_str = reminder_list.id
 	result = await session.execute(
 		select(Reminder).where(Reminder.list_id == reminder_list.id)
@@ -393,9 +399,10 @@ async def delete_reminder_list(
 		user_id=principal.user_id,
 		reminder_list_id=reminder_list.id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	await invalidate_reminder_list_scheduled_items(reminder_list.id)
+	await invalidate_project_payload_caches(project_ids)
 	await session.delete(reminder_list)
 	await session.flush()

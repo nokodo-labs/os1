@@ -57,9 +57,11 @@ async def handle_typing_event(
 		},
 	}
 
-	await event_service.event_connections.send_to_users(
-		recipient_ids,
+	await event_service.fanout_live_payload(
 		payload,
+		recipient_ids,
+		None,
+		False,
 		exclude_user_id=user_id,
 	)
 
@@ -127,7 +129,7 @@ async def mark_thread_read(
 	await session.flush()
 
 	# notify all thread participants (read receipts)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=Event(
 			scope=EventScope.THREAD,

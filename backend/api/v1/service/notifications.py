@@ -14,7 +14,7 @@ from api.models.event_types import EventType
 from api.models.notification import Notification
 from api.schemas.notification import NotificationListFilters
 from api.v1.service.auth import Principal
-from api.v1.service.events import event_connections
+from api.v1.service.events import fanout_event
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -122,7 +122,7 @@ async def send_agent_notification(
 	# refresh and broadcast each
 	for notif in notifications:
 		await session.refresh(notif, attribute_names=["event"])
-		await event_connections.broadcast_event(notif.event)
+		await fanout_event(notif.event)
 
 	return notifications
 

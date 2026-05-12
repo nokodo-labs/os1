@@ -232,7 +232,7 @@ async def create_reminder(
 		user_id=principal.user_id,
 		reminder_id=reminder.id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 
@@ -574,7 +574,7 @@ async def update_reminder(
 		user_id=principal.user_id,
 		reminder_id=reminder.id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	await _invalidate_reminders(reminder_ids_to_invalidate)
@@ -650,7 +650,7 @@ async def complete_reminder(
 		user_id=principal.user_id,
 		reminder_id=reminder.id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	await _invalidate_reminders(reminder_ids_to_invalidate)
@@ -923,7 +923,7 @@ async def _publish_reminder_created(
 		user_id=reminder.owner_id,
 		reminder_id=reminder.id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -950,7 +950,7 @@ async def _publish_reminder_series_updated(
 		user_id=reminder.owner_id,
 		reminder_id=reminder.id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -984,7 +984,7 @@ async def _publish_reminder_occurrence_completed(
 		user_id=reminder.owner_id,
 		reminder_id=reminder.id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -1052,7 +1052,7 @@ async def delete_reminder(
 		user_id=principal.user_id,
 		reminder_id=reminder.id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	await _invalidate_reminders(reminder_ids_to_invalidate)
@@ -1152,7 +1152,7 @@ async def move_reminder(
 		user_id=principal.user_id,
 		reminder_id=reminder.id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	await _invalidate_reminders(reminder_ids_to_invalidate)

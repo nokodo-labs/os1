@@ -32,6 +32,7 @@ from api.v1.service import events as event_service
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	list_accessible_user_ids,
 	require_permission,
 	require_project_access,
 	require_resource_access,
@@ -39,7 +40,7 @@ from api.v1.service.authorization import (
 )
 from api.v1.service.embeddings import embed_text, embed_texts
 from api.v1.service.listing import SortDir, apply_sort
-from api.v1.service.projects import load_projects
+from api.v1.service.projects import invalidate_project_payload_caches, load_projects
 from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
 	invalidate_resource_payload_cache,
@@ -129,11 +130,12 @@ async def create_note(
 		data=NoteOut.model_validate(note).model_dump(mode="json"),
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
 	)
+	await invalidate_project_payload_caches(set(note_in.project_ids))
 
 	# freshly created note has no acl rules yet, but include the placeholder fields
 	await vectorize_resource(
@@ -260,8 +262,10 @@ async def update_note(
 	)
 
 	update_data = note_in.model_dump(exclude_unset=True, by_alias=True)
-	new_project_ids = update_data.pop("project_ids", None)
+	new_project_ids: list[TypeID] | None = update_data.pop("project_ids", None)
+	changed_project_ids: set[TypeID] = set()
 	if new_project_ids is not None:
+		old_project_ids = {project.id for project in note.projects}
 		for pid in new_project_ids:
 			await require_project_access(
 				pid,
@@ -270,6 +274,7 @@ async def update_note(
 				required_level=AccessLevel.EDITOR,
 			)
 		note.projects = await load_projects(new_project_ids, session, principal)
+		changed_project_ids = old_project_ids | set(new_project_ids)
 	for key, value in update_data.items():
 		setattr(note, key, value)
 
@@ -287,12 +292,13 @@ async def update_note(
 		data=event_data,
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
 	)
 	await invalidate_resource_payload_cache(ResourceType.NOTE, note_id)
+	await invalidate_project_payload_caches(changed_project_ids)
 
 	if await NOTE_SPEC.should_revectorize(note, note_in, session):
 		await vectorize_resource(
@@ -319,6 +325,12 @@ async def delete_note(
 		principal,
 		required_level=AccessLevel.EDITOR,
 	)
+	project_ids = {project.id for project in note.projects}
+	delete_recipients = await list_accessible_user_ids(
+		ResourceType.NOTE,
+		note_id,
+		session,
+	)
 	if settings.soft_delete.notes:
 		note.soft_delete()
 	else:
@@ -330,12 +342,14 @@ async def delete_note(
 		data={"id": str(note_id)},
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
+		recipient_ids=delete_recipients,
 	)
 	await invalidate_resource_payload_cache(ResourceType.NOTE, note_id)
+	await invalidate_project_payload_caches(project_ids)
 
 	await remove_vectorized_resource(
 		NOTE_SPEC, resource_id=str(note_id), session=session

@@ -537,7 +537,7 @@ async def update_user(
 			},
 			user_id=user.id,
 		)
-		await event_service.publish_event(
+		await event_service.persist_and_fanout_event(
 			session, event=event, origin_session_id=origin_session_id
 		)
 

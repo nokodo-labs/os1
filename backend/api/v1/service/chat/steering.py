@@ -45,7 +45,7 @@ from api.v1.service.chat.user_message import (
 	create_run_user_message,
 	resolve_run_input,
 )
-from api.v1.service.events import event_connections
+from api.v1.service.events import fanout_live_payload
 from nokodo_ai import Agent as SDKAgent
 from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.types.json import JSONObject
@@ -284,7 +284,7 @@ async def broadcast_steering_event(
 		)
 
 	if recipient_ids:
-		await event_connections.send_to_users(recipient_ids, payload)
+		await fanout_live_payload(payload, recipient_ids, None, False)
 
 
 async def persist_steering_state(

@@ -237,7 +237,7 @@ async def decline_friend_request(
 		},
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	return friendship
@@ -278,7 +278,7 @@ async def remove_friend(
 		},
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 
@@ -453,7 +453,7 @@ async def _accept(
 			},
 			user_id=principal.user_id,
 		)
-		await event_service.publish_event(
+		await event_service.persist_and_fanout_event(
 			session, event=event, origin_session_id=origin_session_id
 		)
 	return friendship
@@ -476,6 +476,6 @@ async def _publish_request_event(
 		},
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)

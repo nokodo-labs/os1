@@ -24,7 +24,7 @@ from api.v1.service.chat.message_metadata import (
 	CITATIONS_KEY,
 	persisted_message_metadata,
 )
-from api.v1.service.events import event_connections
+from api.v1.service.events import fanout_live_payload
 from api.v1.service.prompt_runtime import render_agent_instructions
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.threads import Thread as SDKThread
@@ -100,7 +100,7 @@ async def broadcast_run_event(
 		)
 
 	if recipient_ids:
-		await event_connections.send_to_users(recipient_ids, payload)
+		await fanout_live_payload(payload, recipient_ids, None, False)
 
 
 async def load_sdk_thread(

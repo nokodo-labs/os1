@@ -344,7 +344,7 @@ async def switch_branch(
 		user_id=principal.user_id,
 		thread_id=str(thread_id),
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -434,7 +434,7 @@ async def create_message(
 
 	# emit message.created event with full message payload
 	message_data = _message_event_data(message)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=Event(
 			scope=EventScope.THREAD,
@@ -449,7 +449,7 @@ async def create_message(
 	)
 
 	# emit thread.updated so all sessions reorder the sidebar by last_activity_at
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=Event(
 			scope=EventScope.THREAD,
@@ -523,7 +523,7 @@ async def update_user_message(
 	await session.refresh(message)
 
 	message_data = _message_event_data(message)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=Event(
 			scope=EventScope.THREAD,
@@ -539,7 +539,7 @@ async def update_user_message(
 
 	# emit thread.updated so all sessions reorder the sidebar
 	await session.refresh(thread, attribute_names=["last_activity_at", "updated_at"])
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=Event(
 			scope=EventScope.THREAD,
@@ -654,14 +654,14 @@ async def delete_user_message_turn(
 
 	thread.last_activity_at = datetime.now(tz=UTC)
 
-	# capture before publish_event commits (expiring all ORM attributes)
+	# capture before persist_and_fanout_event commits (expiring all ORM attributes)
 	owner_id = str(thread.owner_id)
 
 	# bulk-delete subtree; DB CASCADE on event FKs handles cleanup
 	await session.execute(sa_delete(Message).where(Message.id.in_(deleted_ids)))
 
 	# emit message.deleted event
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=Event(
 			scope=EventScope.THREAD,
@@ -680,11 +680,11 @@ async def delete_user_message_turn(
 	)
 	await _invalidate_thread_payload(thread_id)
 
-	# publish_event commits; refresh thread to get server-side updated_at
+	# persist_and_fanout_event commits; refresh thread to get server-side updated_at
 	await session.refresh(thread, attribute_names=["last_activity_at", "updated_at"])
 
 	# emit thread.updated so all sessions reorder the sidebar
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=Event(
 			scope=EventScope.THREAD,

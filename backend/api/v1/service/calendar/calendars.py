@@ -26,6 +26,7 @@ from api.v1.service.calendar.common import (
 )
 from api.v1.service.calendar.search import CALENDAR_EVENT_SPEC
 from api.v1.service.listing import SortDir, apply_sort
+from api.v1.service.projects import invalidate_project_payload_caches
 from api.v1.service.vectorize import remove_vectorized_resource
 from api.v1.tasks.calendar import cancel_calendar_event_notifications
 from nokodo_ai.utils.typeid import TypeID
@@ -113,6 +114,7 @@ async def create_calendar(
 		event_type=EventType.CALENDAR_CREATED,
 		origin_session_id=origin_session_id,
 	)
+	await invalidate_project_payload_caches(set(data.project_ids))
 	return calendar
 
 
@@ -153,13 +155,16 @@ async def update_calendar(
 			except_id=calendar.id,
 			owner_id=calendar.owner_id,
 		)
-	new_project_ids = update_data.pop("project_ids", None)
+	new_project_ids: list[TypeID] | None = update_data.pop("project_ids", None)
+	changed_project_ids: set[TypeID] = set()
 	if new_project_ids is not None:
+		old_project_ids = {project.id for project in calendar.projects}
 		calendar.projects = await load_calendar_projects(
 			new_project_ids,
 			session,
 			principal,
 		)
+		changed_project_ids = old_project_ids | set(new_project_ids)
 	for key, value in update_data.items():
 		setattr(calendar, key, value)
 	await session.flush()
@@ -172,6 +177,7 @@ async def update_calendar(
 		origin_session_id=origin_session_id,
 	)
 	await invalidate_calendar_scheduled_items(calendar.id)
+	await invalidate_project_payload_caches(changed_project_ids)
 	return calendar
 
 
@@ -193,6 +199,7 @@ async def delete_calendar(
 			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
 			detail="default calendar cannot be deleted",
 		)
+	project_ids = {project.id for project in calendar.projects}
 	result = await session.execute(
 		select(CalendarEvent).where(
 			CalendarEvent.calendar_id == calendar.id,
@@ -219,5 +226,6 @@ async def delete_calendar(
 		origin_session_id=origin_session_id,
 	)
 	await invalidate_calendar_scheduled_items(calendar.id)
+	await invalidate_project_payload_caches(project_ids)
 	await session.delete(calendar)
 	await session.flush()

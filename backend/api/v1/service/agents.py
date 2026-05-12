@@ -19,6 +19,7 @@ from api.v1.service import access_rules as access_rules_service
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	list_accessible_user_ids,
 	require_permission,
 	require_resource_access,
 	resource_access_predicate,
@@ -88,7 +89,7 @@ async def create_agent(
 		data=agent_data,
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -230,7 +231,7 @@ async def update_agent(
 		data=agent_data,
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -247,6 +248,11 @@ async def delete_agent(
 ) -> None:
 	require_permission(principal, "agents:manage")
 	agent = await _get_agent(agent_id, session)
+	delete_recipients = await list_accessible_user_ids(
+		ResourceType.AGENT,
+		agent_id,
+		session,
+	)
 	await session.delete(agent)
 	event = Event(
 		scope=EventScope.USER,
@@ -255,10 +261,11 @@ async def delete_agent(
 		data={"id": str(agent_id)},
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
+		recipient_ids=delete_recipients,
 	)
 	await invalidate_resource_payload_cache(ResourceType.AGENT, agent_id)
 
@@ -283,5 +290,5 @@ async def set_agent_access_rules(
 		data=agent_data,
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(session, event=event)
+	await event_service.persist_and_fanout_event(session, event=event)
 	return updated_rules

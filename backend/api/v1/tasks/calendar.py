@@ -18,7 +18,7 @@ from api.permissions import ResourceType
 from api.settings import settings
 from api.taskiq import broker, redis_schedule_source
 from api.v1.service.authorization import list_accessible_user_ids
-from api.v1.service.events import event_connections
+from api.v1.service.events import fanout_event
 from api.v1.service.scheduling.recurrence import expand_occurrence_starts
 from nokodo_ai.types import JSONValue
 from nokodo_ai.utils.typeid import TypeID, new_typeid
@@ -475,7 +475,7 @@ async def dispatch_due_calendar_notifications() -> int:
 		await session.commit()
 		for notification in notifications:
 			await session.refresh(notification, attribute_names=["event"])
-			await event_connections.broadcast_event(notification.event)
+			await fanout_event(notification.event)
 		for event_id in event_ids:
 			await schedule_calendar_event_notifications(event_id, session=session)
 	return len(notifications)
@@ -577,7 +577,7 @@ async def dispatch_calendar_event_notification(calendar_event_id: TypeID) -> int
 		await session.commit()
 		for notification in notifications:
 			await session.refresh(notification, attribute_names=["event"])
-			await event_connections.broadcast_event(notification.event)
+			await fanout_event(notification.event)
 		await schedule_calendar_event_notifications(
 			calendar_event_id,
 			session=session,

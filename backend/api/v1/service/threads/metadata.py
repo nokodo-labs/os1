@@ -69,7 +69,7 @@ async def generate_thread_metadata(
 	principal: Principal,
 	session: AsyncSession | None = None,
 	replace: bool = False,
-	emit_event: bool = True,
+	create_event: bool = True,
 	origin_session_id: str | None = None,
 ) -> Thread:
 	"""generate thread metadata (title/tags) and persist via update_thread.
@@ -186,7 +186,7 @@ async def generate_thread_metadata(
 			update_in,
 			session,
 			principal=principal,
-			emit_event=emit_event,
+			create_event=create_event,
 			origin_session_id=origin_session_id,
 		)
 

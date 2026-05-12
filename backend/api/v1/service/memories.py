@@ -17,6 +17,7 @@ from api.database import build_cursor_page, decode_cursor
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.memory import Memory
+from api.permissions import ResourceType
 from api.schemas.memory import MemoryCreate, MemoryListFilters, MemoryUpdate
 from api.schemas.search import (
 	CursorPage,
@@ -28,7 +29,10 @@ from api.schemas.search import (
 from api.v1.service import events as event_service
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
-from api.v1.service.authorization import require_permission
+from api.v1.service.authorization import (
+	list_accessible_user_ids,
+	require_permission,
+)
 from api.v1.service.chat.models import (
 	resolve_task_chat_model,
 	run_chat_model_json_schema,
@@ -195,7 +199,7 @@ async def create_memory(
 		data={"id": str(memory_id)},
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -276,7 +280,7 @@ async def update_memory(
 		data={"id": str(memory_id)},
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -295,6 +299,11 @@ async def delete_memory(
 ) -> None:
 	"""delete a memory and remove from the search index."""
 	memory = await _get_memory(memory_id, session, principal)
+	delete_recipients = await list_accessible_user_ids(
+		ResourceType.MEMORY,
+		memory_id,
+		session,
+	)
 
 	await session.delete(memory)
 
@@ -305,10 +314,11 @@ async def delete_memory(
 		data={"id": str(memory_id)},
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
+		recipient_ids=delete_recipients,
 	)
 
 	await remove_vectorized_resource(
@@ -339,7 +349,7 @@ async def delete_all_memories(
 		data={"all": True, "user_id": str(user_id)},
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,

@@ -20,7 +20,7 @@ from api.schemas.message import MessageCreate
 from api.schemas.runs import RunInput
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
-from api.v1.service.events import publish_event
+from api.v1.service.events import persist_and_fanout_event
 from nokodo_ai.messages import FileContent, ImageContent, TextContent, UserContentPart
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
@@ -140,6 +140,6 @@ async def create_run_user_message(
 				user_id=user_id_str,
 				data={"file_id": fid, "source": "user"},
 			)
-			await publish_event(session, event=ev)
+			await persist_and_fanout_event(session, event=ev)
 
 	return user_msg

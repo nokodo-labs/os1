@@ -57,7 +57,7 @@ async def _notify_role_members(
 		data={"role_id": role_id},
 		user_id=principal.user_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		recipient_ids=member_ids,
