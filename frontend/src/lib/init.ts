@@ -22,30 +22,59 @@ import { BackendUnreachableError, refreshAccessToken } from '$lib/api/client'
 import { apiOriginReady } from '$lib/api/origin'
 import { eventStreamClient } from '$lib/api/streaming'
 import { getAccessToken, markAuthReady } from '$lib/auth/session.svelte'
-import { agents } from '$lib/stores/agents.svelte'
+import { apiCacheStores } from '$lib/stores/apiCacheRegistry'
 import { appReadiness } from '$lib/stores/appReadiness.svelte'
-import { calendars, calendarEvents } from '$lib/stores/calendars.svelte'
-import { chat } from '$lib/stores/chat.svelte'
+import { invalidateApiCacheStores } from '$lib/stores/cacheLifecycle'
 import { initDevice, requestGeolocation } from '$lib/stores/device.svelte'
-import { files } from '$lib/stores/files.svelte'
-import { friends } from '$lib/stores/friends.svelte'
-import { groups } from '$lib/stores/groups.svelte'
 import { initInstallPrompt } from '$lib/stores/installPrompt.svelte'
 import { initNetwork } from '$lib/stores/network.svelte'
-import { notes } from '$lib/stores/notes.svelte'
-import { notifications } from '$lib/stores/notifications.svelte'
-import { permissions } from '$lib/stores/permissions.svelte'
 import { preferences } from '$lib/stores/preferences.svelte'
-import { projects } from '$lib/stores/projects.svelte'
-import { reminders } from '$lib/stores/reminders.svelte'
 import { initServiceWorker } from '$lib/stores/serviceWorker.svelte'
 import { session } from '$lib/stores/session.svelte'
-import { invalidateSettings, loadSettings } from '$lib/stores/settings.svelte'
+import { loadSettings } from '$lib/stores/settings.svelte'
 
 export interface InitResult {
 	authenticated: boolean
 	token: string | null
 	backendUnreachable?: boolean
+}
+
+const EXECUTION_GAP_STALE_MS = 15_000
+let cacheLifecycleStarted = false
+let lastExecutionTick = Date.now()
+
+function hasSession(): boolean {
+	return Boolean(getAccessToken())
+}
+
+function invalidateCachedData(): void {
+	if (!hasSession()) return
+	invalidateApiCacheStores(apiCacheStores)
+}
+
+function startCacheLifecycle(): void {
+	if (cacheLifecycleStarted || !browser) return
+	cacheLifecycleStarted = true
+
+	eventStreamClient.onStatusChange((newStatus, prevStatus) => {
+		if (prevStatus === 'connected' && newStatus !== 'connected') {
+			invalidateCachedData()
+		}
+	})
+
+	window.addEventListener('online', invalidateCachedData)
+	window.addEventListener('pageshow', (event) => {
+		if (event.persisted) invalidateCachedData()
+	})
+	document.addEventListener('visibilitychange', () => {
+		invalidateCachedData()
+	})
+
+	setInterval(() => {
+		const now = Date.now()
+		if (now - lastExecutionTick > EXECUTION_GAP_STALE_MS) invalidateCachedData()
+		lastExecutionTick = now
+	}, 5_000)
 }
 
 /**
@@ -111,23 +140,7 @@ export async function initApp(options?: { skipAuthRestore?: boolean }): Promise<
 			preferences.startSync()
 
 			// 7. invalidate all caches when WS drops (missed events = stale data)
-			eventStreamClient.onStatusChange((newStatus, prevStatus) => {
-				if (prevStatus === 'connected' && newStatus !== 'connected') {
-					chat.threadCache.clear()
-					notes.invalidate()
-					projects.invalidate()
-					calendars.invalidate()
-					calendarEvents.invalidate()
-					reminders.invalidateAll()
-					invalidateSettings()
-					agents.invalidate()
-					files.invalidate()
-					friends.invalidate()
-					groups.invalidate()
-					permissions.invalidate()
-					void notifications.refresh()
-				}
-			})
+			startCacheLifecycle()
 
 			// 8. request geolocation if user has useLocation enabled
 			if (preferences.data.privacy.useLocation) {

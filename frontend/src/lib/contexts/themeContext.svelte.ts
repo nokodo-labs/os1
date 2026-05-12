@@ -142,11 +142,6 @@ interface ThemeContext {
 }
 
 export function createThemeContext(): ThemeContext {
-	// keep preferences hydrated based on session state (tracked reactively)
-	$effect(() => {
-		return preferences.startSync()
-	})
-
 	const mode = $derived(preferences.data.appearance.themeMode ?? 'system')
 	const accent = $derived(preferences.data.appearance.accent ?? 'purple')
 	const autoAccentColors = $derived(preferences.data.appearance.autoAccentColors ?? true)
