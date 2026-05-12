@@ -6,10 +6,14 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
-from api.models.project import Project
 from api.permissions import ResourceType
 from api.schemas.project import Project as ProjectSchema
-from api.schemas.project import ProjectCreate, ProjectSortBy, ProjectUpdate
+from api.schemas.project import (
+	ProjectCreate,
+	ProjectResourceCounts,
+	ProjectSortBy,
+	ProjectUpdate,
+)
 from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import projects as project_service
@@ -28,7 +32,7 @@ async def create_project(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
-) -> Project:
+) -> ProjectSchema:
 	"""create a new project."""
 	return await project_service.create_project(
 		project_in,
@@ -46,7 +50,7 @@ async def list_projects(
 	sort_dir: SortDir = "desc",
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> list[Project]:
+) -> list[ProjectSchema]:
 	"""list projects accessible by the caller."""
 	return await project_service.list_projects(
 		db,
@@ -55,6 +59,20 @@ async def list_projects(
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
+	)
+
+
+@router.get("/{project_id}/resource_counts", response_model=ProjectResourceCounts)
+async def get_project_resource_counts(
+	project_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> ProjectResourceCounts:
+	"""fetch resource counts for a project."""
+	return await project_service.get_project_resource_counts(
+		project_id,
+		db,
+		principal=principal,
 	)
 
 
@@ -77,7 +95,7 @@ async def update_project(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
-) -> Project:
+) -> ProjectSchema:
 	"""update a project."""
 	return await project_service.update_project(
 		project_id,

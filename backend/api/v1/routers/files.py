@@ -13,7 +13,13 @@ from api.database import get_db
 from api.models.file import File, FileSource
 from api.permissions import ResourceType
 from api.schemas.file import File as FileSchema
-from api.schemas.file import FileCreate, FileListFilters, FileSortBy, FileUpdate
+from api.schemas.file import (
+	FileCounts,
+	FileCreate,
+	FileListFilters,
+	FileSortBy,
+	FileUpdate,
+)
 from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import files as file_service
@@ -99,6 +105,16 @@ async def list_files(
 	)
 
 
+@router.get("/count", response_model=FileCounts)
+async def count_files(
+	filters: Annotated[FileListFilters, Depends()],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> FileCounts:
+	"""count files accessible by the caller."""
+	return await file_service.count_files(db, principal=principal, filters=filters)
+
+
 @router.get("/{file_id}", response_model=FileSchema)
 async def get_file(
 	file_id: TypeID,
@@ -126,6 +142,8 @@ async def get_file_content(
 	headers: dict[str, str] = {}
 	if filename:
 		encoded = quote(filename, safe="")
+		fallback = filename.encode("ascii", "ignore").decode("ascii") or "download"
+		fallback = fallback.replace("\\", "_").replace('"', "_")
 		# use inline disposition for media types so browsers render them
 		# directly (e.g. <img> tags); attachment for everything else.
 		# download=True forces attachment regardless of content type.
@@ -134,7 +152,7 @@ async def get_file_content(
 		else:
 			disposition = "inline" if _is_inline_type(content_type) else "attachment"
 		headers["Content-Disposition"] = (
-			f"{disposition}; filename=\"{encoded}\"; filename*=UTF-8''{encoded}"
+			f"{disposition}; filename=\"{fallback}\"; filename*=UTF-8''{encoded}"
 		)
 	if size_bytes is not None:
 		headers["Content-Length"] = str(size_bytes)
@@ -142,6 +160,21 @@ async def get_file_content(
 		stream,
 		media_type=content_type or "application/octet-stream",
 		headers=headers,
+	)
+
+
+@router.get("/{file_id}/preview")
+async def get_file_preview(
+	file_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+	"""temporary proxy for file content previews."""
+	return await get_file_content(
+		file_id,
+		download=False,
+		principal=principal,
+		db=db,
 	)
 
 

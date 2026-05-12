@@ -21,12 +21,25 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 type FileSortBy = CommonSortBy | Literal["filename", "size_bytes"]
+type FileCategoryFilter = Literal["image", "audio", "video", "file"]
 
 
 class FileListFilters(BaseModel):
 	"""filters for listing files."""
 
 	project_id: TypeID | None = None
+	source: FileSource | None = None
+	category: FileCategoryFilter | None = None
+
+
+class FileCounts(BaseModel):
+	"""count summary for accessible files."""
+
+	total: int = 0
+	owned_total: int = 0
+	shared_total: int = 0
+	by_category: dict[str, int] = Field(default_factory=dict)
+	by_source: dict[str, int] = Field(default_factory=dict)
 
 
 class FileBase(MetadataModel):

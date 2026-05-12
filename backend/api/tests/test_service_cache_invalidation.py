@@ -202,11 +202,10 @@ async def test_role_default_update_notifies_members_and_invalidates_defaults(
 		_ = session
 		type_calls.append(resource_types)
 
-	async def record_publish_event(
+	async def record_persist_and_fanout_event(
 		session: AsyncSession,
 		event: Event,
 		origin_session_id: str | None = None,
-		*,
 		recipient_ids: list[TypeID] | None = None,
 	) -> Event:
 		_ = session
@@ -226,8 +225,8 @@ async def test_role_default_update_notifies_members_and_invalidates_defaults(
 	)
 	monkeypatch.setattr(
 		role_service.event_service,
-		"publish_event",
-		record_publish_event,
+		"persist_and_fanout_event",
+		record_persist_and_fanout_event,
 	)
 
 	await role_service.update_role(
@@ -288,11 +287,10 @@ async def test_role_member_update_invalidates_role_default_resource_types(
 		_ = session
 		type_calls.append(resource_types)
 
-	async def record_publish_event(
+	async def record_persist_and_fanout_event(
 		session: AsyncSession,
 		event: Event,
 		origin_session_id: str | None = None,
-		*,
 		recipient_ids: list[TypeID] | None = None,
 	) -> Event:
 		_ = session
@@ -312,8 +310,8 @@ async def test_role_member_update_invalidates_role_default_resource_types(
 	)
 	monkeypatch.setattr(
 		role_service.event_service,
-		"publish_event",
-		record_publish_event,
+		"persist_and_fanout_event",
+		record_persist_and_fanout_event,
 	)
 
 	await role_service.set_role_members(
@@ -373,11 +371,10 @@ async def test_role_priority_update_does_not_invalidate_default_access(
 		_ = session
 		type_calls.append(resource_types)
 
-	async def record_publish_event(
+	async def record_persist_and_fanout_event(
 		session: AsyncSession,
 		event: Event,
 		origin_session_id: str | None = None,
-		*,
 		recipient_ids: list[TypeID] | None = None,
 	) -> Event:
 		_ = session
@@ -397,8 +394,8 @@ async def test_role_priority_update_does_not_invalidate_default_access(
 	)
 	monkeypatch.setattr(
 		role_service.event_service,
-		"publish_event",
-		record_publish_event,
+		"persist_and_fanout_event",
+		record_persist_and_fanout_event,
 	)
 
 	await role_service.update_role(

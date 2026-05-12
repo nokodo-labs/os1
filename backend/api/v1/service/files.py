@@ -18,9 +18,10 @@ import time
 from collections.abc import AsyncIterator
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import case, func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import ColumnElement, Select
 
 from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
@@ -30,20 +31,27 @@ from api.models.many_to_many import file_project_association
 from api.models.project import Project
 from api.permissions import ResourceType
 from api.schemas.file import File as FileOut
-from api.schemas.file import FileCreate, FileListFilters, FileUpdate
+from api.schemas.file import (
+	FileCategoryFilter,
+	FileCounts,
+	FileCreate,
+	FileListFilters,
+	FileUpdate,
+)
 from api.settings import settings
 from api.storage import get_storage_backend
 from api.storage.base import MimeType
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	list_accessible_user_ids,
 	require_permission,
 	require_project_access,
 	require_resource_access,
 	resource_access_predicate,
 )
 from api.v1.service.listing import SortDir, apply_sort
-from api.v1.service.projects import load_projects
+from api.v1.service.projects import invalidate_project_payload_caches, load_projects
 from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
 	invalidate_resource_payload_cache,
@@ -52,7 +60,6 @@ from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 log = logging.getLogger(__name__)
-
 
 # internal helpers
 
@@ -138,8 +145,9 @@ async def _emit_file_event(
 	user_id: TypeID,
 	filename: str | None = None,
 	origin_session_id: str | None = None,
+	recipient_ids: list[TypeID] | None = None,
 ) -> None:
-	"""publish a file lifecycle event."""
+	"""persist and fanout a file lifecycle event."""
 	data: dict[str, str | None] = {"id": str(file_id)}
 	if filename is not None:
 		data["filename"] = filename
@@ -150,8 +158,11 @@ async def _emit_file_event(
 		data=data,
 		user_id=user_id,
 	)
-	await event_service.publish_event(
-		session, event=event, origin_session_id=origin_session_id
+	await event_service.persist_and_fanout_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+		recipient_ids=recipient_ids,
 	)
 
 
@@ -171,7 +182,7 @@ async def store_file(
 	message_id: TypeID | None = None,
 	backend_name: str | None = None,
 	key_prefix: str | None = None,
-	emit_event: bool = True,
+	create_event: bool = True,
 	origin_session_id: str | None = None,
 ) -> File:
 	"""store bytes and create a File record.
@@ -220,7 +231,7 @@ async def store_file(
 	session.add(file)
 	await session.flush()
 
-	if emit_event:
+	if create_event:
 		await _emit_file_event(
 			session,
 			event_type=EventType.FILE_CREATED,
@@ -229,6 +240,7 @@ async def store_file(
 			filename=filename,
 			origin_session_id=origin_session_id,
 		)
+	await invalidate_project_payload_caches(set(project_ids or []))
 
 	return file
 
@@ -366,6 +378,7 @@ async def create_file(
 		filename=file.filename,
 		origin_session_id=origin_session_id,
 	)
+	await invalidate_project_payload_caches(set(file_in.project_ids))
 	return file
 
 
@@ -457,6 +470,38 @@ async def get_file_url(
 	return await backend.get_url(file.storage_key, expires_in=expires_in)
 
 
+def _file_category_predicate(category: FileCategoryFilter) -> ColumnElement[bool]:
+	if category == "image":
+		return File.mime_type.like("image/%")
+	if category == "audio":
+		return File.mime_type.like("audio/%")
+	if category == "video":
+		return File.mime_type.like("video/%")
+	return or_(
+		File.mime_type.is_(None),
+		not_(
+			or_(
+				File.mime_type.like("image/%"),
+				File.mime_type.like("audio/%"),
+				File.mime_type.like("video/%"),
+			)
+		),
+	)
+
+
+def _apply_file_filters(stmt: Select, filters: FileListFilters) -> Select:
+	if filters.project_id is not None:
+		stmt = stmt.join(
+			file_project_association,
+			File.id == file_project_association.c.file_id,
+		).where(file_project_association.c.project_id == filters.project_id)
+	if filters.source is not None:
+		stmt = stmt.where(File.source == filters.source)
+	if filters.category is not None:
+		stmt = stmt.where(_file_category_predicate(filters.category))
+	return stmt
+
+
 async def list_files(
 	session: AsyncSession,
 	principal: Principal,
@@ -476,11 +521,7 @@ async def list_files(
 			required_level=AccessLevel.READER,
 		),
 	)
-	if file_filters.project_id is not None:
-		stmt = stmt.join(
-			file_project_association,
-			File.id == file_project_association.c.file_id,
-		).where(file_project_association.c.project_id == file_filters.project_id)
+	stmt = _apply_file_filters(stmt, file_filters)
 	stmt = apply_sort(
 		stmt,
 		sort_by=sort_by,
@@ -497,6 +538,67 @@ async def list_files(
 		stmt.offset(skip).limit(limit).options(selectinload(File.projects))
 	)
 	return list(result.scalars().all())
+
+
+async def count_files(
+	session: AsyncSession,
+	principal: Principal,
+	filters: FileListFilters | None = None,
+) -> FileCounts:
+	"""count files accessible by the principal."""
+	file_filters = filters or FileListFilters()
+	base_stmt = select(File).where(
+		File.deleted_at.is_(None),
+		resource_access_predicate(
+			principal,
+			ResourceType.FILE,
+			required_level=AccessLevel.READER,
+		),
+	)
+	base_stmt = _apply_file_filters(base_stmt, file_filters)
+
+	total_result = await session.execute(
+		base_stmt.with_only_columns(func.count(File.id)).order_by(None)
+	)
+	total = total_result.scalar_one()
+
+	category_result = await session.execute(
+		base_stmt.with_only_columns(
+			func.sum(case((_file_category_predicate("image"), 1), else_=0)),
+			func.sum(case((_file_category_predicate("audio"), 1), else_=0)),
+			func.sum(case((_file_category_predicate("video"), 1), else_=0)),
+			func.sum(case((_file_category_predicate("file"), 1), else_=0)),
+		).order_by(None)
+	)
+	image_count, audio_count, video_count, file_count = category_result.one()
+
+	source_result = await session.execute(
+		base_stmt.with_only_columns(File.source, func.count(File.id))
+		.group_by(File.source)
+		.order_by(None)
+	)
+	by_source = {str(source): count for source, count in source_result.all()}
+
+	ownership_result = await session.execute(
+		base_stmt.with_only_columns(
+			func.sum(case((File.owner_id == principal.user_id, 1), else_=0)),
+			func.sum(case((File.owner_id != principal.user_id, 1), else_=0)),
+		).order_by(None)
+	)
+	owned_total, shared_total = ownership_result.one()
+
+	return FileCounts(
+		total=total,
+		owned_total=owned_total or 0,
+		shared_total=shared_total or 0,
+		by_category={
+			"image": image_count or 0,
+			"audio": audio_count or 0,
+			"video": video_count or 0,
+			"file": file_count or 0,
+		},
+		by_source=by_source,
+	)
 
 
 async def get_file(
@@ -571,7 +673,8 @@ async def update_file(
 	)
 	file = await _get_file(file_id, session)
 	updates = file_in.model_dump(exclude_unset=True, by_alias=True)
-	new_project_ids = updates.pop("project_ids", None)
+	new_project_ids: list[TypeID] | None = updates.pop("project_ids", None)
+	changed_project_ids: set[TypeID] = set()
 	if new_project_ids is not None:
 		for pid in new_project_ids:
 			await require_project_access(
@@ -584,7 +687,9 @@ async def update_file(
 		await session.execute(
 			select(File).where(File.id == file_id).options(selectinload(File.projects))
 		)
+		old_project_ids = {project.id for project in file.projects}
 		file.projects = await load_projects(new_project_ids, session, principal)
+		changed_project_ids = old_project_ids | set(new_project_ids)
 	for field, value in updates.items():
 		setattr(file, field, value)
 	await session.flush()
@@ -604,6 +709,7 @@ async def update_file(
 		origin_session_id=origin_session_id,
 	)
 	await invalidate_resource_payload_cache(ResourceType.FILE, file_id)
+	await invalidate_project_payload_caches(changed_project_ids)
 	return file
 
 
@@ -624,7 +730,13 @@ async def delete_file(
 		ResourceType.FILE,
 		required_level=AccessLevel.EDITOR,
 	)
-	file = await _get_file(file_id, session)
+	file = await _get_file_with_projects(file_id, session)
+	project_ids = {project.id for project in file.projects}
+	delete_recipients = await list_accessible_user_ids(
+		ResourceType.FILE,
+		file_id,
+		session,
+	)
 
 	if not settings.soft_delete.files:
 		await delete_content(file)
@@ -640,5 +752,7 @@ async def delete_file(
 		file_id=file_id,
 		user_id=principal.user_id,
 		origin_session_id=origin_session_id,
+		recipient_ids=delete_recipients,
 	)
 	await invalidate_resource_payload_cache(ResourceType.FILE, file_id)
+	await invalidate_project_payload_caches(project_ids)

@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from typing import TypedDict
+
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.models.access_rule import AccessLevel
+from api.models.calendar import Calendar
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
+from api.models.file import File
 from api.models.many_to_many import (
 	calendar_project_association,
 	file_project_association,
@@ -17,13 +21,16 @@ from api.models.many_to_many import (
 	reminder_list_project_association,
 	thread_project_association,
 )
+from api.models.note import Note
 from api.models.project import Project
+from api.models.thread import Thread
 from api.permissions import ResourceType
 from api.schemas.project import Project as ProjectSchema
-from api.schemas.project import ProjectCreate, ProjectUpdate
+from api.schemas.project import ProjectCreate, ProjectResourceCounts, ProjectUpdate
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	list_accessible_user_ids,
 	require_permission,
 	require_resource_access,
 	resource_access_predicate,
@@ -34,6 +41,128 @@ from api.v1.service.resource_payload_cache import (
 	invalidate_resource_payload_cache,
 )
 from nokodo_ai.utils.typeid import TypeID
+
+
+class _ProjectResourceCountData(TypedDict):
+	thread_count: int
+	note_count: int
+	file_count: int
+	reminder_list_count: int
+	calendar_count: int
+	resource_count: int
+
+
+def _empty_project_resource_counts() -> _ProjectResourceCountData:
+	return {
+		"thread_count": 0,
+		"note_count": 0,
+		"file_count": 0,
+		"reminder_list_count": 0,
+		"calendar_count": 0,
+		"resource_count": 0,
+	}
+
+
+async def invalidate_project_payload_caches(project_ids: set[TypeID]) -> None:
+	for project_id in project_ids:
+		await invalidate_resource_payload_cache(ResourceType.PROJECT, project_id)
+
+
+async def _load_project_resource_counts(
+	project_ids: set[TypeID],
+	session: AsyncSession,
+) -> dict[TypeID, _ProjectResourceCountData]:
+	counts = {
+		project_id: _empty_project_resource_counts() for project_id in project_ids
+	}
+	if not project_ids:
+		return counts
+
+	thread_rows = await session.execute(
+		select(
+			thread_project_association.c.project_id,
+			func.count(thread_project_association.c.thread_id),
+		)
+		.join(Thread, Thread.id == thread_project_association.c.thread_id)
+		.where(
+			thread_project_association.c.project_id.in_(project_ids),
+			Thread.deleted_at.is_(None),
+		)
+		.group_by(thread_project_association.c.project_id)
+	)
+	for project_id, count in thread_rows.all():
+		counts[TypeID(str(project_id))]["thread_count"] = int(count)
+
+	note_rows = await session.execute(
+		select(
+			note_project_association.c.project_id,
+			func.count(note_project_association.c.note_id),
+		)
+		.join(Note, Note.id == note_project_association.c.note_id)
+		.where(
+			note_project_association.c.project_id.in_(project_ids),
+			Note.deleted_at.is_(None),
+		)
+		.group_by(note_project_association.c.project_id)
+	)
+	for project_id, count in note_rows.all():
+		counts[TypeID(str(project_id))]["note_count"] = int(count)
+
+	file_rows = await session.execute(
+		select(
+			file_project_association.c.project_id,
+			func.count(file_project_association.c.file_id),
+		)
+		.join(File, File.id == file_project_association.c.file_id)
+		.where(
+			file_project_association.c.project_id.in_(project_ids),
+			File.deleted_at.is_(None),
+		)
+		.group_by(file_project_association.c.project_id)
+	)
+	for project_id, count in file_rows.all():
+		counts[TypeID(str(project_id))]["file_count"] = int(count)
+
+	reminder_list_rows = await session.execute(
+		select(
+			reminder_list_project_association.c.project_id,
+			func.count(reminder_list_project_association.c.reminder_list_id),
+		)
+		.where(reminder_list_project_association.c.project_id.in_(project_ids))
+		.group_by(reminder_list_project_association.c.project_id)
+	)
+	for project_id, count in reminder_list_rows.all():
+		counts[TypeID(str(project_id))]["reminder_list_count"] = int(count)
+
+	calendar_rows = await session.execute(
+		select(
+			calendar_project_association.c.project_id,
+			func.count(calendar_project_association.c.calendar_id),
+		)
+		.join(Calendar, Calendar.id == calendar_project_association.c.calendar_id)
+		.where(calendar_project_association.c.project_id.in_(project_ids))
+		.group_by(calendar_project_association.c.project_id)
+	)
+	for project_id, count in calendar_rows.all():
+		counts[TypeID(str(project_id))]["calendar_count"] = int(count)
+
+	for count_set in counts.values():
+		count_set["resource_count"] = (
+			count_set["thread_count"]
+			+ count_set["note_count"]
+			+ count_set["file_count"]
+			+ count_set["reminder_list_count"]
+			+ count_set["calendar_count"]
+		)
+	return counts
+
+
+def _project_payload(project: Project) -> ProjectSchema:
+	return ProjectSchema.model_validate(project)
+
+
+def _project_payloads(projects: list[Project]) -> list[ProjectSchema]:
+	return [ProjectSchema.model_validate(project) for project in projects]
 
 
 async def _get_project(project_id: TypeID, session: AsyncSession) -> Project:
@@ -176,7 +305,7 @@ async def create_project(
 	session: AsyncSession,
 	principal: Principal,
 	origin_session_id: str | None = None,
-) -> Project:
+) -> ProjectSchema:
 	"""create a new project. the caller becomes the owner."""
 	require_permission(principal, "projects:create")
 	data = project_in.model_dump(by_alias=True)
@@ -197,12 +326,12 @@ async def create_project(
 		user_id=principal.user_id,
 		project_id=project_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
 	)
-	return await _get_project(project_id, session)
+	return _project_payload(await _get_project(project_id, session))
 
 
 async def list_projects(
@@ -212,7 +341,7 @@ async def list_projects(
 	limit: int = 50,
 	sort_by: str = "updated_at",
 	sort_dir: SortDir = "desc",
-) -> list[Project]:
+) -> list[ProjectSchema]:
 	"""list projects accessible by the principal."""
 	predicate = resource_access_predicate(
 		principal,
@@ -231,7 +360,8 @@ async def list_projects(
 		tie_breaker=Project.id,
 	)
 	result = await session.execute(stmt.offset(skip).limit(limit))
-	return list(result.scalars().unique().all())
+	projects = list(result.scalars().unique().all())
+	return _project_payloads(projects)
 
 
 async def get_project(
@@ -266,7 +396,7 @@ async def get_project_payload(
 	)
 
 	async def load_payload() -> ProjectSchema:
-		return ProjectSchema.model_validate(await _get_project(project_id, session))
+		return _project_payload(await _get_project(project_id, session))
 
 	if not use_cache:
 		return await load_payload()
@@ -278,13 +408,32 @@ async def get_project_payload(
 	)
 
 
+async def get_project_resource_counts(
+	project_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+) -> ProjectResourceCounts:
+	"""get resource counts for a project after access is validated."""
+	await require_resource_access(
+		project_id,
+		session,
+		principal,
+		ResourceType.PROJECT,
+		required_level=AccessLevel.READER,
+	)
+	counts = await _load_project_resource_counts({project_id}, session)
+	return ProjectResourceCounts.model_validate(
+		counts.get(project_id, _empty_project_resource_counts())
+	)
+
+
 async def update_project(
 	project_id: TypeID,
 	project_in: ProjectUpdate,
 	session: AsyncSession,
 	principal: Principal,
 	origin_session_id: str | None = None,
-) -> Project:
+) -> ProjectSchema:
 	"""update a project (requires editor access)."""
 	await require_resource_access(
 		project_id,
@@ -311,14 +460,14 @@ async def update_project(
 		user_id=principal.user_id,
 		project_id=str(project_id),
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
 	)
 	await invalidate_resource_payload_cache(ResourceType.PROJECT, project_id)
 	await _invalidate_thread_payload_caches(thread_ids)
-	return await _get_project(project_id, session)
+	return _project_payload(await _get_project(project_id, session))
 
 
 async def delete_project(
@@ -345,6 +494,11 @@ async def delete_project(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="forbidden",
 		)
+	delete_recipients = await list_accessible_user_ids(
+		ResourceType.PROJECT,
+		project_id,
+		session,
+	)
 	await session.delete(project)
 	event = Event(
 		scope=EventScope.USER,
@@ -354,10 +508,11 @@ async def delete_project(
 		user_id=principal.user_id,
 		project_id=project_id,
 	)
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
+		recipient_ids=delete_recipients,
 	)
-	await invalidate_resource_payload_cache(ResourceType.PROJECT, project_id)
+	await invalidate_project_payload_caches({project_id})
 	await _invalidate_resource_payload_caches(dependent_resource_ids)

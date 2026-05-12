@@ -22,7 +22,7 @@ from api.v1.service.authorization import (
 	require_resource_access,
 	resolve_effective_level,
 )
-from api.v1.service.events import event_connections
+from api.v1.service.events import fanout_live_payload
 from api.v1.service.vectorize import sync_resource_vector_acl
 from nokodo_ai.utils.typeid import TypeID
 
@@ -561,8 +561,7 @@ async def _publish_access_updated(
 	recipient_ids = _unique_typeids([*previous_recipient_ids, *current_recipient_ids])
 	if not recipient_ids:
 		return
-	await event_connections.send_to_users(
-		recipient_ids,
+	await fanout_live_payload(
 		{
 			"type": "access.updated",
 			"data": {
@@ -570,4 +569,7 @@ async def _publish_access_updated(
 				"resource_id": str(resource_id),
 			},
 		},
+		recipient_ids,
+		None,
+		False,
 	)

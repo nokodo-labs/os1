@@ -47,3 +47,14 @@ class Project(ProjectBase, TimestampedModel, ORMModel):
 	id: TypeID
 	owner_id: TypeID
 	thread_ids: list[TypeID] = Field(default_factory=list)
+
+
+class ProjectResourceCounts(ORMModel):
+	"""resource counts for one project."""
+
+	thread_count: int = 0
+	note_count: int = 0
+	file_count: int = 0
+	reminder_list_count: int = 0
+	calendar_count: int = 0
+	resource_count: int = 0
