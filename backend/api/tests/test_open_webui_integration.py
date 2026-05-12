@@ -1023,6 +1023,128 @@ async def test_open_webui_import_downloads_chat_files_as_attachments(
 
 
 @pytest.mark.asyncio
+async def test_open_webui_import_uses_nested_file_metadata_for_filename(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	_allow_test_deployment(monkeypatch)
+	_install_fake_open_webui_client(
+		monkeypatch,
+		files={
+			"file_1": (
+				{
+					"id": "file_1",
+					"meta": {
+						"content_type": "text/markdown",
+						"data": {"name": "nested-notes.md"},
+					},
+				},
+				b"# hello from owui",
+				None,
+			)
+		},
+		chats=[
+			_chat_with_messages(
+				current_id="m1",
+				messages={
+					"m1": {
+						"id": "m1",
+						"role": "user",
+						"content": "see attached",
+						"files": [{"id": "file_1"}],
+					}
+				},
+			)
+		],
+	)
+	principal = await _persisted_principal(db_session, *_all_import_permissions())
+
+	await open_webui.import_from_open_webui(
+		deployment_origin="https://open-webui.example.com",
+		credential="token",
+		include_chats=True,
+		include_memories=False,
+		session=db_session,
+		principal=principal,
+	)
+
+	file = (await db_session.scalars(select(File))).one()
+	message = (await db_session.scalars(select(Message))).one()
+	file_part = next(part for part in message.content if part.get("type") == "file")
+	assert file.filename == "nested-notes.md"
+	assert file.mime_type == "text/markdown"
+	assert file_part["filename"] == "nested-notes.md"
+
+
+@pytest.mark.asyncio
+async def test_open_webui_import_downloads_generated_image_files(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	_allow_test_deployment(monkeypatch)
+	_install_fake_open_webui_client(
+		monkeypatch,
+		files={
+			"generated_file": (
+				{
+					"id": "generated_file",
+					"meta": {
+						"name": "generated-image.png",
+						"content_type": "image/png",
+					},
+				},
+				b"\x89PNG\r\n",
+				"image/png",
+			)
+		},
+		chats=[
+			_chat_with_messages(
+				current_id="m2",
+				messages={
+					"m1": {"id": "m1", "role": "user", "content": "make an image"},
+					"m2": {
+						"id": "m2",
+						"parentId": "m1",
+						"role": "assistant",
+						"content": "done",
+						"files": [
+							{
+								"type": "image",
+								"url": "/api/v1/files/generated_file/content",
+							}
+						],
+					},
+				},
+			)
+		],
+	)
+	principal = await _persisted_principal(db_session, *_all_import_permissions())
+
+	summary = await open_webui.import_from_open_webui(
+		deployment_origin="https://open-webui.example.com",
+		credential="token",
+		include_chats=True,
+		include_memories=False,
+		session=db_session,
+		principal=principal,
+	)
+
+	file = (await db_session.scalars(select(File))).one()
+	assistant = (
+		await db_session.scalars(
+			select(Message).where(Message.type == MessageType.ASSISTANT)
+		)
+	).one()
+	file_part = next(part for part in assistant.content if part.get("type") == "image")
+	assert summary.files_imported == 1
+	assert file.filename == "generated-image.png"
+	assert file.mime_type == "image/png"
+	assert file.message_id == assistant.id
+	assert file_part["filename"] == "generated-image.png"
+	assert file_part["metadata"]["file_id"] == str(file.id)
+
+
+@pytest.mark.asyncio
 async def test_open_webui_import_skips_failed_file_storage_without_skipping_chat(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,

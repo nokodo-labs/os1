@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from html.parser import HTMLParser
 from typing import Any, Literal
-from urllib.parse import unquote_to_bytes, urlparse
+from urllib.parse import unquote, unquote_to_bytes, urlparse
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -46,6 +46,15 @@ logger = logging.getLogger(__name__)
 
 _OWUI_FILE_PATH_PARTS = ("api", "v1", "files")
 _OWUI_METADATA_KEY = "open-webui"
+_OWUI_FILENAME_KEYS = (
+	"filename",
+	"name",
+	"original_filename",
+	"original_name",
+	"file_name",
+	"title",
+)
+_OWUI_FILE_PATH_KEYS = ("path", "filepath", "file_path")
 _PINNED_CHATS_PROJECT_NAME = "pinned chats"
 _CHAT_FETCH_BATCH_SIZE = 24
 _OWUI_PLACEHOLDER_CHAT_TITLES = frozenset(
@@ -1332,20 +1341,80 @@ def _file_entry_url(file_entry: dict[str, Any]) -> str | None:
 	return _first_str(file_entry, "url") or _first_str(file_obj, "url")
 
 
+def _filename_from_value(value: Any) -> str | None:
+	if not isinstance(value, str):
+		return None
+	cleaned = value.strip()
+	if not cleaned:
+		return None
+	parsed = urlparse(cleaned)
+	path = parsed.path if parsed.scheme or parsed.netloc else cleaned
+	name = unquote(path.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1])
+	name = name.strip()
+	if not name or name in (".", ".."):
+		return None
+	return name[:255]
+
+
+def _filename_from_mapping(mapping: dict[str, Any]) -> str | None:
+	for key in _OWUI_FILENAME_KEYS:
+		filename = _filename_from_value(mapping.get(key))
+		if filename:
+			return filename
+	for key in _OWUI_FILE_PATH_KEYS:
+		filename = _filename_from_value(mapping.get(key))
+		if filename:
+			return filename
+	return None
+
+
+def _metadata_containers(metadata: dict[str, Any] | None) -> list[dict[str, Any]]:
+	if metadata is None:
+		return []
+	containers = [metadata]
+	for key in ("file", "meta", "data"):
+		value = metadata.get(key)
+		if isinstance(value, dict):
+			containers.append(value)
+	for value in list(containers):
+		for key in ("file", "meta", "data"):
+			nested = value.get(key)
+			if isinstance(nested, dict) and nested not in containers:
+				containers.append(nested)
+	return containers
+
+
 def _file_entry_filename(
 	file_entry: dict[str, Any],
 	metadata: dict[str, Any] | None = None,
 ) -> str | None:
-	file_obj = _file_entry_object(file_entry)
-	meta = metadata.get("meta") if metadata else None
-	if not isinstance(meta, dict):
-		meta = {}
-	return (
-		_first_str(file_entry, "filename", "name")
-		or _first_str(file_obj, "filename", "name")
-		or _first_str(metadata or {}, "filename")
-		or _first_str(meta, "name")
+	for mapping in (file_entry, _file_entry_object(file_entry)):
+		filename = _filename_from_mapping(mapping)
+		if filename:
+			return filename
+	for mapping in _metadata_containers(metadata):
+		filename = _filename_from_mapping(mapping)
+		if filename:
+			return filename
+	return None
+
+
+def _file_entry_fallback_filename(
+	owui_file_id: str | None,
+	url: str | None,
+	media_type: str | None,
+) -> str | None:
+	url_name = (
+		_filename_from_value(url) if url and not url.startswith("data:") else None
 	)
+	if url_name and url_name != "content":
+		return url_name
+	if owui_file_id is None:
+		return None
+	extension = mimetypes.guess_extension(media_type or "") or ""
+	if extension == ".jpe":
+		extension = ".jpg"
+	return f"open-webui-{owui_file_id}{extension}"[:255]
 
 
 def _file_entry_media_type(
@@ -1396,6 +1465,27 @@ async def _import_file_entry(
 			owui_file_id=owui_file_id,
 		)
 		if existing is not None:
+			existing_metadata: dict[str, Any] | None = None
+			if existing.filename is None or existing.mime_type is None:
+				try:
+					existing_metadata = await client.get_file_metadata(owui_file_id)
+				except OpenWebUIError:
+					existing_metadata = None
+			if existing.mime_type is None:
+				existing_media_type = _file_entry_media_type(
+					file_entry, existing_metadata
+				)
+				if existing_media_type is not None:
+					existing.mime_type = existing_media_type
+			if existing.filename is None:
+				existing.filename = _file_entry_filename(
+					file_entry,
+					existing_metadata,
+				) or _file_entry_fallback_filename(
+					owui_file_id,
+					url,
+					existing.mime_type,
+				)
 			_append_missing_projects_to_file(existing, projects)
 			if existing.message_id is None:
 				existing.message_id = message_id
@@ -1433,6 +1523,11 @@ async def _import_file_entry(
 	if media_type is None and filename:
 		media_type = mimetypes.guess_type(filename)[0]
 	media_type = media_type or "application/octet-stream"
+	filename = filename or _file_entry_fallback_filename(
+		owui_file_id,
+		url,
+		media_type,
+	)
 
 	if data is None:
 		return _file_content_part(
@@ -1453,7 +1548,7 @@ async def _import_file_entry(
 			source=FileSource.IMPORT,
 			project_ids=project_ids,
 			message_id=message_id,
-			emit_event=False,
+			create_event=False,
 		)
 	except (OSError, RuntimeError, ValueError) as exc:
 		summary.files_skipped += 1
