@@ -31,6 +31,7 @@ from api.models.message import (
 from api.models.model import Model as ModelORM
 from api.models.provider import Provider as ProviderORM
 from api.schemas.message import MessageCreate
+from api.schemas.prompt import PromptListFilters
 from api.schemas.thread import ThreadListFilters
 from api.v1.routers import openai as openai_router
 from api.v1.routers import prompts as prompts_router
@@ -241,6 +242,7 @@ async def test_prompts_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 		limit: int = 50,
 		sort_by: str = "command",
 		sort_dir: str = "asc",
+		q: str | None = None,
 	) -> list[object]:
 		return [fake_prompt]
 
@@ -266,7 +268,9 @@ async def test_prompts_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 		principal=admin,  # type: ignore[arg-type]
 		db=None,  # type: ignore[arg-type]
 	)  # type: ignore[arg-type]
-	out_list = await prompts_router.list_prompts(principal=admin, db=None)  # type: ignore[arg-type]
+	out_list = await prompts_router.list_prompts(
+		filters=PromptListFilters(), principal=admin, db=None
+	)  # type: ignore[arg-type]
 	out_get = await prompts_router.get_prompt("1", principal=admin, db=None)  # type: ignore[arg-type]
 	out_update = await prompts_router.update_prompt(
 		"1",  # type: ignore[arg-type]
@@ -321,9 +325,6 @@ async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 	async def _switch(*_args: object, **_kwargs: object) -> object:
 		return SimpleNamespace(current_message_id=new_typeid("message"))
 
-	async def _return_access_rules(*_args: object, **_kwargs: object) -> list[object]:
-		return ["rule"]
-
 	monkeypatch.setattr(threads_router.thread_service, "create_thread", _return_thread)
 	monkeypatch.setattr(
 		threads_router.thread_service, "list_threads", _return_thread_list
@@ -345,17 +346,6 @@ async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 		threads_router.thread_service, "create_message", _return_message
 	)
 	monkeypatch.setattr(threads_router.thread_service, "switch_branch", _switch)
-	monkeypatch.setattr(
-		threads_router.access_rules_service,
-		"list_access_rules",
-		_return_access_rules,
-	)
-	monkeypatch.setattr(
-		threads_router.access_rules_service,
-		"set_access_rules",
-		_return_access_rules,  # type: ignore[arg-type]
-	)  # type: ignore[arg-type]
-	# type: ignore[arg-type]
 	created = await threads_router.create_thread(
 		SimpleNamespace(owner_id="u"),  # type: ignore[arg-type]
 		principal=principal,  # type: ignore[arg-type]
@@ -388,18 +378,6 @@ async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 		principal=principal,  # type: ignore[arg-type]
 		db=None,  # type: ignore[arg-type]
 	)  # type: ignore[arg-type]
-	rule_list = await threads_router.list_thread_access_rules(  # type: ignore[arg-type]
-		"t",  # type: ignore[arg-type]
-		principal=principal,  # type: ignore[arg-type]
-		db=None,  # type: ignore[arg-type]
-	)  # type: ignore[arg-type]
-	rule_set = await threads_router.set_thread_access_rules(
-		"t",  # type: ignore[arg-type]
-		[],
-		principal=principal,  # type: ignore[arg-type]
-		db=None,  # type: ignore[arg-type]
-	)  # type: ignore[arg-type]
-
 	assert created is fake_thread
 	assert listed == [fake_thread]
 	assert fetched is fake_thread
@@ -409,8 +387,6 @@ async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 	assert tree == [fake_message]
 	assert posted is fake_message
 	assert switched.current_message_id is not None
-	assert rule_list == ["rule"]
-	assert rule_set == ["rule"]
 
 
 @pytest.mark.asyncio

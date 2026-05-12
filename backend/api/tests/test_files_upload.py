@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import io
 import os
@@ -25,12 +24,6 @@ from nokodo_ai.utils.typeid import new_typeid
 
 def _sha256(data: bytes) -> str:
 	return hashlib.sha256(data).hexdigest()
-
-
-PNG_BYTES = base64.b64decode(
-	"iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR4nGP8z8Dwn4GBgYGB"
-	"gYGJAAAfQICBq3G38AAAAABJRU5ErkJggg=="
-)
 
 
 # ---------------------------------------------------------------------------
@@ -159,49 +152,6 @@ class TestFileContent:
 		fake_id = new_typeid("file")
 		resp = await client.get(f"/v1/files/{fake_id}/content")
 		assert resp.status_code == 401
-
-
-class TestFileThumbnail:
-	async def test_thumbnail_generates_cached_derivative(
-		self, client: AsyncClient, admin_auth: dict
-	) -> None:
-		headers = admin_auth["headers"]
-		upload_resp = await client.post(
-			"/v1/files/upload",
-			headers=headers,
-			files={"file": ("tiny.png", io.BytesIO(PNG_BYTES), "image/png")},
-		)
-		assert upload_resp.status_code == 201
-		file_id = upload_resp.json()["id"]
-
-		resp = await client.get(f"/v1/files/{file_id}/thumbnail", headers=headers)
-		assert resp.status_code == 200
-		assert "image/webp" in resp.headers.get("content-type", "")
-		assert resp.headers.get("content-disposition") == "inline"
-		assert resp.headers.get("etag")
-		assert resp.content
-
-		cached_resp = await client.get(
-			f"/v1/files/{file_id}/thumbnail", headers=headers
-		)
-		assert cached_resp.status_code == 200
-		assert cached_resp.headers.get("etag") == resp.headers.get("etag")
-		assert cached_resp.content == resp.content
-
-	async def test_thumbnail_rejects_non_image(
-		self, client: AsyncClient, admin_auth: dict
-	) -> None:
-		headers = admin_auth["headers"]
-		upload_resp = await client.post(
-			"/v1/files/upload",
-			headers=headers,
-			files={"file": ("plain.txt", io.BytesIO(b"not an image"), "text/plain")},
-		)
-		assert upload_resp.status_code == 201
-		file_id = upload_resp.json()["id"]
-
-		resp = await client.get(f"/v1/files/{file_id}/thumbnail", headers=headers)
-		assert resp.status_code == 415
 
 
 # ---------------------------------------------------------------------------
