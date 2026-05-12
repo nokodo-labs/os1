@@ -20,6 +20,7 @@ from api.permissions import AccessLevel
 from api.schemas.event import EventCreate, EventListFilters
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
+from api.v1.service.chat import run_helpers
 from nokodo_ai.utils.typeid import new_typeid
 
 
@@ -46,8 +47,8 @@ def _non_admin_events_manager_principal(user: User) -> Principal:
 
 
 @pytest.mark.asyncio
-async def test_emit_event(db_session: AsyncSession) -> None:
-	"""Test emitting an event."""
+async def test_create_event_from_request(db_session: AsyncSession) -> None:
+	"""Test creating an event from an API request."""
 	principal = _admin_principal()
 	# Create user
 	user = User(
@@ -71,12 +72,16 @@ async def test_emit_event(db_session: AsyncSession) -> None:
 		data={"foo": "bar"},
 		user_id=user.id,
 	)
-	event = await event_service.emit_event(event_in, db_session, principal=principal)
+	event = await event_service.create_event_from_request(
+		event_in,
+		db_session,
+		principal=principal,
+	)
 	assert event.type == EventType.NOTIFICATION_CUSTOM
 	assert event.user_id == user.id
 	assert event.data == {"foo": "bar"}
 
-	# events.emit_event does NOT auto-create notifications (use notifications.py)
+	# event creation does not auto-create notifications (use notifications.py)
 	result = await db_session.execute(
 		select(Notification).where(Notification.event_id == event.id)
 	)
@@ -85,7 +90,7 @@ async def test_emit_event(db_session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_emit_event_non_admin_cannot_notify_other_user(
+async def test_create_event_from_request_non_admin_cannot_notify_other_user(
 	db_session: AsyncSession,
 ) -> None:
 	"""Non-admins may only create notifications for themselves."""
@@ -117,7 +122,7 @@ async def test_emit_event_non_admin_cannot_notify_other_user(
 	principal = _non_admin_events_manager_principal(actor)
 
 	with pytest.raises(Exception) as excinfo:
-		await event_service.emit_event(
+		await event_service.create_event_from_request(
 			EventCreate(
 				scope=EventScope.USER,
 				scope_id=target.id,
@@ -135,7 +140,7 @@ async def test_emit_event_non_admin_cannot_notify_other_user(
 
 
 @pytest.mark.asyncio
-async def test_emit_event_non_admin_cannot_target_other_user_scope(
+async def test_create_event_from_request_non_admin_cannot_target_other_user_scope(
 	db_session: AsyncSession,
 ) -> None:
 	"""Non-admins cannot route user-scoped events to another user."""
@@ -167,7 +172,7 @@ async def test_emit_event_non_admin_cannot_target_other_user_scope(
 	principal = _non_admin_events_manager_principal(actor)
 
 	with pytest.raises(Exception) as excinfo:
-		await event_service.emit_event(
+		await event_service.create_event_from_request(
 			EventCreate(
 				scope=EventScope.USER,
 				scope_id=target.id,
@@ -184,7 +189,7 @@ async def test_emit_event_non_admin_cannot_target_other_user_scope(
 
 
 @pytest.mark.asyncio
-async def test_publish_event_routes_user_scope_to_scope_id(
+async def test_persist_and_fanout_event_routes_user_scope_to_scope_id(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -216,22 +221,22 @@ async def test_publish_event_routes_user_scope_to_scope_id(
 
 	captured: list[tuple[object, object, bool]] = []
 
-	async def fake_fanout_event_data(
-		event_data: dict[str, object],
+	async def fake_fanout_live_payload(
+		stream_payload: dict[str, object],
 		recipient_ids: object,
 		user_id: object,
 		broadcast: bool,
 	) -> None:
-		_ = event_data
+		_ = stream_payload
 		captured.append((recipient_ids, user_id, broadcast))
 
 	monkeypatch.setattr(
 		event_service,
-		"_fanout_event_data",
-		fake_fanout_event_data,
+		"fanout_live_payload",
+		fake_fanout_live_payload,
 	)
 
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		db_session,
 		Event(
 			scope=EventScope.USER,
@@ -267,22 +272,22 @@ async def test_publish_task_event_routes_by_user_scope(
 
 	captured: list[tuple[object, object, bool]] = []
 
-	async def fake_fanout_event_data(
-		event_data: dict[str, object],
+	async def fake_fanout_live_payload(
+		stream_payload: dict[str, object],
 		recipient_ids: object,
 		user_id: object,
 		broadcast: bool,
 	) -> None:
-		_ = event_data
+		_ = stream_payload
 		captured.append((recipient_ids, user_id, broadcast))
 
 	monkeypatch.setattr(
 		event_service,
-		"_fanout_event_data",
-		fake_fanout_event_data,
+		"fanout_live_payload",
+		fake_fanout_live_payload,
 	)
 
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		db_session,
 		Event(
 			scope=EventScope.USER,
@@ -349,22 +354,22 @@ async def test_tool_progress_routes_to_thread_readers(
 
 	captured: list[tuple[object, object, bool]] = []
 
-	async def fake_fanout_event_data(
-		event_data: dict[str, object],
+	async def fake_fanout_live_payload(
+		stream_payload: dict[str, object],
 		recipient_ids: object,
 		user_id: object,
 		broadcast: bool,
 	) -> None:
-		_ = event_data
+		_ = stream_payload
 		captured.append((recipient_ids, user_id, broadcast))
 
 	monkeypatch.setattr(
 		event_service,
-		"_fanout_event_data",
-		fake_fanout_event_data,
+		"fanout_live_payload",
+		fake_fanout_live_payload,
 	)
 
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		db_session,
 		Event(
 			scope=EventScope.THREAD,
@@ -387,29 +392,29 @@ async def test_tool_progress_routes_to_thread_readers(
 
 
 @pytest.mark.asyncio
-async def test_publish_event_broadcasts_system_scope(
+async def test_persist_and_fanout_event_broadcasts_system_scope(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	"""System scope is the explicit live broadcast target."""
 	captured: list[tuple[object, object, bool]] = []
 
-	async def fake_fanout_event_data(
-		event_data: dict[str, object],
+	async def fake_fanout_live_payload(
+		stream_payload: dict[str, object],
 		recipient_ids: object,
 		user_id: object,
 		broadcast: bool,
 	) -> None:
-		_ = event_data
+		_ = stream_payload
 		captured.append((recipient_ids, user_id, broadcast))
 
 	monkeypatch.setattr(
 		event_service,
-		"_fanout_event_data",
-		fake_fanout_event_data,
+		"fanout_live_payload",
+		fake_fanout_live_payload,
 	)
 
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		db_session,
 		Event(
 			scope=EventScope.SYSTEM,
@@ -422,7 +427,7 @@ async def test_publish_event_broadcasts_system_scope(
 
 
 @pytest.mark.asyncio
-async def test_publish_event_does_not_broadcast_unroutable_non_system_scope(
+async def test_persist_and_fanout_event_skips_unroutable_non_system_scope(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -443,22 +448,22 @@ async def test_publish_event_does_not_broadcast_unroutable_non_system_scope(
 
 	captured: list[tuple[object, object, bool]] = []
 
-	async def fake_fanout_event_data(
-		event_data: dict[str, object],
+	async def fake_fanout_live_payload(
+		stream_payload: dict[str, object],
 		recipient_ids: object,
 		user_id: object,
 		broadcast: bool,
 	) -> None:
-		_ = event_data
+		_ = stream_payload
 		captured.append((recipient_ids, user_id, broadcast))
 
 	monkeypatch.setattr(
 		event_service,
-		"_fanout_event_data",
-		fake_fanout_event_data,
+		"fanout_live_payload",
+		fake_fanout_live_payload,
 	)
 
-	await event_service.publish_event(
+	await event_service.persist_and_fanout_event(
 		db_session,
 		Event(
 			scope=EventScope.THREAD,
@@ -469,6 +474,134 @@ async def test_publish_event_does_not_broadcast_unroutable_non_system_scope(
 	)
 
 	assert captured == []
+
+
+@pytest.mark.asyncio
+async def test_persist_and_fanout_event_includes_owner_for_new_resource(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""Recipients must include the owner even when the resource row is still
+	uncommitted in the caller's session.
+
+	Regression: when ``persist_and_fanout_event`` resolved recipients before
+	committing, a fresh read-only session could not see the pending INSERT for
+	newly-created resources, so the owner was excluded from the recipient list
+	and from the cached ``accessible_users`` entry. This blocked all subsequent
+	THREAD-scope events (run.started, thread.updated, ...) from reaching the owner.
+	"""
+	owner = User(
+		email="new_thread_owner@example.com",
+		username="new_thread_owner",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add(owner)
+	await db_session.flush()
+
+	thread = Thread(owner_id=owner.id, title="brand new thread")
+	db_session.add(thread)
+	await db_session.flush()
+
+	captured: list[tuple[object, object, bool]] = []
+
+	async def fake_fanout_live_payload(
+		stream_payload: dict[str, object],
+		recipient_ids: object,
+		user_id: object,
+		broadcast: bool,
+	) -> None:
+		_ = stream_payload
+		captured.append((recipient_ids, user_id, broadcast))
+
+	monkeypatch.setattr(
+		event_service,
+		"fanout_live_payload",
+		fake_fanout_live_payload,
+	)
+
+	await event_service.persist_and_fanout_event(
+		db_session,
+		Event(
+			scope=EventScope.THREAD,
+			scope_id=thread.id,
+			type=EventType.THREAD_CREATED,
+			data={"id": str(thread.id)},
+			user_id=owner.id,
+			thread_id=thread.id,
+		),
+	)
+
+	assert len(captured) == 1
+	recipient_ids = captured[0][0]
+	assert isinstance(recipient_ids, list)
+	recipient_id_values = {str(value) for value in recipient_ids}
+	assert str(owner.id) in recipient_id_values
+
+
+@pytest.mark.asyncio
+async def test_broadcast_run_event_uses_live_payload_fanout(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	owner = User(
+		email="run_owner@example.com",
+		username="run_owner",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add(owner)
+	await db_session.flush()
+
+	thread = Thread(owner_id=owner.id, title="run thread")
+	db_session.add(thread)
+	await db_session.flush()
+	owner_id = owner.id
+	thread_id = thread.id
+	await db_session.commit()
+
+	stream_payloads: list[tuple[dict[str, object], list[object] | None]] = []
+
+	async def fake_fanout_live_payload(
+		stream_payload: dict[str, object],
+		recipient_ids: list[object],
+		user_id: object | None = None,
+		broadcast: bool = False,
+	) -> None:
+		_ = user_id, broadcast
+		stream_payloads.append((stream_payload, recipient_ids))
+
+	monkeypatch.setattr(
+		run_helpers,
+		"fanout_live_payload",
+		fake_fanout_live_payload,
+	)
+
+	await run_helpers.broadcast_run_event(
+		thread_id=thread_id,
+		agent_id=new_typeid("agent"),
+		run_id=new_typeid("run"),
+		started=True,
+	)
+
+	assert len(stream_payloads) == 1
+	stream_payload, recipient_ids = stream_payloads[0]
+	assert recipient_ids is not None
+	assert str(owner_id) in {str(value) for value in recipient_ids}
+	assert stream_payload["type"] == EventType.RUN_STARTED
+	payload_data = stream_payload["data"]
+	assert isinstance(payload_data, dict)
+	assert any(
+		key == "thread_id" and value == thread_id for key, value in payload_data.items()
+	)
 
 
 @pytest.mark.asyncio
@@ -491,7 +624,7 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	await db_session.refresh(user)
 
 	# Emit events
-	event1 = await event_service.emit_event(
+	event1 = await event_service.create_event_from_request(
 		EventCreate(
 			scope=EventScope.USER,
 			scope_id=user.id,
@@ -502,7 +635,7 @@ async def test_list_events(db_session: AsyncSession) -> None:
 		db_session,
 		principal=principal,
 	)
-	event2 = await event_service.emit_event(
+	event2 = await event_service.create_event_from_request(
 		EventCreate(
 			scope=EventScope.SYSTEM,
 			scope_id=None,
@@ -519,7 +652,7 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	await db_session.commit()
 	await db_session.refresh(thread)
 
-	event3 = await event_service.emit_event(
+	event3 = await event_service.create_event_from_request(
 		EventCreate(
 			scope=EventScope.THREAD,
 			scope_id=thread.id,
@@ -537,7 +670,7 @@ async def test_list_events(db_session: AsyncSession) -> None:
 	await db_session.commit()
 	await db_session.refresh(task)
 
-	event4 = await event_service.emit_event(
+	event4 = await event_service.create_event_from_request(
 		EventCreate(
 			scope=EventScope.TASK,
 			scope_id=task.id,

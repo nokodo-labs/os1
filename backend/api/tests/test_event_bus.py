@@ -10,7 +10,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 @pytest.mark.asyncio
-async def test_event_bus_publish_includes_routing(
+async def test_publish_remote_fanout_includes_routing(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	"""event fanout publishes routing metadata with a process-specific id."""
@@ -21,16 +21,16 @@ async def test_event_bus_publish_includes_routing(
 			published.append(payload)
 			return 1
 
-	monkeypatch.setattr(event_bus, "_CHANNEL", _Channel())
+	monkeypatch.setattr(event_bus, "_FANOUT_CHANNEL", _Channel())
 
-	await event_bus.publish_event(
+	await event_bus.publish_remote_fanout(
 		{"type": "thread.updated", "data": {"id": "thread_1"}},
 		recipient_ids=[TypeID("user_1"), TypeID("user_2")],
 	)
 
 	assert published == [
 		{
-			"publisher_id": event_bus._publisher_id(),
+			"publisher_id": event_bus._process_fanout_id(),
 			"event": {"type": "thread.updated", "data": {"id": "thread_1"}},
 			"broadcast": False,
 			"recipient_ids": ["user_1", "user_2"],
@@ -50,9 +50,9 @@ async def test_event_fanout_skips_empty_resource_recipients(
 			published.append(payload)
 			return 1
 
-	monkeypatch.setattr(event_bus, "_CHANNEL", _Channel())
+	monkeypatch.setattr(event_bus, "_FANOUT_CHANNEL", _Channel())
 
-	await event_service._fanout_event_data(
+	await event_service.fanout_live_payload(
 		{"type": "thread.updated"},
 		recipient_ids=[],
 		user_id=None,
@@ -63,7 +63,7 @@ async def test_event_fanout_skips_empty_resource_recipients(
 
 
 @pytest.mark.asyncio
-async def test_event_bus_subscriber_rebroadcasts_remote_event(
+async def test_remote_fanout_relay_sends_remote_event_to_users(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	"""remote fanout events are rebroadcast to their resolved users."""
@@ -92,13 +92,13 @@ async def test_event_bus_subscriber_rebroadcasts_remote_event(
 		async def send_to_user(self, user_id: TypeID, data: dict[str, object]) -> None:
 			sent.append(([str(user_id)], data))
 
-		async def broadcast(self, data: dict[str, object]) -> None:
+		async def send_to_all(self, data: dict[str, object]) -> None:
 			sent.append(([], data))
 
-	monkeypatch.setattr(event_bus, "_CHANNEL", _Channel())
+	monkeypatch.setattr(event_bus, "_FANOUT_CHANNEL", _Channel())
 	monkeypatch.setattr(event_service, "event_connections", _Manager())
 
-	task = await event_service.start_event_subscriber()
+	task = await event_service.start_remote_fanout_relay()
 	try:
 		for _ in range(20):
 			if sent:
@@ -111,7 +111,7 @@ async def test_event_bus_subscriber_rebroadcasts_remote_event(
 
 
 @pytest.mark.asyncio
-async def test_event_bus_subscriber_skips_local_event(
+async def test_remote_fanout_relay_skips_local_event(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	"""events published by this process are not delivered back to itself."""
@@ -120,7 +120,7 @@ async def test_event_bus_subscriber_skips_local_event(
 	class _Channel:
 		async def subscribe(self):
 			yield {
-				"publisher_id": event_bus._publisher_id(),
+				"publisher_id": event_bus._process_fanout_id(),
 				"event": {"type": "thread.updated"},
 				"user_id": "user_1",
 				"broadcast": False,
@@ -141,13 +141,13 @@ async def test_event_bus_subscriber_skips_local_event(
 			_ = user_id
 			sent.append(data)
 
-		async def broadcast(self, data: dict[str, object]) -> None:
+		async def send_to_all(self, data: dict[str, object]) -> None:
 			sent.append(data)
 
-	monkeypatch.setattr(event_bus, "_CHANNEL", _Channel())
+	monkeypatch.setattr(event_bus, "_FANOUT_CHANNEL", _Channel())
 	monkeypatch.setattr(event_service, "event_connections", _Manager())
 
-	task = await event_service.start_event_subscriber()
+	task = await event_service.start_remote_fanout_relay()
 	try:
 		await asyncio.sleep(0.05)
 	finally:
@@ -157,7 +157,7 @@ async def test_event_bus_subscriber_skips_local_event(
 
 
 @pytest.mark.asyncio
-async def test_event_bus_subscriber_rebroadcasts_remote_broadcast(
+async def test_remote_fanout_relay_sends_remote_broadcast_to_all(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	"""remote broadcast envelopes are delivered through the raw broadcast path."""
@@ -186,13 +186,13 @@ async def test_event_bus_subscriber_rebroadcasts_remote_broadcast(
 			_ = user_id
 			sent.append(data)
 
-		async def broadcast(self, data: dict[str, object]) -> None:
+		async def send_to_all(self, data: dict[str, object]) -> None:
 			sent.append(data)
 
-	monkeypatch.setattr(event_bus, "_CHANNEL", _Channel())
+	monkeypatch.setattr(event_bus, "_FANOUT_CHANNEL", _Channel())
 	monkeypatch.setattr(event_service, "event_connections", _Manager())
 
-	task = await event_service.start_event_subscriber()
+	task = await event_service.start_remote_fanout_relay()
 	try:
 		await asyncio.sleep(0.05)
 	finally:

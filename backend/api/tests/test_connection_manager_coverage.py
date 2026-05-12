@@ -8,6 +8,7 @@ import pytest
 from fastapi import WebSocket
 
 from api.models.event import Event, EventScope
+from api.v1.service import events as event_service
 from api.v1.service.events import ConnectionManager
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
@@ -48,7 +49,7 @@ def _make_websocket(
 
 
 @pytest.mark.asyncio
-async def test_send_to_user_and_broadcast_exception_paths() -> None:
+async def test_send_to_user_and_send_to_all_exception_paths() -> None:
 	manager = ConnectionManager()
 
 	ws_ok, _ = _make_websocket(fail_send=False)
@@ -58,26 +59,31 @@ async def test_send_to_user_and_broadcast_exception_paths() -> None:
 	await manager.connect(TypeID("u"), ws_fail)
 
 	await manager.send_to_user(TypeID("u"), {"a": 1})
-	await manager.broadcast({"type": "stream.pong"})
+	await manager.send_to_all({"type": "stream.pong"})
 
 	await manager.disconnect(TypeID("u"), ws_ok)
 	await manager.disconnect(TypeID("u"), ws_fail)
 
 
 @pytest.mark.asyncio
-async def test_broadcast_event_routes() -> None:
-	seen_send: list[str] = []
-	seen_broadcast: list[dict[str, object]] = []
+async def test_fanout_event_routes_scope_payloads(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	seen: list[tuple[object, object, bool, dict[str, object]]] = []
 
-	class _Manager(ConnectionManager):
-		async def send_to_user(self, user_id: TypeID, data: dict[str, object]) -> None:
-			_ = data
-			seen_send.append(str(user_id))
+	async def fake_fanout_live_payload(
+		stream_payload: dict[str, object],
+		recipient_ids: object,
+		user_id: object,
+		broadcast: bool,
+	) -> None:
+		seen.append((recipient_ids, user_id, broadcast, stream_payload))
 
-		async def broadcast(self, data: dict[str, object]) -> None:
-			seen_broadcast.append(data)
-
-	manager = _Manager()
+	monkeypatch.setattr(
+		event_service,
+		"fanout_live_payload",
+		fake_fanout_live_payload,
+	)
 
 	event = Event(
 		scope=EventScope.USER,
@@ -95,18 +101,21 @@ async def test_broadcast_event_routes() -> None:
 	)
 	event.created_at = datetime.now(UTC)
 
-	await manager.broadcast_event(event)
-	assert seen_send == [str(event.scope_id)]
+	await event_service.fanout_event(event)
+	assert seen[0][:3] == (None, event.scope_id, False)
 
 	event.scope = EventScope.PROJECT
 	event.scope_id = None
-	await manager.broadcast_event(event)
-	assert seen_broadcast == []
+	await event_service.fanout_event(event)
+	assert len(seen) == 1
 
 	event.user_id = None
 	event.scope = EventScope.SYSTEM
-	await manager.broadcast_event(event)
-	assert seen_broadcast == [
+	await event_service.fanout_event(event)
+	assert seen[1] == (
+		None,
+		None,
+		True,
 		{
 			"id": str(event.id),
 			"type": "t",
@@ -125,5 +134,5 @@ async def test_broadcast_event_routes() -> None:
 			"reminder_id": None,
 			"created_at": event.created_at.isoformat(),
 			"origin_session_id": None,
-		}
-	]
+		},
+	)

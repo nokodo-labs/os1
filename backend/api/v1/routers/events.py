@@ -37,13 +37,17 @@ logger = get_logger(__name__)
 
 
 @router.post("", response_model=EventSchema, status_code=201)
-async def emit_event(
+async def create_event(
 	event_in: EventCreate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> Event:
 	"""Persist and broadcast an event."""
-	return await event_service.emit_event(event_in, db, principal=principal)
+	return await event_service.create_event_from_request(
+		event_in,
+		db,
+		principal=principal,
+	)
 
 
 @router.get("", response_model=list[EventSchema])

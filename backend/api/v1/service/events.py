@@ -1,6 +1,6 @@
 """event service helpers.
 
-this module centralizes event persistence + websocket broadcasting.
+this module centralizes event persistence and websocket fanout.
 
 resource events (note.*, thread.*, file.*, etc.) are automatically routed
 to all users with at least READER access to the affected resource.
@@ -232,13 +232,14 @@ def _build_event_data(
 	}
 
 
-async def _resolve_recipient_ids(
+async def _resolve_event_recipient_ids(
 	event: Event,
 ) -> list[TypeID] | None:
 	"""resolve all user IDs that should receive this event.
 
-	uses a fresh read-only session so pending deletes in the caller's
-	transaction don't hide the resource row.
+	uses a fresh read-only session because the caller's session may already
+	be closed by the time recipients are needed (persist_and_fanout_event commits
+	before resolving so newly-created rows are visible to the lookup).
 	returns None when the event has no resource route; scope routing handles
 	direct-user or system broadcast delivery.
 	"""
@@ -250,48 +251,69 @@ async def _resolve_recipient_ids(
 		return await list_accessible_user_ids(resource_type, resource_id, session)
 
 
-async def _broadcast_event_data(
-	event_data: dict[str, Any],
+async def _send_live_payload_locally(
+	stream_payload: dict[str, Any],
 	recipient_ids: list[TypeID] | None,
 	user_id: TypeID | str | None,
 	broadcast: bool,
+	exclude_user_id: TypeID | str | None = None,
 ) -> None:
 	if recipient_ids is not None:
 		if recipient_ids:
-			await event_connections.send_to_users(recipient_ids, event_data)
+			exclude = TypeID(str(exclude_user_id)) if exclude_user_id else None
+			await event_connections.send_to_users(
+				recipient_ids,
+				stream_payload,
+				exclude_user_id=exclude,
+			)
 		return
 	if user_id:
-		await event_connections.send_to_user(TypeID(str(user_id)), event_data)
+		await event_connections.send_to_user(TypeID(str(user_id)), stream_payload)
 	elif broadcast:
-		await event_connections.broadcast(event_data)
+		await event_connections.send_to_all(stream_payload)
 
 
-async def _fanout_event_data(
-	event_data: dict[str, Any],
+async def fanout_live_payload(
+	stream_payload: dict[str, Any],
 	recipient_ids: list[TypeID] | None,
 	user_id: TypeID | str | None,
 	broadcast: bool,
+	exclude_user_id: TypeID | str | None = None,
 ) -> None:
+	"""deliver a websocket payload locally and relay it to other API workers."""
 	if recipient_ids is not None and not recipient_ids:
 		return
-	await _broadcast_event_data(event_data, recipient_ids, user_id, broadcast)
-	await event_bus.publish_event(
-		event_data,
+	if recipient_ids is None and user_id is None and not broadcast:
+		logger.debug(
+			"live payload has no delivery target: %s",
+			stream_payload.get("type"),
+		)
+		return
+	await _send_live_payload_locally(
+		stream_payload,
+		recipient_ids,
+		user_id,
+		broadcast,
+		exclude_user_id,
+	)
+	await event_bus.publish_remote_fanout(
+		stream_payload,
 		recipient_ids=recipient_ids,
 		user_id=user_id,
 		broadcast=broadcast,
+		exclude_user_id=exclude_user_id,
 	)
 
 
-async def _fanout_scope_event_data(
+async def _fanout_event_scope(
 	event: Event,
-	event_data: dict[str, Any],
+	stream_payload: dict[str, Any],
 ) -> None:
 	user_id = _scope_user_recipient_id(event)
 	if user_id is not None:
-		await _fanout_event_data(event_data, None, user_id, False)
+		await fanout_live_payload(stream_payload, None, user_id, False)
 	elif _scope_broadcasts(event):
-		await _fanout_event_data(event_data, None, None, True)
+		await fanout_live_payload(stream_payload, None, None, True)
 	else:
 		logger.debug(
 			"event has no live delivery target: type=%s scope=%s",
@@ -300,13 +322,13 @@ async def _fanout_scope_event_data(
 		)
 
 
-async def start_event_subscriber() -> asyncio.Task[None]:
-	"""start the redis subscriber that rebroadcasts remote websocket events."""
-	return await event_bus.start_event_subscriber(_broadcast_event_data)
+async def start_remote_fanout_relay() -> asyncio.Task[None]:
+	"""start the redis listener that sends remote websocket payloads locally."""
+	return await event_bus.start_remote_fanout_listener(_send_live_payload_locally)
 
 
 class ConnectionManager:
-	"""Manages active WebSocket connections per user for event broadcasting."""
+	"""manages process-local websocket connections per user."""
 
 	def __init__(self) -> None:
 		self._connections: dict[TypeID, set[WebSocket]] = defaultdict(set)
@@ -345,7 +367,7 @@ class ConnectionManager:
 		targets = (uid for uid in user_ids if uid != exclude_user_id)
 		await asyncio.gather(*(self.send_to_user(uid, data) for uid in targets))
 
-	async def broadcast(self, data: dict[str, Any]) -> None:
+	async def send_to_all(self, data: dict[str, Any]) -> None:
 		async with self._lock:
 			all_connections = [
 				(user_id, ws)
@@ -359,34 +381,17 @@ class ConnectionManager:
 			except Exception:
 				logger.debug("failed to broadcast to user %s", user_id)
 
-	async def broadcast_event(
-		self,
-		event: EventModel,
-		origin_session_id: str | None = None,
-	) -> None:
-		"""broadcast a non-resource event according to its scope.
-
-		prefer publish_event() for persisted resource events (does access-based
-		routing automatically). this method is kept for the emitter fast-path.
-		"""
-		event_data = _build_event_data(event, origin_session_id)
-		user_id = _scope_user_recipient_id(event)
-		if user_id is not None:
-			await self.send_to_user(user_id, event_data)
-		elif _scope_broadcasts(event):
-			await self.broadcast(event_data)
-
 
 event_connections = ConnectionManager()
 
 EventEmitter = Callable[[Event], Awaitable[None]]
 
 
-def build_event_emitter(
+def build_live_persisting_event_emitter(
 	message_id_provider: Callable[[], str | None] | None = None,
 	before_persist: Callable[[Event], Awaitable[None]] | None = None,
 ) -> EventEmitter:
-	"""Create a non-blocking emitter that broadcasts immediately and persists async.
+	"""create a non-blocking emitter that fanouts immediately and persists async.
 
 	This is the "core" behavior: tools/filters should never be able to emit events
 	that vanish (no no-op emitter). Persistence happens in a separate session.
@@ -396,8 +401,8 @@ def build_event_emitter(
 	"""
 	_recipient_cache: dict[str, list[TypeID]] = {}
 
-	async def _broadcast_with_routing(event: Event) -> None:
-		"""broadcast an event with access-based routing (cached per resource)."""
+	async def _fanout_with_cached_route(event: Event) -> None:
+		"""fanout an event with access-based routing cached per resource."""
 		event_data = _build_event_data(event)
 		routing = _resolve_routing(event)
 		if routing:
@@ -411,9 +416,9 @@ def build_event_emitter(
 						read_session,
 					)
 			user_ids = _recipient_cache[cache_key]
-			await _fanout_event_data(event_data, user_ids, None, False)
+			await fanout_live_payload(event_data, user_ids, None, False)
 			return
-		await _fanout_scope_event_data(event, event_data)
+		await _fanout_event_scope(event, event_data)
 
 	def _track(name: str, coro: Coroutine[object, object, object]) -> None:
 		create_background_task(coro, name=name)
@@ -429,10 +434,10 @@ def build_event_emitter(
 			if msg_id:
 				event.message_id = TypeID(msg_id)
 
-		# broadcast immediately (with access-based routing)
+		# fanout immediately with access-based routing
 		_track(
-			"event_broadcast",
-			_broadcast_with_routing(event),
+			"event_fanout",
+			_fanout_with_cached_route(event),
 		)
 
 		# persist in background (without broadcasting again)
@@ -467,46 +472,72 @@ def build_event_emitter(
 	return emit
 
 
-async def publish_event(
+async def fanout_event(
+	event: Event,
+	origin_session_id: str | None = None,
+	recipient_ids: list[TypeID] | None = None,
+) -> None:
+	"""deliver an already-built event through websocket fanout without persisting."""
+	resolved_recipient_ids = recipient_ids
+	if resolved_recipient_ids is None:
+		resolved_recipient_ids = await _resolve_event_recipient_ids(event)
+
+	stream_payload = _build_event_data(event, origin_session_id)
+	await _fanout_event_with_recipients(event, stream_payload, resolved_recipient_ids)
+
+
+async def _fanout_event_with_recipients(
+	event: Event,
+	stream_payload: dict[str, Any],
+	recipient_ids: list[TypeID] | None,
+) -> None:
+	if recipient_ids is not None:
+		await fanout_live_payload(stream_payload, recipient_ids, None, False)
+	else:
+		await _fanout_event_scope(event, stream_payload)
+
+
+async def persist_and_fanout_event(
 	session: AsyncSession,
 	event: Event,
 	origin_session_id: str | None = None,
 	recipient_ids: list[TypeID] | None = None,
 ) -> Event:
-	"""persist an event and deliver it through its resolved route.
+	"""persist an event and deliver it through its resolved websocket route.
 
 	explicit recipients override route resolution. otherwise, resource events are
 	sent to users with access. non-resource events route by scope: user scope
 	targets scope_id, system scope broadcasts, and other unroutable scopes are
 	persisted without live delivery.
 
-	recipient resolution uses a separate read-only session so that
-	pending hard-deletes in the caller's transaction don't hide the
-	resource row.
+	the event is committed before recipients are resolved so newly-created
+	resource rows (e.g. THREAD_CREATED) are visible to the recipient lookup
+	and to the cache it populates. callers that hard-delete a resource and
+	still need to notify users beyond superusers must pass ``recipient_ids``
+	explicitly, since the row is gone after commit.
 	"""
-	resolved_recipient_ids = recipient_ids
-	if resolved_recipient_ids is None:
-		resolved_recipient_ids = await _resolve_recipient_ids(event)
-
 	session.add(event)
 	await session.commit()
 
-	event_data = _build_event_data(event, origin_session_id)
+	resolved_recipient_ids = recipient_ids
+	if resolved_recipient_ids is None:
+		resolved_recipient_ids = await _resolve_event_recipient_ids(event)
 
-	if resolved_recipient_ids is not None:
-		await _fanout_event_data(event_data, resolved_recipient_ids, None, False)
-	else:
-		await _fanout_scope_event_data(event, event_data)
+	await _fanout_event_with_recipients(
+		event,
+		_build_event_data(event, origin_session_id),
+		resolved_recipient_ids,
+	)
 
 	return event
 
 
-async def emit_event(
+async def create_event_from_request(
 	event_in: EventCreate,
 	session: AsyncSession,
 	principal: Principal,
 ) -> Event:
-	"""emit an event via the API."""
+	"""validate an event create request, persist it, and fanout live updates."""
 	require_permission(principal, "events:manage")
 	if event_in.user_id is not None and not principal.is_admin:
 		if event_in.user_id != principal.user_id:
@@ -525,7 +556,7 @@ async def emit_event(
 			detail="forbidden",
 		)
 	event = Event(**event_in.model_dump(by_alias=True))
-	return await publish_event(session, event=event)
+	return await persist_and_fanout_event(session, event=event)
 
 
 async def list_events(
