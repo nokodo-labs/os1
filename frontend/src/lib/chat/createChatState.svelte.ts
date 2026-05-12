@@ -24,7 +24,7 @@ import {
 	type RunBlock,
 	type StreamingAssistantState,
 } from './helpers'
-import { dropSteering as dropSteeringApi } from './steering'
+import { dropSteering as dropSteeringApi, steerRun as steerRunApi } from './steering'
 import { resumeCreateAndRun } from './streamProcessor'
 import { findRunUserMessage, switchBranch } from './treeNavigation'
 import type {
@@ -56,6 +56,7 @@ export function createChatState(): ChatState {
 	let optimisticUserMessage = $state<OptimisticUserMessage | null>(null)
 	const queuedSteeringById = new SvelteMap<string, QueuedSteeringMessage>()
 	const steeringParentOverrides = new SvelteMap<string, string>()
+	let pendingSteeringFlushInFlight = false
 	let streamingAssistant = $state<StreamingAssistantState | null>(null)
 	let streamingAssistantParentId = $state<string | null>(null)
 	let viewingStreamingBranch = $state(true)
@@ -190,6 +191,65 @@ export function createChatState(): ChatState {
 
 	function removeQueuedSteeringMessage(messageId: string): void {
 		queuedSteeringById.delete(messageId)
+	}
+
+	function nextPendingSteeringMessage(runId: string | null): QueuedSteeringMessage | null {
+		for (const message of queuedSteeringById.values()) {
+			if (message.deliveryState !== 'sending') continue
+			if (runId && message.runId && message.runId !== runId) continue
+			return message
+		}
+		return null
+	}
+
+	async function flushPendingSteeringMessages(
+		runId: string | null,
+		parentId: string
+	): Promise<void> {
+		if (pendingSteeringFlushInFlight) return
+		pendingSteeringFlushInFlight = true
+		let nextParentId = parentId
+		try {
+			for (;;) {
+				const pending = nextPendingSteeringMessage(runId)
+				if (!pending) return
+				const targetRunId = runId ?? pending.runId
+				if (!targetRunId || !pending.input) return
+
+				try {
+					const queued = await steerRunApi(targetRunId, pending.input, nextParentId)
+					if (!queuedSteeringById.has(pending.id)) {
+						if (queued.state === 'queued') {
+							try {
+								await dropSteeringApi(targetRunId, queued.messageId)
+							} catch (error) {
+								console.error(
+									'failed to drop removed pending steering message',
+									error
+								)
+							}
+						}
+						continue
+					}
+
+					queuedSteeringById.delete(pending.id)
+					if (queued.state !== 'queued') continue
+					queuedSteeringById.set(queued.messageId, {
+						...pending,
+						id: queued.messageId,
+						runId: targetRunId,
+						deliveryState: 'queued',
+						input: undefined,
+					})
+					nextParentId = queued.messageId
+				} catch (error) {
+					console.error('failed to flush pending steering message', error)
+					return
+				}
+			}
+		} finally {
+			pendingSteeringFlushInFlight = false
+		}
 	}
 
 	function injectedMessage(
@@ -354,6 +414,7 @@ export function createChatState(): ChatState {
 		optimisticUserMessage = null
 		queuedSteeringById.clear()
 		steeringParentOverrides.clear()
+		pendingSteeringFlushInFlight = false
 		streamingAssistant = null
 		streamingAssistantParentId = null
 		viewingStreamingBranch = true
@@ -447,6 +508,7 @@ export function createChatState(): ChatState {
 		},
 		stageQueuedSteeringMessage,
 		removeQueuedSteeringMessage,
+		flushPendingSteeringMessages,
 		injectQueuedSteeringMessage,
 		setSteeringParentOverride,
 		consumeSteeringParentOverride,
@@ -688,6 +750,11 @@ export function createChatState(): ChatState {
 		deleteUserMessage: (messageId) => deleteUserMessage(messageId, state),
 		dropSteering: async (runId, messageId) => {
 			if (!state.thread) return
+			const queued = queuedSteeringById.get(messageId)
+			if (queued?.deliveryState === 'sending') {
+				state.removeQueuedSteeringMessage(messageId)
+				return
+			}
 			try {
 				await dropSteeringApi(runId, messageId)
 				state.removeQueuedSteeringMessage(messageId)

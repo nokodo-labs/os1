@@ -15,7 +15,7 @@ import { syncCacheAfterRun } from './dataLoader'
 import { computeIsAtBottom, contentPartsToText } from './helpers'
 import { runThreadStream } from './streamProcessor'
 import { getLatestLeaf } from './treeNavigation'
-import type { ChatContext } from './types'
+import type { ChatContext, PendingRunInput } from './types'
 
 function resolveLeafAfterDelete(startParentId: string | null, ctx: ChatContext): string | null {
 	if (startParentId && ctx.messageTree.has(startParentId)) {
@@ -28,6 +28,38 @@ function resolveLeafAfterDelete(startParentId: string | null, ctx: ChatContext):
 	}
 
 	return null
+}
+
+function createLocalSteeringMessageId(): string {
+	if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+		return `local-steering-${crypto.randomUUID()}`
+	}
+	return `local-steering-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function cloneRunInput(input: RunInput): PendingRunInput {
+	return {
+		text: input.text ?? null,
+		attachment_ids: input.attachment_ids ? [...input.attachment_ids] : undefined,
+		attachment_actions: input.attachment_actions ? { ...input.attachment_actions } : undefined,
+	}
+}
+
+function steeringEnabledForAgent(agentId: string): boolean {
+	const targetAgent = agents.get(agentId)
+	const features = (
+		targetAgent?.config as { features?: { steering?: { enabled?: boolean } } } | undefined
+	)?.features
+	return features?.steering?.enabled !== false
+}
+
+function resolveSteeringParentId(ctx: ChatContext): string | null {
+	const parentId = ctx.currentLeafId
+	if (!parentId) return null
+	if (!ctx.messageTree.has(parentId)) return null
+	if (parentId === ctx.streamingLeafId) return null
+	if (parentId === ctx.streamingAssistant?.messageId) return null
+	return parentId
 }
 
 /** send a new user message and stream the agent response */
@@ -56,25 +88,42 @@ export async function handleSendMessage(
 	// steering: queued messages stay outside the thread until the backend
 	// broadcasts that the running agent has injected them.
 	const activeRuns = activeRunsStore.getRunsForThread(ctx.thread.id)
-	if (activeRuns.length > 0) {
-		const targetRun = activeRuns[activeRuns.length - 1]
+	const targetRun = activeRuns[activeRuns.length - 1] ?? null
+	const canQueueForUnconfirmedRun = ctx.optimisticUserMessage !== null && ctx.isGenerating
+	if (targetRun || canQueueForUnconfirmedRun) {
 		// gate: if the run's agent has steering disabled, fall through to
 		// starting a new run (concurrent runs) instead of attempting to steer.
 		// the backend exposes config as a free-form dict; the structured
 		// shape is documented in api/schemas/agent_config.py (regenerate
 		// types after the schema is migrated to AgentConfig).
-		const targetAgent = agents.get(targetRun.agentId)
-		const features = (
-			targetAgent?.config as { features?: { steering?: { enabled?: boolean } } } | undefined
-		)?.features
-		const steeringEnabled = features?.steering?.enabled !== false
+		const steeringAgentId = targetRun?.agentId || selectedAgent.id
+		const steeringEnabled = steeringAgentId ? steeringEnabledForAgent(steeringAgentId) : true
 		if (!steeringEnabled) {
 			// fall through - skip the steering branch
 		} else {
 			ctx.lastRunInput = displayText
 			ctx.inputValue = ''
+			if (ctx.optimisticUserMessage) {
+				ctx.stageQueuedSteeringMessage({
+					id: createLocalSteeringMessageId(),
+					runId: targetRun?.runId ?? '',
+					content: [],
+					text: displayText,
+					attachments: modifiers?.attachments ?? [],
+					createdAt: new SvelteDate(),
+					message: null,
+					deliveryState: 'sending',
+					input: cloneRunInput(runInput),
+				})
+				return
+			}
+			if (!targetRun) return
 			try {
-				const queued = await steerRun(targetRun.runId, runInput, ctx.currentLeafId)
+				const queued = await steerRun(
+					targetRun.runId,
+					runInput,
+					resolveSteeringParentId(ctx)
+				)
 				if (queued.state === 'queued') {
 					ctx.stageQueuedSteeringMessage({
 						id: queued.messageId,

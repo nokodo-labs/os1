@@ -80,6 +80,12 @@ export interface OptimisticUserMessage {
 	timestamp: Date
 }
 
+export interface PendingRunInput {
+	text?: string | null
+	attachment_ids?: string[]
+	attachment_actions?: Record<string, 'reveal' | 'reference'> | null
+}
+
 export type SteeringState = 'queued' | 'injected' | 'dropped'
 
 export interface QueuedSteeringMessage {
@@ -90,6 +96,8 @@ export interface QueuedSteeringMessage {
 	attachments: PendingAttachment[]
 	createdAt: Date
 	message: ApiMessage | null
+	deliveryState?: 'sending' | 'queued'
+	input?: PendingRunInput
 }
 
 /** allowed tool_choice values that can be forced by the user */
@@ -156,6 +164,7 @@ export interface ChatContext {
 	runAbortController: AbortController | null
 	stageQueuedSteeringMessage(message: QueuedSteeringMessage): void
 	removeQueuedSteeringMessage(messageId: string): void
+	flushPendingSteeringMessages(runId: string | null, parentId: string): Promise<void>
 	injectQueuedSteeringMessage(
 		messageId: string,
 		message?: ApiMessage,

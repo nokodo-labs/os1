@@ -55,6 +55,8 @@ export function processDelta(
 			if (msg.type === 'user' && steeringState === 'dropped') return 'continue'
 			if (msg.type === 'user') {
 				ctx.optimisticUserMessage = null
+				const runId = getMessageSteeringRunId(msg)
+				void ctx.flushPendingSteeringMessages(runId, msg.id)
 			}
 			ctx.messageTree.set(msg.id, msg)
 			ctx.streamingLeafId = msg.id

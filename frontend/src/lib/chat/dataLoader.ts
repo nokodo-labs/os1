@@ -5,6 +5,8 @@
 import { api } from '$lib/api/client'
 import type { components } from '$lib/api/types'
 import { chat as chatStore, type Thread } from '$lib/stores/chat.svelte'
+import { resolveResourceAccessLevels } from '$lib/stores/resourceAccess.svelte'
+import { session } from '$lib/stores/session.svelte'
 import { parseToolCalls, parseToolEvent, parseToolResult } from '$lib/tools'
 import { tick } from 'svelte'
 import { getMessageCreatedAt, type ApiMessage } from './helpers'
@@ -13,6 +15,13 @@ import type { ChatContext } from './types'
 
 type ApiEvent = components['schemas']['Event']
 const INITIAL_MESSAGE_LIMIT = 120
+
+export class ThreadNotFoundError extends Error {
+	constructor(threadId: string) {
+		super(`thread not found: ${threadId}`)
+		this.name = 'ThreadNotFoundError'
+	}
+}
 
 function mergeMessages(...groups: ApiMessage[][]): ApiMessage[] {
 	const byId = new Map<string, ApiMessage>()
@@ -223,11 +232,16 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 		// message.* event arriving during the fetch will invalidate this
 		// (potentially partial) result via setMessages's race guard.
 		const fetchStartedAt = Date.now()
-		const { data, error: threadError } = await api.GET('/v1/threads/{thread_id}', {
+		const {
+			data,
+			error: threadError,
+			response: threadResponse,
+		} = await api.GET('/v1/threads/{thread_id}', {
 			params: { path: { thread_id: threadId } },
 		})
 		if (!isCurrent()) return false
 		if (threadError) {
+			if (threadResponse?.status === 404) throw new ThreadNotFoundError(threadId)
 			console.error('failed to load thread', threadError)
 			ctx.thread = null
 			chatStore.activeThread = null
@@ -244,7 +258,7 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 			ctx.messageTree.clear()
 			ctx.currentLeafId = null
 			ctx.rebuildRunBlocks()
-			return true
+			throw new ThreadNotFoundError(threadId)
 		}
 		threadData = data
 
@@ -379,8 +393,8 @@ type AccessLevel = components['schemas']['AccessLevel']
  * returns the level string, or null if the request fails.
  */
 export async function fetchThreadAccessLevel(threadId: string): Promise<AccessLevel | null> {
-	const { data } = await api.GET('/v1/threads/{thread_id}/access-level', {
-		params: { path: { thread_id: threadId } },
-	})
-	return data ?? null
+	const userId = session.currentUserId
+	if (!userId) return null
+	const results = await resolveResourceAccessLevels('thread', threadId, [userId])
+	return results.find((result) => result.user_id === userId)?.level ?? null
 }

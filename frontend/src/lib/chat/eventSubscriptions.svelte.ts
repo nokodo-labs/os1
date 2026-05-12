@@ -112,11 +112,15 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 					return
 				}
 				if (newMsg.type === 'user' && steeringState === 'dropped') return
-				if (ownEvent) return
+				if (ownEvent && newMsg.type !== 'user') return
 				// defense-in-depth: if this is a user message that matches the
 				// optimistic message, clear it to prevent double rendering
 				if (newMsg.type === 'user' && ctx.optimisticUserMessage) {
 					ctx.optimisticUserMessage = null
+				}
+				if (newMsg.type === 'user') {
+					const runId = getMessageSteeringRunId(newMsg)
+					void ctx.flushPendingSteeringMessages(runId, newMsg.id)
 				}
 				ctx.messageTree.set(newMsg.id, newMsg)
 				seedMessageCitations(newMsg)

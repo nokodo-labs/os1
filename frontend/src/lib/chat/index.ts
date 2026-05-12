@@ -68,6 +68,7 @@ export {
 	loadOlderMessages,
 	loadTree,
 	syncCacheAfterRun,
+	ThreadNotFoundError,
 } from './dataLoader'
 
 // user actions
