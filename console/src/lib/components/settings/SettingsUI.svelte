@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { BackgroundType } from '$lib/api'
+	import SettingsPublicBadge from '$lib/components/settings/SettingsPublicBadge.svelte'
 	import {
 		Card,
 		CardContent,
@@ -62,7 +63,10 @@
 	</CardHeader>
 	<CardContent class="space-y-5">
 		<div class="space-y-2">
-			<Label for="default_theme">default theme</Label>
+			<div class="flex items-center gap-2">
+				<Label for="default_theme">default theme</Label>
+				<SettingsPublicBadge />
+			</div>
 			<p class="text-xs text-zinc-500">
 				color scheme applied to the frontend app by default.
 			</p>
@@ -83,7 +87,10 @@
 
 		<div class="flex items-center justify-between">
 			<div class="space-y-0.5">
-				<Label for="sidebar_collapsed">sidebar collapsed</Label>
+				<div class="flex items-center gap-2">
+					<Label for="sidebar_collapsed">sidebar collapsed</Label>
+					<SettingsPublicBadge />
+				</div>
 				<p class="text-xs text-zinc-500">collapse sidebar by default.</p>
 			</div>
 			<Switch
@@ -94,7 +101,10 @@
 		</div>
 
 		<div class="space-y-2">
-			<Label for="default_background">default background</Label>
+			<div class="flex items-center gap-2">
+				<Label for="default_background">default background</Label>
+				<SettingsPublicBadge />
+			</div>
 			<p class="text-xs text-zinc-500">
 				animated background shown in the main app interface.
 			</p>
@@ -116,7 +126,10 @@
 		</div>
 
 		<div class="space-y-2">
-			<Label for="auth_pages_background">auth pages background</Label>
+			<div class="flex items-center gap-2">
+				<Label for="auth_pages_background">auth pages background</Label>
+				<SettingsPublicBadge />
+			</div>
 			<p class="text-xs text-zinc-500">
 				animated background shown on login and signup pages.
 			</p>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SettingsPublicBadge from '$lib/components/settings/SettingsPublicBadge.svelte'
 	import {
 		Card,
 		CardContent,
@@ -36,7 +37,10 @@
 	</CardHeader>
 	<CardContent class="space-y-5">
 		<div class="space-y-2">
-			<Label for="media_base_url">base URL</Label>
+			<div class="flex items-center gap-2">
+				<Label for="media_base_url">base URL</Label>
+				<SettingsPublicBadge />
+			</div>
 			<p class="text-xs text-zinc-500">
 				fallback base URL for all media assets not explicitly overridden below.
 			</p>
@@ -49,7 +53,10 @@
 		</div>
 		<div class="grid gap-4 md:grid-cols-2">
 			<div class="space-y-2">
-				<Label for="media_favicon_url">favicon URL</Label>
+				<div class="flex items-center gap-2">
+					<Label for="media_favicon_url">favicon URL</Label>
+					<SettingsPublicBadge />
+				</div>
 				<p class="text-xs text-zinc-500">
 					overrides the branding favicon for frontend pages.
 				</p>
@@ -61,7 +68,10 @@
 				/>
 			</div>
 			<div class="space-y-2">
-				<Label for="media_apple_touch_icon_url">Apple touch icon URL</Label>
+				<div class="flex items-center gap-2">
+					<Label for="media_apple_touch_icon_url">Apple touch icon URL</Label>
+					<SettingsPublicBadge />
+				</div>
 				<p class="text-xs text-zinc-500">
 					icon used when adding the app to an iOS home screen.
 				</p>
@@ -73,7 +83,10 @@
 				/>
 			</div>
 			<div class="space-y-2">
-				<Label for="media_sidebar_logo_url">sidebar logo URL</Label>
+				<div class="flex items-center gap-2">
+					<Label for="media_sidebar_logo_url">sidebar logo URL</Label>
+					<SettingsPublicBadge />
+				</div>
 				<p class="text-xs text-zinc-500">logo shown in the frontend sidebar.</p>
 				<Input
 					id="media_sidebar_logo_url"
@@ -83,7 +96,10 @@
 				/>
 			</div>
 			<div class="space-y-2">
-				<Label for="media_splash_logo_url">splash logo URL</Label>
+				<div class="flex items-center gap-2">
+					<Label for="media_splash_logo_url">splash logo URL</Label>
+					<SettingsPublicBadge />
+				</div>
 				<p class="text-xs text-zinc-500">logo shown on the splash/loading screen.</p>
 				<Input
 					id="media_splash_logo_url"

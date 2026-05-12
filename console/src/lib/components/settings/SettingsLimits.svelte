@@ -14,6 +14,7 @@
 		maxMessagesPerThread?: string
 		maxFileSizeMb?: string
 		rateLimitRequestsPerMinute?: string
+		accessibleUsersTtlSeconds?: string
 	}
 
 	let {
@@ -21,6 +22,7 @@
 		maxMessagesPerThread = $bindable(''),
 		maxFileSizeMb = $bindable(''),
 		rateLimitRequestsPerMinute = $bindable(''),
+		accessibleUsersTtlSeconds = $bindable(''),
 	}: Props = $props()
 </script>
 
@@ -66,6 +68,18 @@
 				id="rate_limit"
 				type="number"
 				bind:value={rateLimitRequestsPerMinute}
+				class="rounded-xl"
+			/>
+		</div>
+		<div class="space-y-2">
+			<Label for="accessible_users_ttl">share recipient cache TTL (seconds)</Label>
+			<p class="text-xs text-zinc-500">
+				redis TTL for cached recipient lists used by realtime sharing events.
+			</p>
+			<Input
+				id="accessible_users_ttl"
+				type="number"
+				bind:value={accessibleUsersTtlSeconds}
 				class="rounded-xl"
 			/>
 		</div>

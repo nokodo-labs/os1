@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Schemas } from '$lib/api'
+	import SettingsPublicBadge from '$lib/components/settings/SettingsPublicBadge.svelte'
 
 	type Agent = Schemas['Agent']
 	type Model = Schemas['Model']
@@ -175,7 +176,10 @@
 		<div class="space-y-2">
 			<div class="flex items-center justify-between gap-2">
 				<div>
-					<Label for="default_agents">default agents</Label>
+					<div class="flex items-center gap-2">
+						<Label for="default_agents">default agents</Label>
+						<SettingsPublicBadge />
+					</div>
 					<p class="text-xs text-zinc-500">
 						tried in order; first available agent is used.
 					</p>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api, unwrap, type BackgroundType, type Schemas } from '$lib/api'
+	import { asNumberOrNull, asNumberOrUndefined } from '$lib/utils/settingsNumbers'
 
 	type Agent = Schemas['Agent']
 	type DefaultPermissionsSettings = Schemas['DefaultPermissionsSettings']
@@ -19,6 +20,7 @@
 	type IntegrationsSettingsPatch = NonNullable<SettingsPatch['integrations']>
 	type SearxngSettingsPatch = NonNullable<IntegrationsSettingsPatch['searxng']>
 	type PerplexitySettingsPatch = NonNullable<IntegrationsSettingsPatch['perplexity']>
+	type CacheSettingsPatch = NonNullable<SettingsPatch['cache']>
 	type CodeInterpreterSettingsPatch = NonNullable<SettingsPatch['code_interpreter']>
 	type E2bSettingsPatch = NonNullable<CodeInterpreterSettingsPatch['e2b']>
 	type AssetsSettingsPatch = NonNullable<SettingsPatch['assets']>
@@ -57,7 +59,7 @@
 	import { Button } from '$lib/components/ui/button'
 	import {
 		Brain,
-		Code2,
+		CodeXml,
 		Database,
 		Gauge,
 		Globe,
@@ -191,7 +193,7 @@
 			label: 'code interpreter',
 			keywords:
 				'sandbox engine code execution enabled e2b api key template pre-installed packages python numpy pandas matplotlib timeout',
-			icon: Code2,
+			icon: CodeXml,
 			color: 'text-sky-400',
 			activeBg: 'bg-sky-500/10',
 		},
@@ -359,6 +361,7 @@
 	let limitsMaxMessagesPerThread = $state<string>('')
 	let limitsMaxFileSizeMb = $state<string>('')
 	let limitsRateLimitRequestsPerMinute = $state<string>('')
+	let cacheAccessibleUsersTtlSeconds = $state<string>('')
 
 	let securityAccessTokenExpireMinutes = $state<string>('')
 	let securityRefreshTokenExpireDays = $state<string>('')
@@ -465,6 +468,11 @@
 	let codeInterpreterTimeout = $state<string>('')
 
 	// task scheduling
+	let taskiqQueueName = $state('')
+	let taskiqResultTtlSeconds = $state<string>('')
+	let taskiqMaxConnections = $state<string>('')
+	let taskiqAutoWorkersMax = $state<string>('')
+	let taskiqSchedulePrefix = $state('')
 	let taskMaintenanceBackfillEnabled = $state(false)
 	let taskMaintenanceBackfillCron = $state('')
 	let taskMaintenanceBackfillBatchSize = $state<string>('')
@@ -543,6 +551,7 @@
 		limitsMaxMessagesPerThread: '',
 		limitsMaxFileSizeMb: '',
 		limitsRateLimitRequestsPerMinute: '',
+		cacheAccessibleUsersTtlSeconds: '',
 		securityAccessTokenExpireMinutes: '',
 		securityRefreshTokenExpireDays: '',
 		securityAuthCookieSecure: false,
@@ -631,6 +640,11 @@
 		codeInterpreterE2bTemplate: '',
 		codeInterpreterE2bAvailablePackages: '',
 		codeInterpreterTimeout: '',
+		taskiqQueueName: '',
+		taskiqResultTtlSeconds: '',
+		taskiqMaxConnections: '',
+		taskiqAutoWorkersMax: '',
+		taskiqSchedulePrefix: '',
 		taskMaintenanceBackfillEnabled: false,
 		taskMaintenanceBackfillCron: '',
 		taskMaintenanceBackfillBatchSize: '',
@@ -705,6 +719,7 @@
 			limitsMaxMessagesPerThread !== original.limitsMaxMessagesPerThread ||
 			limitsMaxFileSizeMb !== original.limitsMaxFileSizeMb ||
 			limitsRateLimitRequestsPerMinute !== original.limitsRateLimitRequestsPerMinute ||
+			cacheAccessibleUsersTtlSeconds !== original.cacheAccessibleUsersTtlSeconds ||
 			securityAccessTokenExpireMinutes !== original.securityAccessTokenExpireMinutes ||
 			securityRefreshTokenExpireDays !== original.securityRefreshTokenExpireDays ||
 			securityAuthCookieSecure !== original.securityAuthCookieSecure ||
@@ -1025,6 +1040,12 @@
 		codeInterpreterTimeout = toStringOrEmpty(ci?.timeout)
 
 		const taskSettings = r.data.tasks
+		const taskiq = taskSettings?.taskiq
+		taskiqQueueName = taskiq?.queue_name ?? ''
+		taskiqResultTtlSeconds = toStringOrEmpty(taskiq?.result_ttl_seconds)
+		taskiqMaxConnections = toStringOrEmpty(taskiq?.max_connections)
+		taskiqAutoWorkersMax = toStringOrEmpty(taskiq?.auto_workers_max)
+		taskiqSchedulePrefix = taskiq?.schedule_prefix ?? ''
 		const maintenanceBackfill = taskSettings?.maintenance_backfill
 		taskMaintenanceBackfillEnabled = maintenanceBackfill?.enabled ?? false
 		taskMaintenanceBackfillCron = maintenanceBackfill?.cron ?? ''
@@ -1041,6 +1062,9 @@
 		limitsMaxMessagesPerThread = toStringOrEmpty(limits?.max_messages_per_thread)
 		limitsMaxFileSizeMb = toStringOrEmpty(limits?.max_file_size_mb)
 		limitsRateLimitRequestsPerMinute = toStringOrEmpty(limits?.rate_limit_requests_per_minute)
+
+		const cache = r.data.cache
+		cacheAccessibleUsersTtlSeconds = toStringOrEmpty(cache?.accessible_users_ttl_seconds)
 
 		const security = r.data.security
 		securityAccessTokenExpireMinutes = toStringOrEmpty(security?.access_token_expire_minutes)
@@ -1192,6 +1216,7 @@
 			limitsMaxMessagesPerThread,
 			limitsMaxFileSizeMb,
 			limitsRateLimitRequestsPerMinute,
+			cacheAccessibleUsersTtlSeconds,
 			securityAccessTokenExpireMinutes,
 			securityRefreshTokenExpireDays,
 			securityAuthCookieSecure,
@@ -1286,6 +1311,11 @@
 			codeInterpreterE2bTemplate,
 			codeInterpreterE2bAvailablePackages,
 			codeInterpreterTimeout,
+			taskiqQueueName,
+			taskiqResultTtlSeconds,
+			taskiqMaxConnections,
+			taskiqAutoWorkersMax,
+			taskiqSchedulePrefix,
 			taskMaintenanceBackfillEnabled,
 			taskMaintenanceBackfillCron,
 			taskMaintenanceBackfillBatchSize,
@@ -1408,6 +1438,7 @@
 		limitsMaxMessagesPerThread = original.limitsMaxMessagesPerThread
 		limitsMaxFileSizeMb = original.limitsMaxFileSizeMb
 		limitsRateLimitRequestsPerMinute = original.limitsRateLimitRequestsPerMinute
+		cacheAccessibleUsersTtlSeconds = original.cacheAccessibleUsersTtlSeconds
 		securityAccessTokenExpireMinutes = original.securityAccessTokenExpireMinutes
 		securityRefreshTokenExpireDays = original.securityRefreshTokenExpireDays
 		securityAuthCookieSecure = original.securityAuthCookieSecure
@@ -1494,6 +1525,11 @@
 		codeInterpreterE2bTemplate = original.codeInterpreterE2bTemplate
 		codeInterpreterE2bAvailablePackages = original.codeInterpreterE2bAvailablePackages
 		codeInterpreterTimeout = original.codeInterpreterTimeout
+		taskiqQueueName = original.taskiqQueueName
+		taskiqResultTtlSeconds = original.taskiqResultTtlSeconds
+		taskiqMaxConnections = original.taskiqMaxConnections
+		taskiqAutoWorkersMax = original.taskiqAutoWorkersMax
+		taskiqSchedulePrefix = original.taskiqSchedulePrefix
 		taskMaintenanceBackfillEnabled = original.taskMaintenanceBackfillEnabled
 		taskMaintenanceBackfillCron = original.taskMaintenanceBackfillCron
 		taskMaintenanceBackfillBatchSize = original.taskMaintenanceBackfillBatchSize
@@ -1503,20 +1539,6 @@
 		defaultPermissions = normalizeDefaultPermissions(original.defaultPermissions)
 		saveError = null
 		saveSuccess = null
-	}
-
-	function asNumberOrNull(s: string): number | null {
-		const trimmed = s.trim()
-		if (!trimmed) return null
-		const n = Number(trimmed)
-		return Number.isFinite(n) ? n : null
-	}
-
-	function asNumberOrUndefined(s: string): number | undefined {
-		const trimmed = s.trim()
-		if (!trimmed) return undefined
-		const n = Number(trimmed)
-		return Number.isFinite(n) ? n : undefined
 	}
 
 	function buildDefaultPermissionsPatch(): DefaultPermissionsSettingsPatch {
@@ -1879,6 +1901,14 @@
 				data.limits.rate_limit_requests_per_minute = asNumberOrUndefined(
 					limitsRateLimitRequestsPerMinute
 				)
+		}
+
+		if (cacheAccessibleUsersTtlSeconds !== original.cacheAccessibleUsersTtlSeconds) {
+			const cachePatch: CacheSettingsPatch = {}
+			cachePatch.accessible_users_ttl_seconds = asNumberOrUndefined(
+				cacheAccessibleUsersTtlSeconds
+			)
+			data.cache = cachePatch
 		}
 
 		if (
@@ -2892,6 +2922,9 @@
 										bind:rateLimitRequestsPerMinute={
 											limitsRateLimitRequestsPerMinute
 										}
+										bind:accessibleUsersTtlSeconds={
+											cacheAccessibleUsersTtlSeconds
+										}
 									/>
 								</section>
 							{:else if activeSection === 'section-soft-delete'}
@@ -2964,6 +2997,11 @@
 							{:else if activeSection === 'section-tasks'}
 								<section>
 									<SettingsTasks
+										{taskiqQueueName}
+										{taskiqResultTtlSeconds}
+										{taskiqMaxConnections}
+										{taskiqAutoWorkersMax}
+										{taskiqSchedulePrefix}
 										bind:backfillEnabled={taskMaintenanceBackfillEnabled}
 										bind:backfillCron={taskMaintenanceBackfillCron}
 										bind:backfillBatchSize={taskMaintenanceBackfillBatchSize}

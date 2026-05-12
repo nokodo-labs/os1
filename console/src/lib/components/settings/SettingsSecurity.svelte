@@ -1,5 +1,6 @@
 <script lang="ts">
 	import RolePicker from '$lib/components/RolePicker.svelte'
+	import SettingsPublicBadge from '$lib/components/settings/SettingsPublicBadge.svelte'
 	import {
 		Card,
 		CardContent,
@@ -212,7 +213,10 @@
 
 		<div class="flex items-center justify-between">
 			<div class="space-y-0.5">
-				<Label for="allow_signups">allow new user signups</Label>
+				<div class="flex items-center gap-2">
+					<Label for="allow_signups">allow new user signups</Label>
+					<SettingsPublicBadge />
+				</div>
 				<p class="text-xs text-zinc-500">
 					when off, admins or users with users:manage only.
 				</p>
@@ -325,7 +329,10 @@
 
 				<div class="mt-4 flex items-center justify-between">
 					<div class="space-y-0.5">
-						<Label for="oidc_only">oidc only</Label>
+						<div class="flex items-center gap-2">
+							<Label for="oidc_only">oidc only</Label>
+							<SettingsPublicBadge />
+						</div>
 						<p class="text-xs text-zinc-500">
 							disable password login. requires oidc to be enabled &amp; configured.
 						</p>
