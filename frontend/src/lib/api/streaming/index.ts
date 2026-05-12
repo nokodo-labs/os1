@@ -31,3 +31,4 @@ export {
 	type StreamMessage,
 } from './eventStream.svelte'
 export { searchStream, type SearchResult, type SearchStreamOptions } from './searchStream'
+export { streamTask, type TaskStreamDelta } from './taskStream'

@@ -21,13 +21,18 @@ export class BackendUnreachableError extends Error {
 }
 
 let refreshInFlight: Promise<string | null> | null = null
+let authGeneration = 0
+let logoutInProgress = false
 
 export async function refreshAccessToken(): Promise<string | null> {
+	if (logoutInProgress) return null
 	if (refreshInFlight) return refreshInFlight
 
+	const generation = authGeneration
 	refreshInFlight = (async () => {
 		try {
 			const { data, response } = await rawApi.POST('/v1/auth/refresh', {})
+			if (logoutInProgress || generation !== authGeneration) return null
 			if (!response || !response.ok || !data?.access_token) {
 				clearAccessToken()
 				return null
@@ -183,5 +188,12 @@ export async function getAuthHeaders(): Promise<HeadersInit> {
 }
 
 export async function logout(): Promise<void> {
-	await rawApi.POST('/v1/auth/logout', {}).catch(() => {})
+	logoutInProgress = true
+	authGeneration += 1
+	try {
+		await rawApi.POST('/v1/auth/logout', {}).catch(() => {})
+	} finally {
+		clearAccessToken()
+		logoutInProgress = false
+	}
 }

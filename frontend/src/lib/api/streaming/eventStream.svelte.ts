@@ -15,7 +15,6 @@
  * Native Svelte 5 rune-based state (no svelte/store).
  */
 
-import { SvelteSet } from 'svelte/reactivity'
 import { getApiBaseUrl } from '../client'
 import { getSessionId } from '../sessionId'
 
@@ -54,6 +53,23 @@ export interface StreamEvent extends StreamMessage {
 
 type EventHandler = (message: StreamMessage) => void
 type StatusChangeHandler = (newStatus: ConnectionStatus, previousStatus: ConnectionStatus) => void
+type PrefixEventHandler = { prefixes: readonly string[]; handler: EventHandler }
+type TypeEventHandlers = { type: string; handlers: EventHandler[] }
+
+function addUnique<T>(items: T[], item: T): void {
+	if (!items.includes(item)) items.push(item)
+}
+
+function removeItem<T>(items: T[], item: T): void {
+	const index = items.indexOf(item)
+	if (index !== -1) items.splice(index, 1)
+}
+
+function uniqueStrings(values: readonly string[]): string[] {
+	const unique: string[] = []
+	for (const value of values) addUnique(unique, value)
+	return unique
+}
 
 /** how often to send a heartbeat ping (ms) */
 // 4s keeps the connection alive under aggressive NAT/proxy idle timeouts (e.g. Docker virtual switch on Windows ~5s)
@@ -74,8 +90,10 @@ export class EventStreamClient {
 	private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null
 	private pingIntervalId: ReturnType<typeof setInterval> | null = null
 	private pongTimeoutId: ReturnType<typeof setTimeout> | null = null
-	private handlers = new SvelteSet<EventHandler>()
-	private statusHandlers = new SvelteSet<StatusChangeHandler>()
+	private handlers: EventHandler[] = []
+	private typeHandlers: TypeEventHandlers[] = []
+	private prefixHandlers: PrefixEventHandler[] = []
+	private statusHandlers: StatusChangeHandler[] = []
 	private intentionalDisconnect = false
 	private awaitingPong = false
 	private connecting = false
@@ -86,7 +104,6 @@ export class EventStreamClient {
 
 	readonly state = $state({
 		status: 'disconnected' as ConnectionStatus,
-		lastEvent: null as StreamMessage | null,
 		/** WS session_id assigned by the server on stream.connected */
 		sessionId: null as string | null,
 	})
@@ -127,14 +144,40 @@ export class EventStreamClient {
 	}
 
 	subscribe(handler: EventHandler): () => void {
-		this.handlers.add(handler)
-		return () => this.handlers.delete(handler)
+		addUnique(this.handlers, handler)
+		return () => removeItem(this.handlers, handler)
+	}
+
+	subscribeTypes(types: readonly string[], handler: EventHandler): () => void {
+		const uniqueTypes = uniqueStrings(types)
+		for (const type of uniqueTypes) {
+			let entry = this.typeHandlers.find((typeEntry) => typeEntry.type === type)
+			if (!entry) {
+				entry = { type, handlers: [] }
+				this.typeHandlers.push(entry)
+			}
+			addUnique(entry.handlers, handler)
+		}
+		return () => {
+			for (const type of uniqueTypes) {
+				const entry = this.typeHandlers.find((typeEntry) => typeEntry.type === type)
+				if (!entry) continue
+				removeItem(entry.handlers, handler)
+				if (entry.handlers.length === 0) removeItem(this.typeHandlers, entry)
+			}
+		}
+	}
+
+	subscribePrefixes(prefixes: readonly string[], handler: EventHandler): () => void {
+		const entry = { prefixes: uniqueStrings(prefixes), handler }
+		addUnique(this.prefixHandlers, entry)
+		return () => removeItem(this.prefixHandlers, entry)
 	}
 
 	/** subscribe to connection status changes (e.g. for cache invalidation). */
 	onStatusChange(handler: StatusChangeHandler): () => void {
-		this.statusHandlers.add(handler)
-		return () => this.statusHandlers.delete(handler)
+		addUnique(this.statusHandlers, handler)
+		return () => removeItem(this.statusHandlers, handler)
 	}
 
 	/** update status and notify status change handlers. */
@@ -142,7 +185,7 @@ export class EventStreamClient {
 		const previous = this.state.status
 		if (previous === status) return
 		this.state.status = status
-		this.statusHandlers.forEach((h) => h(status, previous))
+		for (const handler of [...this.statusHandlers]) handler(status, previous)
 	}
 
 	/** send a JSON message to the server (typing events, etc.) */
@@ -196,8 +239,14 @@ export class EventStreamClient {
 					this.state.sessionId = message.session_id
 				}
 
-				this.state.lastEvent = message
-				this.handlers.forEach((h) => h(message))
+				for (const handler of [...this.handlers]) handler(message)
+				const typeEntry = this.typeHandlers.find((entry) => entry.type === message.type)
+				if (typeEntry) {
+					for (const handler of [...typeEntry.handlers]) handler(message)
+				}
+				for (const { prefixes, handler } of [...this.prefixHandlers]) {
+					if (prefixes.some((prefix) => message.type.startsWith(prefix))) handler(message)
+				}
 			} catch {
 				// ignore malformed
 			}
