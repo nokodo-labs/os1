@@ -20,6 +20,7 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock('$lib/api/streaming', () => ({
 	eventStreamClient: {
 		subscribe: vi.fn(() => () => {}),
+		subscribeTypes: vi.fn(() => () => {}),
 	},
 }))
 
