@@ -2,11 +2,14 @@
 	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import { portal } from '$lib/actions/portal'
 	import CalendarEventModal from '$lib/components/calendar/CalendarEventModal.svelte'
+	import CalendarSidebar from '$lib/components/calendar/CalendarSidebar.svelte'
 	import CalendarIcon from '$lib/components/icons/Calendar.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
+	import Sidebar from '$lib/components/icons/Sidebar.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { useTheme } from '$lib/contexts/themeContext.svelte'
 	import {
@@ -19,6 +22,8 @@
 		type CalendarEventUpdate,
 		type ScheduledItem,
 	} from '$lib/stores/calendars.svelte'
+	import { device } from '$lib/stores/device.svelte'
+	import { canEditAccessLevel, resourceAccess } from '$lib/stores/resourceAccess.svelte'
 	import type { CalendarType, Event as DayflowEvent } from '@dayflow/core'
 	import {
 		ViewType,
@@ -52,6 +57,7 @@
 	const DAYFLOW_DEFAULT_CALENDAR_ID = 'personal'
 	const REMINDERS_CALENDAR_ID = '__reminders__'
 	const REMINDER_EVENT_PREFIX = 'reminder:'
+	const START_OF_WEEK = 0
 
 	let currentView = $state<ViewType>(ViewType.WEEK)
 	let currentDate: Date = new SvelteDate()
@@ -60,6 +66,7 @@
 	let selectedEvent = $state<CalendarEvent | null>(null)
 	let eventModalStart = $state<Date | null>(null)
 	let selectedCalendarFilter = $state<CalendarFilter>('all')
+	let mobileSidebarOpen = $state(false)
 	let syncingFromStore = false
 
 	const fallbackDayflowCalendars: CalendarType[] = [
@@ -117,9 +124,9 @@
 	const calendar = useCalendarApp({
 		views: [
 			createDayView(),
-			createWeekView(),
-			createMonthView({ showWeekNumbers: true }),
-			createYearView({ mode: 'fixed-week' }),
+			createWeekView({ startOfWeek: START_OF_WEEK }),
+			createMonthView({ showWeekNumbers: false, startOfWeek: START_OF_WEEK }),
+			createYearView({ mode: 'fixed-week', startOfWeek: START_OF_WEEK }),
 		],
 		plugins: [createEventsPlugin(), dragPlugin],
 		events: [],
@@ -181,6 +188,13 @@
 	const rangeTitle = $derived(formatRangeTitle(currentDate, currentView))
 	const scheduledWindow = $derived(getScheduledWindow(currentDate, currentView))
 	const defaultCalendarId = $derived(calendars.defaultCalendar?.id ?? null)
+	const editableCalendars = $derived(calendars.all.filter(canEditCalendar))
+	const editableDefaultCalendarId = $derived(
+		defaultCalendarId && canEditCalendarId(defaultCalendarId)
+			? defaultCalendarId
+			: (editableCalendars[0]?.id ?? null)
+	)
+	const canCreateEvent = $derived(editableDefaultCalendarId !== null)
 	const modalDefaultStart = $derived(eventModalStart ?? defaultEventStart())
 
 	$effect(() => {
@@ -196,6 +210,12 @@
 	})
 
 	$effect(() => {
+		for (const calendar of calendars.all) {
+			void resourceAccess.ensure('calendar', calendar.id, calendar.owner_id)
+		}
+	})
+
+	$effect(() => {
 		if (renderedCalendars.length === 0) return
 		void syncDayflowCalendars(renderedCalendars)
 	})
@@ -208,18 +228,21 @@
 		if (!browser) return
 
 		const handleAdd = () => {
+			mobileSidebarOpen = false
 			openCreateModal()
 		}
 		const handleFocus = (event: Event) => {
 			if (!(event instanceof CustomEvent)) return
 			const detail = event.detail
 			if (!isCalendarFocusDetail(detail)) return
+			mobileSidebarOpen = false
 			void focusCalendarEvent(detail.eventId, detail.startAt)
 		}
 		const handleFilter = (event: Event) => {
 			if (!(event instanceof CustomEvent)) return
 			const detail = event.detail
 			if (!isCalendarFilterDetail(detail)) return
+			mobileSidebarOpen = false
 			selectedCalendarFilter = detail.calendarId ?? 'all'
 			calendar.app.dismissUI()
 		}
@@ -276,6 +299,7 @@
 		return {
 			id: calendar.id,
 			name: calendar.name,
+			readOnly: !canEditCalendar(calendar),
 			colors: {
 				lineColor: calendar.color,
 				eventColor: colorMix(calendar.color, '#ffffff', 0.76),
@@ -371,6 +395,10 @@
 		if (isReminderDayflowEvent(event)) return
 		const calendarId = resolveCalendarId(event.calendarId)
 		if (!calendarId) return
+		if (!canEditCalendarId(calendarId)) {
+			void syncDayflowEvents(renderedEvents)
+			return
+		}
 		const created = await calendarEvents.create(calendarId, toCreatePayload(event), {
 			optimisticId: event.id,
 		})
@@ -382,11 +410,21 @@
 		if (isReminderDayflowEvent(event)) return
 		const scheduledItem = scheduledItems.find(event.id)
 		if (scheduledItem?.kind === 'event') {
+			const calendarId = scheduledItem.calendar_id ?? scheduledItem.container_id
+			if (!canEditCalendarId(calendarId)) {
+				void syncDayflowEvents(renderedEvents)
+				return
+			}
 			const updated = await scheduledItems.editEventOccurrence(
 				scheduledItem,
 				toOccurrenceUpdatePayload(event)
 			)
 			if (updated) await scheduledItems.refresh()
+			return
+		}
+		const calendarId = resolveCalendarId(event.calendarId)
+		if (calendarId && !canEditCalendarId(calendarId)) {
+			void syncDayflowEvents(renderedEvents)
 			return
 		}
 		const updated = await calendarEvents.update(event.id, toUpdatePayload(event))
@@ -398,8 +436,18 @@
 		if (isReminderEventId(eventId)) return
 		const scheduledItem = scheduledItems.find(eventId)
 		if (scheduledItem?.kind === 'event') {
+			const calendarId = scheduledItem.calendar_id ?? scheduledItem.container_id
+			if (!canEditCalendarId(calendarId)) {
+				void syncDayflowEvents(renderedEvents)
+				return
+			}
 			const deleted = await scheduledItems.cancelEventOccurrence(scheduledItem)
 			if (deleted) await scheduledItems.refresh()
+			return
+		}
+		const event = calendarEvents.all.find((item) => item.id === eventId)
+		if (event && !canEditCalendarId(event.calendar_id)) {
+			void syncDayflowEvents(renderedEvents)
 			return
 		}
 		const deleted = await calendarEvents.remove(eventId)
@@ -410,6 +458,16 @@
 		if (calendarId === REMINDERS_CALENDAR_ID) return null
 		if (calendarId && calendarId !== DAYFLOW_DEFAULT_CALENDAR_ID) return calendarId
 		return defaultCalendarId ?? calendars.defaultCalendar?.id ?? null
+	}
+
+	function canEditCalendar(calendar: Calendar): boolean {
+		return canEditAccessLevel(resourceAccess.level('calendar', calendar.id, calendar.owner_id))
+	}
+
+	function canEditCalendarId(calendarId: string | null | undefined): boolean {
+		if (!calendarId || calendarId === REMINDERS_CALENDAR_ID) return false
+		const source = calendars.all.find((calendar) => calendar.id === calendarId)
+		return source ? canEditCalendar(source) : false
 	}
 
 	function openEventFromDayflow(event: DayflowEvent): void {
@@ -490,7 +548,7 @@
 			start.setHours(0, 0, 0, 0)
 			end.setHours(23, 59, 59, 999)
 		} else if (view === ViewType.WEEK) {
-			start.setDate(start.getDate() - start.getDay())
+			start.setDate(start.getDate() - ((start.getDay() - START_OF_WEEK + 7) % 7))
 			start.setHours(0, 0, 0, 0)
 			end.setTime(start.getTime() + 7 * 24 * 60 * 60 * 1000 - 1)
 		} else if (view === ViewType.MONTH) {
@@ -568,6 +626,7 @@
 	}
 
 	function openCreateModal(start?: Date): void {
+		if (!canCreateEvent) return
 		eventModalEventId = null
 		selectedEvent = null
 		eventModalStart = start ?? defaultEventStart()
@@ -669,7 +728,7 @@
 		}
 
 		const start = new SvelteDate(date)
-		start.setDate(date.getDate() - date.getDay())
+		start.setDate(date.getDate() - ((date.getDay() - START_OF_WEEK + 7) % 7))
 		const end = new SvelteDate(start)
 		end.setDate(start.getDate() + 6)
 		const formatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' })
@@ -678,9 +737,19 @@
 </script>
 
 {#snippet calendarIslandActions()}
+	{#if device.isMobile}
+		<button
+			type="button"
+			class="flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+			aria-label="open calendar sidebar"
+			onclick={() => (mobileSidebarOpen = true)}
+		>
+			<Sidebar variant="solid" />
+		</button>
+	{/if}
 	<button
 		type="button"
-		class="rounded-pill flex h-8 w-8 cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+		class="flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
 		aria-label="previous date"
 		onclick={goToPrevious}
 	>
@@ -688,33 +757,49 @@
 	</button>
 	<button
 		type="button"
-		class="rounded-pill flex h-8 w-8 cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+		class="flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
 		aria-label="today"
 		onclick={goToToday}
 	>
-		<CalendarIcon class="h-4 w-4" />
+		<CalendarIcon />
 	</button>
 	<button
 		type="button"
-		class="rounded-pill flex h-8 w-8 cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+		class="flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
 		aria-label="next date"
 		onclick={goToNext}
 	>
 		<ChevronRight />
 	</button>
-	<button
-		type="button"
-		class="rounded-pill flex h-8 w-8 cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
-		aria-label="create event"
-		onclick={() => openCreateModal()}
-	>
-		<Plus class="h-4 w-4" />
-	</button>
+	{#if canCreateEvent}
+		<button
+			type="button"
+			class="flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+			aria-label="create event"
+			onclick={() => openCreateModal()}
+		>
+			<Plus />
+		</button>
+	{/if}
 {/snippet}
 
 <div
 	class="calendar-page flex h-full min-h-0 flex-1 flex-col gap-[clamp(10px,1.1vw,14px)] overflow-hidden"
 >
+	{#if device.isMobile}
+		<div use:portal>
+			<aside
+				class="border-foreground/14 bg-background/90 fixed inset-y-0 left-0 z-50 h-dvh w-full max-w-[min(100vw,28rem)] overflow-hidden border-r pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] backdrop-blur-[22px] transition-transform duration-300 ease-in-out {mobileSidebarOpen
+					? 'translate-x-0'
+					: 'pointer-events-none -translate-x-full'}"
+				inert={!mobileSidebarOpen}
+				aria-hidden={!mobileSidebarOpen}
+			>
+				<CalendarSidebar isMobile={true} onClose={() => (mobileSidebarOpen = false)} />
+			</aside>
+		</div>
+	{/if}
+
 	<header
 		class="liquid-glass liquid-glass--frosted border-foreground/14 flex min-h-17 shrink-0 items-center gap-4 rounded-[18px] border px-4 py-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.12)] max-[888px]:flex-col max-[888px]:items-stretch max-[888px]:gap-3 max-[888px]:p-3"
 	>
@@ -738,7 +823,7 @@
 						aria-selected={currentView === option.value}
 						class="rounded-pill flex min-h-8 cursor-pointer items-center border-none bg-transparent px-3 text-[0.78rem] font-semibold transition-all duration-150 active:scale-[0.97] {currentView ===
 						option.value
-							? 'bg-foreground/10 text-foreground'
+							? 'text-foreground bg-[color-mix(in_oklch,var(--accent-primary)_28%,transparent)] shadow-[inset_0_1px_0_rgb(255_255_255/0.16)]'
 							: 'text-foreground/75 hover:bg-foreground/6 hover:text-foreground'}"
 						onclick={() => changeView(option.value)}
 					>
@@ -758,7 +843,7 @@
 	<CalendarEventModal
 		open={eventModalOpen}
 		defaultStart={modalDefaultStart}
-		{defaultCalendarId}
+		defaultCalendarId={editableDefaultCalendarId}
 		event={selectedEvent}
 		onClose={closeEventModal}
 		onSaved={handleSavedEvent}
@@ -847,6 +932,28 @@
 	.nokodo-calendar :global(.df-month-segment-event) {
 		border-radius: 10px;
 		box-shadow: 0 8px 18px rgb(0 0 0 / 0.14);
+	}
+
+	.nokodo-calendar :global(.df-week-header-row .df-week-grid) {
+		padding-inline: 0;
+	}
+
+	.nokodo-calendar :global(.df-week-grid),
+	.nokodo-calendar :global(.df-month-week-grid),
+	.nokodo-calendar :global(.df-compact-header-dates),
+	.nokodo-calendar :global(.df-compact-header-labels) {
+		grid-template-columns: repeat(7, minmax(0, 1fr));
+	}
+
+	.nokodo-calendar :global(.df-week-header-row),
+	.nokodo-calendar :global(.df-month-week-grid-shell) {
+		box-sizing: border-box;
+	}
+
+	.nokodo-calendar :global(.df-month-day-cell),
+	.nokodo-calendar :global(.df-week-day-cell),
+	.nokodo-calendar :global(.df-month-day-cell-surface) {
+		min-width: 0;
 	}
 
 	.nokodo-calendar :global(.df-event-detail-panel),

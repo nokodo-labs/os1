@@ -29,7 +29,15 @@
 		const val = privacy?.[field]
 		if (val === 'everyone' || val === 'friends' || val === 'private') return val
 		// defaults
-		if (field === 'gender' || field === 'birth_date') return 'friends'
+		if (
+			field === 'online_status' ||
+			field === 'real_name' ||
+			field === 'gender' ||
+			field === 'birth_date' ||
+			field === 'allow_dms'
+		)
+			return 'friends'
+		if (field === 'email') return 'private'
 		return 'everyone'
 	}
 
@@ -40,6 +48,18 @@
 		const { data } = await api.PATCH('/v1/users/{user_id}', {
 			params: { path: { user_id: uid } },
 			body: { privacy: updated },
+		})
+		if (data) session.currentUser = { ...data }
+	}
+
+	const findByEmail = $derived(session.currentUser?.find_by_email ?? false)
+
+	async function setFindByEmail(enabled: boolean): Promise<void> {
+		const uid = session.currentUser?.id
+		if (!uid) return
+		const { data } = await api.PATCH('/v1/users/{user_id}', {
+			params: { path: { user_id: uid } },
+			body: { find_by_email: enabled },
 		})
 		if (data) session.currentUser = { ...data }
 	}
@@ -64,6 +84,11 @@
 			key: 'bio',
 			label: 'bio',
 			description: 'who can see your bio',
+		},
+		{
+			key: 'email',
+			label: 'email address',
+			description: 'who can see your email address',
 		},
 		{
 			key: 'gender',
@@ -123,6 +148,15 @@
 				choose who can see each part of your profile.
 			</div>
 			<div class="mt-4 space-y-4">
+				<div class="flex items-center justify-between gap-3">
+					<div class="min-w-0 flex-1">
+						<div class="text-foreground/70 text-sm">email search</div>
+						<div class="text-foreground/50 text-xs">
+							allow people to find you by your email address
+						</div>
+					</div>
+					<Switch size="sm" checked={findByEmail} onchange={setFindByEmail} />
+				</div>
 				{#each privacyFields as field (field.key)}
 					<div class="flex items-center justify-between gap-3">
 						<div class="min-w-0 flex-1">

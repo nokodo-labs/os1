@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import { SortIcon } from '$lib/components/icons'
 	import Plus from '$lib/components/icons/Plus.svelte'
-	import SortIcon from '$lib/components/icons/SortIcon.svelte'
 	import NotesSidebar from '$lib/components/notes/NotesSidebar.svelte'
 	import { MenuItem, PopupMenu } from '$lib/components/primitives'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
@@ -58,7 +58,7 @@
 		aria-haspopup="menu"
 		aria-expanded={isSortMenuOpen}
 	>
-		<SortIcon value={notes.sortMode} />
+		<SortIcon />
 	</button>
 	<PopupMenu
 		open={isSortMenuOpen}
@@ -69,7 +69,7 @@
 		<div
 			class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
 		>
-			<SortIcon value={notes.sortMode} class="h-3.5 w-3.5" />
+			<SortIcon class="h-3.5 w-3.5" />
 			sort notes
 		</div>
 		{#each sortOptions as option (option.value)}

@@ -11,7 +11,6 @@
 		createChatState,
 		extractFileParts,
 		extractMediaParts,
-		fetchThreadAccessLevel,
 		getBlockFirstAssistant,
 		getBlockResponseItems,
 		getMessageCreatedAt,
@@ -19,6 +18,7 @@
 		hasAttachmentParts,
 		pendingAttachmentsToFileParts,
 		pendingAttachmentsToMediaParts,
+		ThreadNotFoundError,
 		type ApiMessage,
 	} from '$lib/chat'
 	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
@@ -52,6 +52,7 @@
 	import { device } from '$lib/stores/device.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
+	import { canEditAccessLevel, resourceAccess } from '$lib/stores/resourceAccess.svelte'
 	import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { untrack } from 'svelte'
@@ -66,7 +67,9 @@
 	let didLoadAgents = $state(false)
 	let inputFocusToken = $state(0)
 	let lastInputFocusKey = $state<string | null>(null)
+	let lastChatRefreshVersion = 0
 	let isReadOnly = $state(false)
+	let threadNotFound = $state(false)
 
 	// citation sources modal state
 	type Citation = components['schemas']['Citation']
@@ -108,6 +111,10 @@
 	})
 
 	$effect(() => {
+		if (threadNotFound) {
+			pageTitleStore.pageTitle = 'page not found'
+			return
+		}
 		const t = chat.thread?.title
 		pageTitleStore.pageTitle = t && t.trim() ? t : 'untitled chat'
 	})
@@ -132,6 +139,7 @@
 	$effect(() => {
 		const threadId = page.params.id
 		return untrack(() => {
+			threadNotFound = false
 			if (!threadId) {
 				chat.clearThread()
 				return
@@ -170,6 +178,15 @@
 					const loaded = await chat.loadTree(threadId)
 					if (cancelled) return
 					chat.hasLoadedBranch = loaded
+				} catch (err) {
+					if (cancelled) return
+					if (err instanceof ThreadNotFoundError) {
+						threadNotFound = true
+						chat.hasLoadedBranch = false
+						return
+					}
+					console.error('failed to load thread', err)
+					chat.hasLoadedBranch = false
 				} finally {
 					if (!cancelled) chat.isThreadLoading = false
 				}
@@ -182,6 +199,36 @@
 		})
 	})
 
+	$effect(() => {
+		const version = chatStore.refreshVersion
+		const routeThreadId = page.params.id
+		if (version === 0 || version === lastChatRefreshVersion) return
+		if (!routeThreadId || !chat.hasLoadedBranch) return
+		lastChatRefreshVersion = version
+
+		let cancelled = false
+		untrack(() => {
+			void (async () => {
+				try {
+					const loaded = await chat.loadTree(routeThreadId)
+					if (!cancelled) chat.hasLoadedBranch = loaded
+				} catch (err) {
+					if (cancelled) return
+					if (err instanceof ThreadNotFoundError) {
+						threadNotFound = true
+						chat.hasLoadedBranch = false
+						return
+					}
+					console.error('failed to refresh thread', err)
+				}
+			})()
+		})
+
+		return () => {
+			cancelled = true
+		}
+	})
+
 	// effects: Island context actions for agent selector
 	$effect(() => {
 		chrome.setContextActions(islandContextActions)
@@ -191,21 +238,17 @@
 	// effects: resolve read-only access for non-owner threads
 	$effect(() => {
 		const thread = chat.thread
-		const userId = session.currentUser?.id
-		if (!thread || !userId) {
+		if (!thread) {
 			isReadOnly = false
 			return
 		}
-		if (thread.owner_id === userId) {
-			isReadOnly = false
-			return
-		}
-		// non-owner: fetch effective access level
+		isReadOnly = !canEditAccessLevel(resourceAccess.level('thread', thread.id, thread.owner_id))
 		let cancelled = false
-		void fetchThreadAccessLevel(thread.id)
+		void resourceAccess
+			.ensure('thread', thread.id, thread.owner_id)
 			.then((level) => {
 				if (cancelled) return
-				isReadOnly = !level || level === 'reader'
+				isReadOnly = !canEditAccessLevel(level)
 			})
 			.catch(() => {
 				if (!cancelled) isReadOnly = true
@@ -225,6 +268,7 @@
 	$effect(() => {
 		if (chat.thread) return
 		if (!page.params.id) return
+		if (threadNotFound) return
 		// thread was nulled while we're on a /c/[id] route - redirect home
 		if (chat.isThreadLoading) return
 		if (chat.hasLoadedBranch === false && !chatStore.pendingCreateAndRun) return
@@ -291,7 +335,7 @@
 	let isTyping = false
 	$effect(() => {
 		const tid = threadId
-		const typing = hasInput
+		const typing = hasInput && !isReadOnly
 		if (!tid) return
 
 		if (typing) {
@@ -439,7 +483,23 @@
 			class="mx-auto flex min-h-full w-full flex-col {device.isMobile ? '' : 'max-w-7xl'}"
 			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: var(--chrome-island-offset); padding-bottom: {chat.inputOverlayHeight}px;"
 		>
-			{#if chat.isTemporaryChat && chat.hasLoadedBranch && chat.messages.length === 0 && !chat.optimisticUserMessage && !chat.streamingAssistant}
+			{#if threadNotFound}
+				<div class="flex flex-1 items-center justify-center py-16">
+					<div class="max-w-md text-center">
+						<div
+							class="text-foreground/90 text-[4.75rem] leading-none font-semibold tracking-tight"
+						>
+							404
+						</div>
+						<h2 class="text-foreground/90 mt-3 text-2xl font-semibold">
+							chat not found
+						</h2>
+						<p class="text-foreground/60 mt-2 text-sm">
+							this chat doesn't exist or you don't have access to it.
+						</p>
+					</div>
+				</div>
+			{:else if chat.isTemporaryChat && chat.hasLoadedBranch && chat.messages.length === 0 && !chat.optimisticUserMessage && !chat.streamingAssistant}
 				<div class="flex flex-1 items-center justify-center py-16">
 					<div class="max-w-md text-center">
 						<div
@@ -560,6 +620,7 @@
 										timestamp={item.timestamp}
 										tailStyle={bubbleTailStyle}
 										{showTail}
+										sending
 									>
 										{#snippet actions()}
 											<CopyButton content={item.text} />
@@ -743,7 +804,7 @@
 												)
 											}}
 										/>
-										{#if !isStreamingBlock}
+										{#if !isStreamingBlock && !isReadOnly}
 											<RegenerateMenu
 												onRegenerate={(prompt) => {
 													const userMessageId =
@@ -754,7 +815,7 @@
 													)
 												}}
 											/>
-										{:else if chat.streamingAssistant?.isError}
+										{:else if chat.streamingAssistant?.isError && !isReadOnly}
 											<button
 												type="button"
 												class="border-destructive/30 text-destructive hover:bg-destructive/10 flex items-center gap-1.5 rounded-xl border bg-transparent px-3 py-1.5 text-sm font-medium transition-colors"
@@ -786,9 +847,11 @@
 					<TypingIndicator typingUserIds={chat.typingUsers} />
 					<FloatingButtons
 						{threadId}
-						onQuote={(content) => {
-							chat.inputValue = content
-						}}
+						onQuote={!isReadOnly
+							? (content) => {
+									chat.inputValue = content
+								}
+							: undefined}
 					/>
 				</div>
 			{:else}
@@ -808,37 +871,38 @@
 		{/if}
 	</div>
 
-	<div
-		class="absolute right-0 bottom-0 left-0 z-10 pt-4 {device.virtualKeyboardOpen &&
-		device.isMobile
-			? 'pb-2'
-			: 'pb-6'}"
-		bind:this={chat.inputOverlay}
-	>
+	{#if !threadNotFound && !isReadOnly}
 		<div
-			class="relative mx-auto w-full {device.isMobile ? '' : 'max-w-7xl'}"
-			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
+			class="absolute right-0 bottom-0 left-0 z-10 pt-4 {device.virtualKeyboardOpen &&
+			device.isMobile
+				? 'pb-2'
+				: 'pb-6'}"
+			bind:this={chat.inputOverlay}
 		>
-			<div class="transition-all duration-500 ease-in-out">
-				<SteeringQueue
-					messages={chat.queuedSteeringMessages}
-					onDrop={(runId, messageId) => chat.dropSteering(runId, messageId)}
-				/>
-				<ChatInput
-					bind:value={chat.inputValue}
-					onSubmit={chat.handleSendMessage}
-					onStop={chat.handleStopGeneration}
-					isGenerating={chat.isGenerating}
-					placeholder="send a message"
-					disabled={isReadOnly}
-					focusToken={inputFocusToken}
-					viewTransitionName="chat-input"
-					threadAttachments={chat.threadAttachments}
-					onToggleAttachmentStatus={chat.toggleAttachmentStatus}
-				/>
+			<div
+				class="relative mx-auto w-full {device.isMobile ? '' : 'max-w-7xl'}"
+				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
+			>
+				<div class="transition-all duration-500 ease-in-out">
+					<SteeringQueue
+						messages={chat.queuedSteeringMessages}
+						onDrop={(runId, messageId) => chat.dropSteering(runId, messageId)}
+					/>
+					<ChatInput
+						bind:value={chat.inputValue}
+						onSubmit={chat.handleSendMessage}
+						onStop={chat.handleStopGeneration}
+						isGenerating={chat.isGenerating}
+						placeholder="send a message"
+						focusToken={inputFocusToken}
+						viewTransitionName="chat-input"
+						threadAttachments={chat.threadAttachments}
+						onToggleAttachmentStatus={chat.toggleAttachmentStatus}
+					/>
+				</div>
 			</div>
 		</div>
-	</div>
+	{/if}
 </div>
 
 {#if chat.confirmDeleteMessage}

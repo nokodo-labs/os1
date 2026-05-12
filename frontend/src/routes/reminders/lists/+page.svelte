@@ -67,7 +67,7 @@
 		aria-haspopup="menu"
 		aria-expanded={isSortMenuOpen}
 	>
-		<SortIcon value={reminders.listsSortMode} />
+		<SortIcon />
 	</button>
 	<PopupMenu
 		open={isSortMenuOpen}
@@ -78,7 +78,7 @@
 		<div
 			class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
 		>
-			<SortIcon value={reminders.listsSortMode} class="h-3.5 w-3.5" />
+			<SortIcon class="h-3.5 w-3.5" />
 			sort lists
 		</div>
 		{#each sortOptions as option (option.value)}

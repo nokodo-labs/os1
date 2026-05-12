@@ -12,6 +12,7 @@
 	import { preferences } from '$lib/stores/preferences.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { debounce, getUserInitials } from '$lib/utils'
+	import { userDisplayName } from '$lib/utils/resourceAuthors'
 	import { onMount } from 'svelte'
 
 	const chrome = useSystemChrome()
@@ -32,7 +33,13 @@
 
 	// derived display values
 	const user = $derived(isOwnProfile ? session.currentUser : profileUser)
-	const displayName = $derived((user?.display_name as string) ?? '')
+	const displayName = $derived(
+		userDisplayName({
+			id: userId,
+			display_name: typeof user?.display_name === 'string' ? user.display_name : null,
+			username: typeof user?.username === 'string' ? user.username : null,
+		}) ?? userId
+	)
 	const displayUsername = $derived((user?.username as string) ?? '')
 	const displayAvatar = $derived(
 		isOwnProfile ? session.userDisplay?.avatar : ((user?.avatar_url as string) ?? null)

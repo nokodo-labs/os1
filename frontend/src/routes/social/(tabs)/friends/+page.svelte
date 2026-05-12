@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
+	import EmptyState from '$lib/components/EmptyState.svelte'
 	import UserPlus from '$lib/components/icons/UserPlusSolid.svelte'
 	import Users from '$lib/components/icons/Users.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
@@ -10,7 +11,13 @@
 	import { friends, type FriendResponse, type FriendshipDetail } from '$lib/stores/friends.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { getUserInitials } from '$lib/utils'
+	import { userDisplayName, userHandleOrId } from '$lib/utils/resourceAuthors'
 	import { onMount } from 'svelte'
+
+	type SocialUser = Pick<
+		FriendResponse,
+		'id' | 'username' | 'display_name' | 'email' | 'avatar_url'
+	>
 
 	let actionPending = $state<Set<string>>(new Set())
 
@@ -48,6 +55,14 @@
 			actionPending = new Set([...actionPending].filter((id) => id !== friend.id))
 		}
 	}
+
+	function userLabel(user: SocialUser): string {
+		return userDisplayName(user) ?? user.id
+	}
+
+	function userMeta(user: SocialUser): string {
+		return userHandleOrId(user) ?? user.id
+	}
 </script>
 
 <div class="flex flex-1 flex-col gap-6 py-4">
@@ -74,22 +89,16 @@
 			{/each}
 		</div>
 	{:else if !friends.hasContent}
-		<!-- empty state -->
 		<div
-			class="flex flex-1 flex-col items-center justify-center gap-5"
+			class="flex flex-1 flex-col items-center justify-center"
 			style="view-transition-name: social-empty-state;"
 		>
-			<div
-				class="flex h-20 w-20 items-center justify-center rounded-full bg-(--accent-primary)/10"
+			<EmptyState
+				label="no friends yet"
+				description="add friends to share notes, start conversations, and collaborate together"
 			>
-				<Users class="h-10 w-10 text-(--accent-primary)" />
-			</div>
-			<div class="flex flex-col items-center gap-2 text-center">
-				<p class="text-foreground/80 text-base font-medium">no friends yet</p>
-				<p class="text-foreground/50 max-w-xs text-sm">
-					add friends to share notes, start conversations, and collaborate together.
-				</p>
-			</div>
+				{#snippet icon()}<Users class="h-10 w-10" />{/snippet}
+			</EmptyState>
 		</div>
 	{:else}
 		<!-- incoming requests -->
@@ -102,6 +111,7 @@
 					{#each friends.incoming as request (request.id)}
 						{@const user = request.requester}
 						{#if user}
+							{@const label = userLabel(user)}
 							<div
 								class="bg-foreground/3 hover:bg-foreground/5 flex items-center gap-3 rounded-2xl p-3 transition-all"
 							>
@@ -109,14 +119,14 @@
 									{#if user.avatar_url}
 										<img
 											src={user.avatar_url}
-											alt={user.display_name ?? ''}
+											alt={label}
 											class="h-10 w-10 rounded-full object-cover"
 										/>
 									{:else}
 										<div
 											class="flex h-10 w-10 items-center justify-center rounded-full bg-(--accent-primary)/15 text-xs font-semibold text-(--accent-primary)"
 										>
-											{getUserInitials(user.display_name ?? user.email)}
+											{getUserInitials(label)}
 										</div>
 									{/if}
 								</button>
@@ -125,10 +135,10 @@
 									onclick={() => navigateToProfile(user.id)}
 								>
 									<span class="text-foreground truncate text-sm font-medium">
-										{user.display_name ?? user.email.split('@')[0]}
+										{label}
 									</span>
 									<span class="text-foreground/50 truncate text-xs">
-										{user.email}
+										{userMeta(user)}
 									</span>
 								</button>
 								{#if actionPending.has(request.id)}
@@ -166,6 +176,7 @@
 					{#each friends.outgoing as request (request.id)}
 						{@const user = request.addressee}
 						{#if user}
+							{@const label = userLabel(user)}
 							<div
 								class="bg-foreground/3 hover:bg-foreground/5 flex items-center gap-3 rounded-2xl p-3 transition-all"
 							>
@@ -173,14 +184,14 @@
 									{#if user.avatar_url}
 										<img
 											src={user.avatar_url}
-											alt={user.display_name ?? ''}
+											alt={label}
 											class="h-10 w-10 rounded-full object-cover"
 										/>
 									{:else}
 										<div
 											class="bg-foreground/10 text-foreground/50 flex h-10 w-10 items-center justify-center rounded-full text-xs font-semibold"
 										>
-											{getUserInitials(user.display_name ?? user.email)}
+											{getUserInitials(label)}
 										</div>
 									{/if}
 								</button>
@@ -189,10 +200,10 @@
 									onclick={() => navigateToProfile(user.id)}
 								>
 									<span class="text-foreground truncate text-sm font-medium">
-										{user.display_name ?? user.email.split('@')[0]}
+										{label}
 									</span>
 									<span class="text-foreground/50 truncate text-xs">
-										{user.email}
+										{userMeta(user)}
 									</span>
 								</button>
 								<span class="text-foreground/30 shrink-0 text-xs font-medium">
@@ -213,6 +224,7 @@
 				</h2>
 				<div class="flex flex-col gap-1">
 					{#each friends.list as friend (friend.id)}
+						{@const label = userLabel(friend)}
 						<div
 							class="group hover:bg-foreground/5 flex items-center gap-3 rounded-2xl p-3 transition-all"
 						>
@@ -220,14 +232,14 @@
 								{#if friend.avatar_url}
 									<img
 										src={friend.avatar_url}
-										alt={friend.display_name ?? ''}
+										alt={label}
 										class="h-10 w-10 rounded-full object-cover"
 									/>
 								{:else}
 									<div
 										class="flex h-10 w-10 items-center justify-center rounded-full bg-(--accent-primary)/15 text-xs font-semibold text-(--accent-primary)"
 									>
-										{getUserInitials(friend.display_name ?? friend.email)}
+										{getUserInitials(label)}
 									</div>
 								{/if}
 							</button>
@@ -236,10 +248,10 @@
 								onclick={() => navigateToProfile(friend.id)}
 							>
 								<span class="text-foreground truncate text-sm font-medium">
-									{friend.display_name ?? friend.email.split('@')[0]}
+									{label}
 								</span>
 								<span class="text-foreground/50 truncate text-xs">
-									{friend.email}
+									{userMeta(friend)}
 								</span>
 							</button>
 							{#if actionPending.has(friend.id)}

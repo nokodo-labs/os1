@@ -13,9 +13,10 @@
 	import CreateGroupModal from '$lib/components/modals/CreateGroupModal.svelte'
 	import FileDetailsModal from '$lib/components/modals/FileDetailsModal.svelte'
 	import MemoriesModal from '$lib/components/modals/MemoriesModal.svelte'
-	import ResourceAccessModal from '$lib/components/modals/ResourceAccessModal.svelte'
+	import NotePropertiesModal from '$lib/components/modals/NotePropertiesModal.svelte'
 	import ShareResourceModal from '$lib/components/modals/ShareResourceModal.svelte'
 	import NokodoBrandLogo from '$lib/components/NokodoBrandLogo.svelte'
+	import ResourceAccessModal from '$lib/components/resource-access/ResourceAccessModal.svelte'
 	import SplashController from '$lib/components/SplashController.svelte'
 	import BackendReconnect from '$lib/components/system/BackendReconnect.svelte'
 	import Dock from '$lib/components/system/Dock.svelte'
@@ -470,6 +471,11 @@
 				onClose={modals.close}
 			/>
 			<MemoriesModal open={modals.isOpen('memories')} onClose={modals.close} />
+			<NotePropertiesModal
+				open={modals.isOpen('note-properties')}
+				payload={modals.notePropertiesPayload}
+				onClose={modals.close}
+			/>
 			<ResourceAccessModal
 				open={modals.isOpen('resource-access')}
 				payload={modals.resourceAccessPayload}
