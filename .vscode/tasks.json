@@ -225,7 +225,8 @@
 			},
 			"group": "test",
 			"presentation": {
-				"reveal": "always",
+				"reveal": "never",
+				"focus": false,
 				"panel": "shared"
 			}
 		},
@@ -250,7 +251,8 @@
 			},
 			"group": "test",
 			"presentation": {
-				"reveal": "always",
+				"reveal": "never",
+				"focus": false,
 				"panel": "dedicated",
 				"showReuseMessage": false
 			}
@@ -264,7 +266,8 @@
 			},
 			"group": "test",
 			"presentation": {
-				"reveal": "always",
+				"reveal": "never",
+				"focus": false,
 				"panel": "dedicated",
 				"showReuseMessage": false
 			}
@@ -278,7 +281,8 @@
 			},
 			"group": "test",
 			"presentation": {
-				"reveal": "always",
+				"reveal": "never",
+				"focus": false,
 				"panel": "dedicated",
 				"showReuseMessage": false
 			}
@@ -361,6 +365,20 @@
 			}
 		},
 		{
+			"label": "console: lint",
+			"type": "shell",
+			"command": "pnpm run lint",
+			"options": {
+				"cwd": "${workspaceFolder}/console"
+			},
+			"group": "test",
+			"presentation": {
+				"reveal": "never",
+				"focus": false,
+				"panel": "shared"
+			}
+		},
+		{
 			"label": "console: check",
 			"type": "shell",
 			"command": "pnpm run check",
@@ -369,9 +387,37 @@
 			},
 			"group": "test",
 			"presentation": {
-				"reveal": "always",
-				"panel": "dedicated",
-				"showReuseMessage": false
+				"reveal": "never",
+				"focus": false,
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "console: test",
+			"type": "shell",
+			"command": "pnpm run test",
+			"options": {
+				"cwd": "${workspaceFolder}/console"
+			},
+			"group": "test",
+			"presentation": {
+				"reveal": "never",
+				"focus": false,
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "console: test coverage",
+			"type": "shell",
+			"command": "pnpm run test:coverage",
+			"options": {
+				"cwd": "${workspaceFolder}/console"
+			},
+			"group": "test",
+			"presentation": {
+				"reveal": "never",
+				"focus": false,
+				"panel": "dedicated"
 			}
 		},
 		{
@@ -383,9 +429,9 @@
 			},
 			"group": "build",
 			"presentation": {
-				"reveal": "always",
-				"panel": "dedicated",
-				"showReuseMessage": false
+				"reveal": "never",
+				"focus": false,
+				"panel": "shared"
 			}
 		},
 
