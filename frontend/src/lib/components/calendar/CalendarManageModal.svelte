@@ -6,8 +6,8 @@
 	import Info from '$lib/components/icons/Info.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
-	import XMark from '$lib/components/icons/XMark.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import { Switch } from '$lib/components/primitives'
 	import {
 		calendars,
 		type Calendar,
@@ -15,6 +15,14 @@
 		type CalendarUpdate,
 	} from '$lib/stores/calendars.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
+	import {
+		canDeleteAccessLevel,
+		canEditAccessLevel,
+		canShareAccessLevel,
+		resourceAccess,
+	} from '$lib/stores/resourceAccess.svelte'
+	import { session } from '$lib/stores/session.svelte'
+	import { byAuthor, metadataLine } from '$lib/utils/resourceAuthors'
 
 	interface Props {
 		open: boolean
@@ -33,7 +41,15 @@
 	let error = $state('')
 
 	const isCreate = $derived(!calendar?.id)
-	const title = $derived(isCreate ? 'create calendar' : 'calendar details')
+	const calendarAccessLevel = $derived(
+		calendar?.id ? resourceAccess.level('calendar', calendar.id, calendar.owner_id) : 'admin'
+	)
+	const canEditCalendar = $derived(isCreate || canEditAccessLevel(calendarAccessLevel))
+	const canShareCalendar = $derived(!isCreate && canShareAccessLevel(calendarAccessLevel))
+	const canDeleteCalendar = $derived(!isCreate && canDeleteAccessLevel(calendarAccessLevel))
+	const title = $derived(isCreate ? 'create calendar' : 'calendar properties')
+	const authorLabel = $derived(session.authorLabel(calendar?.owner_id))
+	const previewSubtitle = $derived(metadataLine(byAuthor(authorLabel), timezone.trim() || null))
 	const panelClass =
 		'border-foreground/13 bg-background/70 shadow-[inset_0_1px_0_rgb(255_255_255/0.08)] backdrop-blur-[16px] backdrop-saturate-[1.08]'
 	const fieldClass = `${panelClass} grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 rounded-[16px] border p-3`
@@ -55,12 +71,22 @@
 		error = ''
 	})
 
+	$effect(() => {
+		if (open && calendar?.owner_id && calendar.owner_id !== session.currentUserId) {
+			void session.ensureUsers([calendar.owner_id])
+		}
+		if (open && calendar?.id) {
+			void resourceAccess.ensure('calendar', calendar.id, calendar.owner_id)
+		}
+	})
+
 	function handleSubmit(event: SubmitEvent): void {
 		event.preventDefault()
 		void save()
 	}
 
 	async function save(): Promise<void> {
+		if (!canEditCalendar) return
 		const trimmedName = name.trim()
 		if (!trimmedName) {
 			error = 'name is required'
@@ -93,7 +119,7 @@
 	}
 
 	function shareCalendar(): void {
-		if (!calendar?.id) return
+		if (!calendar?.id || !canShareCalendar) return
 		onClose()
 		modals.open('resource-access', {
 			resourceType: 'calendar',
@@ -103,7 +129,7 @@
 	}
 
 	function requestDelete(): void {
-		if (!calendar?.id || calendar.is_default) return
+		if (!calendar?.id || calendar.is_default || !canDeleteCalendar) return
 		modals.open('confirm-delete', {
 			title: 'delete calendar?',
 			description: calendar.name,
@@ -141,18 +167,23 @@
 				<h3 class="text-foreground min-w-0 truncate text-lg font-semibold">
 					{name.trim() || 'untitled calendar'}
 				</h3>
+				{#if previewSubtitle}
+					<p class="text-foreground/55 mt-0.5 min-w-0 truncate text-xs">
+						{previewSubtitle}
+					</p>
+				{/if}
 			</div>
-			<label
+			<div
 				class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/75 ml-auto inline-flex items-center gap-2 border px-3 py-2 text-[0.8rem] font-semibold whitespace-nowrap"
 			>
-				<input
-					class="accent-(--accent-primary)"
-					type="checkbox"
-					bind:checked={isDefault}
-					disabled={saving}
-				/>
 				<span>default</span>
-			</label>
+				<Switch
+					size="sm"
+					bind:checked={isDefault}
+					disabled={saving || !canEditCalendar}
+					ariaLabel="default calendar"
+				/>
+			</div>
 		</div>
 
 		<div class={fieldClass}>
@@ -164,7 +195,7 @@
 				class="{inputClass} col-span-full"
 				bind:value={name}
 				placeholder="calendar name"
-				disabled={saving}
+				disabled={saving || !canEditCalendar}
 			/>
 		</div>
 
@@ -178,13 +209,13 @@
 						type="color"
 						bind:value={color}
 						class="border-foreground/12 h-10 w-12 cursor-pointer rounded-xl border bg-transparent disabled:cursor-not-allowed disabled:opacity-55"
-						disabled={saving}
+						disabled={saving || !canEditCalendar}
 					/>
 					<input
 						type="text"
 						bind:value={color}
 						class={inputClass}
-						disabled={saving}
+						disabled={saving || !canEditCalendar}
 						aria-label="color value"
 					/>
 				</div>
@@ -198,7 +229,7 @@
 					class="{inputClass} col-span-full"
 					bind:value={timezone}
 					placeholder="local timezone"
-					disabled={saving}
+					disabled={saving || !canEditCalendar}
 				/>
 			</div>
 		</div>
@@ -211,7 +242,7 @@
 				class="{inputClass} col-span-full min-h-24 resize-y text-sm"
 				bind:value={description}
 				placeholder="notes"
-				disabled={saving}
+				disabled={saving || !canEditCalendar}
 			></textarea>
 		</div>
 
@@ -220,7 +251,7 @@
 		{/if}
 
 		<div class="flex items-center gap-2 pt-1 max-[680px]:flex-wrap">
-			{#if calendar?.id}
+			{#if calendar?.id && canShareCalendar}
 				<button
 					type="button"
 					class="{actionButtonClass} border-foreground/12 text-foreground/80 hover:bg-foreground/6 border bg-transparent"
@@ -230,38 +261,30 @@
 					<Share class="h-4 w-4" />
 					<span>share</span>
 				</button>
-				{#if !calendar.is_default}
-					<button
-						type="button"
-						class="{actionButtonClass} border border-red-500/30 bg-red-500/13 text-red-300"
-						disabled={saving}
-						onclick={requestDelete}
-					>
-						<Trash class="h-4 w-4" />
-						<span>delete</span>
-					</button>
-				{/if}
 			{/if}
-			<div class="flex-1 max-[680px]:hidden"></div>
-			<button
-				type="button"
-				class="{actionButtonClass} border-foreground/12 text-foreground/80 hover:bg-foreground/6 border bg-transparent"
-				disabled={saving}
-				onclick={onClose}
-			>
-				<XMark class="h-4 w-4" />
-				<span>cancel</span>
-			</button>
-			<button
-				type="submit"
-				class="{actionButtonClass} bg-(--accent-primary) text-white hover:brightness-[1.06]"
-				disabled={saving || !name.trim()}
-			>
-				<Check class="h-4 w-4" />
-				{#if saving}<ShimmerText className="inline-block">saving</ShimmerText>{:else}<span
-						>save</span
-					>{/if}
-			</button>
+			{#if calendar?.id && !calendar.is_default && canDeleteCalendar}
+				<button
+					type="button"
+					class="{actionButtonClass} border border-red-500/30 bg-red-500/13 text-red-300"
+					disabled={saving}
+					onclick={requestDelete}
+				>
+					<Trash class="h-4 w-4" />
+					<span>delete</span>
+				</button>
+			{/if}
+			<div class="flex-1"></div>
+			{#if canEditCalendar}
+				<button
+					type="submit"
+					class="{actionButtonClass} bg-(--accent-primary) text-white hover:brightness-[1.06]"
+					disabled={saving || !name.trim()}
+				>
+					<Check class="h-4 w-4" />
+					{#if saving}<ShimmerText className="inline-block">saving</ShimmerText
+						>{:else}<span>save</span>{/if}
+				</button>
+			{/if}
 		</div>
 	</form>
 </BaseModal>

@@ -9,7 +9,7 @@
 	import ChatSidebarTopActions from '$lib/components/chat/sidebar/ChatSidebarTopActions.svelte'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
-	import EditChatModal from '$lib/components/modals/EditChatModal.svelte'
+	import ChatPropertiesModal from '$lib/components/modals/ChatPropertiesModal.svelte'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { chat, type Thread } from '$lib/stores/chat.svelte'
 	import { device } from '$lib/stores/device.svelte'
@@ -45,7 +45,7 @@
 	let openThreadMenuId = $state<string | null>(null)
 	let editThread = $state<Thread | null>(null)
 	let editTitle = $state('')
-	let editTagsCsv = $state('')
+	let editTags = $state<string[]>([])
 	let isSavingEdit = $state(false)
 	let editError = $state<string | null>(null)
 
@@ -209,16 +209,11 @@
 	$effect(() => {
 		if (!editThread) return
 		editTitle = editThread.title ?? ''
-		editTagsCsv = Array.isArray(editThread.tags) ? editThread.tags.join(', ') : ''
+		editTags = Array.isArray(editThread.tags) ? [...editThread.tags] : []
 	})
 
 	function closeEditModal(): void {
 		if (isSavingEdit) return
-		editThread = null
-		editError = null
-	}
-
-	function cancelEditModal(): void {
 		editThread = null
 		editError = null
 	}
@@ -232,18 +227,29 @@
 
 			const threadId = editThread.id
 			const newTitle = editTitle.trim()
-			const newTags = editTagsCsv
-				.split(',')
-				.map((t) => t.trim())
-				.filter(Boolean)
-
-			editThread = null
+			const newTags = editTags
 
 			const ok = await updateThread(threadId, newTitle, newTags)
-			if (!ok) editError = 'could not save changes'
+			if (ok) {
+				editThread = null
+			} else {
+				editError = 'could not save changes'
+			}
 
 			isSavingEdit = false
 		})()
+	}
+
+	function shareEditThread(): void {
+		if (!editThread) return
+		const thread = editThread
+		editThread = null
+		editError = null
+		modals.open('resource-access', {
+			resourceType: 'thread',
+			resourceId: thread.id,
+			title: thread.title ?? thread.id,
+		})
 	}
 
 	let routeChatId = $derived.by((): string | null => {
@@ -364,14 +370,14 @@
 	</div>
 </aside>
 
-<EditChatModal
+<ChatPropertiesModal
 	open={editThread !== null}
 	thread={editThread}
 	bind:title={editTitle}
-	bind:tagsCsv={editTagsCsv}
+	bind:tags={editTags}
 	error={editError}
 	isSaving={isSavingEdit}
 	onClose={closeEditModal}
-	onCancel={cancelEditModal}
+	onShare={shareEditThread}
 	onSave={saveEditModal}
 />

@@ -1,11 +1,16 @@
 <script lang="ts">
-	import { tick } from 'svelte'
-
 	import type { Thread } from '$lib/stores/chat.svelte'
 
-	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
+	import EmptyState from '$lib/components/EmptyState.svelte'
+	import FloatingScrollTopButton from '$lib/components/FloatingScrollTopButton.svelte'
 	import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
+	import LoadingMoreIndicator from '$lib/components/LoadingMoreIndicator.svelte'
+	import type { ResourceProjectOption } from '$lib/components/widgets/ResourceProjectsMenu.svelte'
 	import { device } from '$lib/stores/device.svelte'
+	import { projects } from '$lib/stores/projects.svelte'
+	import { canEditAccessLevel, resourceAccess } from '$lib/stores/resourceAccess.svelte'
+	import SvelteVirtualList from '@humanspeak/svelte-virtual-list'
+	import { tick } from 'svelte'
 
 	import ChatSidebarThreadRow from './ChatSidebarThreadRow.svelte'
 
@@ -43,29 +48,67 @@
 		onDeleteThread,
 	}: Props = $props()
 
-	const LOAD_MORE_THRESHOLD_PX = 720
+	type ChatSidebarRow =
+		| { kind: 'header'; id: 'header' }
+		| { kind: 'thread'; id: string; thread: Thread }
+		| { kind: 'loading'; id: 'loading' }
 
-	let scrollContainer = $state<HTMLDivElement | null>(null)
+	let listShellEl = $state<HTMLDivElement | null>(null)
+	let listViewportEl = $state<HTMLElement | null>(null)
 
-	function requestLoadMoreThreads(): void {
-		if (!scrollContainer || !isLoggedIn || !hasMoreThreads || isLoadingMoreThreads) return
-		const remaining =
-			scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight
-		const threshold = Math.max(LOAD_MORE_THRESHOLD_PX, scrollContainer.clientHeight * 0.75)
-		if (remaining > threshold) return
-		void onLoadMoreThreads()
+	const manageableProjectOptions = $derived.by((): ResourceProjectOption[] =>
+		projects.list
+			.filter((project) =>
+				canEditAccessLevel(resourceAccess.level('project', project.id, project.owner_id))
+			)
+			.map((project) => ({
+				id: project.id,
+				name: project.name,
+				owner_id: project.owner_id,
+			}))
+	)
+	const lastThreadId = $derived(threads.at(-1)?.id ?? null)
+	const threadRows = $derived.by((): ChatSidebarRow[] => {
+		const rows: ChatSidebarRow[] = [{ kind: 'header', id: 'header' }]
+		for (const thread of threads) rows.push({ kind: 'thread', id: thread.id, thread })
+		if (isLoadingMoreThreads) rows.push({ kind: 'loading', id: 'loading' })
+		return rows
+	})
+
+	function requestLoadMoreThreads(): void | Promise<void> {
+		if (!isLoggedIn || !hasMoreThreads || isLoadingMoreThreads) return
+		return onLoadMoreThreads()
 	}
 
 	$effect(() => {
-		void threads.length
-		void expandedContentVisible
-		void hasMoreThreads
-		void isLoadingMoreThreads
-		if (!expandedContentVisible || !hasMoreThreads || isLoadingMoreThreads) return
-		void (async () => {
-			await tick()
-			requestLoadMoreThreads()
-		})()
+		if (!isLoggedIn || !expandedContentVisible) return
+		void projects.load()
+	})
+
+	$effect(() => {
+		if (!isLoggedIn || !expandedContentVisible) return
+		for (const project of projects.list) {
+			void resourceAccess.ensure('project', project.id, project.owner_id)
+		}
+	})
+
+	$effect(() => {
+		const shell = listShellEl
+		const rowCount = threadRows.length
+		if (!shell || rowCount === 0) {
+			listViewportEl = null
+			return
+		}
+
+		let cancelled = false
+		void tick().then(() => {
+			if (cancelled) return
+			const viewport = shell.querySelector('.chat-sidebar-thread-viewport')
+			listViewportEl = viewport instanceof HTMLElement ? viewport : null
+		})
+		return () => {
+			cancelled = true
+		}
 	})
 </script>
 
@@ -84,61 +127,72 @@
 		></div>
 	</div>
 	<div class="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-		<div
-			bind:this={scrollContainer}
-			class="min-h-0 flex-1 overflow-y-auto"
-			onscroll={requestLoadMoreThreads}
-		>
-			<div class="flex min-h-full flex-col space-y-0.5 px-3">
+		{#if !isLoggedIn}
+			<div class="px-3">
 				<div class="mt-2 mb-1 flex items-center gap-2 px-2">
 					<ChatBubble class="text-foreground/70 h-4 w-4 shrink-0" />
 					<h3 class="text-foreground/60 text-xs font-semibold uppercase">chats</h3>
 				</div>
-				{#if !isLoggedIn}
-					<div class="flex flex-1 flex-col items-center justify-center">
-						<div
-							class="rounded-container border-foreground/14 bg-foreground/5 text-foreground/55 w-full overflow-hidden border p-3 text-center text-sm whitespace-nowrap"
-						>
-							log in to see your recent chats
-						</div>
-					</div>
-				{:else if threads.length === 0}
-					<div class="flex flex-1 flex-col items-center justify-center">
-						<div
-							class="rounded-container border-foreground/14 bg-foreground/5 text-foreground/55 w-full overflow-hidden border p-3 text-center text-sm whitespace-nowrap"
-						>
-							no chats yet
-						</div>
-					</div>
-				{:else}
-					{#each threads as thread, index (thread.id)}
-						<div
-							class={index === threads.length - 1
-								? device.isMobile
-									? 'pb-20'
-									: 'pb-5'
-								: ''}
-						>
-							<ChatSidebarThreadRow
-								{thread}
-								selected={selectedChatId === thread.id}
-								onPrefetch={onPrefetchThread}
-								{onOpenThread}
-								{openThreadMenuId}
-								{onToggleMenu}
-								{onCloseMenu}
-								{onRequestEdit}
-								{onDeleteThread}
-							/>
-						</div>
-					{/each}
-					{#if isLoadingMoreThreads}
-						<div class="text-foreground/45 px-2 py-3 text-center text-xs font-medium">
-							<ShimmerText className="inline-block">loading more chats</ShimmerText>
-						</div>
-					{/if}
-				{/if}
+				<EmptyState label="log in to see your recent chats" compact class="flex-1" />
 			</div>
-		</div>
+		{:else if threads.length === 0}
+			<div class="px-3">
+				<div class="mt-2 mb-1 flex items-center gap-2 px-2">
+					<ChatBubble class="text-foreground/70 h-4 w-4 shrink-0" />
+					<h3 class="text-foreground/60 text-xs font-semibold uppercase">chats</h3>
+				</div>
+				<EmptyState label="no chats yet" compact class="flex-1" />
+			</div>
+		{:else}
+			<div bind:this={listShellEl} class="relative min-h-0 w-full flex-1 overflow-hidden">
+				<SvelteVirtualList
+					items={threadRows}
+					defaultEstimatedItemHeight={54}
+					bufferSize={16}
+					loadMoreThreshold={12}
+					hasMore={hasMoreThreads && !isLoadingMoreThreads}
+					onLoadMore={requestLoadMoreThreads}
+					containerClass="relative h-full min-h-0 w-full overflow-hidden"
+					viewportClass="chat-sidebar-thread-viewport absolute inset-0 w-full overflow-y-auto"
+					contentClass="relative min-h-full w-full"
+					itemsClass="absolute top-0 left-0 flex w-full flex-col gap-0.5 px-3"
+				>
+					{#snippet renderItem(row)}
+						{#if row.kind === 'header'}
+							<div class="mt-2 mb-1 flex items-center gap-2 px-2">
+								<ChatBubble class="text-foreground/70 h-4 w-4 shrink-0" />
+								<h3 class="text-foreground/60 text-xs font-semibold uppercase">
+									chats
+								</h3>
+							</div>
+						{:else if row.kind === 'loading'}
+							<LoadingMoreIndicator className="py-3" label="loading more chats" />
+						{:else}
+							<div
+								class={row.thread.id === lastThreadId && !isLoadingMoreThreads
+									? device.isMobile
+										? 'pb-20'
+										: 'pb-5'
+									: ''}
+							>
+								<ChatSidebarThreadRow
+									thread={row.thread}
+									selected={selectedChatId === row.thread.id}
+									onPrefetch={onPrefetchThread}
+									{onOpenThread}
+									{openThreadMenuId}
+									{onToggleMenu}
+									{onCloseMenu}
+									{onRequestEdit}
+									{onDeleteThread}
+									projectOptions={manageableProjectOptions}
+								/>
+							</div>
+						{/if}
+					{/snippet}
+				</SvelteVirtualList>
+				<FloatingScrollTopButton target={listViewportEl} />
+			</div>
+		{/if}
 	</div>
 </div>

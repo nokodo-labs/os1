@@ -1,8 +1,8 @@
 <script lang="ts">
+	import { logoutAndRedirect } from '$lib/auth/logout'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import { permissions } from '$lib/stores/permissions.svelte'
-	import { session } from '$lib/stores/session.svelte'
 
 	interface Props {
 		supportEmail?: string | null
@@ -12,10 +12,16 @@
 	let { supportEmail = null, adminEmail = null }: Props = $props()
 
 	let isRefreshing = $state(false)
+	let isLoggingOut = $state(false)
 
-	function handleLogout() {
-		session.clear()
-		window.location.href = '/login'
+	async function handleLogout() {
+		if (isLoggingOut) return
+		isLoggingOut = true
+		try {
+			await logoutAndRedirect()
+		} finally {
+			isLoggingOut = false
+		}
 	}
 
 	async function handleRefresh() {
@@ -87,6 +93,7 @@
 				type="button"
 				class="rounded-pill border-foreground/10 text-foreground/45 hover:bg-foreground/5 hover:text-foreground/70 border bg-transparent px-4 py-2 text-sm transition-colors"
 				onclick={handleLogout}
+				disabled={isLoggingOut}
 			>
 				log out
 			</button>

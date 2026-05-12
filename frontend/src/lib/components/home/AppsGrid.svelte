@@ -5,16 +5,9 @@
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import Bolt from '$lib/components/icons/Bolt.svelte'
 	import Bookmark from '$lib/components/icons/Bookmark.svelte'
-	import Calendar from '$lib/components/icons/Calendar.svelte'
-	import ChatBubbles from '$lib/components/icons/ChatBubbles.svelte'
-	import CheckBox from '$lib/components/icons/CheckBox.svelte'
-	import Clip from '$lib/components/icons/Clip.svelte'
 	import Cloud from '$lib/components/icons/Cloud.svelte'
-	import Cog6 from '$lib/components/icons/Cog6.svelte'
 	import CommandLine from '$lib/components/icons/CommandLine.svelte'
 	import Database from '$lib/components/icons/Database.svelte'
-	import Document from '$lib/components/icons/Document.svelte'
-	import FinderFolder from '$lib/components/icons/FinderFolder.svelte'
 	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
 	import Heart from '$lib/components/icons/Heart.svelte'
 	import Map from '$lib/components/icons/Map.svelte'
@@ -23,17 +16,16 @@
 	import Star from '$lib/components/icons/Star.svelte'
 	import Users from '$lib/components/icons/Users.svelte'
 	import { accentColors, type AccentColorKey } from '$lib/contexts/themeContext.svelte'
+	import { appVisuals, type ResourceIconComponent } from '$lib/resources/resourceVisuals'
 	import { appNavigation } from '$lib/stores/appNavigation.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { onDestroy, tick } from 'svelte'
 
-	type IconComponent = typeof Document
-
 	interface AppDefinition {
 		id: string
 		title: string
-		icon: IconComponent
+		icon: ResourceIconComponent
 		accent?: AccentColorKey
 		action?: () => Promise<void>
 	}
@@ -47,72 +39,19 @@
 
 	let { iconShape = 'circle', fullWidth = false }: Props = $props()
 
-	const apps: AppDefinition[] = [
-		{
-			id: 'notes',
-			title: 'notes',
-			icon: Document,
-			accent: 'notes',
-			action: async () => {
-				await goto(resolve(appNavigation.getEntryRoute('notes')))
-			},
-		},
-		{
-			id: 'reminders',
-			title: 'reminders',
-			icon: CheckBox,
-			accent: 'reminders',
-			action: async () => {
-				await goto(resolve(appNavigation.getEntryRoute('reminders')))
-			},
-		},
-		{
-			id: 'calendar',
-			title: 'calendar',
-			icon: Calendar,
-			accent: 'calendar',
-			action: async () => {
-				await goto(resolve(appNavigation.getEntryRoute('calendar')))
-			},
-		},
-		{ id: 'messages', title: 'messages', icon: ChatBubbles, accent: 'green' },
-		{
-			id: 'projects',
-			title: 'projects',
-			icon: FinderFolder,
-			accent: 'yellow',
-			action: async () => {
-				await goto(resolve(appNavigation.getEntryRoute('projects')))
-			},
-		},
-		{
-			id: 'library',
-			title: 'files',
-			icon: Clip,
-			accent: 'blue',
-			action: async () => {
+	const apps: AppDefinition[] = appVisuals.map((app) => ({
+		id: app.id,
+		title: app.title,
+		icon: app.icon,
+		accent: app.accent,
+		action: async () => {
+			if (app.id === 'library') {
 				await goto(resolve('/library'))
-			},
+				return
+			}
+			await goto(resolve(appNavigation.getEntryRoute(app.id)))
 		},
-		{
-			id: 'social',
-			title: 'social',
-			icon: Users,
-			accent: 'orange',
-			action: async () => {
-				await goto(resolve(appNavigation.getEntryRoute('social')))
-			},
-		},
-		{
-			id: 'settings',
-			title: 'settings',
-			icon: Cog6,
-			accent: 'gray',
-			action: async () => {
-				await goto(resolve(appNavigation.getEntryRoute('settings')))
-			},
-		},
-	]
+	}))
 
 	const debugApps: AppDefinition[] = [
 		{ id: 'bookmarks', title: 'bookmarks', icon: Bookmark },
@@ -140,8 +79,10 @@
 	let gridGapYPx = $state(35)
 	let iconPx = $state(32)
 	const INDICATOR_SPACE_PX = 48
+	const hoverBleedPx = 10
 	const baseSidePaddingPx = 24
 	const sidePaddingPx = $derived(fullWidth ? 0 : baseSidePaddingPx)
+	const gridSidePaddingPx = $derived(sidePaddingPx + hoverBleedPx)
 
 	let rootEl: HTMLDivElement
 	let scrollerEl: HTMLDivElement
@@ -173,7 +114,7 @@
 			// Calculate current content height
 			const cellHeight = tilePx + tileToLabelGapPx + labelPx
 			const gridHeight = rows * (cellHeight + gridGapYPx) - gridGapYPx
-			const totalHeight = gridHeight + INDICATOR_SPACE_PX
+			const totalHeight = gridHeight + INDICATOR_SPACE_PX + hoverBleedPx * 2
 
 			if (totalHeight <= rootHeight) break
 			if (rows <= 1) break
@@ -204,7 +145,7 @@
 
 		const rect = rootEl.getBoundingClientRect()
 		// Account for side padding when calculating columns
-		const availableWidth = rect.width - sidePaddingPx * 2
+		const availableWidth = rect.width - gridSidePaddingPx * 2
 
 		// Scale tile sizing down on small viewports.
 		const scale = clamp(rect.width / 560, 0.78, 1)
@@ -223,7 +164,7 @@
 
 		const cellHeight = tilePx + tileToLabelGapPx + labelPx
 		const tileBlockHeight = cellHeight + gridGapYPx
-		const heightForGrid = Math.max(0, availableHeight - INDICATOR_SPACE_PX)
+		const heightForGrid = Math.max(0, availableHeight - INDICATOR_SPACE_PX - hoverBleedPx * 2)
 		const nextRows = clamp(Math.floor((heightForGrid + gridGapYPx) / tileBlockHeight), 1, 5)
 
 		cols = nextCols
@@ -357,15 +298,15 @@
 	<div
 		bind:this={scrollerEl}
 		class="no-scrollbar relative flex min-h-0 w-full flex-1 snap-x snap-mandatory overflow-x-auto overscroll-x-contain select-none"
-		style="touch-action: pan-x; -webkit-overflow-scrolling: touch;"
+		style="touch-action: pan-x; -webkit-overflow-scrolling: touch; padding-block: {hoverBleedPx}px;"
 		onscroll={syncPageFromScroll}
 		use:passiveWheel={onScrollerWheel}
 	>
 		{#each pages as pageApps, pageIndex (pageIndex)}
-			<div class="w-full shrink-0 snap-center">
+			<div class="w-full shrink-0 snap-center overflow-visible">
 				<div
-					class="grid w-full justify-center"
-					style="grid-template-columns: repeat({cols}, {tilePx}px); column-gap: {gridGapXPx}px; row-gap: {gridGapYPx}px; padding-left: {sidePaddingPx}px; padding-right: {sidePaddingPx}px;"
+					class="grid w-full justify-center overflow-visible"
+					style="grid-template-columns: repeat({cols}, {tilePx}px); column-gap: {gridGapXPx}px; row-gap: {gridGapYPx}px; padding-left: {gridSidePaddingPx}px; padding-right: {gridSidePaddingPx}px;"
 				>
 					{#each pageApps as app (app.id)}
 						{@const Icon = app.icon}

@@ -2,7 +2,7 @@
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
 	import type { Snippet } from 'svelte'
 
-	type ActionsVisibility = 'always' | 'hover' | 'overlay-always'
+	type ActionsVisibility = 'always' | 'hover' | 'reserve-hover' | 'overlay-always'
 
 	interface Props {
 		selected?: boolean
@@ -61,6 +61,12 @@
 	{#if actions}
 		{#if actionsVisibility === 'always'}
 			<div class="shrink-0">
+				{@render actions()}
+			</div>
+		{:else if actionsVisibility === 'reserve-hover'}
+			<div
+				class="pointer-events-none shrink-0 opacity-0 transition-opacity duration-150 group-focus-within/sidebar-item:pointer-events-auto group-focus-within/sidebar-item:opacity-100 group-hover/sidebar-item:pointer-events-auto group-hover/sidebar-item:opacity-100"
+			>
 				{@render actions()}
 			</div>
 		{:else}

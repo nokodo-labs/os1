@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
+	import User from '$lib/components/icons/User.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import ResourcePreview from './ResourcePreview.svelte'
 	import type { ResourceItem } from './types'
@@ -19,15 +20,10 @@
 	class="group liquid-glass liquid-glass--frosted block overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
 		? 'flex items-center gap-4 px-5 py-4'
-		: 'flex min-h-80 flex-col p-6'} {className}"
+		: 'flex h-80 flex-col p-6'} {className}"
 >
 	{#if layout === 'grid'}
-		<ResourcePreview
-			tone="sky"
-			label="prompt"
-			caption={author ? `by ${author}` : 'prompt'}
-			class="-mx-6 -mt-6"
-		>
+		<ResourcePreview tone="sky" label="prompt" caption={author || 'prompt'} class="-mx-6 -mt-6">
 			{#snippet icon()}
 				<Sparkles variant="solid" class="size-6" />
 			{/snippet}
@@ -57,7 +53,10 @@
 		{/if}
 		<div class="mt-auto flex items-center gap-2">
 			{#if author}
-				<span class="text-foreground/40 text-xs">by {author}</span>
+				<span class="text-foreground/40 flex min-w-0 items-center gap-1 text-xs">
+					<User class="size-3.5 shrink-0" />
+					<span class="truncate">{author}</span>
+				</span>
 			{/if}
 			<Timestamp
 				timestamp={new Date(resource.updatedAt)}
@@ -80,7 +79,10 @@
 			{/if}
 		</div>
 		{#if author}
-			<span class="text-foreground/40 shrink-0 text-xs">by {author}</span>
+			<span class="text-foreground/40 flex min-w-0 shrink-0 items-center gap-1 text-xs">
+				<User class="size-3.5 shrink-0" />
+				<span class="max-w-32 truncate">{author}</span>
+			</span>
 		{/if}
 		<Timestamp
 			timestamp={new Date(resource.updatedAt)}

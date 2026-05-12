@@ -1,3 +1,7 @@
+<script module lang="ts">
+	export const popupMenuScaleTransition = { duration: 160, start: 0.96, opacity: 0 } as const
+</script>
+
 <script lang="ts">
 	import { portal } from '$lib/actions/portal'
 	import LiquidMetal from '$lib/components/effects/LiquidMetal.svelte'
@@ -30,20 +34,39 @@
 	let posLeft = $state(0)
 	let usesLeft = $state(true)
 
+	function updatePosition(): void {
+		if (!anchorEl) return
+		const rect = anchorEl.getBoundingClientRect()
+		const mh = menuEl ? menuEl.offsetHeight : estimatedHeight
+		const screenCx = window.innerWidth / 2
+		posTop =
+			rect.bottom + mh < window.innerHeight ? rect.bottom + 4 : Math.max(4, rect.top - mh - 4)
+		usesLeft = rect.left < screenCx
+		posLeft = usesLeft ? rect.left : window.innerWidth - rect.right
+	}
+
 	$effect(() => {
 		if (!open || !anchorEl) return
-		void tick().then(() => {
-			if (!anchorEl) return
-			const rect = anchorEl.getBoundingClientRect()
-			const mh = menuEl ? menuEl.offsetHeight : estimatedHeight
-			const screenCx = window.innerWidth / 2
-			posTop =
-				rect.bottom + mh < window.innerHeight
-					? rect.bottom + 4
-					: Math.max(4, rect.top - mh - 4)
-			usesLeft = rect.left < screenCx
-			posLeft = usesLeft ? rect.left : window.innerWidth - rect.right
-		})
+		void tick().then(updatePosition)
+	})
+
+	$effect(() => {
+		if (!open) return
+		const onReposition = () => updatePosition()
+		window.addEventListener('resize', onReposition)
+		window.addEventListener('scroll', onReposition, true)
+		return () => {
+			window.removeEventListener('resize', onReposition)
+			window.removeEventListener('scroll', onReposition, true)
+		}
+	})
+
+	$effect(() => {
+		const node = menuEl
+		if (!open || !node) return
+		const ro = new ResizeObserver(updatePosition)
+		ro.observe(node)
+		return () => ro.disconnect()
 	})
 
 	$effect(() => {
@@ -52,6 +75,13 @@
 			const path = e.composedPath()
 			if (menuEl && path.includes(menuEl)) return
 			if (anchorEl && path.includes(anchorEl)) return
+			if (
+				path.some(
+					(node) => node instanceof HTMLElement && node.closest('[data-popup-menu]')
+				)
+			) {
+				return
+			}
 			onClose()
 		}
 		const onKeyDown = (e: KeyboardEvent) => {
@@ -73,14 +103,15 @@
 		use:portal
 		bind:this={menuEl}
 		role="menu"
-		transition:scale={{ duration: 160, start: 0.96, opacity: 0 }}
+		data-popup-menu
+		transition:scale={popupMenuScaleTransition}
 		class="fixed z-9999"
 		style="top: {posTop}px; {usesLeft ? `left: ${posLeft}px` : `right: ${posLeft}px`};"
 		{...rest}
 	>
 		<LiquidMetal
 			tag="div"
-			class="rounded-popup border-foreground/12 bg-background/80 max-w-[min(calc(100vw-1rem),22rem)] min-w-44 border p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55),inset_0_1px_0_rgb(255_255_255/0.12)] backdrop-blur-[18px] {className}"
+			class="rounded-popup border-foreground/12 bg-background/80 max-w-[min(calc(100vw-1rem),22rem)] min-w-44 overflow-hidden border p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55),inset_0_1px_0_rgb(255_255_255/0.12)] backdrop-blur-[18px] {className}"
 		>
 			{@render children()}
 		</LiquidMetal>

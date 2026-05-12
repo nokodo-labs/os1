@@ -1,37 +1,49 @@
 <script lang="ts">
+	import { browser } from '$app/environment'
+	import { base } from '$app/paths'
 	import { api } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
-	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
-	import Check from '$lib/components/icons/Check.svelte'
-	import ChevronUpDown from '$lib/components/icons/ChevronUpDown.svelte'
-	import Plus from '$lib/components/icons/Plus.svelte'
-	import Search from '$lib/components/icons/Search.svelte'
-	import Trash from '$lib/components/icons/Trash.svelte'
-	import User from '$lib/components/icons/User.svelte'
-	import UserGroup from '$lib/components/icons/UserGroup.svelte'
+	import { contentPartsToText } from '$lib/chat/helpers'
+	import ShieldCheck from '$lib/components/icons/ShieldCheck.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
-	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import ResourceAccessActions from '$lib/components/resource-access/ResourceAccessActions.svelte'
+	import ResourceAccessHeader from '$lib/components/resource-access/ResourceAccessHeader.svelte'
+	import ResourceAccessPeople from '$lib/components/resource-access/ResourceAccessPeople.svelte'
+	import {
+		queryString,
+		resourceLabel,
+		resourcePath,
+		shareIconFailureKey,
+		type ExportFormat,
+		type RuleEntry,
+		type ShareTarget,
+		type ShareTargetId,
+		type UserPick,
+		type UserResult,
+	} from '$lib/components/resource-access/resourceAccessModal'
+	import { calendars } from '$lib/stores/calendars.svelte'
+	import { chat } from '$lib/stores/chat.svelte'
+	import { downloadFile, files } from '$lib/stores/files.svelte'
+	import { friends } from '$lib/stores/friends.svelte'
 	import { groups } from '$lib/stores/groups.svelte'
 	import type { ResourceAccessPayload } from '$lib/stores/modals.svelte'
+	import { notes } from '$lib/stores/notes.svelte'
+	import { notifications, showError } from '$lib/stores/notifications.svelte'
+	import { projects } from '$lib/stores/projects.svelte'
+	import { reminders } from '$lib/stores/reminders.svelte'
+	import {
+		canShareAccessLevel,
+		resourceAccess,
+		type AccessLevel,
+		type AccessRuleCreate,
+		type AccessRuleResponse,
+	} from '$lib/stores/resourceAccess.svelte'
+	import { faviconCandidates } from '$lib/utils/favicons'
+	import { userDisplayName } from '$lib/utils/resourceAuthors'
 
-	type AccessLevel = components['schemas']['AccessLevel']
-	type AccessRuleResponse = components['schemas']['AccessRuleResponse']
-	type AccessRuleCreate = components['schemas']['AccessRuleCreate']
-
-	interface UserResult {
-		id: string
-		display_name?: string | null
-		email?: string | null
-	}
-
-	interface RuleEntry {
-		id: string | null
-		subjectLabel: string
-		subjectUserId: string | null
-		subjectGroupId: string | null
-		level: AccessLevel
-		orderIndex: number
-	}
+	type ApiFile = components['schemas']['File']
+	type ApiMessage = components['schemas']['Message']
+	type ApiThread = components['schemas']['Thread']
 
 	interface Props {
 		open: boolean
@@ -45,197 +57,235 @@
 	let isSaving = $state(false)
 	let isLoading = $state(false)
 	let saveError = $state<string | null>(null)
+	let workingAction = $state<string | null>(null)
 
 	let searchQuery = $state('')
 	let searchResults = $state<UserResult[]>([])
+	let failedShareIcons = $state<string[]>([])
 	let searchDebounce: ReturnType<typeof setTimeout> | null = null
+	let rulesLoadKey = ''
+	let rulesLoadVersion = -1
 
-	// drag state
 	let dragIndex = $state<number | null>(null)
 	let dragOverIndex = $state<number | null>(null)
 
-	const ACCESS_LEVELS: AccessLevel[] = ['reader', 'editor', 'admin']
+	const currentLevel = $derived(
+		payload ? resourceAccess.level(payload.resourceType, payload.resourceId) : null
+	)
+	const canManageSharing = $derived(canShareAccessLevel(currentLevel))
+	const shareTitle = $derived(payload?.title?.trim() || resourceLabel(payload?.resourceType))
+	const sharePath = $derived(
+		payload ? resourcePath(payload.resourceType, payload.resourceId) : '/'
+	)
+	const sharePathWithBase = $derived(`${base}${sharePath}`)
+	const shareUrl = $derived(
+		browser ? new URL(sharePathWithBase, window.location.origin).toString() : sharePathWithBase
+	)
+	const mailHref = $derived(`mailto:?${queryString({ subject: shareTitle, body: shareUrl })}`)
+	const whatsappHref = $derived(
+		`https://wa.me/?${queryString({ text: `${shareTitle} ${shareUrl}` })}`
+	)
+	const telegramHref = $derived(
+		`https://t.me/share/url?${queryString({ url: shareUrl, text: shareTitle })}`
+	)
+	const xHref = $derived(
+		`https://x.com/intent/tweet?${queryString({ url: shareUrl, text: shareTitle })}`
+	)
+	const shareTargets = $derived<ShareTarget[]>([
+		{
+			id: 'whatsapp',
+			label: 'whatsapp',
+			href: whatsappHref,
+			origin: 'https://www.whatsapp.com',
+		},
+		{
+			id: 'telegram',
+			label: 'telegram',
+			href: telegramHref,
+			origin: 'https://telegram.org',
+		},
+		{
+			id: 'x',
+			label: 'x',
+			href: xHref,
+			origin: 'https://x.com',
+		},
+	])
+	const canNativeShare = $derived(
+		browser && typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+	)
 
-	// ---- API helpers ----
+	const filteredGroups = $derived(
+		groups.list.filter(
+			(group) => !searchQuery || group.name.toLowerCase().includes(searchQuery.toLowerCase())
+		)
+	)
+	const filteredFriends = $derived.by(() => {
+		const query = searchQuery.trim().toLowerCase()
+		return friends.list.filter((friend) => {
+			if (rules.some((rule) => rule.subjectUserId === friend.id)) return false
+			if (!query) return true
+			return userLabel(friend).toLowerCase().includes(query)
+		})
+	})
+
+	const panelClass =
+		'liquid-glass liquid-glass--frosted rounded-container border-foreground/10 bg-foreground/4 border'
+	const actionButtonClass =
+		'rounded-pill inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55'
+	const quietButtonClass = `${actionButtonClass} border-foreground/12 text-foreground/80 hover:bg-foreground/6 border bg-transparent`
+	const primaryButtonClass = `${actionButtonClass} bg-(--accent-primary) text-white hover:brightness-[1.06]`
+	const iconBoxClass =
+		'flex h-11 w-11 shrink-0 items-center justify-center rounded-[15px] border border-[color-mix(in_oklch,var(--accent-primary)_22%,transparent)] bg-[color-mix(in_oklch,var(--accent-primary)_12%,transparent)] text-(--accent-primary)'
+	const inputClass =
+		'rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border py-2.5 pr-4 pl-10 text-sm transition-colors outline-none'
+	const THREAD_EXPORT_MESSAGE_LIMIT = 500
+	const MAX_CLIPBOARD_SNAPSHOT_CHARS = 120_000
+
+	function shareIconUrls(target: ShareTarget): string[] {
+		return faviconCandidates(target.origin)
+	}
+
+	function activeShareIconUrl(target: ShareTarget): string | undefined {
+		return shareIconUrls(target).find(
+			(url) => !failedShareIcons.includes(shareIconFailureKey(target.id, url))
+		)
+	}
+
+	function markShareIconFailed(targetId: ShareTargetId, url: string): void {
+		const key = shareIconFailureKey(targetId, url)
+		if (failedShareIcons.includes(key)) return
+		failedShareIcons = [...failedShareIcons, key]
+	}
+
+	function ruleLocalId(rule: AccessRuleResponse, index: number): string {
+		return (
+			rule.id ??
+			rule.subject_user_id ??
+			rule.subject_group_id ??
+			rule.subject_role_id ??
+			`rule-${index}`
+		)
+	}
+
+	function ruleSubjectLabel(rule: AccessRuleResponse): string {
+		if (rule.subject_user_id) return rule.subject_user_id
+		if (rule.subject_group_id) return rule.subject_group_id
+		if (rule.subject_role_id) return rule.subject_role_id
+		return 'someone'
+	}
+
+	function toRuleEntry(rule: AccessRuleResponse, index: number): RuleEntry {
+		return {
+			localId: ruleLocalId(rule, index),
+			id: rule.id,
+			subjectLabel: ruleSubjectLabel(rule),
+			subjectUserId: rule.subject_user_id ?? null,
+			subjectGroupId: rule.subject_group_id ?? null,
+			subjectRoleId: rule.subject_role_id ?? null,
+			level: rule.level,
+			orderIndex: index,
+		}
+	}
+
+	function makeNewRuleId(subjectType: 'user' | 'group' | 'role', subjectId: string): string {
+		return `new-${subjectType}-${subjectId}`
+	}
+
+	function userLabel(user: UserPick): string {
+		return userDisplayName(user) ?? user.id
+	}
 
 	async function loadRules(): Promise<void> {
-		if (!payload) return
+		if (!payload || !canManageSharing) return
+		const key = `${payload.resourceType}:${payload.resourceId}`
+		const version = resourceAccess.version
+		if (rulesLoadKey === key && rulesLoadVersion === version) return
 		isLoading = true
 		try {
-			let fetched: AccessRuleResponse[] = []
-			switch (payload.resourceType) {
-				case 'file': {
-					const { data } = await api.GET('/v1/files/{file_id}/access-rules', {
-						params: { path: { file_id: payload.resourceId } },
-					})
-					if (data) fetched = data
-					break
-				}
-				case 'thread': {
-					const { data } = await api.GET('/v1/threads/{thread_id}/access-rules', {
-						params: { path: { thread_id: payload.resourceId } },
-					})
-					if (data) fetched = data
-					break
-				}
-				case 'project': {
-					const { data } = await api.GET('/v1/projects/{project_id}/access-rules', {
-						params: { path: { project_id: payload.resourceId } },
-					})
-					if (data) fetched = data
-					break
-				}
-				case 'group': {
-					const { data } = await api.GET('/v1/groups/{group_id}/access-rules', {
-						params: { path: { group_id: payload.resourceId } },
-					})
-					if (data) fetched = data
-					break
-				}
-				case 'agent': {
-					const { data } = await api.GET('/v1/agents/{agent_id}/access-rules', {
-						params: { path: { agent_id: payload.resourceId } },
-					})
-					if (data) fetched = data
-					break
-				}
-				case 'note': {
-					const { data } = await api.GET('/v1/notes/{note_id}/access-rules', {
-						params: { path: { note_id: payload.resourceId } },
-					})
-					if (data) fetched = data
-					break
-				}
-				case 'reminder_list': {
-					const { data } = await api.GET('/v1/reminder-lists/{list_id}/access-rules', {
-						params: { path: { list_id: payload.resourceId } },
-					})
-					if (data) fetched = data
-					break
-				}
-				case 'calendar': {
-					const { data } = await api.GET('/v1/calendars/{calendar_id}/access-rules', {
-						params: { path: { calendar_id: payload.resourceId } },
-					})
-					if (data) fetched = data
-					break
-				}
-			}
-			rules = fetched.map((r, i) => ({
-				id: r.id,
-				subjectLabel:
-					r.subject_user_id ?? r.subject_group_id ?? r.subject_role_id ?? 'unknown',
-				subjectUserId: r.subject_user_id ?? null,
-				subjectGroupId: r.subject_group_id ?? null,
-				level: r.level,
-				orderIndex: i,
-			}))
+			const fetched = await resourceAccess.ensureRules(
+				payload.resourceType,
+				payload.resourceId
+			)
+			rules = fetched.map(toRuleEntry)
+			rulesLoadKey = key
+			rulesLoadVersion = version
 		} finally {
 			isLoading = false
 		}
 	}
 
+	function showSaveError(): void {
+		const message = 'could not save sharing'
+		saveError = message
+		showError(message)
+	}
+
 	async function saveRules(): Promise<void> {
-		if (!payload) return
+		if (!payload || !canManageSharing) return
 		isSaving = true
 		saveError = null
-		const body: AccessRuleCreate[] = rules.map((r, i) => ({
-			subject_user_id: r.subjectUserId ?? undefined,
-			subject_group_id: r.subjectGroupId ?? undefined,
-			level: r.level,
-			order_index: i,
+		const body: AccessRuleCreate[] = rules.map((rule, index) => ({
+			subject_user_id: rule.subjectUserId ?? undefined,
+			subject_group_id: rule.subjectGroupId ?? undefined,
+			subject_role_id: rule.subjectRoleId ?? undefined,
+			level: rule.level,
+			order_index: index,
 		}))
 		try {
-			switch (payload.resourceType) {
-				case 'file':
-					await api.PUT('/v1/files/{file_id}/access-rules', {
-						params: { path: { file_id: payload.resourceId } },
-						body,
-					})
-					break
-				case 'thread':
-					await api.PUT('/v1/threads/{thread_id}/access-rules', {
-						params: { path: { thread_id: payload.resourceId } },
-						body,
-					})
-					break
-				case 'project':
-					await api.PUT('/v1/projects/{project_id}/access-rules', {
-						params: { path: { project_id: payload.resourceId } },
-						body,
-					})
-					break
-				case 'group':
-					await api.PUT('/v1/groups/{group_id}/access-rules', {
-						params: { path: { group_id: payload.resourceId } },
-						body,
-					})
-					break
-				case 'agent':
-					await api.PUT('/v1/agents/{agent_id}/access-rules', {
-						params: { path: { agent_id: payload.resourceId } },
-						body,
-					})
-					break
-				case 'note':
-					await api.PUT('/v1/notes/{note_id}/access-rules', {
-						params: { path: { note_id: payload.resourceId } },
-						body,
-					})
-					break
-				case 'reminder_list':
-					await api.PUT('/v1/reminder-lists/{list_id}/access-rules', {
-						params: { path: { list_id: payload.resourceId } },
-						body,
-					})
-					break
-				case 'calendar':
-					await api.PUT('/v1/calendars/{calendar_id}/access-rules', {
-						params: { path: { calendar_id: payload.resourceId } },
-						body,
-					})
-					break
+			const saved = await resourceAccess.replaceRules(
+				payload.resourceType,
+				payload.resourceId,
+				body
+			)
+			if (!saved) {
+				showSaveError()
+				return
 			}
+			rules = saved.map(toRuleEntry)
+			notifications.pushEphemeralToast('success', 'sharing saved')
 			onClose()
 		} catch {
-			saveError = 'failed to save access rules'
+			showSaveError()
 		} finally {
 			isSaving = false
 		}
 	}
 
-	// ---- search ----
-
-	async function doSearch(q: string): Promise<void> {
-		if (!q.trim()) {
+	async function doSearch(query: string): Promise<void> {
+		if (!canManageSharing || !query.trim()) {
 			searchResults = []
 			return
 		}
 		try {
-			const { data } = await api.GET('/v1/users', {
-				params: { query: { q: q.trim(), limit: 10 } },
+			const { data } = await api.GET('/v1/users/search', {
+				params: { query: { q: query.trim(), limit: 10 } },
 			})
-			searchResults = (data ?? []) as UserResult[]
+			searchResults = data ?? []
 		} catch {
 			searchResults = []
 		}
 	}
 
-	function onSearchInput(e: Event) {
-		searchQuery = (e.target as HTMLInputElement).value
+	function onSearchInput(event: Event): void {
+		const target = event.currentTarget
+		if (!(target instanceof HTMLInputElement)) return
+		searchQuery = target.value
 		if (searchDebounce) clearTimeout(searchDebounce)
 		searchDebounce = setTimeout(() => void doSearch(searchQuery), 300)
 	}
 
-	function addUserRule(user: UserResult, level: AccessLevel = 'reader'): void {
-		if (rules.some((r) => r.subjectUserId === user.id)) return
+	function addUserRule(user: UserPick, level: AccessLevel = 'reader'): void {
+		if (rules.some((rule) => rule.subjectUserId === user.id)) return
 		rules = [
 			...rules,
 			{
+				localId: makeNewRuleId('user', user.id),
 				id: null,
-				subjectLabel: user.display_name ?? user.email ?? user.id,
+				subjectLabel: userLabel(user),
 				subjectUserId: user.id,
 				subjectGroupId: null,
+				subjectRoleId: null,
 				level,
 				orderIndex: rules.length,
 			},
@@ -245,14 +295,16 @@
 	}
 
 	function addGroupRule(groupId: string, label: string, level: AccessLevel = 'reader'): void {
-		if (rules.some((r) => r.subjectGroupId === groupId)) return
+		if (rules.some((rule) => rule.subjectGroupId === groupId)) return
 		rules = [
 			...rules,
 			{
+				localId: makeNewRuleId('group', groupId),
 				id: null,
 				subjectLabel: label,
 				subjectUserId: null,
 				subjectGroupId: groupId,
+				subjectRoleId: null,
 				level,
 				orderIndex: rules.length,
 			},
@@ -260,32 +312,26 @@
 	}
 
 	function removeRule(index: number): void {
-		rules = rules.filter((_, i) => i !== index)
+		rules = rules.filter((_, ruleIndex) => ruleIndex !== index)
 	}
 
 	function setLevel(index: number, level: AccessLevel): void {
-		rules = rules.map((r, i) => (i === index ? { ...r, level } : r))
+		rules = rules.map((rule, ruleIndex) => (ruleIndex === index ? { ...rule, level } : rule))
 	}
 
-	// ---- drag-and-drop reordering ----
-
-	function onDragStart(e: DragEvent, index: number): void {
+	function onDragStart(event: DragEvent, index: number): void {
 		dragIndex = index
-		if (e.dataTransfer) {
-			e.dataTransfer.effectAllowed = 'move'
-		}
+		if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
 	}
 
-	function onDragOver(e: DragEvent, index: number): void {
-		e.preventDefault()
+	function onDragOver(event: DragEvent, index: number): void {
+		event.preventDefault()
 		dragOverIndex = index
-		if (e.dataTransfer) {
-			e.dataTransfer.dropEffect = 'move'
-		}
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
 	}
 
-	function onDrop(e: DragEvent, toIndex: number): void {
-		e.preventDefault()
+	function onDrop(event: DragEvent, toIndex: number): void {
+		event.preventDefault()
 		if (dragIndex === null || dragIndex === toIndex) {
 			dragIndex = null
 			dragOverIndex = null
@@ -304,20 +350,258 @@
 		dragOverIndex = null
 	}
 
-	// ---- filtered groups (client-side) ----
-
-	const filteredGroups = $derived(
-		groups.list.filter(
-			(g) => !searchQuery || g.name.toLowerCase().includes(searchQuery.toLowerCase())
+	function cleanFilename(value: string): string {
+		return (
+			value
+				.toLowerCase()
+				.replace(/[^a-z0-9]+/g, '-')
+				.replace(/(^-|-$)/g, '') || 'share'
 		)
-	)
+	}
 
-	// ---- lifecycle ----
+	function downloadTextFile(filename: string, content: string, mimeType: string): void {
+		const blob = new Blob([content], { type: mimeType })
+		const href = URL.createObjectURL(blob)
+		const anchor = document.createElement('a')
+		anchor.href = href
+		anchor.download = filename
+		document.body.appendChild(anchor)
+		anchor.click()
+		document.body.removeChild(anchor)
+		URL.revokeObjectURL(href)
+	}
+
+	async function copyText(value: string, successMessage: string): Promise<void> {
+		if (value.length > MAX_CLIPBOARD_SNAPSHOT_CHARS) {
+			showError('too large to copy; download instead')
+			return
+		}
+		try {
+			await navigator.clipboard.writeText(value)
+			notifications.pushEphemeralToast('success', successMessage)
+		} catch {
+			showError('could not copy')
+		}
+	}
+
+	async function withWorking(actionId: string, callback: () => Promise<void>): Promise<void> {
+		workingAction = actionId
+		try {
+			await callback()
+		} finally {
+			workingAction = null
+		}
+	}
+
+	function threadTitle(thread: ApiThread | null): string {
+		return thread?.title?.trim() || shareTitle
+	}
+
+	function messageText(message: ApiMessage): string {
+		return contentPartsToText(message.content).trim()
+	}
+
+	function plainTextFromMarkdown(markdown: string): string {
+		return markdown
+			.replace(/^#{1,6}\s+/gm, '')
+			.replace(/^[-*]\s+/gm, '- ')
+			.trim()
+	}
+
+	function exportExtension(format: ExportFormat): string {
+		return format === 'json' ? 'json' : format
+	}
+
+	function exportMimeType(format: ExportFormat): string {
+		if (format === 'json') return 'application/json;charset=utf-8'
+		if (format === 'txt') return 'text/plain;charset=utf-8'
+		return 'text/markdown;charset=utf-8'
+	}
+
+	function exportSnapshot(markdown: string, format: ExportFormat): string {
+		if (format === 'md') return markdown
+		if (format === 'txt') return plainTextFromMarkdown(markdown)
+		return JSON.stringify(
+			{
+				resource_type: payload?.resourceType ?? null,
+				resource_id: payload?.resourceId ?? null,
+				title: shareTitle,
+				url: shareUrl,
+				markdown,
+			},
+			null,
+			2
+		)
+	}
+
+	async function buildResourceSnapshot(): Promise<string> {
+		if (!payload) return shareUrl
+		const title = shareTitle
+		switch (payload.resourceType) {
+			case 'thread': {
+				const thread = await chat.threadCache.getThread(payload.resourceId)
+				const { messages } = await chat.threadCache.getMessages(
+					payload.resourceId,
+					0,
+					THREAD_EXPORT_MESSAGE_LIMIT
+				)
+				const lines = [`# ${threadTitle(thread)}`, '', `link: ${shareUrl}`, '']
+				for (const message of messages) {
+					const text = messageText(message)
+					if (!text) continue
+					lines.push(`## ${message.type}`, '', text, '')
+				}
+				return lines.join('\n')
+			}
+			case 'note': {
+				await notes.load()
+				const note = notes.get(payload.resourceId)
+				return [
+					`# ${note?.title || title}`,
+					'',
+					note?.content ?? '',
+					'',
+					`link: ${shareUrl}`,
+				]
+					.filter(Boolean)
+					.join('\n')
+			}
+			case 'file': {
+				await files.load()
+				const file = files.get(payload.resourceId) as ApiFile | null
+				return [
+					`# ${file?.filename || title}`,
+					'',
+					file?.mime_type ? `type: ${file.mime_type}` : '',
+					file?.size_bytes ? `size: ${file.size_bytes} bytes` : '',
+					`link: ${shareUrl}`,
+				]
+					.filter(Boolean)
+					.join('\n')
+			}
+			case 'project': {
+				await projects.load()
+				const project = projects.getById(payload.resourceId)
+				return [
+					`# ${project?.name || title}`,
+					'',
+					project?.description ?? '',
+					'',
+					`link: ${shareUrl}`,
+				]
+					.filter(Boolean)
+					.join('\n')
+			}
+			case 'group': {
+				await groups.load()
+				const group = groups.getById(payload.resourceId)
+				return [
+					`# ${group?.name || title}`,
+					'',
+					group?.description ?? '',
+					'',
+					`link: ${shareUrl}`,
+				]
+					.filter(Boolean)
+					.join('\n')
+			}
+			case 'reminder_list': {
+				await reminders.loadLists()
+				const list = reminders.getListById(payload.resourceId)
+				return [
+					`# ${list?.name || title}`,
+					'',
+					list ? `total: ${list.total_count}` : '',
+					list ? `pending: ${list.pending_count}` : '',
+					list ? `completed: ${list.completed_count}` : '',
+					`link: ${shareUrl}`,
+				]
+					.filter(Boolean)
+					.join('\n')
+			}
+			case 'calendar': {
+				await calendars.load()
+				const calendar = calendars.all.find((item) => item.id === payload.resourceId)
+				return [`# ${calendar?.name || title}`, '', `link: ${shareUrl}`].join('\n')
+			}
+			case 'agent':
+				return [`# ${title}`, '', `link: ${shareUrl}`].join('\n')
+		}
+	}
+
+	async function copyLink(): Promise<void> {
+		await copyText(shareUrl, 'link copied')
+	}
+
+	async function copySnapshot(): Promise<void> {
+		await withWorking('copy-snapshot', async () => {
+			await copyText(exportSnapshot(await buildResourceSnapshot(), 'txt'), 'copied')
+		})
+	}
+
+	async function downloadSnapshot(format: ExportFormat): Promise<void> {
+		await withWorking(`download-snapshot-${format}`, async () => {
+			const content = exportSnapshot(await buildResourceSnapshot(), format)
+			downloadTextFile(
+				`${cleanFilename(shareTitle)}.${exportExtension(format)}`,
+				content,
+				exportMimeType(format)
+			)
+		})
+	}
+
+	async function printSnapshotPdf(): Promise<void> {
+		if (!browser) return
+		const printWindow = window.open('', '_blank')
+		if (!printWindow) {
+			showError('could not open print view')
+			return
+		}
+		await withWorking('print-snapshot', async () => {
+			const content = exportSnapshot(await buildResourceSnapshot(), 'txt')
+			printWindow.document.write(
+				'<!doctype html><html><head><title></title><style>body{font-family:system-ui,sans-serif;margin:32px;line-height:1.5}pre{white-space:pre-wrap;font:inherit}</style></head><body><pre></pre></body></html>'
+			)
+			printWindow.document.title = shareTitle
+			printWindow.document.querySelector('pre')?.append(document.createTextNode(content))
+			printWindow.document.close()
+			printWindow.focus()
+			printWindow.print()
+		})
+	}
+
+	async function downloadOriginalFile(): Promise<void> {
+		if (!payload || payload.resourceType !== 'file') return
+		await withWorking('download-file', async () => {
+			await files.load()
+			const file = files.get(payload.resourceId)
+			await downloadFile(payload.resourceId, file?.filename ?? shareTitle)
+		})
+	}
+
+	async function nativeShare(): Promise<void> {
+		if (!canNativeShare) {
+			await copyLink()
+			return
+		}
+		try {
+			await navigator.share({ title: shareTitle, text: shareTitle, url: shareUrl })
+		} catch (error) {
+			if (error instanceof DOMException && error.name === 'AbortError') return
+			showError('could not share')
+		}
+	}
 
 	$effect(() => {
-		if (open && payload) {
+		if (!open || !payload) return
+		void resourceAccess.ensure(payload.resourceType, payload.resourceId)
+	})
+
+	$effect(() => {
+		if (open && payload && canManageSharing) {
 			void loadRules()
 			void groups.load()
+			void friends.load()
 		}
 	})
 
@@ -327,176 +611,86 @@
 			searchQuery = ''
 			searchResults = []
 			saveError = null
+			workingAction = null
+			failedShareIcons = []
 			dragIndex = null
 			dragOverIndex = null
+			rulesLoadKey = ''
+			rulesLoadVersion = -1
 		}
 	})
 </script>
 
-<BaseModal
-	{open}
-	title="access rules"
-	description={payload?.title ? `sharing: ${payload.title}` : undefined}
-	{onClose}
-	widthClassName="max-w-3xl"
->
-	<div class="flex flex-col gap-4">
-		<!-- search for users -->
-		<div class="relative">
-			<Search class="text-foreground/30 absolute top-1/2 left-3.5 size-4 -translate-y-1/2" />
-			<input
-				class="bg-foreground/8 text-foreground ring-foreground/10 placeholder:text-foreground/30 w-full rounded-xl py-3 pr-4 pl-10 text-sm ring-1 outline-none focus:ring-(--accent-primary)/50"
-				type="text"
-				placeholder="search users and groups"
-				value={searchQuery}
-				oninput={onSearchInput}
+<BaseModal {open} title="share" {onClose} widthClassName="max-w-3xl">
+	<div class="grid gap-3">
+		<ResourceAccessHeader
+			{panelClass}
+			{iconBoxClass}
+			resourceType={payload?.resourceType}
+			title={shareTitle}
+			url={shareUrl}
+			{currentLevel}
+		/>
+
+		<ResourceAccessActions
+			{panelClass}
+			{quietButtonClass}
+			{mailHref}
+			{shareTargets}
+			{workingAction}
+			resourceType={payload?.resourceType}
+			{activeShareIconUrl}
+			{markShareIconFailed}
+			{copyLink}
+			{nativeShare}
+			{copySnapshot}
+			{downloadSnapshot}
+			{printSnapshotPdf}
+			{downloadOriginalFile}
+		/>
+
+		{#if canManageSharing}
+			<ResourceAccessPeople
+				{panelClass}
+				{quietButtonClass}
+				{primaryButtonClass}
+				{inputClass}
+				{rules}
+				{searchQuery}
+				{searchResults}
+				{filteredFriends}
+				{filteredGroups}
+				{isLoading}
+				{isSaving}
+				{saveError}
+				{dragIndex}
+				{dragOverIndex}
+				{userLabel}
+				{onSearchInput}
+				{addUserRule}
+				{addGroupRule}
+				{removeRule}
+				{setLevel}
+				{onDragStart}
+				{onDragOver}
+				{onDrop}
+				{onDragEnd}
+				{saveRules}
 			/>
-		</div>
-
-		{#if searchResults.length > 0}
-			<div class="rounded-xl border border-white/8 bg-white/4 py-1">
-				{#each searchResults as user (user.id)}
-					<button
-						class="text-foreground/80 hover:bg-foreground/6 flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-sm transition-colors"
-						onclick={() => addUserRule(user)}
-					>
-						<div
-							class="bg-foreground/10 flex size-8 shrink-0 items-center justify-center rounded-full"
-						>
-							<User class="size-4" />
-						</div>
-						<span class="flex-1 text-left">
-							{user.display_name ?? user.email ?? user.id}
-						</span>
-						<Plus class="text-foreground/40 size-4" />
-					</button>
-				{/each}
-			</div>
-		{/if}
-
-		<!-- quick-add / filter: groups -->
-		{#if filteredGroups.length > 0}
-			<div>
-				<p class="text-foreground/40 mb-2 text-xs">
-					{searchQuery ? 'matching groups' : 'your groups'}
-				</p>
-				<div class="flex flex-wrap gap-2">
-					{#each filteredGroups as group (group.id)}
-						{@const alreadyAdded = rules.some((r) => r.subjectGroupId === group.id)}
-						<button
-							class="liquid-glass flex cursor-pointer items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm transition-all hover:brightness-110 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
-							onclick={() => addGroupRule(group.id, group.name)}
-							disabled={alreadyAdded}
-						>
-							<UserGroup class="size-3.5" />
-							{group.name}
-							{#if alreadyAdded}
-								<Check class="text-foreground/50 size-3" />
-							{/if}
-						</button>
-					{/each}
+		{:else}
+			<section class="{panelClass} flex items-start gap-3 p-4">
+				<div
+					class="bg-foreground/10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+				>
+					<ShieldCheck class="h-4 w-4" />
 				</div>
-			</div>
+				<div>
+					<p class="text-sm font-medium">sharing is managed by someone else</p>
+					<p class="text-foreground/45 mt-1 text-sm">
+						you can still send the link or export what you can view.
+					</p>
+				</div>
+			</section>
 		{/if}
-
-		<!-- ACL rules list -->
-		<div class="flex flex-col gap-1">
-			<p class="text-foreground/40 mb-1 text-xs">
-				access rules {rules.length > 0 ? `(${rules.length})` : ''}
-			</p>
-			{#if isLoading}
-				<div class="flex justify-center py-4"><NokodoLoader shimmer /></div>
-			{:else if rules.length === 0}
-				<p class="text-foreground/30 py-4 text-center text-sm">
-					no rules yet — add users or groups above
-				</p>
-			{:else}
-				{#each rules as rule, i (i)}
-					<div
-						class="flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-all {dragOverIndex ===
-						i
-							? 'border-(--accent-primary)/40 bg-(--accent-primary)/5'
-							: 'border-white/8 bg-white/4'} {dragIndex === i ? 'opacity-40' : ''}"
-						draggable="true"
-						ondragstart={(e) => onDragStart(e, i)}
-						ondragover={(e) => onDragOver(e, i)}
-						ondrop={(e) => onDrop(e, i)}
-						ondragend={onDragEnd}
-						role="listitem"
-					>
-						<!-- drag handle -->
-						<div
-							class="text-foreground/20 flex cursor-grab flex-col items-center active:cursor-grabbing"
-							aria-hidden="true"
-						>
-							<ChevronUpDown class="size-4" />
-						</div>
-
-						<!-- subject icon -->
-						<div
-							class="bg-foreground/10 flex size-8 shrink-0 items-center justify-center rounded-full"
-						>
-							{#if rule.subjectGroupId}
-								<UserGroup class="size-4" />
-							{:else}
-								<User class="size-4" />
-							{/if}
-						</div>
-
-						<!-- label -->
-						<span class="text-foreground/80 flex-1 truncate text-sm"
-							>{rule.subjectLabel}</span
-						>
-
-						<!-- level selector -->
-						<div class="flex items-center gap-1 rounded-lg bg-black/15 p-0.5">
-							{#each ACCESS_LEVELS as lvl (lvl)}
-								<button
-									class="cursor-pointer rounded-md px-2.5 py-1 text-xs transition-all {rule.level ===
-									lvl
-										? 'bg-(--accent-primary)/20 font-medium text-(--accent-primary)'
-										: 'text-foreground/40 hover:text-foreground/70'}"
-									onclick={() => setLevel(i, lvl)}
-								>
-									{lvl}
-								</button>
-							{/each}
-						</div>
-
-						<!-- remove -->
-						<button
-							class="text-foreground/30 cursor-pointer transition-colors hover:text-red-400"
-							onclick={() => removeRule(i)}
-							aria-label="remove rule"
-						>
-							<Trash class="size-4" />
-						</button>
-					</div>
-				{/each}
-			{/if}
-		</div>
-
-		{#if saveError}
-			<p class="text-sm text-red-400">{saveError}</p>
-		{/if}
-
-		<!-- save -->
-		<div class="flex justify-end gap-2 pt-1">
-			<button
-				class="text-foreground/60 hover:text-foreground cursor-pointer rounded-xl px-4 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-				onclick={onClose}
-				disabled={isSaving}
-			>
-				cancel
-			</button>
-			<button
-				class="liquid-glass cursor-pointer rounded-xl px-5 py-2 text-sm font-medium transition-all hover:brightness-110 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
-				onclick={saveRules}
-				disabled={isSaving}
-			>
-				{#if isSaving}<ShimmerText className="inline-block">saving</ShimmerText
-					>{:else}save{/if}
-			</button>
-		</div>
 	</div>
 </BaseModal>

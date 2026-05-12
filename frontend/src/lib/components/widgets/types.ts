@@ -5,13 +5,20 @@
  * which define all resource types a user can interact with.
  */
 
-export type ResourceType = 'thread' | 'note' | 'reminder_list' | 'project' | 'file'
+export type ResourceType = 'thread' | 'note' | 'reminder_list' | 'project' | 'file' | 'calendar'
 
 export type ResourceSortBy = 'updated_at' | 'created_at' | 'title'
 export type SortDir = 'asc' | 'desc'
 export type ResourceSortMode = `${ResourceSortBy}:${SortDir}`
 
-export type ResourceFilterMode = 'all' | 'threads' | 'notes' | 'reminders' | 'files'
+export type ResourceFilterMode =
+	| 'all'
+	| 'threads'
+	| 'notes'
+	| 'reminders'
+	| 'files'
+	| 'projects'
+	| 'calendars'
 
 export type ResourceLayoutMode = 'grid' | 'list'
 

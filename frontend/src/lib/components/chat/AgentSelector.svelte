@@ -1,4 +1,5 @@
 <script lang="ts">
+	import EmptyState from '$lib/components/EmptyState.svelte'
 	import Check from '$lib/components/icons/Check.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
@@ -133,7 +134,7 @@
 
 		<ul class="m-0 list-none p-0" role="listbox">
 			{#if filteredAgents.length === 0}
-				<li class="text-foreground/50 px-3 py-3 text-center text-sm">no agents found</li>
+				<li><EmptyState label="no agents found" compact /></li>
 			{:else}
 				{#each filteredAgents as agent (agent.id)}
 					{@const isSelected = agent.id === selectedAgent}

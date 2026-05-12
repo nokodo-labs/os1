@@ -15,11 +15,12 @@
 		value = '',
 		class: className = 'size-4',
 		color = 'currentColor',
-		strokeWidth = '1.5',
+		strokeWidth = '1.7',
 		...rest
 	}: IconProps = $props()
 
 	const normalized = $derived(value.toLowerCase())
+	const hasValue = $derived(normalized.trim().length > 0)
 	const kind = $derived.by((): SortKind => {
 		if (normalized.includes('position')) return 'manual'
 		if (normalized.includes('content_length')) return 'length'
@@ -40,7 +41,12 @@
 	})
 
 	const direction = $derived.by((): SortDirection => {
-		if (normalized.endsWith(':asc') || normalized.endsWith('-asc') || normalized === 'oldest') {
+		if (
+			normalized.endsWith(':asc') ||
+			normalized.endsWith('-asc') ||
+			normalized === 'oldest' ||
+			normalized === 'name'
+		) {
 			return 'asc'
 		}
 		return 'desc'
@@ -48,133 +54,65 @@
 
 	const alphaTop = $derived(direction === 'desc' ? 'z' : 'a')
 	const alphaBottom = $derived(direction === 'desc' ? 'a' : 'z')
+	const arrowPath = $derived(
+		direction === 'asc' ? 'M19 17V3m0 0-3 3m3-3 3 3' : 'M19 3v14m0 0-3-3m3 3 3-3'
+	)
 </script>
 
-{#if kind === 'alpha'}
+{#if !hasValue}
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
 		viewBox="0 0 24 24"
 		fill="none"
 		stroke={color}
 		stroke-width={strokeWidth}
+		stroke-linecap="round"
+		stroke-linejoin="round"
 		class={className}
 		aria-hidden="true"
 		{...rest}
 	>
-		<text x="4" y="9" fill={color} font-size="7" font-weight="700">{alphaTop}</text>
-		<text x="4" y="19" fill={color} font-size="7" font-weight="700">{alphaBottom}</text>
-		<path stroke-linecap="round" stroke-linejoin="round" d="M17 5v14m0 0-3-3m3 3 3-3" />
-	</svg>
-{:else if kind === 'created'}
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke={color}
-		stroke-width={strokeWidth}
-		class={className}
-		aria-hidden="true"
-		{...rest}
-	>
-		<path
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			d="M5.5 4.5v2M12 4.5v2m6.5-2v2M4 10h11M4.5 7h11A1.5 1.5 0 0 1 17 8.5V18a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 18V8.5A1.5 1.5 0 0 1 4.5 7Z"
-		/>
-		{#if direction === 'desc'}
-			<path
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				d="M20 5v14m0 0-2.5-2.5M20 19l2.5-2.5"
-			/>
-		{:else}
-			<path
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				d="M20 19V5m0 0-2.5 2.5M20 5l2.5 2.5"
-			/>
-		{/if}
-	</svg>
-{:else if kind === 'updated'}
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke={color}
-		stroke-width={strokeWidth}
-		class={className}
-		aria-hidden="true"
-		{...rest}
-	>
-		<path stroke-linecap="round" stroke-linejoin="round" d="M10.5 5a6.5 6.5 0 1 0 6.2 8.5" />
-		<path stroke-linecap="round" stroke-linejoin="round" d="M10.5 8.5v4l3 1.75" />
-		<path stroke-linecap="round" stroke-linejoin="round" d="M15.5 4.75h4v4" />
-		<path stroke-linecap="round" stroke-linejoin="round" d="M19.25 4.75 15.5 8.5" />
-		{#if direction === 'desc'}
-			<path
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				d="M20 12v7m0 0-2.5-2.5M20 19l2.5-2.5"
-			/>
-		{:else}
-			<path
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				d="M20 19v-7m0 0-2.5 2.5M20 12l2.5 2.5"
-			/>
-		{/if}
-	</svg>
-{:else if kind === 'manual'}
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke={color}
-		stroke-width={strokeWidth}
-		class={className}
-		aria-hidden="true"
-		{...rest}
-	>
-		<path
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			d="M3 5h10.5M3 10h8M3 15h5.5m5-.5 3.5-3.5m0 0 3.5 3.5M17 11v8"
-		/>
-	</svg>
-{:else if kind === 'length'}
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke={color}
-		stroke-width={strokeWidth}
-		class={className}
-		aria-hidden="true"
-		{...rest}
-	>
-		{#if direction === 'desc'}
-			<path stroke-linecap="round" d="M4 6h10M4 12h7M4 18h4" />
-		{:else}
-			<path stroke-linecap="round" d="M4 6h4M4 12h7M4 18h10" />
-		{/if}
-		{#if direction === 'desc'}
-			<path stroke-linecap="round" stroke-linejoin="round" d="M18 5v14m0 0-3-3m3 3 3-3" />
-		{:else}
-			<path stroke-linecap="round" stroke-linejoin="round" d="M18 19V5m0 0-3 3m3-3 3 3" />
-		{/if}
+		<path d="M7 18V6m0 0L4 9m3-3 3 3" />
+		<path d="M17 6v12m0 0-3-3m3 3 3-3" />
 	</svg>
 {:else}
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
-		viewBox="0 0 24 24"
+		viewBox="0 0 24 20"
 		fill="none"
 		stroke={color}
 		stroke-width={strokeWidth}
+		stroke-linecap="round"
+		stroke-linejoin="round"
 		class={className}
 		aria-hidden="true"
 		{...rest}
 	>
-		<path stroke-linecap="round" stroke-linejoin="round" d="M7 4v10m0-10 3 3m-3-3L4 7" />
-		<path stroke-linecap="round" stroke-linejoin="round" d="M17 20V10m0 10-3-3m3 3 3-3" />
+		{#if kind === 'alpha'}
+			<text x="3" y="8" fill={color} stroke="none" font-size="7" font-weight="700"
+				>{alphaTop}</text
+			>
+			<text x="3" y="16" fill={color} stroke="none" font-size="7" font-weight="700"
+				>{alphaBottom}</text
+			>
+		{:else if kind === 'created'}
+			<path d="M4.5 3.5v2M10.5 3.5v2" />
+			<path d="M3 7h9" />
+			<rect x="2.5" y="5" width="11" height="11" rx="2" />
+		{:else if kind === 'updated'}
+			<circle cx="8" cy="10" r="5" />
+			<path d="M8 7.5V10l2.25 1.35" />
+		{:else if kind === 'manual'}
+			<path d="M3 5.5h9M3 10h7M3 14.5h9" />
+		{:else if kind === 'length'}
+			{#if direction === 'asc'}
+				<path d="M3 5.5h4M3 10h7M3 14.5h10" />
+			{:else}
+				<path d="M3 5.5h10M3 10h7M3 14.5h4" />
+			{/if}
+		{:else}
+			<path d="M3 5.5h8M3 10h10M3 14.5h6" />
+		{/if}
+		<path d={arrowPath} />
 	</svg>
 {/if}

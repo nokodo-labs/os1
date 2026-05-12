@@ -11,12 +11,14 @@
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import { MenuItem, PopupMenu } from '$lib/components/primitives'
+	import RecurrenceEditor from '$lib/components/scheduling/RecurrenceEditor.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import type {
 		ReminderListWithCounts,
 		ReminderUpdate,
 		ReminderWithSubtasks,
 	} from '$lib/stores/reminders.svelte'
+	import { describeRecurrence, type Recurrence } from '$lib/utils/recurrence'
 	import { tick } from 'svelte'
 	import { SvelteDate } from 'svelte/reactivity'
 
@@ -36,6 +38,7 @@
 		availableLists: ReminderListWithCounts[]
 		motion?: Motion
 		motionDelayMs?: number
+		editable?: boolean
 	}
 
 	type CreateProps = {
@@ -69,6 +72,7 @@
 	let editedDescription = $state('')
 
 	const isCompleted = $derived(props.kind === 'edit' && props.reminder.status === 'completed')
+	const isEditable = $derived(props.kind === 'create' || (props.editable ?? true))
 	const isMotionIn = $derived(props.motion === 'in')
 	const isMotionOutComplete = $derived(props.motion === 'out-complete')
 	const isMotionOutUncomplete = $derived(props.motion === 'out-uncomplete')
@@ -130,23 +134,17 @@
 		return new SvelteDate(props.reminder.due_at) < new SvelteDate()
 	})
 
-	// recurrence presets: rrule strings mapped to friendly labels.
-	// covers ~95% of reminder use cases without a custom rrule builder.
-	const RECURRENCE_PRESETS = [
-		{ value: '', label: 'never' },
-		{ value: 'FREQ=DAILY', label: 'every day' },
-		{ value: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', label: 'every weekday' },
-		{ value: 'FREQ=WEEKLY', label: 'every week' },
-		{ value: 'FREQ=MONTHLY', label: 'every month' },
-		{ value: 'FREQ=YEARLY', label: 'every year' },
-	] as const
-
 	const recurrenceLabel = $derived.by(() => {
 		if (props.kind !== 'edit') return null
-		const rule = props.reminder.recurrence?.rrule?.[0] ?? ''
-		if (!rule) return null
-		const preset = RECURRENCE_PRESETS.find((p) => p.value === rule)
-		return preset ? preset.label : 'custom'
+		if (!props.reminder.recurrence) return null
+		return describeRecurrence(
+			props.reminder.recurrence,
+			props.reminder.due_at ?? props.reminder.remind_at ?? null
+		)
+	})
+	const recurrenceAnchor = $derived.by(() => {
+		if (props.kind !== 'edit') return null
+		return props.reminder.due_at ?? props.reminder.remind_at ?? defaultDueAtIso()
 	})
 
 	/** convert an ISO datetime to the local-tz format used by datetime-local inputs. */
@@ -176,14 +174,14 @@
 	})
 
 	function handleDueChange(value: string) {
-		if (props.kind !== 'edit') return
+		if (props.kind !== 'edit' || !isEditable) return
 		dueDraft = value
 		const iso = localInputToIso(value)
 		void props.onUpdate({ due_at: iso })
 	}
 
 	function setDuePreset(daysFromToday: number) {
-		if (props.kind !== 'edit') return
+		if (props.kind !== 'edit' || !isEditable) return
 		const date = new SvelteDate()
 		date.setDate(date.getDate() + daysFromToday)
 		if (daysFromToday === 0) {
@@ -197,30 +195,27 @@
 	}
 
 	function clearDue() {
-		if (props.kind !== 'edit') return
+		if (props.kind !== 'edit' || !isEditable) return
 		dueDraft = ''
 		void props.onUpdate({ due_at: null })
 		isDatePickerOpen = false
 	}
 
-	function handleRecurrence(value: string) {
-		if (props.kind !== 'edit') return
-		isRepeatMenuOpen = false
-		void props.onUpdate({
-			recurrence: value
-				? {
-						rrule: [value],
-						rdate: [],
-						exdate: [],
-						timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-					}
-				: null,
-		})
+	function defaultDueAtIso(): string {
+		const date = new SvelteDate()
+		date.setHours(date.getHours() + 1, 0, 0, 0)
+		return date.toISOString()
 	}
 
-	function currentRecurrenceRule(): string {
-		if (props.kind !== 'edit') return ''
-		return props.reminder.recurrence?.rrule?.[0] ?? ''
+	function handleRecurrenceChange(value: Recurrence | null) {
+		if (props.kind !== 'edit' || !isEditable) return
+		const updates: ReminderUpdate = { recurrence: value }
+		if (value && !props.reminder.due_at && !props.reminder.remind_at) {
+			const dueAt = defaultDueAtIso()
+			updates.due_at = dueAt
+			dueDraft = isoToLocalInput(dueAt)
+		}
+		void props.onUpdate(updates)
 	}
 
 	async function focusTitle() {
@@ -238,6 +233,7 @@
 
 		if (!props.expanded) {
 			if (props.kind === 'create') return
+			if (!isEditable) return
 			props.onSelect()
 			await focusTitle()
 		}
@@ -247,6 +243,7 @@
 		const trimmed = editedTitle.trim()
 
 		if (props.kind === 'edit') {
+			if (!isEditable) return
 			if (trimmed !== props.reminder.title && trimmed !== '') {
 				props.onUpdate({ title: trimmed })
 			} else {
@@ -262,6 +259,7 @@
 		const trimmed = editedDescription.trim()
 
 		if (props.kind === 'edit') {
+			if (!isEditable) return
 			const original = props.reminder.description ?? ''
 			if (trimmed !== original) {
 				props.onUpdate({ description: trimmed || null })
@@ -331,6 +329,7 @@
 		event.preventDefault()
 
 		if (props.kind === 'create') return
+		if (!isEditable) return
 		if (props.expanded) return
 		props.onSelect()
 		void focusTitle()
@@ -351,7 +350,7 @@
 	}
 
 	async function handleToggleComplete() {
-		if (props.kind !== 'edit') return
+		if (props.kind !== 'edit' || !isEditable) return
 		await props.onToggleComplete()
 	}
 
@@ -395,10 +394,14 @@
 		<button
 			data-circle-button
 			type="button"
-			class="circle-btn text-foreground/55 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center transition-colors duration-150 {props.kind ===
-			'edit'
-				? 'hover:text-foreground/80'
+			class="circle-btn text-foreground/55 flex h-6 w-6 shrink-0 items-center justify-center transition-colors duration-150 {isEditable
+				? 'cursor-pointer'
+				: 'cursor-default'} {props.kind === 'edit'
+				? isEditable
+					? 'hover:text-foreground/80'
+					: ''
 				: ''} {isCompleted ? 'text-emerald-400' : ''}"
+			disabled={props.kind === 'edit' && !isEditable}
 			onclick={(event) => {
 				event.stopPropagation()
 				void handleToggleComplete()
@@ -452,7 +455,7 @@
 			{/if}
 		</div>
 
-		{#if props.kind === 'edit'}
+		{#if props.kind === 'edit' && isEditable}
 			<div data-menu-area class="flex items-center">
 				<button
 					bind:this={menuButtonEl}
@@ -722,27 +725,18 @@
 			open={isRepeatMenuOpen}
 			anchorEl={repeatButtonEl}
 			onClose={() => (isRepeatMenuOpen = false)}
+			estimatedHeight={320}
+			class="overflow-hidden"
 		>
-			<div class="flex min-w-56 flex-col gap-0.5 p-1">
-				<div
-					class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
-				>
-					<ArrowPath class="h-3.5 w-3.5" />
-					repeat
+			<div class="w-[min(calc(100vw-3rem),20rem)] max-w-full">
+				<div class="max-h-[min(70vh,26rem)] overflow-y-auto overscroll-contain p-1">
+					<RecurrenceEditor
+						value={props.reminder.recurrence ?? null}
+						anchorDate={recurrenceAnchor}
+						timezone={props.reminder.recurrence?.timezone ?? null}
+						onChange={handleRecurrenceChange}
+					/>
 				</div>
-				{#each RECURRENCE_PRESETS as preset (preset.value)}
-					{@const isCurrent = currentRecurrenceRule() === preset.value}
-					<MenuItem
-						selected={isCurrent}
-						onclick={(event) => {
-							event.stopPropagation()
-							handleRecurrence(preset.value)
-						}}
-					>
-						{#snippet icon()}<ArrowPath class="h-4 w-4" />{/snippet}
-						{preset.label}
-					</MenuItem>
-				{/each}
 			</div>
 		</PopupMenu>
 	{/if}

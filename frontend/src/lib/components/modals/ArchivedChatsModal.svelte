@@ -9,6 +9,7 @@
 	import { chat } from '$lib/stores/chat.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { debounce } from '$lib/utils'
+	import { metadataLine } from '$lib/utils/resourceAuthors'
 
 	type Thread = components['schemas']['Thread']
 
@@ -163,6 +164,13 @@
 		if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
 		return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 	}
+
+	function archivedThreadMeta(thread: Thread): string {
+		const tags = thread.tags ?? []
+		const visibleTags = tags.slice(0, 3)
+		const moreTags = tags.length > 3 ? `+${tags.length - 3}` : null
+		return metadataLine(`created ${formatDate(thread.created_at)}`, ...visibleTags, moreTags)
+	}
 </script>
 
 <BaseModal
@@ -210,27 +218,8 @@
 								{formatDate(thread.last_activity_at)}
 							</span>
 						</div>
-						<!-- tags row -->
-						{#if thread.tags && thread.tags.length > 0}
-							<div class="mt-1 flex items-center gap-1 overflow-hidden">
-								{#each (thread.tags ?? []).slice(0, 3) as tag (tag)}
-									<span
-										class="bg-foreground/8 text-foreground/50 inline-flex max-w-20 shrink-0 items-center truncate rounded-full px-1.5 py-px text-[10px] leading-tight"
-										title={tag}
-									>
-										{tag}
-									</span>
-								{/each}
-								{#if (thread.tags ?? []).length > 3}
-									<span class="text-foreground/30 shrink-0 text-[10px]">
-										+{(thread.tags ?? []).length - 3}
-									</span>
-								{/if}
-							</div>
-						{/if}
-						<!-- created date -->
-						<div class="text-foreground/30 mt-0.5 text-[11px]">
-							created {formatDate(thread.created_at)}
+						<div class="text-foreground/35 mt-0.5 truncate text-[11px]">
+							{archivedThreadMeta(thread)}
 						</div>
 					</button>
 					<button

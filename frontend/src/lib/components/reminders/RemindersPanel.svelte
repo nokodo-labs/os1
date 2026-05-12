@@ -9,6 +9,7 @@
 		type ReminderUpdate,
 		type ReminderWithSubtasks,
 	} from '$lib/stores/reminders.svelte'
+	import { canEditAccessLevel, resourceAccess } from '$lib/stores/resourceAccess.svelte'
 	import { tick, untrack } from 'svelte'
 	import { SvelteMap } from 'svelte/reactivity'
 	import ReminderRow from './ReminderRow.svelte'
@@ -74,6 +75,12 @@
 
 	const availableLists = $derived(reminders.lists)
 	const activeList = $derived(listId ? reminders.getListById(listId) : reminders.defaultList)
+	const activeListAccessLevel = $derived(
+		activeList
+			? resourceAccess.level('reminder_list', activeList.id, activeList.owner_id)
+			: null
+	)
+	const canEditActiveList = $derived(canEditAccessLevel(activeListAccessLevel))
 
 	// helpers
 
@@ -98,6 +105,7 @@
 	// actions
 
 	async function startInlineAdd() {
+		if (!canEditActiveList) return
 		isAddingReminder = true
 		isAddingExpanded = false
 		expandedReminderId = null
@@ -112,6 +120,7 @@
 	}
 
 	async function submitInlineAdd(draft: { title: string; description: string | null }) {
+		if (!canEditActiveList) return
 		const created = await reminders.createReminder({
 			title: draft.title,
 			listId,
@@ -136,6 +145,7 @@
 	}
 
 	async function toggleComplete(reminder: ReminderWithSubtasks) {
+		if (!canEditActiveList) return
 		const direction = reminder.status === 'pending' ? 'to-completed' : 'to-pending'
 
 		if (!transitions.has(reminder.id)) {
@@ -154,11 +164,13 @@
 	}
 
 	async function moveReminder(reminder: ReminderWithSubtasks, targetListId: string | null) {
+		if (!canEditActiveList) return
 		await reminders.moveReminder(reminder, targetListId)
 		expandedReminderId = null
 	}
 
 	async function deleteReminder(reminder: ReminderWithSubtasks): Promise<boolean> {
+		if (!canEditActiveList) return false
 		const ok = await reminders.deleteReminder(reminder)
 		if (ok && expandedReminderId === reminder.id) {
 			expandedReminderId = null
@@ -167,6 +179,7 @@
 	}
 
 	async function updateReminder(reminder: ReminderWithSubtasks, updates: ReminderUpdate) {
+		if (!canEditActiveList) return
 		await reminders.updateReminder(reminder, updates)
 	}
 
@@ -181,8 +194,14 @@
 	})
 
 	$effect(() => {
+		if (activeList)
+			void resourceAccess.ensure('reminder_list', activeList.id, activeList.owner_id)
+	})
+
+	$effect(() => {
 		if (!browser) return
 		const handler = (event: Event) => {
+			if (!canEditActiveList) return
 			const { detail } = event as CustomEvent<{ listId: string | null }>
 			if (!detail) return
 			if (detail.listId !== listId) return
@@ -196,6 +215,11 @@
 	$effect(() => {
 		if (!browser) return
 		if (!expandedReminderId && !isAddingReminder) return
+		if (!canEditActiveList) {
+			expandedReminderId = null
+			isAddingReminder = false
+			return
+		}
 
 		const onPointerDown = (event: PointerEvent) => {
 			const target = event.target
@@ -258,6 +282,7 @@
 					<ReminderRow
 						kind="edit"
 						{reminder}
+						editable={canEditActiveList}
 						expanded={expandedReminderId === reminder.id &&
 							!transitions.has(reminder.id)}
 						{availableLists}
@@ -277,7 +302,7 @@
 					/>
 				{/each}
 
-				{#if isAddingReminder}
+				{#if isAddingReminder && canEditActiveList}
 					<div class="px-1 py-1">
 						<ReminderRow
 							kind="create"
@@ -289,7 +314,7 @@
 							onCancel={() => void cancelInlineAdd()}
 						/>
 					</div>
-				{:else}
+				{:else if canEditActiveList}
 					<button
 						type="button"
 						class="rounded-pill text-foreground/70 hover:bg-foreground/6 hover:text-foreground/85 flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left text-[0.95rem] leading-6 transition-colors duration-150"
@@ -334,6 +359,7 @@
 								<ReminderRow
 									kind="edit"
 									{reminder}
+									editable={canEditActiveList}
 									expanded={expandedReminderId === reminder.id &&
 										!transitions.has(reminder.id)}
 									{availableLists}

@@ -100,7 +100,7 @@
 		<div class="flex h-full items-center">
 			{#if chrome.island.contextActions}
 				<div
-					class="island-context-actions flex h-full items-center gap-1"
+					class="island-context-actions flex h-full items-center"
 					style="color: var(--accent-primary, white);"
 				>
 					{@render chrome.island.contextActions()}
@@ -189,37 +189,28 @@
 </LiquidGlass>
 
 <style>
-	/* only target direct children of context actions, not nested dropdown menus */
+	/* direct island controls only; composite controls keep their own inner layout */
+	:global(.island-context-actions) {
+		gap: 0;
+	}
 	:global(.island-context-actions > *) {
 		height: 100%;
 	}
-	:global(.island-context-actions > * > svg),
-	:global(.island-context-actions > button > svg) {
-		height: 60%;
-		width: auto;
-	}
-	/* handle trigger buttons nested inside wrapper elements (e.g. dropdown containers) */
-	:global(.island-context-actions > div > button) {
-		height: 100%;
-	}
-	:global(.island-context-actions > div > button > svg) {
-		height: 60%;
-		width: auto;
-	}
 
-	/* only target direct button children of right controls, not nested menus */
-	:global(.island-right-controls > button) {
-		height: 100%;
-	}
-	:global(.island-right-controls > button > svg) {
-		height: 60%;
-		width: auto;
-	}
-
-	/* PWA buttons: icon sizing matches other island buttons */
+	:global(.island-context-actions > button),
+	:global(.island-right-controls > button),
 	:global(.island-pwa-btn) {
+		display: inline-flex;
 		height: 100%;
+		min-width: 0;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		line-height: 1;
 	}
+
+	:global(.island-context-actions > button > svg),
+	:global(.island-right-controls > button > svg),
 	:global(.island-pwa-btn > svg) {
 		height: 60%;
 		width: auto;

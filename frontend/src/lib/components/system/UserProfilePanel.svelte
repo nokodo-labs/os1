@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import { logout } from '$lib/api/client'
+	import { logoutAndRedirect } from '$lib/auth/logout'
 	import { ChevronRight, Cog6, InfoCircle, SignOut, Sparkles } from '$lib/components/icons'
 	import { appNavigation } from '$lib/stores/appNavigation.svelte'
 	import { session } from '$lib/stores/session.svelte'
@@ -17,6 +17,7 @@
 	}
 
 	let { user, onClose }: UserProfilePanelProps = $props()
+	let isLoggingOut = $state(false)
 
 	function handleUserProfileClick() {
 		onClose?.()
@@ -42,11 +43,15 @@
 		void goto(resolve('/settings/about'), { keepFocus: true, noScroll: true })
 	}
 
-	function handleLogout() {
+	async function handleLogout() {
+		if (isLoggingOut) return
+		isLoggingOut = true
 		onClose?.()
-		void logout()
-		session.clear()
-		window.location.href = '/login'
+		try {
+			await logoutAndRedirect()
+		} finally {
+			isLoggingOut = false
+		}
 	}
 
 	function handleLogin() {
@@ -179,6 +184,7 @@
 		<button
 			class="rounded-pill flex w-full cursor-pointer items-center gap-2 border border-transparent bg-transparent px-3 py-2 text-left text-sm font-medium text-[rgb(239,68,68)] transition-all duration-150 hover:border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.15)] active:scale-[0.98]"
 			onclick={handleLogout}
+			disabled={isLoggingOut}
 		>
 			<SignOut class="h-4.5 w-4.5 shrink-0" />
 			<span>log out</span>

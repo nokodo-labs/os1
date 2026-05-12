@@ -8,6 +8,7 @@
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 	import ModalListLayout from '$lib/components/modals/ModalListLayout.svelte'
+	import { showError } from '$lib/stores/notifications.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { debounce } from '$lib/utils'
 
@@ -20,7 +21,7 @@
 
 	let { open, onClose }: MemoriesModalProps = $props()
 
-	const PAGE_SIZE = 20
+	const PAGE_SIZE = 100
 
 	const sortOptions = [
 		{ label: 'latest updated', value: 'updated_at-desc' },
@@ -55,8 +56,20 @@
 	let sortIndex = $state(0)
 	let editingId = $state<string | null>(null)
 	let editContent = $state('')
+	let savingEditId = $state<string | null>(null)
 	let deletingAll = $state(false)
 	let hasMore = $state(true)
+	let memoryTotal = $state<number | null>(null)
+
+	async function fetchMemoryTotal(): Promise<void> {
+		const userId = session.currentUser?.id
+		if (!userId) return
+		const { data } = await api.GET('/v1/users/{user_id}/counts', {
+			params: { path: { user_id: userId } },
+		})
+		const total = data?.memories
+		memoryTotal = typeof total === 'number' ? total : null
+	}
 
 	const currentSort = $derived(sortParsed[sortIndex])
 
@@ -102,6 +115,7 @@
 
 	function reload(): void {
 		void fetchMemories({ reset: true })
+		if (!search) void fetchMemoryTotal()
 	}
 
 	const debouncedSearch = debounce(() => reload(), 400)
@@ -121,9 +135,11 @@
 		if (open) {
 			memories = []
 			hasMore = true
+			memoryTotal = null
 			search = ''
 			sortIndex = 0
 			editingId = null
+			savingEditId = null
 			reload()
 		}
 	})
@@ -140,18 +156,30 @@
 	}
 
 	async function saveEdit(memoryId: string): Promise<void> {
+		if (savingEditId) return
 		const trimmed = editContent.trim()
 		if (!trimmed) return
-		await api.PUT('/v1/memories/{memory_id}', {
-			params: { path: { memory_id: memoryId } },
-			body: { content: trimmed },
-		})
-		const idx = memories.findIndex((m) => m.id === memoryId)
-		if (idx >= 0) {
-			memories[idx] = { ...memories[idx], content: trimmed }
+		savingEditId = memoryId
+		try {
+			const { error } = await api.PUT('/v1/memories/{memory_id}', {
+				params: { path: { memory_id: memoryId } },
+				body: { content: trimmed },
+			})
+			if (error) {
+				showError('could not save memory')
+				return
+			}
+			const idx = memories.findIndex((m) => m.id === memoryId)
+			if (idx >= 0) {
+				memories[idx] = { ...memories[idx], content: trimmed }
+			}
+			editingId = null
+			editContent = ''
+		} catch {
+			showError('could not save memory')
+		} finally {
+			savingEditId = null
 		}
-		editingId = null
-		editContent = ''
 	}
 
 	// delete single
@@ -160,6 +188,7 @@
 			params: { path: { memory_id: memoryId } },
 		})
 		memories = memories.filter((m) => m.id !== memoryId)
+		if (memoryTotal !== null) memoryTotal = Math.max(0, memoryTotal - 1)
 	}
 
 	// delete all
@@ -168,22 +197,30 @@
 		try {
 			await api.DELETE('/v1/memories', {})
 			memories = []
+			memoryTotal = 0
 			hasMore = false
 		} finally {
 			deletingAll = false
 		}
 	}
 
-	function formatDate(dateStr: string): string {
+	function formatDateTime(dateStr: string): string {
 		const d = new Date(dateStr)
-		const now = new Date()
-		const diffMs = now.getTime() - d.getTime()
-		const diffDays = Math.floor(diffMs / 86400000)
-		if (diffDays === 0) return 'today'
-		if (diffDays === 1) return 'yesterday'
-		if (diffDays < 7) return `${diffDays}d ago`
-		if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
-		return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+		if (Number.isNaN(d.getTime())) return 'unknown'
+		return d.toLocaleString(undefined, {
+			year: 'numeric',
+			month: 'numeric',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit',
+		})
+	}
+
+	function footerCountLabel(): string {
+		const noun = memoryTotal === 1 ? 'memory' : 'memories'
+		if (search) return `${memories.length} loaded`
+		if (memoryTotal !== null) return `${memories.length} of ${memoryTotal} ${noun} loaded`
+		return `${memories.length} ${memories.length === 1 ? 'memory' : 'memories'} loaded`
 	}
 </script>
 
@@ -192,7 +229,7 @@
 	title="memories"
 	description="manage what the AI remembers about you"
 	{onClose}
-	widthClassName="max-w-2xl"
+	widthClassName="max-w-5xl"
 >
 	<ModalListLayout
 		{search}
@@ -208,6 +245,7 @@
 		{onSearchInput}
 		{onSortChange}
 		onLoadMore={() => void fetchMemories()}
+		loadMoreThreshold={1600}
 	>
 		{#snippet items()}
 			{#each memories as memory (memory.id)}
@@ -228,15 +266,20 @@
 								onclick={cancelEdit}
 							>
 								<XMark class="h-3.5 w-3.5" />
-								cancel
+								discard
 							</button>
 							<button
 								type="button"
 								class="rounded-pill border-foreground/10 bg-foreground/10 text-foreground/80 hover:bg-foreground/15 flex items-center gap-1 border px-2.5 py-1 text-xs transition-colors"
+								disabled={savingEditId !== null}
 								onclick={() => void saveEdit(memory.id)}
 							>
 								<Check class="h-3.5 w-3.5" />
-								save
+								{#if savingEditId === memory.id}
+									<ShimmerText className="inline-block">saving</ShimmerText>
+								{:else}
+									save
+								{/if}
 							</button>
 						</div>
 					{:else}
@@ -247,9 +290,10 @@
 									{memory.content}
 								</p>
 								<p class="text-foreground/50 mt-1.5 text-xs">
-									created {formatDate(memory.created_at)}{memory.updated_at !==
-									memory.created_at
-										? ` · updated ${formatDate(memory.updated_at)}`
+									created {formatDateTime(
+										memory.created_at
+									)}{memory.updated_at !== memory.created_at
+										? ` · updated ${formatDateTime(memory.updated_at)}`
 										: ''}
 								</p>
 							</div>
@@ -280,8 +324,7 @@
 		{/snippet}
 
 		{#snippet footerLeft()}
-			{memories.length}
-			{memories.length === 1 ? 'memory' : 'memories'}
+			{footerCountLabel()}
 		{/snippet}
 
 		{#snippet footerRight()}

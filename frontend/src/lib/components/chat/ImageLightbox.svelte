@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { portal } from '$lib/actions/portal'
 	import XMark from '$lib/components/icons/XMark.svelte'
+	import { SvelteMap } from 'svelte/reactivity'
 
 	interface Props {
 		open: boolean
@@ -16,8 +17,14 @@
 	let translateX = $state(0)
 	let translateY = $state(0)
 	let isPanning = $state(false)
+	let isPinching = $state(false)
 	let panStart = $state({ x: 0, y: 0 })
 	let panOrigin = $state({ x: 0, y: 0 })
+	let pinchStartDistance = 0
+	let pinchStartScale = 1
+	let pinchStartCenter = { x: 0, y: 0 }
+	let pinchStartTranslate = { x: 0, y: 0 }
+	const activePointers = new SvelteMap<number, { x: number; y: number }>()
 
 	const MIN_SCALE = 1
 	const MAX_SCALE = 8
@@ -29,6 +36,54 @@
 		scale = 1
 		translateX = 0
 		translateY = 0
+		isPanning = false
+		isPinching = false
+		activePointers.clear()
+	}
+
+	function clampPan(tx: number, ty: number, targetScale = scale): { x: number; y: number } {
+		if (!imgEl) return { x: tx, y: ty }
+		const vw = window.innerWidth
+		const vh = window.innerHeight
+		const iw = imgEl.offsetWidth * targetScale
+		const ih = imgEl.offsetHeight * targetScale
+		const maxTx = vw / 2 + iw / 2 - PAN_MARGIN
+		const minTx = -(vw / 2 + iw / 2 - PAN_MARGIN)
+		const maxTy = vh / 2 + ih / 2 - PAN_MARGIN
+		const minTy = -(vh / 2 + ih / 2 - PAN_MARGIN)
+		return {
+			x: Math.max(minTx, Math.min(maxTx, tx)),
+			y: Math.max(minTy, Math.min(maxTy, ty)),
+		}
+	}
+
+	function pointerValues(): Array<{ x: number; y: number }> {
+		return [...activePointers.values()]
+	}
+
+	function pointerDistance(points: Array<{ x: number; y: number }>): number {
+		const first = points[0]
+		const second = points[1]
+		if (!first || !second) return 0
+		return Math.hypot(second.x - first.x, second.y - first.y)
+	}
+
+	function pointerCenter(points: Array<{ x: number; y: number }>): { x: number; y: number } {
+		const first = points[0]
+		const second = points[1]
+		if (!first || !second) return { x: 0, y: 0 }
+		return { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }
+	}
+
+	function localPoint(
+		element: HTMLElement,
+		point: { x: number; y: number }
+	): { x: number; y: number } {
+		const rect = element.getBoundingClientRect()
+		return {
+			x: point.x - rect.left - rect.width / 2,
+			y: point.y - rect.top - rect.height / 2,
+		}
 	}
 
 	function handleKeyDown(e: KeyboardEvent) {
@@ -54,44 +109,102 @@
 		const cx = e.clientX - rect.left - rect.width / 2
 		const cy = e.clientY - rect.top - rect.height / 2
 		const factor = next / scale
-		translateX = cx - factor * (cx - translateX)
-		translateY = cy - factor * (cy - translateY)
+		const nextPan = clampPan(
+			cx - factor * (cx - translateX),
+			cy - factor * (cy - translateY),
+			next
+		)
+		translateX = nextPan.x
+		translateY = nextPan.y
 		scale = next
 	}
 
 	function handlePointerDown(e: PointerEvent) {
-		if (scale <= 1) return
 		e.preventDefault()
-		isPanning = true
-		panStart = { x: e.clientX, y: e.clientY }
-		panOrigin = { x: translateX, y: translateY }
-		;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-	}
+		const element = e.currentTarget as HTMLElement
+		activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+		element.setPointerCapture(e.pointerId)
 
-	function handlePointerMove(e: PointerEvent) {
-		if (!isPanning) return
-		const rawTx = panOrigin.x + (e.clientX - panStart.x)
-		const rawTy = panOrigin.y + (e.clientY - panStart.y)
-		// clamp so at least PAN_MARGIN px of image stays visible at each edge
-		if (imgEl) {
-			const vw = window.innerWidth
-			const vh = window.innerHeight
-			const iw = imgEl.offsetWidth * scale
-			const ih = imgEl.offsetHeight * scale
-			const maxTx = vw / 2 + iw / 2 - PAN_MARGIN
-			const minTx = -(vw / 2 + iw / 2 - PAN_MARGIN)
-			const maxTy = vh / 2 + ih / 2 - PAN_MARGIN
-			const minTy = -(vh / 2 + ih / 2 - PAN_MARGIN)
-			translateX = Math.max(minTx, Math.min(maxTx, rawTx))
-			translateY = Math.max(minTy, Math.min(maxTy, rawTy))
-		} else {
-			translateX = rawTx
-			translateY = rawTy
+		if (activePointers.size >= 2) {
+			const points = pointerValues()
+			isPanning = false
+			isPinching = true
+			pinchStartDistance = pointerDistance(points)
+			pinchStartScale = scale
+			pinchStartCenter = localPoint(element, pointerCenter(points))
+			pinchStartTranslate = { x: translateX, y: translateY }
+			return
+		}
+
+		if (scale > 1) {
+			isPanning = true
+			panStart = { x: e.clientX, y: e.clientY }
+			panOrigin = { x: translateX, y: translateY }
 		}
 	}
 
-	function handlePointerUp() {
+	function handlePointerMove(e: PointerEvent) {
+		if (!activePointers.has(e.pointerId)) return
+		e.preventDefault()
+		activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+		if (isPinching && activePointers.size >= 2) {
+			const element = e.currentTarget as HTMLElement
+			const points = pointerValues()
+			const currentDistance = pointerDistance(points)
+			if (pinchStartDistance <= 0 || currentDistance <= 0) return
+			const currentCenter = localPoint(element, pointerCenter(points))
+			const next = Math.min(
+				MAX_SCALE,
+				Math.max(MIN_SCALE, pinchStartScale * (currentDistance / pinchStartDistance))
+			)
+			if (next <= MIN_SCALE) {
+				scale = MIN_SCALE
+				translateX = 0
+				translateY = 0
+				return
+			}
+			const factor = next / pinchStartScale
+			const nextPan = clampPan(
+				currentCenter.x - factor * (pinchStartCenter.x - pinchStartTranslate.x),
+				currentCenter.y - factor * (pinchStartCenter.y - pinchStartTranslate.y),
+				next
+			)
+			translateX = nextPan.x
+			translateY = nextPan.y
+			scale = next
+			return
+		}
+
+		if (!isPanning) return
+		const rawTx = panOrigin.x + (e.clientX - panStart.x)
+		const rawTy = panOrigin.y + (e.clientY - panStart.y)
+		const nextPan = clampPan(rawTx, rawTy)
+		translateX = nextPan.x
+		translateY = nextPan.y
+	}
+
+	function handlePointerUp(e: PointerEvent) {
+		activePointers.delete(e.pointerId)
+		try {
+			;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+		} catch {
+			// pointer capture may already be gone after browser gestures are cancelled.
+		}
+
+		if (activePointers.size >= 2) return
+		if (activePointers.size === 1 && scale > 1) {
+			const point = pointerValues()[0]
+			if (point) {
+				isPinching = false
+				isPanning = true
+				panStart = point
+				panOrigin = { x: translateX, y: translateY }
+				return
+			}
+		}
 		isPanning = false
+		isPinching = false
 	}
 
 	function handleDoubleClick(e: MouseEvent) {
@@ -105,8 +218,13 @@
 			const cy = e.clientY - rect.top - rect.height / 2
 			const next = 3
 			const factor = next / scale
-			translateX = cx - factor * (cx - translateX)
-			translateY = cy - factor * (cy - translateY)
+			const nextPan = clampPan(
+				cx - factor * (cx - translateX),
+				cy - factor * (cy - translateY),
+				next
+			)
+			translateX = nextPan.x
+			translateY = nextPan.y
 			scale = next
 		}
 	}
@@ -129,6 +247,7 @@
 	<div use:portal>
 		<div
 			class="fixed inset-0 z-10000 flex items-center justify-center bg-black/85 backdrop-blur-sm"
+			style="touch-action: none; overscroll-behavior: contain;"
 			role="dialog"
 			aria-label="image preview"
 			aria-modal="true"
@@ -148,7 +267,11 @@
 			<!-- zoom/pan container — fills the backdrop so the image is truly fullscreen-centered -->
 			<div
 				class="absolute inset-0 flex items-center justify-center"
-				style="cursor: {scale > 1 ? (isPanning ? 'grabbing' : 'grab') : 'zoom-in'};"
+				style="cursor: {scale > 1
+					? isPanning
+						? 'grabbing'
+						: 'grab'
+					: 'zoom-in'}; touch-action: none; overscroll-behavior: contain;"
 				role="presentation"
 				onwheel={handleWheel}
 				onpointerdown={handlePointerDown}
@@ -165,7 +288,9 @@
 					{alt}
 					class="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl select-none"
 					style="transform: scale({scale}) translate({translateX / scale}px, {translateY /
-						scale}px); transition: {isPanning ? 'none' : 'transform 0.2s ease'};"
+						scale}px); transition: {isPanning || isPinching
+						? 'none'
+						: 'transform 0.2s ease'}; touch-action: none;"
 					draggable="false"
 					role="presentation"
 				/>

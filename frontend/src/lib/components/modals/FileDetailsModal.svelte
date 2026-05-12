@@ -7,12 +7,22 @@
 	import ArrowsPointingOut from '$lib/components/icons/ArrowsPointingOut.svelte'
 	import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
 	import Download from '$lib/components/icons/Download.svelte'
+	import MimeIcon from '$lib/components/icons/MimeIcon.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import { resourceAccentStyle } from '$lib/resources/resourceVisuals'
 	import { downloadFile, fetchAuthenticatedBlob, files } from '$lib/stores/files.svelte'
 	import type { FileDetailsPayload, ResourceAccessPayload } from '$lib/stores/modals.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
+	import {
+		canDeleteAccessLevel,
+		canShareAccessLevel,
+		resourceAccess,
+	} from '$lib/stores/resourceAccess.svelte'
+	import { session } from '$lib/stores/session.svelte'
+	import { describeFileType, formatFileSize } from '$lib/utils/fileTypes'
+	import { byAuthor, metadataLine } from '$lib/utils/resourceAuthors'
 
 	interface Props {
 		open: boolean
@@ -23,11 +33,28 @@
 	let { open, payload, onClose }: Props = $props()
 
 	const file = $derived(payload ? files.get(payload.fileId) : null)
+	const fileAccessLevel = $derived(
+		file ? resourceAccess.level('file', file.id, file.owner_id) : null
+	)
+	const canShareFile = $derived(canShareAccessLevel(fileAccessLevel))
+	const canDeleteFile = $derived(canDeleteAccessLevel(fileAccessLevel))
 
 	// fetch the file into cache if not already present (e.g. after page refresh)
 	$effect(() => {
 		if (open && payload?.fileId && !file) {
 			void files.ensure(payload.fileId)
+		}
+	})
+
+	$effect(() => {
+		if (open && file) void resourceAccess.ensure('file', file.id, file.owner_id)
+	})
+
+	const fileAuthorLabel = $derived(session.authorLabel(file?.owner_id))
+
+	$effect(() => {
+		if (open && file?.owner_id && file.owner_id !== session.currentUserId) {
+			void session.ensureUsers([file.owner_id])
 		}
 	})
 
@@ -38,9 +65,18 @@
 	let deleteError = $state<string | null>(null)
 	let downloadError = $state<string | null>(null)
 	let isDownloading = $state(false)
+	const fileAccentStyle = resourceAccentStyle('file')
 
 	const mimeType = $derived(file?.mime_type ?? '')
-	const primaryType = $derived(mimeType.split('/')[0] ?? 'file')
+	const fileType = $derived(describeFileType(mimeType, file?.filename ?? null))
+	const headerMeta = $derived(
+		metadataLine(
+			byAuthor(fileAuthorLabel),
+			fileType,
+			file?.size_bytes ? formatFileSize(file.size_bytes) : null
+		)
+	)
+	const primaryType = $derived(mimeType.split('/')[0] || 'file')
 	const isImage = $derived(primaryType === 'image')
 	const isVideo = $derived(primaryType === 'video')
 	const isAudio = $derived(primaryType === 'audio')
@@ -59,15 +95,8 @@
 	)
 	const isGenerated = $derived(file?.source === 'generated')
 
-	function formatBytes(n: number | null | undefined): string {
-		if (!n) return '—'
-		if (n < 1024) return `${n} B`
-		if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-		return `${(n / (1024 * 1024)).toFixed(1)} MB`
-	}
-
 	function formatDate(iso: string | null | undefined): string {
-		if (!iso) return '—'
+		if (!iso) return '-'
 		return new Date(iso).toLocaleDateString(undefined, {
 			year: 'numeric',
 			month: 'short',
@@ -118,7 +147,7 @@
 	}
 
 	async function handleDelete(): Promise<void> {
-		if (!file) return
+		if (!file || !canDeleteFile) return
 		modals.open('confirm-delete', {
 			title: 'delete file?',
 			description: file.filename ?? 'this file will be permanently deleted.',
@@ -131,7 +160,7 @@
 	}
 
 	function handleShare(): void {
-		if (!file) return
+		if (!file || !canShareFile) return
 		const accessPayload = {
 			resourceType: 'file' as const,
 			resourceId: file.id,
@@ -164,7 +193,7 @@
 		onClose={handleClose}
 		widthClassName="max-w-2xl"
 	>
-		<div class="flex flex-col gap-5 overflow-hidden">
+		<div class="flex flex-col gap-5 overflow-hidden" style={fileAccentStyle}>
 			<!-- preview area -->
 			{#if isImage && previewBlobUrl}
 				<button
@@ -200,11 +229,34 @@
 				></audio>
 			{/if}
 
+			<section
+				class="border-foreground/13 bg-background/70 flex min-w-0 items-center gap-4 rounded-[18px] border p-4 shadow-[inset_0_1px_0_rgb(255_255_255/0.08)] backdrop-blur-lg backdrop-saturate-[1.08]"
+			>
+				<div
+					class="flex h-11 w-11 shrink-0 items-center justify-center rounded-[15px] border border-[color-mix(in_oklch,var(--accent-primary)_22%,transparent)] bg-[color-mix(in_oklch,var(--accent-primary)_12%,transparent)] text-(--accent-primary)"
+				>
+					<MimeIcon {mimeType} class="h-5 w-5" />
+				</div>
+				<div class="min-w-0 flex-1">
+					<p class="text-foreground/50 text-xs font-medium tracking-[0.12em] uppercase">
+						file
+					</p>
+					<h3 class="text-foreground min-w-0 truncate text-lg font-semibold">
+						{file.filename ?? 'untitled file'}
+					</h3>
+					{#if headerMeta}
+						<p class="text-foreground/55 mt-0.5 min-w-0 truncate text-xs">
+							{headerMeta}
+						</p>
+					{/if}
+				</div>
+			</section>
+
 			<!-- action buttons -->
 			<div class="flex flex-wrap items-center gap-2">
 				{#if hasPreview && isImage}
 					<button
-						class="liquid-glass flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
+						class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
 						onclick={() => (previewOpen = true)}
 					>
 						<ArrowsPointingOut class="size-4" />
@@ -212,7 +264,7 @@
 					</button>
 				{/if}
 				<button
-					class="liquid-glass flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
+					class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
 					onclick={handleDownload}
 					disabled={isDownloading}
 				>
@@ -221,16 +273,18 @@
 							>downloading</ShimmerText
 						>{:else}download{/if}
 				</button>
-				<button
-					class="liquid-glass flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
-					onclick={handleShare}
-				>
-					<Share class="size-4" />
-					share
-				</button>
+				{#if canShareFile}
+					<button
+						class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
+						onclick={handleShare}
+					>
+						<Share class="size-4" />
+						share
+					</button>
+				{/if}
 				{#if threadId}
 					<button
-						class="liquid-glass flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
+						class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
 						onclick={() => {
 							handleClose()
 							void goto(resolve(`/c/${threadId}`))
@@ -240,15 +294,17 @@
 						view thread
 					</button>
 				{/if}
-				<button
-					class="liquid-glass ml-auto flex cursor-pointer items-center gap-1.5 rounded-xl px-4 py-2 text-sm text-red-400 transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
-					onclick={handleDelete}
-					disabled={isDeleting}
-				>
-					<Trash class="size-4" />
-					{#if isDeleting}<ShimmerText className="inline-block">deleting</ShimmerText
-						>{:else}delete{/if}
-				</button>
+				{#if canDeleteFile}
+					<button
+						class="liquid-glass rounded-pill ml-auto flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm text-red-400 transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
+						onclick={handleDelete}
+						disabled={isDeleting}
+					>
+						<Trash class="size-4" />
+						{#if isDeleting}<ShimmerText className="inline-block">deleting</ShimmerText
+							>{:else}delete{/if}
+					</button>
+				{/if}
 			</div>
 
 			{#if deleteError}
@@ -259,42 +315,66 @@
 			{/if}
 
 			<!-- metadata grid -->
-			<div class="rounded-2xl border border-white/8 bg-white/4 p-4">
-				<dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-					<div>
+			<div class="min-w-0 rounded-2xl border border-white/8 bg-white/4 p-4">
+				<dl class="grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+					{#if fileAuthorLabel}
+						<div class="min-w-0">
+							<dt class="text-foreground/40 text-xs tracking-wide uppercase">
+								author
+							</dt>
+							<dd class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word">
+								{fileAuthorLabel}
+							</dd>
+						</div>
+					{/if}
+					<div class="min-w-0">
 						<dt class="text-foreground/40 text-xs tracking-wide uppercase">type</dt>
-						<dd class="text-foreground/80 mt-0.5">{mimeType || '—'}</dd>
+						<dd class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word">
+							{fileType}
+						</dd>
 					</div>
-					<div>
+					<div class="min-w-0">
 						<dt class="text-foreground/40 text-xs tracking-wide uppercase">category</dt>
-						<dd class="text-foreground/80 mt-0.5">{primaryType}</dd>
+						<dd class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word">
+							{primaryType}
+						</dd>
 					</div>
-					<div>
+					<div class="min-w-0">
 						<dt class="text-foreground/40 text-xs tracking-wide uppercase">size</dt>
-						<dd class="text-foreground/80 mt-0.5">{formatBytes(file.size_bytes)}</dd>
+						<dd class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word">
+							{formatFileSize(file.size_bytes)}
+						</dd>
 					</div>
-					<div>
+					<div class="min-w-0">
 						<dt class="text-foreground/40 text-xs tracking-wide uppercase">source</dt>
-						<dd class="text-foreground/80 mt-0.5">{file.source}</dd>
+						<dd class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word">
+							{file.source}
+						</dd>
 					</div>
-					<div>
+					<div class="min-w-0">
 						<dt class="text-foreground/40 text-xs tracking-wide uppercase">created</dt>
-						<dd class="text-foreground/80 mt-0.5">{formatDate(file.created_at)}</dd>
+						<dd class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word">
+							{formatDate(file.created_at)}
+						</dd>
 					</div>
-					<div>
+					<div class="min-w-0">
 						<dt class="text-foreground/40 text-xs tracking-wide uppercase">updated</dt>
-						<dd class="text-foreground/80 mt-0.5">{formatDate(file.updated_at)}</dd>
+						<dd class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word">
+							{formatDate(file.updated_at)}
+						</dd>
 					</div>
 					{#if file.status}
-						<div>
+						<div class="min-w-0">
 							<dt class="text-foreground/40 text-xs tracking-wide uppercase">
 								status
 							</dt>
-							<dd class="text-foreground/80 mt-0.5">{file.status}</dd>
+							<dd class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word">
+								{file.status}
+							</dd>
 						</div>
 					{/if}
 					{#if file.checksum_sha256}
-						<div class="col-span-2">
+						<div class="min-w-0 sm:col-span-2">
 							<dt class="text-foreground/40 text-xs tracking-wide uppercase">
 								sha256
 							</dt>
@@ -304,29 +384,33 @@
 						</div>
 					{/if}
 					{#if isGenerated && genPrompt}
-						<div class="col-span-2">
+						<div class="min-w-0 sm:col-span-2">
 							<dt class="text-foreground/40 text-xs tracking-wide uppercase">
 								prompt
 							</dt>
-							<dd class="text-foreground/80 mt-0.5">{genPrompt}</dd>
+							<dd class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word">
+								{genPrompt}
+							</dd>
 						</div>
 					{/if}
 					{#if imageDimensions}
-						<div>
+						<div class="min-w-0">
 							<dt class="text-foreground/40 text-xs tracking-wide uppercase">
 								dimensions
 							</dt>
-							<dd class="text-foreground/80 mt-0.5">
+							<dd class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word">
 								{imageDimensions.w} x {imageDimensions.h}
 							</dd>
 						</div>
 					{/if}
 					{#if isGenerated && genAgentId}
-						<div class="col-span-2">
+						<div class="min-w-0 sm:col-span-2">
 							<dt class="text-foreground/40 text-xs tracking-wide uppercase">
 								agent
 							</dt>
-							<dd class="text-foreground/60 mt-0.5 font-mono text-xs">
+							<dd
+								class="text-foreground/60 mt-0.5 min-w-0 font-mono text-xs break-all"
+							>
 								{genAgentId}
 							</dd>
 						</div>

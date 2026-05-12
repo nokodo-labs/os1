@@ -1,17 +1,32 @@
 <script lang="ts">
+	import { browser } from '$app/environment'
+	import EmptyState from '$lib/components/EmptyState.svelte'
+	import FloatingScrollTopButton from '$lib/components/FloatingScrollTopButton.svelte'
+	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Grid from '$lib/components/icons/Grid.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
+	import LoadingMoreIndicator from '$lib/components/LoadingMoreIndicator.svelte'
+	import CalendarWidget from '$lib/components/widgets/CalendarWidget.svelte'
 	import ChatWidget from '$lib/components/widgets/ChatWidget.svelte'
 	import FileWidget from '$lib/components/widgets/FileWidget.svelte'
 	import NoteWidget from '$lib/components/widgets/NoteWidget.svelte'
 	import ProjectWidget from '$lib/components/widgets/ProjectWidget.svelte'
 	import RemindersListWidget from '$lib/components/widgets/RemindersListWidget.svelte'
+	import ResourceActionMenu from '$lib/components/widgets/ResourceActionMenu.svelte'
 	import type {
 		ResourceFilterMode,
 		ResourceItem,
 		ResourceLayoutMode,
 		ResourceSortMode,
 	} from '$lib/components/widgets/types'
+	import { resourceAccess } from '$lib/stores/resourceAccess.svelte'
+	import { session } from '$lib/stores/session.svelte'
+
+	type ResourceProjectOption = {
+		id: string
+		name: string
+		owner_id: string
+	}
 
 	interface Props {
 		resources: ResourceItem[]
@@ -24,10 +39,27 @@
 		emptyIcon?: typeof Grid
 		showLayoutToggle?: boolean
 		showPagination?: boolean
+		currentUserId?: string | null
+		ownedSectionLabel?: string
+		sharedSectionLabel?: string
+		ownedEmptyMessage?: string
+		sharedEmptyMessage?: string
+		showOwnershipSections?: boolean
 		onItemEdit?: (item: ResourceItem) => void
+		onItemShare?: (item: ResourceItem) => void
 		onItemDelete?: (item: ResourceItem) => Promise<boolean> | boolean | void
+		onItemRemoveFromProject?: (item: ResourceItem) => Promise<void> | void
+		onItemProjectToggle?: (
+			item: ResourceItem,
+			projectId: string,
+			selected: boolean
+		) => Promise<void> | void
 		onItemClick?: (item: ResourceItem) => void
-		onLoadMore?: () => void
+		projectOptions?: ResourceProjectOption[]
+		getItemProjectIds?: (item: ResourceItem) => string[]
+		ownedSectionCount?: number | null
+		sharedSectionCount?: number | null
+		onLoadMore?: () => void | Promise<void>
 		hasMore?: boolean
 		loadingMore?: boolean
 		class?: string
@@ -43,18 +75,59 @@
 		emptyMessage = 'no resources yet',
 		showLayoutToggle = true,
 		showPagination = true,
+		currentUserId = null,
+		ownedSectionLabel = 'yours',
+		sharedSectionLabel = 'shared with you',
+		ownedEmptyMessage = emptyMessage,
+		sharedEmptyMessage = 'nothing shared with you',
+		showOwnershipSections = true,
 		onItemEdit,
+		onItemShare,
 		onItemDelete,
+		onItemRemoveFromProject,
+		onItemProjectToggle,
 		onItemClick,
+		projectOptions = [],
+		getItemProjectIds,
+		ownedSectionCount = null,
+		sharedSectionCount = null,
 		onLoadMore,
 		hasMore = false,
 		loadingMore = false,
 		class: className = '',
 	}: Props = $props()
 
-	let sentinelEl: HTMLDivElement | null = $state(null)
+	type ResourceVirtualRow =
+		| {
+				kind: 'section'
+				id: string
+				label: string
+				count: number
+				open: boolean
+				target: 'owned' | 'shared'
+		  }
+		| { kind: 'empty'; id: string; message: string }
+		| { kind: 'resources'; id: string; items: ResourceItem[] }
+		| { kind: 'loading'; id: string }
+
+	const GRID_MIN_WIDTH = 340
+	const GRID_GAP = 16
+	const PAGE_LOAD_MORE_THRESHOLD = 720
 
 	let currentPage = $state(0)
+	let ownedSectionOpen = $state(true)
+	let sharedSectionOpen = $state(true)
+	let rootEl = $state<HTMLDivElement | null>(null)
+	let virtualCollectionEl: HTMLDivElement | null = $state(null)
+	let pageScrollTarget = $state<HTMLElement | null>(null)
+	let virtualGridColumns = $state(1)
+	let lastAccessPrefetchKey = ''
+	let loadMoreInFlight: Promise<void> | null = null
+	const resourceGridClass =
+		'grid grid-cols-[repeat(auto-fill,minmax(min(100%,21.25rem),1fr))] gap-4'
+	const virtualGridRowStyle = $derived(
+		`grid-template-columns: repeat(${virtualGridColumns}, minmax(0, 1fr));`
+	)
 
 	// filter resources by type
 	const filtered = $derived.by(() => {
@@ -64,6 +137,8 @@
 			notes: ['note'],
 			reminders: ['reminder_list'],
 			files: ['file'],
+			projects: ['project'],
+			calendars: ['calendar'],
 		}
 		const allowedTypes = typeMap[filter] ?? []
 		return resources.filter((r) => allowedTypes.includes(r.type))
@@ -95,6 +170,25 @@
 			? sorted
 			: sorted.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
 	)
+	const sharedResources = $derived(
+		currentUserId ? paginated.filter((resource) => isSharedResource(resource)) : []
+	)
+	const ownedResources = $derived(
+		currentUserId ? paginated.filter((resource) => !isSharedResource(resource)) : paginated
+	)
+	const showSharedSections = $derived(Boolean(currentUserId && showOwnershipSections))
+	const displayedOwnedSectionCount = $derived(ownedSectionCount ?? ownedResources.length)
+	const displayedSharedSectionCount = $derived(sharedSectionCount ?? sharedResources.length)
+	const hasGenericActions = $derived(
+		Boolean(
+			onItemEdit ||
+			onItemShare ||
+			onItemDelete ||
+			onItemRemoveFromProject ||
+			onItemProjectToggle
+		)
+	)
+	const virtualRows = $derived.by(() => buildVirtualRows())
 
 	// reset page when filter/sort changes
 	$effect(() => {
@@ -102,17 +196,76 @@
 		if (key) currentPage = 0
 	})
 
-	// infinite scroll observer
 	$effect(() => {
-		if (!useInfiniteScroll || !sentinelEl || !hasMore || loadingMore) return
-		const observer = new IntersectionObserver(
-			(entries) => {
-				if (entries[0]?.isIntersecting) onLoadMore?.()
-			},
-			{ rootMargin: '200px' }
-		)
-		observer.observe(sentinelEl)
-		return () => observer.disconnect()
+		const el = virtualCollectionEl
+		if (!el || layout !== 'grid') {
+			virtualGridColumns = 1
+			return
+		}
+
+		const updateColumns = () => {
+			const width = el.getBoundingClientRect().width
+			if (!Number.isFinite(width) || width <= 0) return
+			const nextColumns = Math.max(
+				1,
+				Math.floor((width + GRID_GAP) / (GRID_MIN_WIDTH + GRID_GAP))
+			)
+			if (nextColumns !== virtualGridColumns) virtualGridColumns = nextColumns
+		}
+
+		updateColumns()
+		const observer = new ResizeObserver(updateColumns)
+		observer.observe(el)
+		window.addEventListener('resize', updateColumns)
+		return () => {
+			observer.disconnect()
+			window.removeEventListener('resize', updateColumns)
+		}
+	})
+
+	$effect(() => {
+		if (!currentUserId) return
+		const resourcesToPrefetch = paginated
+		const prefetchKey = resourcesToPrefetch
+			.map((resource) => `${resource.type}:${resource.id}:${resourceOwnerId(resource) ?? ''}`)
+			.join('|')
+		if (prefetchKey === lastAccessPrefetchKey) return
+		lastAccessPrefetchKey = prefetchKey
+
+		const ownerIds = resourcesToPrefetch
+			.map(resourceOwnerId)
+			.filter((ownerId): ownerId is string => Boolean(ownerId && ownerId !== currentUserId))
+		if (ownerIds.length > 0) void session.ensureUsers(ownerIds)
+		for (const resource of resourcesToPrefetch) {
+			void resourceAccess.ensure(resource.type, resource.id, resourceOwnerId(resource))
+		}
+	})
+
+	$effect(() => {
+		if (!browser || !rootEl) {
+			pageScrollTarget = null
+			return
+		}
+		pageScrollTarget = resolvePageScrollTarget(rootEl)
+	})
+
+	$effect(() => {
+		const target = pageScrollTarget
+		if (!browser || !target || !useInfiniteScroll) return
+
+		const onScroll = () => maybeLoadMoreFromPage(target)
+		target.addEventListener('scroll', onScroll, { passive: true })
+		const frame = requestAnimationFrame(onScroll)
+		return () => {
+			target.removeEventListener('scroll', onScroll)
+			cancelAnimationFrame(frame)
+		}
+	})
+
+	$effect(() => {
+		const target = pageScrollTarget
+		if (!target || !useInfiniteScroll || !hasMore || loadingMore) return
+		maybeLoadMoreFromPage(target)
 	})
 
 	function prevPage() {
@@ -122,9 +275,227 @@
 	function nextPage() {
 		if (currentPage < totalPages - 1) currentPage++
 	}
+
+	function resourceOwnerId(resource: ResourceItem): string | null {
+		const ownerId = resource.meta?.owner_id
+		return typeof ownerId === 'string' && ownerId.length > 0 ? ownerId : null
+	}
+
+	function isSharedResource(resource: ResourceItem): boolean {
+		const ownerId = resourceOwnerId(resource)
+		return Boolean(currentUserId && ownerId && ownerId !== currentUserId)
+	}
+
+	function resolvePageScrollTarget(node: HTMLElement): HTMLElement | null {
+		const main = node.closest('[role="main"]')
+		if (main instanceof HTMLElement) return main
+		if (document.scrollingElement instanceof HTMLElement) return document.scrollingElement
+		return document.documentElement
+	}
+
+	function maybeLoadMoreFromPage(target: HTMLElement): void {
+		if (!useInfiniteScroll || !hasMore || loadingMore || loadMoreInFlight) return
+		const remaining = target.scrollHeight - target.scrollTop - target.clientHeight
+		if (remaining > PAGE_LOAD_MORE_THRESHOLD) return
+
+		const result = requestLoadMoreResources()
+		if (!result) return
+		const request = Promise.resolve(result)
+		loadMoreInFlight = request
+		void request
+			.catch(() => {})
+			.finally(() => {
+				if (loadMoreInFlight === request) loadMoreInFlight = null
+			})
+	}
+
+	function resourceWithSharing(resource: ResourceItem): ResourceItem {
+		const shared = isSharedResource(resource)
+		const ownerId = resourceOwnerId(resource)
+		const authorLabel = shared ? session.authorLabel(ownerId) : null
+		const accessLevel = resourceAccess.level(resource.type, resource.id, ownerId)
+		if (
+			resource.meta?.shared === shared &&
+			resource.meta?.author_label === authorLabel &&
+			resource.meta?.access_level === accessLevel
+		) {
+			return resource
+		}
+		return {
+			...resource,
+			meta: {
+				...(resource.meta ?? {}),
+				shared,
+				author_label: authorLabel,
+				access_level: accessLevel,
+			},
+		}
+	}
+
+	function selectedProjectIds(resource: ResourceItem): string[] {
+		if (getItemProjectIds) return getItemProjectIds(resource)
+		const projectIds = resource.meta?.project_ids
+		return Array.isArray(projectIds)
+			? projectIds.filter((id): id is string => typeof id === 'string')
+			: []
+	}
+
+	function chunkResourceRows(items: ResourceItem[]): ResourceVirtualRow[] {
+		const rows: ResourceVirtualRow[] = []
+		const chunkSize = layout === 'grid' ? virtualGridColumns : 1
+		for (let index = 0; index < items.length; index += chunkSize) {
+			const chunk = items.slice(index, index + chunkSize)
+			const firstResource = chunk[0]
+			if (!firstResource) continue
+			rows.push({
+				kind: 'resources',
+				id: `${layout}:${virtualGridColumns}:${firstResource.id}`,
+				items: chunk,
+			})
+		}
+		return rows
+	}
+
+	function buildVirtualRows(): ResourceVirtualRow[] {
+		const rows: ResourceVirtualRow[] = []
+		if (showSharedSections) {
+			rows.push({
+				kind: 'section',
+				id: 'section:owned',
+				label: ownedSectionLabel,
+				count: displayedOwnedSectionCount,
+				open: ownedSectionOpen,
+				target: 'owned',
+			})
+			if (ownedSectionOpen) {
+				if (ownedResources.length > 0) rows.push(...chunkResourceRows(ownedResources))
+				else rows.push({ kind: 'empty', id: 'empty:owned', message: ownedEmptyMessage })
+			}
+
+			rows.push({
+				kind: 'section',
+				id: 'section:shared',
+				label: sharedSectionLabel,
+				count: displayedSharedSectionCount,
+				open: sharedSectionOpen,
+				target: 'shared',
+			})
+			if (sharedSectionOpen) {
+				if (sharedResources.length > 0) rows.push(...chunkResourceRows(sharedResources))
+				else rows.push({ kind: 'empty', id: 'empty:shared', message: sharedEmptyMessage })
+			}
+		} else {
+			rows.push(...chunkResourceRows(paginated))
+		}
+
+		if (useInfiniteScroll && loadingMore) rows.push({ kind: 'loading', id: 'loading' })
+		return rows
+	}
+
+	function toggleSection(target: 'owned' | 'shared'): void {
+		if (target === 'owned') {
+			ownedSectionOpen = !ownedSectionOpen
+			return
+		}
+		sharedSectionOpen = !sharedSectionOpen
+	}
+
+	function requestLoadMoreResources(): void | Promise<void> {
+		if (!useInfiniteScroll || !hasMore || loadingMore || loadMoreInFlight) return
+		return onLoadMore?.()
+	}
 </script>
 
-<div class="flex flex-col gap-4 {className}">
+{#snippet resourceCard(resource: ResourceItem)}
+	{@const displayResource = resourceWithSharing(resource)}
+	{#if resource.type === 'thread'}
+		<ChatWidget resource={displayResource} {layout} />
+	{:else if resource.type === 'note'}
+		<NoteWidget resource={displayResource} {layout} />
+	{:else if resource.type === 'reminder_list'}
+		<RemindersListWidget resource={displayResource} {layout} />
+	{:else if resource.type === 'project'}
+		<ProjectWidget
+			resource={displayResource}
+			{layout}
+			onEdit={onItemEdit ? () => onItemEdit(resource) : undefined}
+			onShare={onItemShare ? () => onItemShare(resource) : undefined}
+			onDelete={onItemDelete ? () => onItemDelete(resource) : undefined}
+		/>
+	{:else if resource.type === 'file'}
+		<FileWidget
+			resource={displayResource}
+			{layout}
+			onclick={onItemClick ? () => onItemClick(resource) : undefined}
+		/>
+	{:else if resource.type === 'calendar'}
+		<CalendarWidget resource={displayResource} {layout} />
+	{/if}
+{/snippet}
+
+{#snippet actionWrappedResourceCard(resource: ResourceItem)}
+	{@const displayResource = resourceWithSharing(resource)}
+	<div class="group/resource relative min-w-0">
+		{@render resourceCard(resource)}
+		{#if hasGenericActions && resource.type !== 'project'}
+			<ResourceActionMenu
+				resource={displayResource}
+				{layout}
+				{projectOptions}
+				selectedProjectIds={selectedProjectIds(resource)}
+				onProperties={onItemEdit ? () => onItemEdit(resource) : undefined}
+				onShare={onItemShare ? () => onItemShare(resource) : undefined}
+				onDelete={onItemDelete ? () => onItemDelete(resource) : undefined}
+				onRemoveFromProject={onItemRemoveFromProject
+					? () => onItemRemoveFromProject(resource)
+					: undefined}
+				onProjectToggle={onItemProjectToggle
+					? (targetProjectId, selected) =>
+							onItemProjectToggle(resource, targetProjectId, selected)
+					: undefined}
+			/>
+		{/if}
+	</div>
+{/snippet}
+
+{#snippet virtualResourceRow(row: ResourceVirtualRow)}
+	{#if row.kind === 'section'}
+		{@render sectionHeader(row.label, row.count, row.open, () => toggleSection(row.target))}
+	{:else if row.kind === 'empty'}
+		<div class="pb-4">
+			<EmptyState label={row.message} class="min-h-56" />
+		</div>
+	{:else if row.kind === 'loading'}
+		<LoadingMoreIndicator className="py-6" label="loading more resources" />
+	{:else if layout === 'grid'}
+		<div class="grid gap-4 pb-4" style={virtualGridRowStyle}>
+			{#each row.items as resource (resource.id)}
+				{@render actionWrappedResourceCard(resource)}
+			{/each}
+		</div>
+	{:else}
+		<div class="flex flex-col gap-2 pb-2">
+			{#each row.items as resource (resource.id)}
+				{@render actionWrappedResourceCard(resource)}
+			{/each}
+		</div>
+	{/if}
+{/snippet}
+
+{#snippet sectionHeader(label: string, count: number, open: boolean, onToggle: () => void)}
+	<button
+		type="button"
+		class="text-foreground/70 hover:text-foreground/90 flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-1 py-2 text-xs font-semibold tracking-wide uppercase transition-colors duration-150"
+		onclick={onToggle}
+		aria-expanded={open}
+	>
+		<ChevronDown class="h-3 w-3 transition-transform duration-200 {open ? '' : '-rotate-90'}" />
+		<span>{label}</span>
+		<span class="text-foreground/50 font-normal">({count})</span>
+	</button>
+{/snippet}
+
+<div bind:this={rootEl} class="relative flex flex-col gap-4 {className}">
 	{#if showLayoutToggle}
 		<div class="flex items-center justify-end gap-1">
 			<button
@@ -155,11 +526,7 @@
 	{/if}
 
 	{#if loading}
-		<div
-			class={layout === 'grid'
-				? 'grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] gap-4'
-				: 'flex flex-col gap-2'}
-		>
+		<div class={layout === 'grid' ? resourceGridClass : 'flex flex-col gap-2'}>
 			{#each [0, 1, 2, 3, 4, 5] as i (i)}
 				<div
 					class="liquid-glass liquid-glass--frosted animate-pulse overflow-hidden rounded-2xl {layout ===
@@ -169,54 +536,25 @@
 				></div>
 			{/each}
 		</div>
-	{:else if paginated.length === 0}
-		<div
-			class="liquid-glass liquid-glass--frosted flex flex-1 flex-col items-center justify-center overflow-hidden rounded-2xl py-16 text-center"
-		>
-			<p class="text-foreground/50 text-sm">{emptyMessage}</p>
-		</div>
+	{:else if paginated.length === 0 && !showSharedSections}
+		<EmptyState label={emptyMessage} class="min-h-[45vh] flex-1 overflow-hidden py-16" />
 	{:else}
-		<div
-			class={layout === 'grid'
-				? 'grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] gap-4'
-				: 'flex flex-col gap-2'}
-		>
-			{#each paginated as resource (resource.id)}
-				{#if resource.type === 'thread'}
-					<ChatWidget {resource} {layout} />
-				{:else if resource.type === 'note'}
-					<NoteWidget {resource} {layout} />
-				{:else if resource.type === 'reminder_list'}
-					<RemindersListWidget {resource} {layout} />
-				{:else if resource.type === 'project'}
-					<ProjectWidget
-						{resource}
-						{layout}
-						onEdit={onItemEdit ? () => onItemEdit(resource) : undefined}
-						onDelete={onItemDelete ? () => onItemDelete(resource) : undefined}
-					/>
-				{:else if resource.type === 'file'}
-					<FileWidget
-						{resource}
-						{layout}
-						onclick={onItemClick ? () => onItemClick(resource) : undefined}
-					/>
-				{/if}
-			{/each}
+		<div bind:this={virtualCollectionEl} class="relative w-full">
+			<div class="flex w-full flex-col">
+				{#each virtualRows as row (row.id)}
+					<div data-resource-view-row={row.kind} data-resource-view-row-id={row.id}>
+						{@render virtualResourceRow(row)}
+					</div>
+				{/each}
+			</div>
 		</div>
 	{/if}
 
-	<!-- infinite scroll sentinel + loading indicator -->
-	{#if useInfiniteScroll}
-		{#if loadingMore}
-			<div class="flex items-center justify-center py-6">
-				<div class="bg-foreground/20 h-5 w-5 animate-pulse rounded-full"></div>
-			</div>
-		{/if}
-		{#if hasMore}
-			<div bind:this={sentinelEl} class="h-1"></div>
-		{/if}
-	{/if}
+	<FloatingScrollTopButton
+		target={pageScrollTarget}
+		class="pointer-events-none fixed bottom-6 z-20 flex justify-center"
+		style="left: var(--island-left, 0px); right: 0;"
+	/>
 
 	{#if !useInfiniteScroll && showPagination && totalPages > 1}
 		<div class="flex items-center justify-center gap-3 pt-2">

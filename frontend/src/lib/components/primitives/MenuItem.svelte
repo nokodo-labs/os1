@@ -26,7 +26,7 @@
 	}: MenuItemProps = $props()
 
 	const baseClasses =
-		'flex w-full min-w-0 cursor-pointer items-center gap-3 rounded-pill border-none bg-transparent px-3 py-2 text-left text-sm transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40'
+		'flex w-full min-w-0 cursor-pointer items-center gap-3 rounded-pill border-none bg-transparent px-3 py-2.5 text-left text-sm font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40'
 
 	const textClasses = $derived(
 		destructive
@@ -50,7 +50,7 @@
 >
 	{#if icon}
 		<span
-			class="text-foreground/65 flex h-5 w-5 shrink-0 items-center justify-center *:h-full *:w-full"
+			class="text-foreground/72 flex size-6 shrink-0 items-center justify-center *:h-full *:w-full"
 		>
 			{@render icon()}
 		</span>
@@ -67,7 +67,7 @@
 	</span>
 	{#if trailing}
 		<span
-			class="text-foreground/60 flex h-5 w-5 shrink-0 items-center justify-center *:h-full *:w-full"
+			class="text-foreground/60 flex size-6 shrink-0 items-center justify-center *:h-full *:w-full"
 		>
 			{@render trailing()}
 		</span>

@@ -2,7 +2,7 @@
 	import type { QueuedSteeringMessage } from '$lib/chat'
 	import { contentPartsToText } from '$lib/chat/helpers'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
-	import ClockRotateRight from '$lib/components/icons/ClockRotateRight.svelte'
+	import Clock from '$lib/components/icons/Clock.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import { SvelteSet } from 'svelte/reactivity'
 
@@ -47,7 +47,7 @@
 					aria-hidden="true"
 				>
 					<span class="clock-tick flex h-4 w-4 items-center justify-center">
-						<ClockRotateRight class="h-4 w-4" strokeWidth="2" />
+						<Clock class="h-4 w-4" strokeWidth="2" />
 					</span>
 				</div>
 

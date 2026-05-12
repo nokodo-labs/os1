@@ -1,3 +1,4 @@
+export { default as CalendarWidget } from './CalendarWidget.svelte'
 export { default as ChatWidget } from './ChatWidget.svelte'
 export { default as FileWidget } from './FileWidget.svelte'
 export { default as NoteWidget } from './NoteWidget.svelte'

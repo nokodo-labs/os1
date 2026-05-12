@@ -12,6 +12,7 @@
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
+	import Clock from '$lib/components/icons/Clock.svelte'
 	import Pencil from '$lib/components/icons/Pencil.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import type { BubbleTailStyle } from '$lib/stores/preferences.svelte'
@@ -34,6 +35,7 @@
 		tailStyle?: BubbleTailStyle
 		showTail?: boolean
 		viewTransitionName?: string
+		sending?: boolean
 		onEditSave?: (newContent: string) => Promise<void>
 		onEditSaveAsCopy?: (newContent: string) => Promise<void>
 	}
@@ -53,6 +55,7 @@
 		tailStyle = 'none',
 		showTail = false,
 		viewTransitionName,
+		sending = false,
 		onEditSave,
 		onEditSaveAsCopy,
 	}: Props = $props()
@@ -254,12 +257,13 @@
 	role="article"
 >
 	{#if timestamp && !isEditing}
-		<Timestamp
-			{timestamp}
-			className="text-xs text-foreground/50 transition-opacity duration-200 {isHovered
+		<div
+			class="text-foreground/50 flex items-center gap-1.5 text-xs transition-opacity duration-200 {isHovered
 				? 'opacity-100'
 				: 'opacity-0'}"
-		/>
+		>
+			<Timestamp {timestamp} className="text-xs text-foreground/50" />
+		</div>
 	{/if}
 
 	<!-- media attachments rendered OUTSIDE the bubble -->
@@ -272,105 +276,123 @@
 	<!-- text bubble (only shown when there is text content or editing) -->
 	{#if content.trim().length > 0 || isEditing}
 		<div
-			class="bubble-wrapper"
+			class="flex items-center gap-2"
+			class:flex-row-reverse={align === 'right' && !isEditing}
 			class:w-full={isEditing}
-			class:imessage-right={!isEditing &&
-				showTail &&
-				tailStyle === 'imessage' &&
-				align === 'right'}
-			class:imessage-left={!isEditing &&
-				showTail &&
-				tailStyle === 'imessage' &&
-				align === 'left'}
-			class:whatsapp-right={!isEditing &&
-				showTail &&
-				tailStyle === 'whatsapp' &&
-				align === 'right'}
-			class:whatsapp-left={!isEditing &&
-				showTail &&
-				tailStyle === 'whatsapp' &&
-				align === 'left'}
 		>
+			{#if sending && !isEditing}
+				<div
+					class="liquid-glass text-foreground/55 flex h-7 w-7 shrink-0 items-center justify-center rounded-full backdrop-blur-[20px] [backdrop-saturate:180%]"
+					aria-label="sending"
+				>
+					<span class="sending-clock-tick flex h-4 w-4 items-center justify-center">
+						<Clock class="h-4 w-4" strokeWidth="2" />
+					</span>
+				</div>
+			{/if}
 			<div
-				class="bubble-content liquid-glass relative rounded-3xl px-3 py-2 backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] [backdrop-saturate:180%]"
-				class:px-5={isEditing}
-				class:py-3={isEditing}
+				class="bubble-wrapper"
 				class:w-full={isEditing}
-				style:view-transition-name={viewTransitionName}
-				style="background-color: var(--accent-primary); box-shadow: 0 4px 16px var(--accent-border);"
+				class:imessage-right={!isEditing &&
+					showTail &&
+					tailStyle === 'imessage' &&
+					align === 'right'}
+				class:imessage-left={!isEditing &&
+					showTail &&
+					tailStyle === 'imessage' &&
+					align === 'left'}
+				class:whatsapp-right={!isEditing &&
+					showTail &&
+					tailStyle === 'whatsapp' &&
+					align === 'right'}
+				class:whatsapp-left={!isEditing &&
+					showTail &&
+					tailStyle === 'whatsapp' &&
+					align === 'left'}
 			>
-				{#if isEditing}
-					<div class="max-h-96 overflow-auto">
-						<textarea
-							bind:this={editTextarea}
-							bind:value={editContent}
-							class="text-foreground placeholder:text-foreground/40 w-full resize-none bg-transparent leading-relaxed wrap-break-word outline-none disabled:opacity-60"
-							placeholder="edit your message"
-							disabled={isSaving}
-							rows={1}
-							oninput={(e) => {
-								const t = e.currentTarget
-								t.style.height = ''
-								t.style.height = `${t.scrollHeight}px`
-							}}
-							onkeydown={(e) => {
-								if (e.key === 'Escape') cancelEditing()
-								if (
-									(e.metaKey || e.ctrlKey) &&
-									e.key === 'Enter' &&
-									onEditSaveAsCopy
-								)
-									saveAsCopy()
-								if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-									e.preventDefault()
-									if (onEditSave) saveEdit()
-								}
-							}}
-						></textarea>
-					</div>
-					<!-- button row: save (left), cancel + send (right) -->
-					<div class="mt-2 mb-1 flex justify-between text-sm font-medium">
-						<div>
-							{#if onEditSave}
-								<button
-									onclick={saveEdit}
-									disabled={isSaving || !editContent.trim()}
-									class="border-foreground/20 bg-foreground/10 text-foreground/90 hover:bg-foreground/20 cursor-pointer rounded-3xl border px-3.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-40"
-								>
-									save
-								</button>
-							{/if}
-						</div>
-						<div class="flex space-x-1.5">
-							<button
-								onclick={cancelEditing}
+				<div
+					class="bubble-content liquid-glass relative rounded-3xl px-3 py-2 backdrop-blur-[20px] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] [backdrop-saturate:180%]"
+					class:px-5={isEditing}
+					class:py-3={isEditing}
+					class:w-full={isEditing}
+					style:view-transition-name={viewTransitionName}
+					style="background-color: var(--accent-primary); box-shadow: 0 4px 16px var(--accent-border);"
+				>
+					{#if isEditing}
+						<div class="max-h-96 overflow-auto">
+							<textarea
+								bind:this={editTextarea}
+								bind:value={editContent}
+								class="text-foreground placeholder:text-foreground/40 w-full resize-none bg-transparent leading-relaxed wrap-break-word outline-none disabled:opacity-60"
+								placeholder="edit your message"
 								disabled={isSaving}
-								class="text-foreground/70 hover:bg-foreground/10 hover:text-foreground cursor-pointer rounded-3xl px-3.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-50"
-							>
-								cancel
-							</button>
-							{#if onEditSaveAsCopy}
-								<button
-									onclick={saveAsCopy}
-									disabled={isSaving || !editContent.trim()}
-									class="bg-foreground text-background hover:bg-foreground/90 cursor-pointer rounded-3xl px-3.5 py-1.5 font-semibold transition disabled:cursor-not-allowed disabled:opacity-40"
-								>
-									{#if isSaving}
-										<ShimmerText className="inline-block">saving</ShimmerText>
-									{:else}
-										send
-									{/if}
-								</button>
-							{/if}
+								rows={1}
+								oninput={(e) => {
+									const t = e.currentTarget
+									t.style.height = ''
+									t.style.height = `${t.scrollHeight}px`
+								}}
+								onkeydown={(e) => {
+									if (e.key === 'Escape') cancelEditing()
+									if (
+										(e.metaKey || e.ctrlKey) &&
+										e.key === 'Enter' &&
+										onEditSaveAsCopy
+									)
+										saveAsCopy()
+									if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+										e.preventDefault()
+										if (onEditSave) saveEdit()
+									}
+								}}
+							></textarea>
 						</div>
-					</div>
-				{:else}
-					<div
-						class="text-foreground leading-relaxed wrap-break-word whitespace-pre-wrap"
-					>
-						{content}
-					</div>
-				{/if}
+						<!-- button row: save (left), cancel + send (right) -->
+						<div class="mt-2 mb-1 flex justify-between text-sm font-medium">
+							<div>
+								{#if onEditSave}
+									<button
+										onclick={saveEdit}
+										disabled={isSaving || !editContent.trim()}
+										class="border-foreground/20 bg-foreground/10 text-foreground/90 hover:bg-foreground/20 cursor-pointer rounded-3xl border px-3.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-40"
+									>
+										save
+									</button>
+								{/if}
+							</div>
+							<div class="flex space-x-1.5">
+								<button
+									onclick={cancelEditing}
+									disabled={isSaving}
+									class="text-foreground/70 hover:bg-foreground/10 hover:text-foreground cursor-pointer rounded-3xl px-3.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-50"
+								>
+									cancel
+								</button>
+								{#if onEditSaveAsCopy}
+									<button
+										onclick={saveAsCopy}
+										disabled={isSaving || !editContent.trim()}
+										class="bg-foreground text-background hover:bg-foreground/90 cursor-pointer rounded-3xl px-3.5 py-1.5 font-semibold transition disabled:cursor-not-allowed disabled:opacity-40"
+									>
+										{#if isSaving}
+											<ShimmerText className="inline-block"
+												>saving</ShimmerText
+											>
+										{:else}
+											send
+										{/if}
+									</button>
+								{/if}
+							</div>
+						</div>
+					{:else}
+						<div
+							class="text-foreground leading-relaxed wrap-break-word whitespace-pre-wrap"
+						>
+							{content}
+						</div>
+					{/if}
+				</div>
 			</div>
 		</div>
 	{/if}
@@ -439,6 +461,17 @@
 	.bubble-wrapper {
 		position: relative;
 		max-width: 100%;
+	}
+
+	@keyframes sendingClockTick {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	.sending-clock-tick {
+		animation: sendingClockTick 1.4s steps(12) infinite;
+		transform-origin: center;
 	}
 
 	/* ════════════════════════════════════════════════════════════

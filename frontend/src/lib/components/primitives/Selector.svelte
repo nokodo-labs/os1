@@ -7,6 +7,7 @@
 		label: string
 		description?: string
 		iconUrl?: string
+		iconUrls?: readonly string[]
 		disabled?: boolean
 	}
 
@@ -39,16 +40,32 @@
 		onchange(option.value)
 	}
 
-	function markIconFailed(value: string) {
-		if (failedIcons.includes(value)) return
-		failedIcons = [...failedIcons, value]
+	function optionIconUrls(option: SelectorOption): readonly string[] {
+		if (option.iconUrls && option.iconUrls.length > 0) return option.iconUrls
+		return option.iconUrl ? [option.iconUrl] : []
+	}
+
+	function iconFailureKey(value: string, url: string): string {
+		return `${value}:${url}`
+	}
+
+	function activeIconUrl(option: SelectorOption): string | undefined {
+		return optionIconUrls(option).find(
+			(url) => !failedIcons.includes(iconFailureKey(option.value, url))
+		)
+	}
+
+	function markIconFailed(value: string, url: string) {
+		const key = iconFailureKey(value, url)
+		if (failedIcons.includes(key)) return
+		failedIcons = [...failedIcons, key]
 	}
 </script>
 
 <div class="grid gap-2 {gridClass} {className}" role="radiogroup" aria-label={ariaLabel}>
 	{#each options as option (option.value)}
 		{@const isSelected = option.value === value}
-		{@const showIcon = option.iconUrl && !failedIcons.includes(option.value)}
+		{@const iconUrl = activeIconUrl(option)}
 		<button
 			type="button"
 			role="radio"
@@ -60,12 +77,12 @@
 				: 'text-foreground/75'}"
 		>
 			<span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden">
-				{#if showIcon}
+				{#if iconUrl}
 					<img
-						src={option.iconUrl}
+						src={iconUrl}
 						alt=""
 						class="h-6 w-6 object-contain"
-						onerror={() => markIconFailed(option.value)}
+						onerror={() => markIconFailed(option.value, iconUrl)}
 					/>
 				{:else}
 					<GlobeAlt class="text-foreground/55 h-5 w-5" />

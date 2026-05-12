@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import EmptyState from '$lib/components/EmptyState.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import Check from '$lib/components/icons/Check.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
@@ -9,6 +10,7 @@
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 	import { friends, type UserSearchResult } from '$lib/stores/friends.svelte'
 	import { getUserInitials } from '$lib/utils'
+	import { userDisplayName, userHandleOrId } from '$lib/utils/resourceAuthors'
 
 	interface AddFriendsModalProps {
 		open: boolean
@@ -65,6 +67,14 @@
 		}
 	}
 
+	function userLabel(user: UserSearchResult): string {
+		return userDisplayName(user) ?? user.id
+	}
+
+	function userMeta(user: UserSearchResult): string {
+		return userHandleOrId(user) ?? user.id
+	}
+
 	// reset state when modal closes
 	$effect(() => {
 		if (!open) {
@@ -106,7 +116,7 @@
 			</div>
 		{:else if results.length > 0}
 			{#each results as user (user.id)}
-				{@const displayName = user.display_name ?? user.email.split('@')[0]}
+				{@const displayName = userLabel(user)}
 				{@const relationship = friends.getRelationship(user.id)}
 				<div
 					class="hover:bg-foreground/5 flex items-center gap-3 rounded-xl p-3 transition-all"
@@ -136,7 +146,7 @@
 						<span class="text-foreground truncate text-sm font-medium">
 							{displayName}
 						</span>
-						<span class="text-foreground/50 truncate text-xs">{user.email}</span>
+						<span class="text-foreground/50 truncate text-xs">{userMeta(user)}</span>
 					</button>
 
 					<!-- action button -->
@@ -172,19 +182,14 @@
 				</div>
 			{/each}
 		{:else if hasSearched}
-			<!-- no results -->
 			<div class="flex flex-col items-center gap-4 py-10">
-				<div
-					class="bg-foreground/5 flex h-14 w-14 items-center justify-center rounded-full"
+				<EmptyState
+					label="no users found"
+					description="try a different name or email, or invite them to the platform"
+					compact
 				>
-					<User class="text-foreground/30 h-7 w-7" />
-				</div>
-				<div class="flex flex-col items-center gap-1.5 text-center">
-					<p class="text-foreground/60 text-sm font-medium">no users found</p>
-					<p class="text-foreground/40 max-w-xs text-xs">
-						try a different name or email, or invite them to the platform
-					</p>
-				</div>
+					{#snippet icon()}<User class="h-7 w-7" />{/snippet}
+				</EmptyState>
 				<!-- invite button -->
 				<button
 					class="flex items-center gap-2 rounded-xl bg-(--accent-primary)/15 px-4 py-2.5 text-sm font-medium text-(--accent-primary) transition-all hover:bg-(--accent-primary)/25 active:scale-[0.97]"

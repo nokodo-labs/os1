@@ -1,7 +1,10 @@
 <script lang="ts">
+	import EmptyState from '$lib/components/EmptyState.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import SortIcon from '$lib/components/icons/SortIcon.svelte'
+	import LoadingMoreIndicator from '$lib/components/LoadingMoreIndicator.svelte'
+	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import type { Snippet } from 'svelte'
 
 	type SortOption = {
@@ -23,6 +26,7 @@
 		onSearchInput: (value: string) => void
 		onSortChange: (index: number) => void
 		onLoadMore: () => void
+		loadMoreThreshold?: number
 		items: Snippet
 		footerLeft?: Snippet
 		footerRight?: Snippet
@@ -42,23 +46,30 @@
 		onSearchInput,
 		onSortChange,
 		onLoadMore,
+		loadMoreThreshold = 400,
 		items,
 		footerLeft,
 		footerRight,
 	}: ModalListLayoutProps = $props()
 
-	const SCROLL_THRESHOLD = 100
-	const selectedSortValue = $derived(
-		sortOptions.find((_option, index) => index === sortIndex)?.value
-	)
+	let scrollerEl: HTMLDivElement | null = $state(null)
 
-	function onScroll(e: Event): void {
-		const el = e.currentTarget as HTMLDivElement
-		if (!el || loadingMore || !hasMore) return
-		if (el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_THRESHOLD) {
+	function maybeLoadMore(el: HTMLDivElement | null): void {
+		if (!el || loading || loadingMore || !hasMore || isEmpty) return
+		if (el.scrollHeight - el.scrollTop - el.clientHeight <= loadMoreThreshold) {
 			onLoadMore()
 		}
 	}
+
+	function onScroll(e: Event): void {
+		maybeLoadMore(e.currentTarget as HTMLDivElement)
+	}
+
+	$effect(() => {
+		if (!scrollerEl || loading || loadingMore || !hasMore || isEmpty) return
+		const frame = requestAnimationFrame(() => maybeLoadMore(scrollerEl))
+		return () => cancelAnimationFrame(frame)
+	})
 </script>
 
 <div class="flex flex-col gap-3">
@@ -78,7 +89,6 @@
 		</div>
 		<div class="relative shrink-0">
 			<SortIcon
-				value={selectedSortValue}
 				class="text-foreground/45 pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2"
 			/>
 			<select
@@ -97,29 +107,19 @@
 	</div>
 
 	<!-- scrollable list container -->
-	<div class="max-h-80 min-h-40 overflow-y-auto" onscroll={onScroll}>
+	<div bind:this={scrollerEl} class="max-h-[68dvh] min-h-40 overflow-y-auto" onscroll={onScroll}>
 		{#if loading}
 			<div class="flex items-center justify-center py-12">
-				<div
-					class="border-foreground/20 h-5 w-5 animate-spin rounded-full border-2 border-t-white/60"
-				></div>
+				<NokodoLoader className="opacity-70" expanded={false} />
 			</div>
 		{:else if isEmpty}
-			<div class="flex min-h-40 items-center justify-center">
-				<p class="text-foreground/40 text-center text-sm">
-					{search ? (emptySearchMessage ?? emptyMessage) : emptyMessage}
-				</p>
-			</div>
+			<EmptyState label={search ? (emptySearchMessage ?? emptyMessage) : emptyMessage} />
 		{:else}
 			<div class="space-y-2">
 				{@render items()}
 
 				{#if loadingMore}
-					<div class="flex items-center justify-center py-3">
-						<div
-							class="border-foreground/20 h-4 w-4 animate-spin rounded-full border-2 border-t-white/60"
-						></div>
-					</div>
+					<LoadingMoreIndicator className="py-3" />
 				{/if}
 			</div>
 		{/if}

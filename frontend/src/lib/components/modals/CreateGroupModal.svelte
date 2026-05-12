@@ -3,6 +3,7 @@
 	import UserGroup from '$lib/components/icons/UserGroup.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 	import { groups } from '$lib/stores/groups.svelte'
+	import { showError } from '$lib/stores/notifications.svelte'
 
 	interface CreateGroupModalProps {
 		open: boolean
@@ -18,12 +19,19 @@
 		const trimmed = name.trim()
 		if (!trimmed) return
 		isCreating = true
-		const created = await groups.create({ name: trimmed })
-		isCreating = false
-		if (created) {
+		try {
+			const created = await groups.create({ name: trimmed })
+			if (!created) {
+				showError('could not create group')
+				return
+			}
 			name = ''
 			onClose()
 			void groups.load({ force: true })
+		} catch {
+			showError('could not create group')
+		} finally {
+			isCreating = false
 		}
 	}
 

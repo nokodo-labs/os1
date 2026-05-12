@@ -1,11 +1,14 @@
 <script lang="ts">
+	import {
+		createMarkdownTurndown,
+		editorHtmlToMarkdown,
+		markdownToEditorHtml,
+	} from '$lib/editor/markdownSerialization'
 	import { Editor } from '@tiptap/core'
 	import Placeholder from '@tiptap/extension-placeholder'
 	import Typography from '@tiptap/extension-typography'
 	import { StarterKit } from '@tiptap/starter-kit'
-	import { marked } from 'marked'
 	import { onDestroy, onMount } from 'svelte'
-	import TurndownService from 'turndown'
 
 	// storage: markdown
 	// on load: markdown -> html (via marked) -> tiptap
@@ -39,15 +42,7 @@
 	}: Props = $props()
 
 	// turndown config (html -> markdown)
-	const turndown = new TurndownService({
-		headingStyle: 'atx',
-		codeBlockStyle: 'fenced',
-	})
-	// preserve underline as html since markdown has no underline syntax
-	turndown.addRule('underline', {
-		filter: ['u'],
-		replacement: (inner: string) => (inner ? `<u>${inner}</u>` : ''),
-	})
+	const turndown = createMarkdownTurndown()
 
 	let editorElement: HTMLDivElement | null = $state(null)
 	let editorState = $state<{ editor: Editor | null }>({ editor: null })
@@ -55,15 +50,6 @@
 	let lastEmittedMarkdown = ''
 
 	// convert markdown to html for tiptap
-	function markdownToHtml(md: string): string {
-		return String(marked.parse(md, { gfm: true, breaks: true }))
-	}
-
-	// convert html to markdown for storage
-	function htmlToMarkdown(html: string): string {
-		return turndown.turndown(html)
-	}
-
 	// sync tiptap content from external value change
 	$effect(() => {
 		const editor = editorState.editor
@@ -73,7 +59,7 @@
 		// only sync if value differs from what we last emitted
 		if (value !== lastEmittedMarkdown) {
 			isSyncing = true
-			const html = markdownToHtml(value)
+			const html = markdownToEditorHtml(value)
 			editor.commands.setContent(html, { emitUpdate: false })
 			lastEmittedMarkdown = value
 			queueMicrotask(() => {
@@ -90,7 +76,7 @@
 	onMount(() => {
 		if (!editorElement) return
 
-		const initialHtml = markdownToHtml(value)
+		const initialHtml = markdownToEditorHtml(value)
 		lastEmittedMarkdown = value
 
 		editorState.editor = new Editor({
@@ -114,7 +100,7 @@
 			onUpdate: ({ editor }) => {
 				if (isSyncing) return
 				const html = editor.getHTML()
-				const md = htmlToMarkdown(html)
+				const md = editorHtmlToMarkdown(turndown, html)
 				if (md !== lastEmittedMarkdown) {
 					lastEmittedMarkdown = md
 					onchange?.(md)

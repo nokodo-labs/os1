@@ -34,6 +34,7 @@
 
 <script lang="ts">
 	import { searchStream, type SearchResult } from '$lib/api/streaming'
+	import EmptyState from '$lib/components/EmptyState.svelte'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
@@ -403,14 +404,9 @@
 					</div>
 				{:else if suggestions.length === 0 && !isFullSearching}
 					<!-- no results -->
-					<div class="flex items-center gap-3 px-3 py-2.5">
-						<div
-							class="rounded-pill bg-foreground/8 text-foreground/40 flex h-9 w-9 shrink-0 items-center justify-center"
-						>
-							<Search class="h-5 w-5" strokeWidth="2" />
-						</div>
-						<div class="text-foreground/40 text-sm">no results found</div>
-					</div>
+					<EmptyState label="no results found" compact>
+						{#snippet icon()}<Search class="h-5 w-5" strokeWidth="2" />{/snippet}
+					</EmptyState>
 				{:else}
 					{#if isFullSearching}
 						<!-- shimmer row while full search runs -->

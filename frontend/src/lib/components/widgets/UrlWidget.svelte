@@ -27,7 +27,7 @@
 	class="group liquid-glass liquid-glass--frosted block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
 		? 'flex items-center gap-4 px-5 py-4'
-		: 'flex min-h-80 flex-col p-6'} {className}"
+		: 'flex h-80 flex-col p-6'} {className}"
 >
 	{#if layout === 'grid'}
 		<ResourcePreview tone="sky" label="web" caption={domain} class="-mx-6 -mt-6">

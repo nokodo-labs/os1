@@ -42,6 +42,7 @@
 	const chatInputDisabled = $derived(
 		chatPhase === 'loading' || chatPhase === 'thinking' || chatPhase === 'streaming'
 	)
+	const canQuote = $derived(typeof onQuote === 'function')
 
 	function updateFromSelection() {
 		const selection = window.getSelection()
@@ -254,14 +255,16 @@
 	>
 		{#if mode === 'menu'}
 			<LiquidGlass frosted class="rounded-popup flex items-center gap-1 p-1">
-				<button
-					class="interactive rounded-pill hover:bg-foreground/10 flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium"
-					onclick={handleQuote}
-				>
-					<BlockQuote class="size-3.5" />
-					quote
-				</button>
-				<div class="bg-foreground/15 h-4 w-px"></div>
+				{#if canQuote}
+					<button
+						class="interactive rounded-pill hover:bg-foreground/10 flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium"
+						onclick={handleQuote}
+					>
+						<BlockQuote class="size-3.5" />
+						quote
+					</button>
+					<div class="bg-foreground/15 h-4 w-px"></div>
+				{/if}
 				<button
 					class="interactive rounded-pill hover:bg-foreground/10 flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium"
 					onclick={handleAsk}
