@@ -18,6 +18,7 @@
 		ChevronLeft,
 		ChevronRight,
 		Circle,
+		CircleX,
 		Clock,
 		Hash,
 		Mail,
@@ -26,7 +27,6 @@
 		Search,
 		Shield,
 		User as UserIcon,
-		XCircle,
 	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
@@ -67,24 +67,11 @@
 
 	let users = $state<User[]>([])
 	let searchQuery = $state('')
+	let serverSearchQuery = $state('')
+	let searchTimer: ReturnType<typeof setTimeout> | null = null
 	let isLoading = $state(false)
 	let hasNext = $state(false)
 	let error = $state<string | null>(null)
-
-	const filteredUsers = $derived(
-		users.filter((u) => {
-			const q = searchQuery.toLowerCase()
-			return (
-				u.email.toLowerCase().includes(q) ||
-				(u.display_name && u.display_name.toLowerCase().includes(q)) ||
-				((u as Record<string, unknown>).username &&
-					String((u as Record<string, unknown>).username)
-						.toLowerCase()
-						.includes(q)) ||
-				u.id.toLowerCase().includes(q)
-			)
-		})
-	)
 
 	let isCreateUserOpen = $state(false)
 	let isUserDetailsOpen = $state(false)
@@ -92,6 +79,14 @@
 
 	function refresh() {
 		refreshToken += 1
+	}
+
+	function scheduleSearch() {
+		pageIndex = 0
+		if (searchTimer) clearTimeout(searchTimer)
+		searchTimer = setTimeout(() => {
+			serverSearchQuery = searchQuery.trim()
+		}, 250)
 	}
 
 	function openUser(userId: string) {
@@ -150,13 +145,14 @@
 	$effect(() => {
 		if (!browser) return
 
+		const q = serverSearchQuery || undefined
 		const skip = pageIndex * limit + refreshToken * 0
 
 		isLoading = true
 		error = null
 
 		api.GET('/v1/users', {
-			params: { query: { skip, limit, sort_by: sortKey, sort_dir: sortDir } },
+			params: { query: { skip, limit, sort_by: sortKey, sort_dir: sortDir, q } },
 		})
 			.then((r) => unwrap(r))
 			.then((result) => {
@@ -189,6 +185,7 @@
 					type="search"
 					placeholder="search users..."
 					bind:value={searchQuery}
+					oninput={scheduleSearch}
 					class="w-full pl-8 sm:w-50 lg:w-75"
 				/>
 			</div>
@@ -288,7 +285,7 @@
 				</div>
 			{/if}
 
-			{#if filteredUsers.length === 0 && !isLoading}
+			{#if users.length === 0 && !isLoading}
 				<div
 					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
 				>
@@ -296,7 +293,7 @@
 				</div>
 			{/if}
 
-			{#each filteredUsers as u (u.id)}
+			{#each users as u (u.id)}
 				<div
 					role="button"
 					tabindex="0"
@@ -320,7 +317,7 @@
 								<span class="truncate text-base font-medium text-zinc-100">
 									{u.display_name || u.email}
 								</span>
-								{#if (u as Record<string, unknown>).is_online}
+								{#if u.is_online}
 									<span class="relative flex h-2.5 w-2.5 shrink-0" title="online">
 										<span
 											class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"
@@ -344,7 +341,7 @@
 									<span
 										class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-red-400 uppercase"
 									>
-										<XCircle class="h-3 w-3" />
+										<CircleX class="h-3 w-3" />
 										inactive
 									</span>
 								{/if}
@@ -354,9 +351,9 @@
 									<Mail class="h-3.5 w-3.5" />
 									{u.email}
 								</span>
-								{#if (u as Record<string, unknown>).username}
+								{#if u.username}
 									<span class="inline-flex items-center gap-1">
-										@{(u as Record<string, unknown>).username}
+										@{u.username}
 									</span>
 								{/if}
 								<span
@@ -368,17 +365,15 @@
 							</div>
 						</div>
 						<div class="shrink-0 text-xs text-zinc-500">
-							{#if (u as Record<string, unknown>).is_online}
+							{#if u.is_online}
 								<div class="flex items-center gap-1 text-emerald-400">
 									<Circle class="h-3 w-3 fill-emerald-400" />
 									online now
 								</div>
-							{:else if (u as Record<string, unknown>).last_active_at}
+							{:else if u.last_active_at}
 								<div class="flex items-center gap-1">
 									<Clock class="h-3.5 w-3.5" />
-									last active {new Date(
-										(u as Record<string, unknown>).last_active_at as string
-									).toLocaleString()}
+									last active {new Date(u.last_active_at).toLocaleString()}
 								</div>
 							{/if}
 							<div class="mt-1 flex items-center gap-1">

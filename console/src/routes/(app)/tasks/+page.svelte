@@ -9,20 +9,20 @@
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import {
 		Activity,
-		AlertTriangle,
 		ArrowDown,
 		ArrowUp,
 		Ban,
-		CheckCircle2,
 		Circle,
+		CircleCheck,
+		CircleX,
 		Clock3,
 		Hash,
 		LoaderCircle,
 		RefreshCw,
 		Search,
+		TriangleAlert,
 		User,
 		Wrench,
-		XCircle,
 	} from '@lucide/svelte'
 
 	type Task = Schemas['Task']
@@ -397,7 +397,7 @@
 					{liveCount} live
 				</span>
 				<span class="inline-flex items-center gap-1.5 rounded-md bg-zinc-900 px-2 py-1">
-					<CheckCircle2 class="h-3.5 w-3.5 text-emerald-400" />
+					<CircleCheck class="h-3.5 w-3.5 text-emerald-400" />
 					{endedCount} shown
 				</span>
 			</div>
@@ -462,9 +462,9 @@
 							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-zinc-300"
 						>
 							{#if task.status === 'complete'}
-								<CheckCircle2 class="h-5 w-5 text-emerald-400" />
+								<CircleCheck class="h-5 w-5 text-emerald-400" />
 							{:else if task.status === 'failed'}
-								<AlertTriangle class="h-5 w-5 text-red-400" />
+								<TriangleAlert class="h-5 w-5 text-red-400" />
 							{:else if task.status === 'cancelled'}
 								<Ban class="h-5 w-5 text-zinc-400" />
 							{:else if task.status === 'running'}
@@ -484,9 +484,9 @@
 									)}"
 								>
 									{#if task.status === 'complete'}
-										<CheckCircle2 class="h-3 w-3" />
+										<CircleCheck class="h-3 w-3" />
 									{:else if task.status === 'failed'}
-										<XCircle class="h-3 w-3" />
+										<CircleX class="h-3 w-3" />
 									{:else if task.status === 'cancelled'}
 										<Ban class="h-3 w-3" />
 									{:else}

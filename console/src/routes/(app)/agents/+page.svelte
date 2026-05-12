@@ -6,7 +6,6 @@
 	type AgentUpdate = Schemas['AgentUpdate']
 	type Model = Schemas['Model']
 	type PluginInfo = Schemas['PluginInfo']
-	type Prompt = Schemas['Prompt']
 	type Provider = Schemas['Provider']
 
 	import AccessRulesButton from '$lib/components/AccessRulesButton.svelte'
@@ -36,13 +35,15 @@
 		Bot,
 		Brain,
 		CalendarDays,
-		Code2,
+		ChevronLeft,
+		ChevronRight,
+		CodeXml,
 		Database,
+		Earth,
 		Eye,
 		FileText,
-		Filter as FilterIcon,
+		Funnel as FilterIcon,
 		FolderOpen,
-		Globe2,
 		Image as ImageIcon,
 		MessageSquare,
 		Paperclip,
@@ -57,7 +58,6 @@
 		X,
 	} from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
-	import { onMount } from 'svelte'
 
 	const TEMPLATE_SYSTEM_PROMPT = `you are a helpful AI assistant.
 
@@ -70,18 +70,26 @@ user: {{ user_name }}.
 
 {{ referenced_attachments }}`
 
-	type SortKey = 'name' | 'model' | 'plugins'
+	type SortKey = 'name' | 'created_at' | 'updated_at'
 	type SortDir = 'asc' | 'desc'
 
 	const sortOptions: Array<{ value: SortKey; label: string }> = [
 		{ value: 'name', label: 'name' },
-		{ value: 'model', label: 'model' },
-		{ value: 'plugins', label: 'plugins' },
+		{ value: 'created_at', label: 'created at' },
+		{ value: 'updated_at', label: 'updated at' },
 	]
 
 	let sortKey = $state<SortKey>('name')
 	let sortDir = $state<SortDir>('asc')
 	let searchQuery = $state('')
+	let serverSearchQuery = $state('')
+	let searchTimer: ReturnType<typeof setTimeout> | null = null
+	let pageIndex = $state(0)
+	let limit = $state(24)
+	let hasNext = $state(false)
+	let agentTotal = $state(0)
+	let refreshToken = $state(0)
+	let fetchRequestId = 0
 
 	let agents = $state<Agent[]>([])
 	let models = $state<Model[]>([])
@@ -89,7 +97,6 @@ user: {{ user_name }}.
 	let availableToolPlugins = $state<PluginInfo[]>([])
 	let availableFilterPlugins = $state<PluginInfo[]>([])
 	let availableHookPlugins = $state<PluginInfo[]>([])
-	let legendPrompts = $state<Prompt[]>([])
 
 	let showModal = $state(false)
 	let modalMode = $state<'create' | 'edit'>('create')
@@ -162,31 +169,7 @@ user: {{ user_name }}.
 		return profileImageInputKind(value) === 'url' ? value : ''
 	})
 
-	const filteredAgents = $derived.by(() => {
-		let result = agents
-		if (searchQuery.trim()) {
-			const q = searchQuery.toLowerCase()
-			result = result.filter(
-				(a) =>
-					(a.name ?? '').toLowerCase().includes(q) ||
-					(a.description ?? '').toLowerCase().includes(q) ||
-					a.id.toLowerCase().includes(q)
-			)
-		}
-		const dir = sortDir === 'asc' ? 1 : -1
-		return [...result].sort((a, b) => {
-			switch (sortKey) {
-				case 'name':
-					return (a.name ?? '').localeCompare(b.name ?? '') * dir
-				case 'model':
-					return getModelLabel(a.model_id).localeCompare(getModelLabel(b.model_id)) * dir
-				case 'plugins':
-					return ((a.plugin_ids?.length ?? 0) - (b.plugin_ids?.length ?? 0)) * dir
-				default:
-					return 0
-			}
-		})
-	})
+	const visibleAgents = $derived(agents)
 
 	function setSort(next: SortKey) {
 		if (sortKey === next) {
@@ -195,10 +178,20 @@ user: {{ user_name }}.
 			sortKey = next
 			sortDir = 'asc'
 		}
+		pageIndex = 0
 	}
 
 	function toggleSortDir() {
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc'
+		pageIndex = 0
+	}
+
+	function scheduleSearch() {
+		pageIndex = 0
+		if (searchTimer) clearTimeout(searchTimer)
+		searchTimer = setTimeout(() => {
+			serverSearchQuery = searchQuery.trim()
+		}, 250)
 	}
 
 	function profileImageInputKind(value: string): 'empty' | 'url' | 'file' {
@@ -252,19 +245,42 @@ user: {{ user_name }}.
 	}
 
 	async function fetchData() {
+		const request = {
+			id: ++fetchRequestId,
+			pageIndex,
+			limit,
+			sortKey,
+			sortDir,
+			serverSearchQuery,
+			refreshToken,
+		}
 		isFetching = true
 		error = null
+		const q = request.serverSearchQuery || undefined
 		try {
 			const [
 				agentsData,
+				agentsCount,
 				modelsData,
 				providersData,
 				toolPluginsData,
 				filterPluginsData,
 				hookPluginsData,
-				promptsData,
 			] = await Promise.all([
-				api.GET('/v1/agents').then((r) => unwrap(r)),
+				api
+					.GET('/v1/agents', {
+						params: {
+							query: {
+								skip: request.pageIndex * request.limit,
+								limit: request.limit,
+								sort_by: request.sortKey,
+								sort_dir: request.sortDir,
+								q,
+							},
+						},
+					})
+					.then((r) => unwrap(r)),
+				api.GET('/v1/agents/count', { params: { query: { q } } }).then((r) => unwrap(r)),
 				api.GET('/v1/models').then((r) => unwrap(r)),
 				api.GET('/v1/providers').then((r) => unwrap(r)),
 				api
@@ -282,27 +298,27 @@ user: {{ user_name }}.
 						params: { query: { plugin_type: 'hook' } },
 					})
 					.then((r) => unwrap(r)),
-				api
-					.GET('/v1/prompts', { params: { query: { limit: 200 } } })
-					.then((r) => unwrap(r)),
 			])
+			if (request.id !== fetchRequestId) return
 			agents = agentsData
+			agentTotal = agentsCount
+			hasNext = (request.pageIndex + 1) * request.limit < agentsCount
 			models = modelsData
 			providers = providersData
 			availableToolPlugins = toolPluginsData
 			availableFilterPlugins = filterPluginsData
 			availableHookPlugins = hookPluginsData
-			legendPrompts = promptsData
 		} catch (e) {
+			if (request.id !== fetchRequestId) return
 			console.error('failed to load agents/models/plugins', e)
 			error = 'failed to load agents'
 		} finally {
-			isFetching = false
+			if (request.id === fetchRequestId) isFetching = false
 		}
 	}
 
-	onMount(() => {
-		fetchData()
+	$effect(() => {
+		void fetchData()
 	})
 
 	function openCreateModal() {
@@ -514,6 +530,7 @@ user: {{ user_name }}.
 					type="search"
 					placeholder="search agents..."
 					bind:value={searchQuery}
+					oninput={scheduleSearch}
 					class="w-full pl-8 sm:w-50 lg:w-75"
 				/>
 			</div>
@@ -553,7 +570,7 @@ user: {{ user_name }}.
 				<Button
 					variant="outline"
 					class="flex-1 rounded-xl sm:flex-none"
-					onclick={() => fetchData()}
+					onclick={() => (refreshToken += 1)}
 					disabled={isFetching}
 				>
 					<RefreshCw class="mr-2 h-4 w-4 {isFetching ? 'animate-spin' : ''}" />
@@ -576,8 +593,39 @@ user: {{ user_name }}.
 				<Button variant="outline" class="mt-4" onclick={fetchData}>Retry</Button>
 			</div>
 		{:else}
+			<div class="flex items-center justify-end">
+				<div class="flex items-center gap-2">
+					<Button
+						variant="outline"
+						class="rounded-xl"
+						onclick={() => {
+							pageIndex = Math.max(0, pageIndex - 1)
+						}}
+						disabled={pageIndex === 0 || isFetching}
+					>
+						<ChevronLeft class="mr-1.5 h-4 w-4" />
+						prev
+					</Button>
+					<span class="text-xs text-zinc-400 tabular-nums">
+						page {pageIndex + 1}{agentTotal > 0
+							? ` · ${agents.length} of ${agentTotal}`
+							: ''}
+					</span>
+					<Button
+						variant="outline"
+						class="rounded-xl"
+						onclick={() => {
+							pageIndex += 1
+						}}
+						disabled={!hasNext || isFetching}
+					>
+						next
+						<ChevronRight class="ml-1.5 h-4 w-4" />
+					</Button>
+				</div>
+			</div>
 			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-				{#each filteredAgents as agent (agent.id)}
+				{#each visibleAgents as agent (agent.id)}
 					<Card
 						class="flex shrink-0 flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
 					>
@@ -644,7 +692,7 @@ user: {{ user_name }}.
 					</Card>
 				{/each}
 
-				{#if filteredAgents.length === 0 && agents.length > 0}
+				{#if agents.length === 0 && serverSearchQuery}
 					<div
 						class="col-span-full rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
 					>
@@ -652,7 +700,7 @@ user: {{ user_name }}.
 					</div>
 				{/if}
 
-				{#if agents.length === 0}
+				{#if agents.length === 0 && !serverSearchQuery}
 					<EmptyState message="no agents yet." hint="create an agent to get started." />
 				{/if}
 			</div>
@@ -886,11 +934,11 @@ user: {{ user_name }}.
 															{:else if iconKind === 'file'}
 																<FolderOpen class="h-4 w-4" />
 															{:else if iconKind === 'web'}
-																<Globe2 class="h-4 w-4" />
+																<Earth class="h-4 w-4" />
 															{:else if iconKind === 'image'}
 																<ImageIcon class="h-4 w-4" />
 															{:else if iconKind === 'code'}
-																<Code2 class="h-4 w-4" />
+																<CodeXml class="h-4 w-4" />
 															{:else if iconKind === 'reveal'}
 																<Eye class="h-4 w-4" />
 															{:else if iconKind === 'attachment'}
@@ -1032,4 +1080,4 @@ user: {{ user_name }}.
 	title="agent access rules"
 />
 
-<PromptVariablesLegend bind:open={showVariablesLegend} prompts={legendPrompts} />
+<PromptVariablesLegend bind:open={showVariablesLegend} />

@@ -9,6 +9,7 @@
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import RoleDetailsModal from '$lib/components/RoleDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
+	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import {
 		ArrowDown,
@@ -20,6 +21,7 @@
 		ListOrdered,
 		Plus,
 		RefreshCw,
+		Search,
 		Shield,
 	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
@@ -52,6 +54,9 @@
 	let refreshToken = $state(0)
 
 	let roles = $state<Role[]>([])
+	let searchQuery = $state('')
+	let serverSearchQuery = $state('')
+	let searchTimer: ReturnType<typeof setTimeout> | null = null
 	let isLoading = $state(false)
 	let isReordering = $state(false)
 	let error = $state<string | null>(null)
@@ -100,6 +105,14 @@
 
 	function refresh() {
 		refreshToken += 1
+	}
+
+	function scheduleSearch() {
+		pageIndex = 0
+		if (searchTimer) clearTimeout(searchTimer)
+		searchTimer = setTimeout(() => {
+			serverSearchQuery = searchQuery.trim()
+		}, 250)
 	}
 
 	function openRole(roleId: string) {
@@ -180,6 +193,7 @@
 		if (!browser) return
 
 		const skip = pageIndex * limit + refreshToken * 0
+		const q = serverSearchQuery || undefined
 
 		isLoading = true
 		error = null
@@ -192,6 +206,7 @@
 					sort_by: sortKey,
 					sort_dir: sortDir,
 					user_id: userIdFilter ?? undefined,
+					q,
 				},
 			},
 		})
@@ -218,6 +233,15 @@
 			<p class="text-zinc-400">manage roles and default permissions.</p>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
+			<div class="relative">
+				<Search class="absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+				<Input
+					placeholder="search roles..."
+					bind:value={searchQuery}
+					oninput={scheduleSearch}
+					class="w-full pl-8 sm:w-50 lg:w-75"
+				/>
+			</div>
 			<Button class="gap-2 rounded-xl" onclick={() => (isCreateOpen = true)}>
 				<Plus class="h-4 w-4" />
 				new role

@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { api, unwrap, type Schemas } from '$lib/api'
-	import { getApiBaseUrl, getAuthHeaders } from '$lib/api'
+	import { api, getApiBaseUrl, getAuthHeaders, unwrap, type Schemas } from '$lib/api'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import { Label } from '$lib/components/ui/label'
@@ -9,10 +8,10 @@
 		Bot,
 		ChevronDown,
 		ChevronUp,
+		CircleMinus,
 		CircleStop,
 		Eraser,
 		FlaskConical,
-		MinusCircle,
 		Play,
 		Plus,
 		RefreshCw,
@@ -420,7 +419,7 @@
 										onclick={() => removeMessage(idx)}
 										disabled={isStreaming}
 									>
-										<MinusCircle class="h-4 w-4" />
+										<CircleMinus class="h-4 w-4" />
 									</button>
 								</div>
 							</div>

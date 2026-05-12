@@ -41,26 +41,26 @@
 		error = null
 		try {
 			const [
-				users,
-				agents,
+				userCount,
+				agentCount,
 				models,
 				providers,
-				threads,
-				notes,
-				groups,
-				roles,
-				prompts,
-				lists,
-				calendars,
+				threadCount,
+				noteCount,
+				groupCount,
+				roleCount,
+				promptCount,
+				reminderListCount,
+				calendarCount,
 			] = await Promise.all([
 				api
-					.GET('/v1/users', { params: { query: { limit: 10000, skip: 0 } } })
+					.GET('/v1/users/count')
 					.then((r) => unwrap(r))
-					.catch(() => []),
+					.catch(() => 0),
 				api
-					.GET('/v1/agents')
+					.GET('/v1/agents/count')
 					.then((r) => unwrap(r))
-					.catch(() => []),
+					.catch(() => 0),
 				api
 					.GET('/v1/models')
 					.then((r) => unwrap(r))
@@ -70,59 +70,57 @@
 					.then((r) => unwrap(r))
 					.catch(() => []),
 				api
-					.GET('/v1/threads', { params: { query: { limit: 10000, skip: 0 } } })
+					.GET('/v1/threads/count')
 					.then((r) => unwrap(r))
-					.catch(() => []),
+					.catch(() => 0),
 				api
-					.GET('/v1/notes', { params: { query: { limit: 10000, skip: 0 } } })
+					.GET('/v1/notes/count')
 					.then((r) => unwrap(r))
-					.catch(() => []),
+					.catch(() => 0),
 				api
-					.GET('/v1/groups', { params: { query: { limit: 10000, skip: 0 } } })
+					.GET('/v1/groups/count')
 					.then((r) => unwrap(r))
-					.catch(() => []),
+					.catch(() => 0),
 				api
-					.GET('/v1/roles', { params: { query: { limit: 10000, skip: 0 } } })
+					.GET('/v1/roles/count')
 					.then((r) => unwrap(r))
-					.catch(() => []),
+					.catch(() => 0),
 				api
-					.GET('/v1/prompts', { params: { query: { limit: 10000, skip: 0 } } })
+					.GET('/v1/prompts/count')
 					.then((r) => unwrap(r))
-					.catch(() => []),
+					.catch(() => 0),
 				api
-					.GET('/v1/reminder-lists', {
-						params: { query: { limit: 10000, include_counts: true } },
-					})
+					.GET('/v1/reminder-lists/count')
 					.then((r) => unwrap(r))
-					.catch(() => []),
+					.catch(() => 0),
 				api
-					.GET('/v1/calendars', { params: { query: { limit: 10000 } } })
+					.GET('/v1/calendars/count')
 					.then((r) => unwrap(r))
-					.catch(() => []),
+					.catch(() => 0),
 			])
 
 			stats = [
 				{
 					label: 'users',
-					value: users.length,
+					value: userCount,
 					icon: Users,
 					color: 'text-blue-400',
 				},
 				{
 					label: 'groups',
-					value: groups.length,
+					value: groupCount,
 					icon: Folder,
 					color: 'text-indigo-400',
 				},
 				{
 					label: 'roles',
-					value: roles.length,
+					value: roleCount,
 					icon: Shield,
 					color: 'text-teal-400',
 				},
 				{
 					label: 'agents',
-					value: agents.length,
+					value: agentCount,
 					icon: Bot,
 					color: 'text-emerald-400',
 				},
@@ -140,31 +138,31 @@
 				},
 				{
 					label: 'threads',
-					value: threads.length,
+					value: threadCount,
 					icon: MessageSquare,
 					color: 'text-cyan-400',
 				},
 				{
 					label: 'prompts',
-					value: prompts.length,
+					value: promptCount,
 					icon: FileText,
 					color: 'text-fuchsia-400',
 				},
 				{
 					label: 'notes',
-					value: notes.length,
+					value: noteCount,
 					icon: StickyNote,
 					color: 'text-pink-400',
 				},
 				{
-					label: 'reminders',
-					value: lists.reduce((sum, l) => sum + (l.total_count ?? 0), 0),
+					label: 'reminder lists',
+					value: reminderListCount,
 					icon: ListChecks,
 					color: 'text-lime-400',
 				},
 				{
 					label: 'calendars',
-					value: calendars.length,
+					value: calendarCount,
 					icon: CalendarDays,
 					color: 'text-rose-400',
 				},

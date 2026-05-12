@@ -15,6 +15,8 @@
 	import {
 		ArrowDown,
 		ArrowUp,
+		ChevronLeft,
+		ChevronRight,
 		Circle,
 		CircleCheck,
 		Clock,
@@ -34,6 +36,7 @@
 		{ value: 'name', label: 'name' },
 		{ value: 'position', label: 'position' },
 	]
+	const REMINDER_LIST_PAGE_LIMIT = 50
 
 	function defaultSortDir(sort: ListSortKey): SortDir {
 		if (sort === 'name') return 'asc'
@@ -47,8 +50,10 @@
 	let refreshToken = $state(0)
 
 	let lists = $state<ReminderListWithCounts[]>([])
+	let pageIndex = $state(0)
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
+	let listRequestId = 0
 
 	let searchResults = $state<SearchResultItem[]>([])
 	let isSearching = $state(false)
@@ -106,10 +111,25 @@
 	function setSort(next: ListSortKey) {
 		sortKey = next
 		sortDir = defaultSortDir(next)
+		pageIndex = 0
 	}
 
 	function toggleSortDir() {
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc'
+		pageIndex = 0
+	}
+
+	function pageOffset(index: number): number {
+		return Math.max(0, Math.trunc(index)) * REMINDER_LIST_PAGE_LIMIT
+	}
+
+	function previousPage() {
+		pageIndex = Math.max(0, pageIndex - 1)
+	}
+
+	function nextPage() {
+		if (lists.length < REMINDER_LIST_PAGE_LIMIT) return
+		pageIndex += 1
 	}
 
 	$effect(() => {
@@ -120,6 +140,7 @@
 
 		isLoading = true
 		error = null
+		const requestId = ++listRequestId
 
 		api.GET('/v1/reminder-lists', {
 			params: {
@@ -127,20 +148,23 @@
 					include_counts: true,
 					sort_by: sortKey,
 					sort_dir: sortDir,
-					limit: 200,
+					skip: pageOffset(pageIndex),
+					limit: REMINDER_LIST_PAGE_LIMIT,
 				},
 			},
 		})
 			.then((r) => unwrap(r))
 			.then((listsResult) => {
+				if (requestId !== listRequestId) return
 				lists = listsResult
 			})
 			.catch((e: unknown) => {
+				if (requestId !== listRequestId) return
 				error = e instanceof Error ? e.message : 'failed to load reminder lists'
 				lists = []
 			})
 			.finally(() => {
-				isLoading = false
+				if (requestId === listRequestId) isLoading = false
 			})
 	})
 </script>
@@ -214,10 +238,34 @@
 	{/if}
 
 	<div class="flex flex-col gap-4">
-		<div class="text-sm text-zinc-400">
-			{searchQuery.trim()
-				? `${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`
-				: `${lists.length} list${lists.length === 1 ? '' : 's'}`}
+		<div class="flex items-center justify-between gap-3">
+			<div class="text-sm text-zinc-400">
+				{searchQuery.trim()
+					? `${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`
+					: `page ${pageIndex + 1} · ${lists.length} list${lists.length === 1 ? '' : 's'}`}
+			</div>
+			{#if !searchQuery.trim()}
+				<div class="flex items-center gap-2">
+					<Button
+						variant="outline"
+						class="rounded-xl"
+						onclick={previousPage}
+						disabled={pageIndex === 0 || isLoading}
+					>
+						<ChevronLeft class="mr-1.5 h-4 w-4" />
+						prev
+					</Button>
+					<Button
+						variant="outline"
+						class="rounded-xl"
+						onclick={nextPage}
+						disabled={lists.length < REMINDER_LIST_PAGE_LIMIT || isLoading}
+					>
+						next
+						<ChevronRight class="ml-1.5 h-4 w-4" />
+					</Button>
+				</div>
+			{/if}
 		</div>
 		<div class="flex flex-col space-y-2">
 			{#if searchQuery.trim()}

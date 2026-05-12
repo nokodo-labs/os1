@@ -54,6 +54,8 @@
 
 	let groups = $state<Group[]>([])
 	let searchQuery = $state('')
+	let serverSearchQuery = $state('')
+	let searchTimer: ReturnType<typeof setTimeout> | null = null
 	let isLoading = $state(false)
 	let hasNext = $state(false)
 	let error = $state<string | null>(null)
@@ -63,17 +65,6 @@
 
 	let isGroupDetailsOpen = $state(false)
 	let selectedGroupId = $state<string | null>(null)
-
-	const filteredGroups = $derived(
-		groups.filter((g) => {
-			const q = searchQuery.toLowerCase()
-			return (
-				g.name.toLowerCase().includes(q) ||
-				(g.description ?? '').toLowerCase().includes(q) ||
-				g.id.toLowerCase().includes(q)
-			)
-		})
-	)
 
 	function openGroup(groupId: string) {
 		selectedGroupId = groupId
@@ -87,6 +78,14 @@
 
 	function refresh() {
 		refreshToken += 1
+	}
+
+	function scheduleSearch() {
+		pageIndex = 0
+		if (searchTimer) clearTimeout(searchTimer)
+		searchTimer = setTimeout(() => {
+			serverSearchQuery = searchQuery.trim()
+		}, 250)
 	}
 
 	function replaceUrl(target: string) {
@@ -152,6 +151,7 @@
 	$effect(() => {
 		if (!browser) return
 
+		const q = serverSearchQuery || undefined
 		const skip = pageIndex * limit + refreshToken * 0
 
 		isLoading = true
@@ -165,6 +165,7 @@
 					limit,
 					sort_by: sortKey,
 					sort_dir: sortDir,
+					q,
 				},
 			},
 		})
@@ -199,6 +200,7 @@
 					type="search"
 					placeholder="search groups..."
 					bind:value={searchQuery}
+					oninput={scheduleSearch}
 					class="w-full pl-8 sm:w-50 lg:w-75"
 				/>
 			</div>
@@ -302,7 +304,7 @@
 				</div>
 			{/if}
 
-			{#if filteredGroups.length === 0 && !isLoading}
+			{#if groups.length === 0 && !isLoading}
 				<div
 					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
 				>
@@ -310,7 +312,7 @@
 				</div>
 			{/if}
 
-			{#each filteredGroups as g (g.id)}
+			{#each groups as g (g.id)}
 				<div
 					role="button"
 					tabindex="0"
