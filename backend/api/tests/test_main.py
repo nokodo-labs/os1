@@ -47,7 +47,7 @@ async def test_lifespan_initializes_database(monkeypatch: pytest.MonkeyPatch) ->
 	async def fake_start_invalidation_subscriber() -> None:
 		return None
 
-	async def fake_start_event_subscriber() -> None:
+	async def fake_start_remote_fanout_relay() -> None:
 		return None
 
 	monkeypatch.setattr(main_module, "init_db", fake_init_db)
@@ -70,8 +70,8 @@ async def test_lifespan_initializes_database(monkeypatch: pytest.MonkeyPatch) ->
 	)
 	monkeypatch.setattr(
 		main_module,
-		"start_event_subscriber",
-		fake_start_event_subscriber,
+		"start_remote_fanout_relay",
+		fake_start_remote_fanout_relay,
 	)
 	monkeypatch.setattr(boot_settings, "ENV", "dev")
 	original_testing = boot_settings.TESTING

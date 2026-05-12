@@ -33,7 +33,7 @@ from api.storage import close_all as close_storage
 from api.storage import configure_storage_backends
 from api.taskiq import shutdown_taskiq, startup_taskiq
 from api.v1.router import api_router
-from api.v1.service.events import start_event_subscriber
+from api.v1.service.events import start_remote_fanout_relay
 from api.v1.tasks.calendar import reconcile_calendar_event_notification_schedules
 from api.v1.tasks.reminders import reconcile_reminder_notification_schedules
 from api.v1.tasks.threads import (
@@ -79,7 +79,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 	event_task: asyncio.Task[None] | None = None
 	if not boot_settings.TESTING:
 		invalidation_task = await start_invalidation_subscriber()
-		event_task = await start_event_subscriber()
+		event_task = await start_remote_fanout_relay()
 
 	await configure_storage_backends()
 
