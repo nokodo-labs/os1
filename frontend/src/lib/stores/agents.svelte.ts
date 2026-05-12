@@ -1,12 +1,16 @@
 import { browser } from '$app/environment'
 import { api } from '$lib/api/client'
-import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
+import type { StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
+import {
+	STORE_EVENT_TYPES,
+	storeEventPayload,
+	storeEventString,
+	subscribeToStoreEvents,
+} from '$lib/stores/storeEvents'
 
 export type Agent = components['schemas']['Agent']
-
-const AGENT_EVENT_TYPES = ['agent.created', 'agent.updated', 'agent.deleted']
 
 class AgentsStore {
 	list = $state<Agent[]>([])
@@ -14,8 +18,13 @@ class AgentsStore {
 	error = $state<string | null>(null)
 
 	#loading = false
+	#hasLoaded = $state(false)
 	#pending: string[] = []
 	#unsubscribe: (() => void) | null = null
+
+	get hasLoaded(): boolean {
+		return this.#hasLoaded
+	}
 
 	get = (agentId: string): Agent | null => this.byId[agentId] ?? null
 
@@ -24,6 +33,7 @@ class AgentsStore {
 			this.error = null
 			this.list = []
 			this.byId = {}
+			this.#hasLoaded = false
 			return
 		}
 		if (this.#loading) return
@@ -39,6 +49,7 @@ class AgentsStore {
 			}
 			this.list = data
 			this.byId = Object.fromEntries(data.map((a) => [a.id, a]))
+			this.#hasLoaded = true
 		} catch {
 			if (this.list.length === 0) {
 				this.error = 'failed to load agents'
@@ -82,10 +93,8 @@ class AgentsStore {
 
 	#handleEvent = (message: StreamMessage): void => {
 		const eventType = message.type
-		if (!AGENT_EVENT_TYPES.includes(eventType)) return
-
-		const data = (message.data ?? message) as Record<string, unknown>
-		const agentId = data.id as string | undefined
+		const data = storeEventPayload(message)
+		const agentId = storeEventString(message, ['id'])
 		if (!agentId) return
 
 		if (eventType === 'agent.deleted') {
@@ -109,7 +118,7 @@ class AgentsStore {
 
 	init = (): void => {
 		if (!this.#unsubscribe) {
-			this.#unsubscribe = eventStreamClient.subscribe(this.#handleEvent)
+			this.#unsubscribe = subscribeToStoreEvents(STORE_EVENT_TYPES.agents, this.#handleEvent)
 		}
 	}
 
@@ -124,11 +133,16 @@ class AgentsStore {
 		// will fetch fresh data on next load
 	}
 
+	refresh = async (): Promise<void> => {
+		await this.load()
+	}
+
 	clear = (): void => {
 		this.list = []
 		this.byId = {}
 		this.error = null
 		this.#loading = false
+		this.#hasLoaded = false
 	}
 }
 

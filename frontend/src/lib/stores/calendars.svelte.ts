@@ -2,10 +2,15 @@
 
 import { browser } from '$app/environment'
 import { api } from '$lib/api/client'
-import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
+import type { StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 import { showError } from '$lib/stores/notifications.svelte'
+import {
+	STORE_EVENT_TYPES,
+	subscribeToStoreEventPrefixes,
+	subscribeToStoreEvents,
+} from '$lib/stores/storeEvents'
 import { SvelteDate, SvelteMap } from 'svelte/reactivity'
 
 export type Calendar = components['schemas']['Calendar']
@@ -58,12 +63,17 @@ function sortScheduledItems(items: ScheduledItem[]): ScheduledItem[] {
 class CalendarsStore {
 	readonly #calendarsMap = new SvelteMap<string, Calendar>()
 	#fetchedAt = $state<number | null>(null)
+	#hasLoaded = $state(false)
 	#isLoading = $state(true)
 	#inFlight: Promise<Calendar[]> | null = null
 	#unsubscribe: (() => void) | null = null
 
 	get hydrated() {
 		return this.#fetchedAt !== null
+	}
+
+	get hasLoaded() {
+		return this.#hasLoaded
 	}
 
 	get loading() {
@@ -80,7 +90,10 @@ class CalendarsStore {
 
 	init(): void {
 		if (!this.#unsubscribe) {
-			this.#unsubscribe = eventStreamClient.subscribe(this.#handleStreamEvent)
+			this.#unsubscribe = subscribeToStoreEvents(
+				STORE_EVENT_TYPES.calendars,
+				this.#handleStreamEvent
+			)
 		}
 	}
 
@@ -113,6 +126,7 @@ class CalendarsStore {
 			this.#calendarsMap.clear()
 			for (const calendar of data) this.#upsert(calendar)
 			this.#fetchedAt = Date.now()
+			this.#hasLoaded = true
 			return this.all
 		})()
 
@@ -188,9 +202,14 @@ class CalendarsStore {
 		this.#fetchedAt = null
 	}
 
+	async refresh(): Promise<Calendar[]> {
+		return await this.load({ force: true })
+	}
+
 	clear(): void {
 		this.#calendarsMap.clear()
 		this.#fetchedAt = null
+		this.#hasLoaded = false
 	}
 
 	#upsert(calendar: Calendar): void {
@@ -218,12 +237,17 @@ class CalendarsStore {
 class CalendarEventsStore {
 	readonly #eventsMap = new SvelteMap<string, CalendarEvent>()
 	#fetchedAt = $state<number | null>(null)
+	#hasLoaded = $state(false)
 	#isLoading = $state(true)
 	#inFlight: Promise<CalendarEvent[]> | null = null
 	#unsubscribe: (() => void) | null = null
 
 	get hydrated() {
 		return this.#fetchedAt !== null
+	}
+
+	get hasLoaded() {
+		return this.#hasLoaded
 	}
 
 	get loading() {
@@ -236,7 +260,10 @@ class CalendarEventsStore {
 
 	init(): void {
 		if (!this.#unsubscribe) {
-			this.#unsubscribe = eventStreamClient.subscribe(this.#handleStreamEvent)
+			this.#unsubscribe = subscribeToStoreEvents(
+				STORE_EVENT_TYPES.calendarEvents,
+				this.#handleStreamEvent
+			)
 		}
 	}
 
@@ -303,6 +330,7 @@ class CalendarEventsStore {
 			}
 			for (const event of fetched) this.#upsert(event)
 			this.#fetchedAt = Date.now()
+			this.#hasLoaded = true
 			return this.all
 		})()
 
@@ -428,10 +456,10 @@ class CalendarEventsStore {
 		if (eventId.startsWith('temp-')) return true
 
 		try {
-			const { error } = await api.DELETE('/v1/calendars/{calendar_id}/events/{event_id}', {
+			const { response } = await api.DELETE('/v1/calendars/{calendar_id}/events/{event_id}', {
 				params: { path: { calendar_id: existing.calendar_id, event_id: eventId } },
 			})
-			if (error) {
+			if (!response.ok) {
 				if (doRollback) this.#eventsMap.set(eventId, existing)
 				showError('could not delete event')
 				return false
@@ -448,9 +476,14 @@ class CalendarEventsStore {
 		this.#fetchedAt = null
 	}
 
+	async refresh(): Promise<CalendarEvent[]> {
+		return await this.load({ force: true })
+	}
+
 	clear(): void {
 		this.#eventsMap.clear()
 		this.#fetchedAt = null
+		this.#hasLoaded = false
 	}
 
 	removeCalendarEvents(calendarId: string): void {
@@ -513,6 +546,10 @@ class ScheduledItemsStore {
 		return this.#windowFetchedAt.size > 0
 	}
 
+	get hasLoaded() {
+		return this.#windows.size > 0 || this.#lastWindow !== null
+	}
+
 	get loading() {
 		return this.#isLoading
 	}
@@ -523,7 +560,10 @@ class ScheduledItemsStore {
 
 	init(): void {
 		if (!this.#unsubscribe) {
-			this.#unsubscribe = eventStreamClient.subscribe(this.#handleStreamEvent)
+			this.#unsubscribe = subscribeToStoreEventPrefixes(
+				['calendar', 'reminder'],
+				this.#handleStreamEvent
+			)
 		}
 	}
 
@@ -644,7 +684,7 @@ class ScheduledItemsStore {
 		}
 		this.#itemsMap.delete(item.id)
 		try {
-			const { error } = await api.POST(
+			const { response } = await api.POST(
 				'/v1/calendars/{calendar_id}/events/{event_id}/occurrence/cancel',
 				{
 					params: {
@@ -656,7 +696,7 @@ class ScheduledItemsStore {
 					body,
 				}
 			)
-			if (error) {
+			if (!response.ok) {
 				this.#itemsMap.set(item.id, item)
 				showError('could not delete event')
 				return false
@@ -697,10 +737,8 @@ class ScheduledItemsStore {
 		for (const item of items) this.#itemsMap.set(item.id, item)
 	}
 
-	#handleStreamEvent = (message: StreamMessage): void => {
-		if (message.type.startsWith('calendar') || message.type.startsWith('reminder')) {
-			this.invalidate()
-		}
+	#handleStreamEvent = (): void => {
+		this.invalidate()
 	}
 }
 

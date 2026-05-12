@@ -12,10 +12,11 @@
 
 import { browser } from '$app/environment'
 import { api } from '$lib/api/client'
-import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
+import type { StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 import { showError } from '$lib/stores/notifications.svelte'
+import { STORE_EVENT_TYPES, subscribeToStoreEvents } from '$lib/stores/storeEvents'
 import { SvelteMap } from 'svelte/reactivity'
 
 // types from API
@@ -23,6 +24,7 @@ export type Reminder = components['schemas']['Reminder']
 export type ReminderWithSubtasks = components['schemas']['ReminderWithSubtasks']
 export type ReminderList = components['schemas']['ReminderList']
 export type ReminderListWithCounts = components['schemas']['ReminderListWithCounts']
+export type ReminderListUpdate = components['schemas']['ReminderListUpdate']
 
 export type Counts = {
 	total_count: number
@@ -122,7 +124,10 @@ class RemindersCache {
 	 */
 	init(): void {
 		if (!this.#unsubscribe) {
-			this.#unsubscribe = eventStreamClient.subscribe(this.#handleStreamEvent)
+			this.#unsubscribe = subscribeToStoreEvents(
+				STORE_EVENT_TYPES.reminders,
+				this.#handleStreamEvent
+			)
 		}
 	}
 
@@ -369,6 +374,14 @@ class RemindersCache {
 		return this.#listsCache ? [...this.#listsCache.data.values()] : []
 	}
 
+	get hasLoaded(): boolean {
+		return (
+			this.#listsCache !== null ||
+			this.#defaultCountsCache !== null ||
+			this.#remindersCache.size > 0
+		)
+	}
+
 	get defaultList(): ReminderListWithCounts | null {
 		return this.lists.find((list) => list.is_default) ?? this.lists[0] ?? null
 	}
@@ -431,7 +444,7 @@ class RemindersCache {
 	}
 
 	invalidateLists(): void {
-		this.#listsCache = null
+		if (this.#listsCache) this.#listsCache.fetchedAt = 0
 	}
 
 	// default counts (computed from default list reminders)
@@ -489,7 +502,7 @@ class RemindersCache {
 	}
 
 	invalidateDefaultCounts(): void {
-		this.#defaultCountsCache = null
+		if (this.#defaultCountsCache) this.#defaultCountsCache.fetchedAt = 0
 	}
 
 	// reminders (per list)
@@ -564,7 +577,8 @@ class RemindersCache {
 
 	invalidateReminders(listId: string | null): void {
 		const key = this.#listKey(listId)
-		this.#remindersCache.delete(key)
+		const entry = this.#remindersCache.get(key)
+		if (entry) entry.fetchedAt = 0
 	}
 
 	// mutations
@@ -651,6 +665,58 @@ class RemindersCache {
 			if (snapshot && this.#listsCache) this.#listsCache.data.set(listId, snapshot)
 			showError('could not delete list')
 			return false
+		}
+	}
+
+	/**
+	 * update a reminder list.
+	 * optimistic update; WS delivers authoritative state.
+	 */
+	async updateList(
+		list: ReminderListWithCounts,
+		updates: ReminderListUpdate,
+		options?: { rollback?: boolean }
+	): Promise<ReminderListWithCounts | null> {
+		const doRollback = options?.rollback ?? true
+		const previous = this.#listsCache?.data.get(list.id) ?? list
+		const optimistic: ReminderListWithCounts = {
+			...previous,
+			...updates,
+			total_count: previous.total_count,
+			pending_count: previous.pending_count,
+			completed_count: previous.completed_count,
+		}
+		this.#listsCache?.data.set(list.id, optimistic)
+
+		try {
+			const { data, error } = await api.PATCH('/v1/reminder-lists/{list_id}', {
+				params: { path: { list_id: list.id } },
+				body: updates,
+			})
+
+			if (error) {
+				if (doRollback) this.#listsCache?.data.set(list.id, previous)
+				showError('could not save list')
+				return null
+			}
+
+			if (data) {
+				const saved: ReminderListWithCounts = {
+					...previous,
+					...data,
+					total_count: previous.total_count,
+					pending_count: previous.pending_count,
+					completed_count: previous.completed_count,
+				}
+				this.#listsCache?.data.set(list.id, saved)
+				return saved
+			}
+
+			return optimistic
+		} catch {
+			if (doRollback) this.#listsCache?.data.set(list.id, previous)
+			showError('could not save list')
+			return null
 		}
 	}
 
@@ -1052,16 +1118,36 @@ class RemindersCache {
 	 * invalidate all caches.
 	 */
 	invalidateAll(): void {
-		this.#listsCache = null
-		this.#defaultCountsCache = null
-		this.#remindersCache.clear()
+		this.invalidateLists()
+		this.invalidateDefaultCounts()
+		for (const entry of this.#remindersCache.values()) entry.fetchedAt = 0
+	}
+
+	invalidate(): void {
+		this.invalidateAll()
+	}
+
+	async refreshCached(): Promise<void> {
+		const tasks: Promise<unknown>[] = []
+		if (this.#listsCache) tasks.push(this.loadLists({ force: true }))
+		if (this.#defaultCountsCache) tasks.push(this.loadDefaultCounts({ force: true }))
+		for (const key of this.#remindersCache.keys()) {
+			tasks.push(this.loadReminders(key === 'default' ? null : key, { force: true }))
+		}
+		await Promise.allSettled(tasks)
+	}
+
+	async refresh(): Promise<void> {
+		await this.refreshCached()
 	}
 
 	/**
 	 * clear all caches (e.g., on logout).
 	 */
 	clear(): void {
-		this.invalidateAll()
+		this.#listsCache = null
+		this.#defaultCountsCache = null
+		this.#remindersCache.clear()
 	}
 }
 

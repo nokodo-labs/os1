@@ -1,12 +1,12 @@
 import { browser, dev } from '$app/environment'
 import { api } from '$lib/api/client'
-import type { CreateAndRunStreamDelta } from '$lib/api/streaming'
-import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
+import type { CreateAndRunStreamDelta, StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getJwtUserId } from '$lib/auth/jwt'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 import type { PendingAttachment } from '$lib/chat/types'
 import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
+import { STORE_EVENT_TYPES, subscribeToStoreEvents } from '$lib/stores/storeEvents'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 
 export type Thread = components['schemas']['Thread']
@@ -229,6 +229,13 @@ class ThreadCache {
 		this.#eventCache.delete(threadId)
 	}
 
+	markAllStale(): void {
+		for (const entry of this.#threadCache.values()) entry.fetchedAt = 0
+		for (const entry of this.#messageCache.values()) entry.fetchedAt = 0
+		for (const entry of this.#eventCache.values()) entry.fetchedAt = 0
+		this.#prefetchInFlight.clear()
+	}
+
 	/** append a message to the cached array (if thread is cached). */
 	addMessage(threadId: string, message: ApiMessage): void {
 		const entry = this.#messageCache.get(threadId)
@@ -352,6 +359,14 @@ class ThreadCache {
 		if (skip === 0) this.setMessages(threadId, data, data.length < limit, startedAt)
 		return { messages: data, fromCache: false }
 	}
+
+	async refreshCached(): Promise<void> {
+		const threadIds = new SvelteSet<string>()
+		for (const threadId of this.#threadCache.keys()) threadIds.add(threadId)
+		for (const threadId of this.#messageCache.keys()) threadIds.add(threadId)
+		for (const threadId of this.#eventCache.keys()) threadIds.add(threadId)
+		await Promise.allSettled([...threadIds].map((threadId) => this.prefetchThread(threadId)))
+	}
 }
 
 class ChatStore {
@@ -363,6 +378,7 @@ class ChatStore {
 	isLoadingThreads = $state(false)
 	isLoadingMoreThreads = $state(false)
 	hasMoreThreads = $state(false)
+	refreshVersion = $state(0)
 
 	/** unread message counts per thread id (only threads with unread > 0) */
 	readonly unreadCounts = new SvelteMap<string, number>()
@@ -423,12 +439,20 @@ class ChatStore {
 	// event stream integration
 
 	#handleStreamEvent = (message: StreamMessage): void => {
-		const data = message.data as Record<string, unknown> | undefined
-		if (!data) return
+		const data =
+			message.data && typeof message.data === 'object' && !Array.isArray(message.data)
+				? (message.data as Record<string, unknown>)
+				: {}
 
 		if (message.type === 'thread.created') {
 			const thread = data as unknown as Thread
 			if (!thread?.id || thread.is_temporary) return
+			// only show threads owned by the current user in the sidebar.
+			// we still receive thread.created for any thread we have access to,
+			// so the home sidebar must filter by ownership explicitly.
+			const token = getAccessToken()
+			const me = token ? getJwtUserId(token) : null
+			if (me && thread.owner_id && thread.owner_id !== me) return
 			// update cache + prepend to recent threads (dedup)
 			this.threadCache.set(thread)
 			this.#clearMetadataGeneratingIfReady(thread)
@@ -485,9 +509,32 @@ class ChatStore {
 			if (this.activeThread?.id === threadId) {
 				this.activeThread = null
 			}
+		} else if (message.type === 'runs.active') {
+			const runs = Array.isArray(message.data)
+				? (message.data as Array<{ thread_id?: string }>)
+				: []
+			for (const run of runs) {
+				if (
+					run.thread_id &&
+					this.#threadMetadataMissing(this.#findKnownThread(run.thread_id))
+				) {
+					this.metadataGeneratingThreadIds.add(run.thread_id)
+				}
+			}
+		} else if (message.type === 'run.started') {
+			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
+			if (threadId && this.#threadMetadataMissing(this.#findKnownThread(threadId))) {
+				this.metadataGeneratingThreadIds.add(threadId)
+			}
 		} else if (message.type === 'run.error' || message.type === 'run.failed') {
 			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
 			if (threadId) this.metadataGeneratingThreadIds.delete(threadId)
+		} else if (message.type === 'run.completed') {
+			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
+			if (!threadId) return
+			if (this.#threadMetadataMissing(this.#findKnownThread(threadId))) {
+				this.metadataGeneratingThreadIds.add(threadId)
+			}
 		} else if (message.type === 'task.created' || message.type === 'task.updated') {
 			const task = data.task as ApiTask | undefined
 			const threadId = this.#threadIdForMaintenanceTask(task)
@@ -551,7 +598,10 @@ class ChatStore {
 
 	init = (): void => {
 		if (!this.#unsubscribe) {
-			this.#unsubscribe = eventStreamClient.subscribe(this.#handleStreamEvent)
+			this.#unsubscribe = subscribeToStoreEvents(
+				STORE_EVENT_TYPES.chat,
+				this.#handleStreamEvent
+			)
 		}
 	}
 
@@ -574,6 +624,33 @@ class ChatStore {
 		this.drafts.clear()
 		this.unreadCounts.clear()
 		this.metadataGeneratingThreadIds.clear()
+	}
+
+	invalidate = (): void => {
+		this.threadCache.markAllStale()
+	}
+
+	refreshCached = async (): Promise<void> => {
+		const activeThreadId = this.activeThread?.id ?? null
+		const tasks: Promise<unknown>[] = [
+			this.threadCache.refreshCached(),
+			this.fetchUnreadCounts(),
+		]
+		if (this.recentThreads.length > 0) tasks.push(this.refreshThreads())
+		if (activeThreadId) {
+			tasks.push(
+				this.threadCache.getThread(activeThreadId).then((thread) => {
+					if (thread && this.activeThread?.id === activeThreadId)
+						this.activeThread = thread
+				})
+			)
+		}
+		await Promise.allSettled(tasks)
+		this.refreshVersion += 1
+	}
+
+	refresh = async (): Promise<void> => {
+		await this.refreshCached()
 	}
 
 	consumePendingChatStart = (threadId: string): string | null => {
@@ -645,7 +722,7 @@ class ChatStore {
 		}
 
 		const userId = getJwtUserId(token)
-		const limit = options?.limit ?? 20
+		const limit = options?.limit ?? this.#threadPaginationLimit
 		this.#threadPaginationLimit = limit
 		this.#threadPaginationSkip = 0
 		this.isLoadingThreads = true

@@ -4,8 +4,10 @@
  * via the event stream. powers sidebar indicators and the run status orb.
  */
 
-import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
-import { SvelteMap, SvelteSet } from 'svelte/reactivity'
+import { api } from '$lib/api/client'
+import type { StreamMessage } from '$lib/api/streaming'
+import { STORE_EVENT_TYPES, subscribeToStoreEvents } from '$lib/stores/storeEvents'
+import { SvelteMap } from 'svelte/reactivity'
 
 export interface ActiveRun {
 	threadId: string
@@ -63,42 +65,69 @@ class ActiveRunsStore {
 
 	init = (): void => {
 		if (this.#unsubscribe) return
-		this.#unsubscribe = eventStreamClient.subscribe(this.#handleEvent)
+		this.#unsubscribe = subscribeToStoreEvents(STORE_EVENT_TYPES.runs, this.#handleEvent)
 	}
 
 	cleanup = (): void => {
 		this.#unsubscribe?.()
 		this.#unsubscribe = null
+		this.clear()
+	}
+
+	invalidate = (): void => {}
+
+	clear = (): void => {
 		this.runs.clear()
 		this.errorThreadIds.clear()
 		for (const t of this.#errorTimeouts.values()) clearTimeout(t)
 		this.#errorTimeouts.clear()
 	}
 
+	refresh = async (): Promise<void> => {
+		const { data, error } = await api.GET('/v1/runs')
+		if (error || !data) return
+		const activeRunIds: string[] = []
+		for (const run of data) {
+			if (run.state !== 'running' || !run.thread_id) continue
+			activeRunIds.push(run.run_id)
+			this.runs.set(run.run_id, {
+				threadId: run.thread_id,
+				runId: run.run_id,
+				agentId: run.agent_id,
+				startedAt: Date.parse(run.started_at),
+			})
+		}
+		for (const runId of this.runs.keys()) {
+			if (!activeRunIds.includes(runId)) this.runs.delete(runId)
+		}
+	}
+
 	#handleEvent = (msg: StreamMessage): void => {
 		if (msg.type === 'runs.active') {
-			const runs = ((msg as Record<string, unknown>).data ?? []) as Array<{
-				thread_id: string
-				run_id: string
-				agent_id: string
-			}>
-			const activeRunIds = new SvelteSet<string>()
+			const runs = Array.isArray(msg.data)
+				? (msg.data as Array<{
+						thread_id?: string
+						run_id?: string
+						agent_id?: string
+					}>)
+				: []
+			const activeRunIds: string[] = []
 			for (const run of runs) {
 				if (run.run_id && run.thread_id) {
-					activeRunIds.add(run.run_id)
+					activeRunIds.push(run.run_id)
 					this.runs.set(run.run_id, {
 						threadId: run.thread_id,
 						runId: run.run_id,
-						agentId: run.agent_id,
+						agentId: run.agent_id ?? '',
 						startedAt: Date.now(),
 					})
 				}
 			}
 			for (const runId of this.runs.keys()) {
-				if (!activeRunIds.has(runId)) this.runs.delete(runId)
+				if (!activeRunIds.includes(runId)) this.runs.delete(runId)
 			}
 		} else if (msg.type === 'run.started') {
-			const data = ((msg as Record<string, unknown>).data ?? {}) as {
+			const data = (msg.data ?? {}) as {
 				thread_id?: string
 				run_id?: string
 				agent_id?: string
@@ -119,7 +148,7 @@ class ActiveRunsStore {
 				}
 			}
 		} else if (msg.type === 'run.completed') {
-			const data = ((msg as Record<string, unknown>).data ?? {}) as {
+			const data = (msg.data ?? {}) as {
 				thread_id?: string
 				run_id?: string
 				status?: string
@@ -128,7 +157,7 @@ class ActiveRunsStore {
 				this.runs.delete(data.run_id)
 			}
 		} else if (msg.type === 'run.error' || msg.type === 'run.failed') {
-			const data = ((msg as Record<string, unknown>).data ?? {}) as {
+			const data = (msg.data ?? {}) as {
 				thread_id?: string
 				run_id?: string
 			}

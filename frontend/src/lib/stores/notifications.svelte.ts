@@ -4,10 +4,16 @@
  */
 
 import { api } from '$lib/api/client'
-import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
+import type { StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getJwtUserId } from '$lib/auth/jwt'
 import { getAccessToken } from '$lib/auth/session.svelte'
+import {
+	STORE_EVENT_TYPES,
+	storeEventData,
+	storeEventString,
+	subscribeToStoreEvents,
+} from '$lib/stores/storeEvents'
 import { SvelteDate, SvelteSet } from 'svelte/reactivity'
 
 export type Notification = components['schemas']['Notification']
@@ -30,17 +36,26 @@ export interface ToastItem {
 	addedAt: number
 }
 
-const NOTIFICATION_EVENT_TYPES = ['notification.custom', 'notification.agent']
-const THREAD_EVENT_TYPES = ['thread.created', 'thread.updated', 'thread.deleted']
-const MESSAGE_EVENT_TYPES = ['message.created', 'message.updated', 'message.deleted']
-const TYPING_EVENT_TYPES = ['typing.user.start', 'typing.user.stop']
-const RUN_EVENT_TYPES = ['run.started', 'run.completed', 'runs.active']
-const FRIEND_EVENT_TYPES = [
-	'friend.request_sent',
-	'friend.request_accepted',
-	'friend.request_declined',
-	'friend.removed',
-]
+const NOTIFICATION_EVENT_TYPES = STORE_EVENT_TYPES.notifications
+const THREAD_EVENT_TYPES = STORE_EVENT_TYPES.threads
+const MESSAGE_EVENT_TYPES = STORE_EVENT_TYPES.messages
+const TYPING_EVENT_TYPES = STORE_EVENT_TYPES.typing
+const RUN_EVENT_TYPES = STORE_EVENT_TYPES.runs
+const FRIEND_EVENT_TYPES = STORE_EVENT_TYPES.friends
+const NOTIFICATIONS_SUBSCRIPTION_TYPES = [
+	...NOTIFICATION_EVENT_TYPES,
+	...THREAD_EVENT_TYPES,
+	...MESSAGE_EVENT_TYPES,
+	...TYPING_EVENT_TYPES,
+	...RUN_EVENT_TYPES,
+	...FRIEND_EVENT_TYPES,
+] as const
+const NOTIFICATION_EVENT_TYPE_SET = new Set<string>(NOTIFICATION_EVENT_TYPES)
+const THREAD_EVENT_TYPE_SET = new Set<string>(THREAD_EVENT_TYPES)
+const MESSAGE_EVENT_TYPE_SET = new Set<string>(MESSAGE_EVENT_TYPES)
+const TYPING_EVENT_TYPE_SET = new Set<string>(TYPING_EVENT_TYPES)
+const RUN_EVENT_TYPE_SET = new Set<string>(RUN_EVENT_TYPES)
+const FRIEND_EVENT_TYPE_SET = new Set<string>(FRIEND_EVENT_TYPES)
 
 const FRIEND_TOAST_TYPES = ['friend.request_sent', 'friend.request_accepted']
 
@@ -71,7 +86,13 @@ class NotificationsStore {
 
 	#refreshTimer: ReturnType<typeof setTimeout> | null = null
 	#unsubscribe: (() => void) | null = null
+	#stale = $state(true)
+	readonly stale = $derived(this.#stale)
 	static readonly TOAST_DURATION_MS = 12000
+
+	get initialized(): boolean {
+		return this.#unsubscribe !== null
+	}
 
 	#scheduleRefresh = () => {
 		if (this.#refreshTimer) clearTimeout(this.#refreshTimer)
@@ -82,7 +103,7 @@ class NotificationsStore {
 	}
 
 	#pushToast = (message: StreamMessage) => {
-		const data = message.data as Record<string, unknown> | undefined
+		const data = storeEventData(message)
 		const title = (data?.title as string) || message.type || 'notification'
 		const body = (data?.body as string) || ''
 		const iconUrl = (data?.icon_url as string) || null
@@ -156,29 +177,29 @@ class NotificationsStore {
 	#handleStreamEvent = (message: StreamMessage) => {
 		const eventType = message.type
 
-		if (NOTIFICATION_EVENT_TYPES.includes(eventType)) {
+		if (NOTIFICATION_EVENT_TYPE_SET.has(eventType)) {
 			this.#scheduleRefresh()
 			this.#pushToast(message)
 			for (const handler of notificationEventHandlers) handler(message)
 		}
 
-		if (FRIEND_EVENT_TYPES.includes(eventType)) {
+		if (FRIEND_EVENT_TYPE_SET.has(eventType)) {
 			if (FRIEND_TOAST_TYPES.includes(eventType)) {
 				this.#pushFriendToast(message)
 			}
 		}
 
-		if (THREAD_EVENT_TYPES.includes(eventType)) {
+		if (THREAD_EVENT_TYPE_SET.has(eventType)) {
 			for (const handler of threadEventHandlers) handler(message)
 		}
 
-		if (MESSAGE_EVENT_TYPES.includes(eventType)) {
+		if (MESSAGE_EVENT_TYPE_SET.has(eventType)) {
 			for (const handler of messageEventHandlers) handler(message)
 		}
 
-		if (TYPING_EVENT_TYPES.includes(eventType)) {
-			const data = message.data as Record<string, unknown> | undefined
-			const threadId = (message.thread_id as string) || (data?.thread_id as string) || ''
+		if (TYPING_EVENT_TYPE_SET.has(eventType)) {
+			const data = storeEventData(message)
+			const threadId = storeEventString(message, ['thread_id']) ?? ''
 
 			if (eventType === 'typing.user.start') {
 				const userId = (data?.user_id as string) || ''
@@ -201,35 +222,52 @@ class NotificationsStore {
 		}
 
 		// run events are forwarded via the generic stream - no further handling here
-		if (RUN_EVENT_TYPES.includes(eventType)) {
+		if (RUN_EVENT_TYPE_SET.has(eventType)) {
 			// no-op: handled by activeRunsStore
 		}
 	}
 
 	init = () => {
-		if (!this.#unsubscribe) {
-			this.#unsubscribe = eventStreamClient.subscribe(this.#handleStreamEvent)
-		}
+		if (this.#unsubscribe) return
+		this.#unsubscribe = subscribeToStoreEvents(
+			NOTIFICATIONS_SUBSCRIPTION_TYPES,
+			this.#handleStreamEvent
+		)
 		void this.refresh()
 	}
 
 	cleanup = () => {
 		this.#unsubscribe?.()
 		this.#unsubscribe = null
+		this.clear()
+	}
+
+	invalidate = (): void => {
+		this.#stale = true
+	}
+
+	clear = (): void => {
+		if (this.#refreshTimer) clearTimeout(this.#refreshTimer)
+		this.#refreshTimer = null
 		this.list = []
 		this.typingIndicators = []
+		this.isLoading = false
+		this.error = null
+		this.#stale = true
 	}
 
 	refresh = async (): Promise<void> => {
 		const token = getAccessToken()
 		if (!token) {
 			this.list = []
+			this.#stale = true
 			return
 		}
 
 		const userId = getJwtUserId(token)
 		if (!userId) {
 			this.list = []
+			this.#stale = true
 			return
 		}
 
@@ -246,12 +284,15 @@ class NotificationsStore {
 
 			if (error) {
 				this.error = 'failed to load notifications'
+				this.#stale = true
 				return
 			}
 
 			this.list = data ?? []
+			this.#stale = false
 		} catch {
 			this.error = 'failed to load notifications'
+			this.#stale = true
 		} finally {
 			this.isLoading = false
 		}

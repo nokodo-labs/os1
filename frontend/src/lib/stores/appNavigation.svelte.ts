@@ -15,17 +15,26 @@ export type NotesRouteId = '/notes' | `/notes/${string}`
 type ReminderListRouteId = `/reminders/lists/${string}`
 export type RemindersRouteId = '/reminders' | ReminderListRouteId
 export type CalendarRouteId = '/calendar'
+export type MessagesRouteId = '/messages'
 
 export type SocialRouteId = '/social/friends' | '/social/groups'
 
 export type ProjectsRouteId = '/projects' | `/projects/${string}`
 
-export type AppId = 'settings' | 'notes' | 'reminders' | 'calendar' | 'social' | 'projects'
+export type AppId =
+	| 'settings'
+	| 'notes'
+	| 'reminders'
+	| 'calendar'
+	| 'messages'
+	| 'social'
+	| 'projects'
 
 export const DEFAULT_SETTINGS_ROUTE: SettingsRouteId = '/settings/appearance'
 export const DEFAULT_NOTES_ROUTE: NotesRouteId = '/notes'
 export const DEFAULT_REMINDERS_ROUTE: RemindersRouteId = '/reminders'
 export const DEFAULT_CALENDAR_ROUTE: CalendarRouteId = '/calendar'
+export const DEFAULT_MESSAGES_ROUTE: MessagesRouteId = '/messages'
 export const DEFAULT_SOCIAL_ROUTE: SocialRouteId = '/social/friends'
 export const DEFAULT_PROJECTS_ROUTE: ProjectsRouteId = '/projects'
 
@@ -63,6 +72,10 @@ function isReminderListRoute(pathname: string): pathname is ReminderListRouteId 
 
 function isCalendarRoute(pathname: string): pathname is CalendarRouteId {
 	return pathname === '/calendar'
+}
+
+function isMessagesRoute(pathname: string): pathname is MessagesRouteId {
+	return pathname === '/messages'
 }
 
 function isSocialRoute(pathname: string): pathname is SocialRouteId {
@@ -118,6 +131,17 @@ function readStoredCalendar(): CalendarRouteId | '' {
 	}
 }
 
+function readStoredMessages(): MessagesRouteId | '' {
+	if (!browser) return ''
+	try {
+		const raw = window.localStorage.getItem(`${STORAGE_PREFIX}messages`) ?? ''
+		const normalized = normalizePath(raw)
+		return isMessagesRoute(normalized) ? normalized : ''
+	} catch {
+		return ''
+	}
+}
+
 function readStoredSocial(): SocialRouteId | '' {
 	if (!browser) return ''
 	try {
@@ -145,6 +169,7 @@ class AppNavigationStore {
 	lastNotesRoute = $state<NotesRouteId | ''>(readStoredNotes())
 	lastRemindersRoute = $state<RemindersRouteId | ''>(readStoredReminders())
 	lastCalendarRoute = $state<CalendarRouteId | ''>(readStoredCalendar())
+	lastMessagesRoute = $state<MessagesRouteId | ''>(readStoredMessages())
 	lastSocialRoute = $state<SocialRouteId | ''>(readStoredSocial())
 	lastProjectsRoute = $state<ProjectsRouteId | ''>(readStoredProjects())
 
@@ -152,6 +177,7 @@ class AppNavigationStore {
 	getEntryRoute(appId: 'notes'): NotesRouteId
 	getEntryRoute(appId: 'reminders'): RemindersRouteId
 	getEntryRoute(appId: 'calendar'): CalendarRouteId
+	getEntryRoute(appId: 'messages'): MessagesRouteId
 	getEntryRoute(appId: 'social'): SocialRouteId
 	getEntryRoute(appId: 'projects'): ProjectsRouteId
 	getEntryRoute(
@@ -161,6 +187,17 @@ class AppNavigationStore {
 		| NotesRouteId
 		| RemindersRouteId
 		| CalendarRouteId
+		| MessagesRouteId
+		| SocialRouteId
+		| ProjectsRouteId
+	getEntryRoute(
+		appId: AppId
+	):
+		| SettingsRouteId
+		| NotesRouteId
+		| RemindersRouteId
+		| CalendarRouteId
+		| MessagesRouteId
 		| SocialRouteId
 		| ProjectsRouteId {
 		switch (appId) {
@@ -172,6 +209,8 @@ class AppNavigationStore {
 				return this.lastRemindersRoute || DEFAULT_REMINDERS_ROUTE
 			case 'calendar':
 				return this.lastCalendarRoute || DEFAULT_CALENDAR_ROUTE
+			case 'messages':
+				return this.lastMessagesRoute || DEFAULT_MESSAGES_ROUTE
 			case 'social':
 				return this.lastSocialRoute || DEFAULT_SOCIAL_ROUTE
 			case 'projects':
@@ -183,8 +222,10 @@ class AppNavigationStore {
 	setLastVisited(appId: 'notes', pathname: string): void
 	setLastVisited(appId: 'reminders', pathname: string): void
 	setLastVisited(appId: 'calendar', pathname: string): void
+	setLastVisited(appId: 'messages', pathname: string): void
 	setLastVisited(appId: 'social', pathname: string): void
 	setLastVisited(appId: 'projects', pathname: string): void
+	setLastVisited(appId: AppId, pathname: string): void
 	setLastVisited(appId: AppId, pathname: string): void {
 		const normalized = normalizePath(pathname)
 
@@ -213,6 +254,12 @@ class AppNavigationStore {
 				this.persist('calendar', normalized)
 				return
 			}
+			case 'messages': {
+				if (!isMessagesRoute(normalized)) return
+				this.lastMessagesRoute = normalized
+				this.persist('messages', normalized)
+				return
+			}
 			case 'social': {
 				if (!isSocialRoute(normalized)) return
 				this.lastSocialRoute = normalized
@@ -235,6 +282,7 @@ class AppNavigationStore {
 			| NotesRouteId
 			| RemindersRouteId
 			| CalendarRouteId
+			| MessagesRouteId
 			| SocialRouteId
 			| ProjectsRouteId
 	) {

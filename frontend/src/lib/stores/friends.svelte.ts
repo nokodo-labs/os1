@@ -10,10 +10,10 @@
 
 import { browser } from '$app/environment'
 import { api } from '$lib/api/client'
-import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getJwtUserId } from '$lib/auth/jwt'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
+import { STORE_EVENT_TYPES, subscribeToStoreEvents } from '$lib/stores/storeEvents'
 
 export type FriendResponse = components['schemas']['FriendResponse']
 export type FriendshipDetail = components['schemas']['FriendshipDetail']
@@ -28,13 +28,6 @@ export interface Relationship {
 }
 
 const CACHE_TTL_MS = 5 * 60 * 1000
-
-const FRIEND_EVENT_TYPES = [
-	'friend.request_sent',
-	'friend.request_accepted',
-	'friend.request_declined',
-	'friend.removed',
-]
 
 // helpers
 
@@ -69,9 +62,11 @@ class FriendsStore {
 
 	init(): void {
 		if (!this.#unsubscribe) {
-			this.#unsubscribe = eventStreamClient.subscribe(this.#handleStreamEvent)
+			this.#unsubscribe = subscribeToStoreEvents(
+				STORE_EVENT_TYPES.friends,
+				this.#handleStreamEvent
+			)
 		}
-		void this.load()
 	}
 
 	cleanup(): void {
@@ -87,10 +82,8 @@ class FriendsStore {
 		this.#fetchedAt = 0
 	}
 
-	#handleStreamEvent = (message: StreamMessage): void => {
-		if (FRIEND_EVENT_TYPES.includes(message.type)) {
-			void this.load({ force: true })
-		}
+	#handleStreamEvent = (): void => {
+		void this.load({ force: true })
 	}
 
 	#isFresh(): boolean {
@@ -224,6 +217,10 @@ class FriendsStore {
 
 	invalidate(): void {
 		this.#fetchedAt = 0
+	}
+
+	async refresh(): Promise<void> {
+		await this.load({ force: true })
 	}
 }
 

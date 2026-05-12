@@ -1,10 +1,11 @@
 import { browser } from '$app/environment'
 import { api } from '$lib/api/client'
-import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
+import type { StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { device } from '$lib/stores/device.svelte'
 import { session } from '$lib/stores/session.svelte'
 import { settingsState } from '$lib/stores/settings.svelte'
+import { STORE_EVENT_TYPES, storeEventData, subscribeToStoreEvents } from '$lib/stores/storeEvents'
 import { deepMerge, isPlainObject } from '$lib/utils'
 
 type UserPreferences = components['schemas']['UserPreferences']
@@ -154,12 +155,10 @@ function createPreferencesStore() {
 	// event stream integration
 
 	let prefsUnsub: (() => void) | null = null
+	let syncCleanup: (() => void) | null = null
 
 	function handlePreferencesEvent(message: StreamMessage): void {
-		if (message.type !== 'user.preferences_updated') return
-
-		const data = (message.data ?? message) as Record<string, unknown>
-		const incoming = data.preferences as UserPreferences | undefined
+		const incoming = storeEventData(message)?.preferences as UserPreferences | undefined
 		if (!incoming || !userId) return
 
 		raw = incoming
@@ -188,8 +187,10 @@ function createPreferencesStore() {
 			raw = stored
 		}
 
+		if (syncCleanup) return syncCleanup
+
 		// $effect.root lets us run effects outside component context
-		const cleanup = $effect.root(() => {
+		const cleanupEffect = $effect.root(() => {
 			$effect(() => {
 				const user = session.currentUser
 
@@ -220,14 +221,24 @@ function createPreferencesStore() {
 
 		// subscribe to event stream for cross-session preference updates
 		if (!prefsUnsub) {
-			prefsUnsub = eventStreamClient.subscribe(handlePreferencesEvent)
+			prefsUnsub = subscribeToStoreEvents(
+				STORE_EVENT_TYPES.preferences,
+				handlePreferencesEvent
+			)
 		}
 
-		return () => {
-			cleanup()
+		let cleanupActive = true
+		const cleanupSync = () => {
+			if (!cleanupActive) return
+			cleanupActive = false
+			cleanupEffect()
 			prefsUnsub?.()
 			prefsUnsub = null
+			if (syncCleanup === cleanupSync) syncCleanup = null
 		}
+		syncCleanup = cleanupSync
+
+		return syncCleanup
 	}
 
 	// api

@@ -8,25 +8,48 @@ svelte 5 reactive stores for frontend state. all stores use `$state` runes (no w
 
 ### api cache stores
 
-class instances backed by API data. follow a standard lifecycle contract:
+API-backed stores follow a standard structural contract. the contract is enforced at
+the central registry with `satisfies readonly ApiCacheStore[]` rather than by a
+shared superclass, because stores may be classes, object literals, or adapters.
 
-| method         | description                                                                         |
-| -------------- | ----------------------------------------------------------------------------------- |
-| `init()`       | subscribe to event stream + start initial fetch                                     |
-| `cleanup()`    | unsubscribe from event stream + wipe state                                          |
-| `load()`       | fetch / re-fetch from API (no state wipe)                                           |
-| `invalidate()` | mark data stale (soft reset, no blob revocation) so the next `load()` fetches fresh |
-| `clear()`      | immediately wipe all local state (full reset, revokes blob URLs where applicable)   |
+| method         | description                                                                       |
+| -------------- | --------------------------------------------------------------------------------- |
+| `init()`       | subscribe to event stream + start initial fetch                                   |
+| `cleanup()`    | unsubscribe from event stream                                                     |
+| `load()`       | domain fetch / re-fetch API (may accept domain-specific options)                  |
+| `invalidate()` | mark data stale while keeping rendered data available                             |
+| `refresh()`    | explicit refetch for already-loaded cache scopes, then swap fresh data in place   |
+| `clear()`      | immediately wipe all local state (full reset, revokes blob URLs where applicable) |
 
-stores: `agents`, `chat`, `files`, `friends`, `groups`, `notes`, `notifications`, `permissions`, `preferences`, `projects`, `reminders`
+stores: `activeRuns`, `agents`, `chat`, `files`, `friends`, `groups`, `notes`, `notifications`, `permissions`, `projects`, `reminders`, `resourceAccess`, `settings`
 
-> `settings` uses free functions (`loadSettings`, `invalidateSettings`, `clearSettings`) instead of a class - it is functionally equivalent.
+composite resources track their own loaded scopes behind the same top-level API:
+`projects.refresh()` refreshes loaded project counts, `reminders.refresh()` refreshes
+loaded lists/counts/reminder lists, `files.refresh()` refreshes loaded filters and
+counts, and `resourceAccess.refresh()` refreshes loaded access levels/rules.
 
-**lifecycle wiring** is centralized in `src/lib/init.ts`:
+**lifecycle wiring** is centralized in `src/lib/stores/apiCacheRegistry.ts` and consumed by `src/lib/init.ts`:
 
-- `init()` is called after auth token is available
 - `cleanup()` and `clear()` are called on logout / token change
-- `invalidate()` is called on WS disconnect (missed events = stale data)
+- `invalidate()` is called on WS disconnect, blur/hidden, resume, and execution gaps
+- lifecycle invalidation never refetches by itself; owning pages/components call `load()`, `ensure()`, or `refresh()` when the data is actually needed again
+
+### websocket event contract
+
+store event handling is centralized in `src/lib/stores/storeEvents.ts`:
+
+- `STORE_EVENT_TYPES` is the frontend source of truth for store-relevant WS event names
+- stores subscribe with `subscribeToStoreEvents()` for exact event groups or `subscribeToStoreEventPrefixes()` for intentionally broad derived windows
+- payload reads should use `storeEventData()` / `storeEventString()` so handlers consistently support backend events that put ids either in `data` or at top level
+
+event handling policy depends on resource shape:
+
+- direct patch: event payload is the authoritative resource shape (`agents`, `notes`, calendars, reminders, chat where possible)
+- item refetch: event only identifies the resource or processing status (`files`)
+- full refetch: small relationship caches where partial state is easy to get wrong (`friends`, `groups`, permissions, settings)
+- scoped invalidation: composite or derived caches (`projects` counts, scheduled item windows, resource access)
+
+`eventStreamClient.subscribeTypes()` and `subscribePrefixes()` route typed groups before handlers run. global `subscribe()` is reserved for generic stream consumers outside store caches.
 
 ### rollback support
 
@@ -59,7 +82,7 @@ no API backing, no lifecycle. either plain `$state` objects or classes used dire
 
 ## notifications store
 
-`notifications` doubles as the **event fanout hub** - all SSE stream messages flow through it. it also owns the toast queue.
+`notifications` owns notification refresh/toasts and still exposes focused chat-related event fanout helpers. store-level WS routing itself lives in `storeEvents.ts`.
 
 ### toast system
 
