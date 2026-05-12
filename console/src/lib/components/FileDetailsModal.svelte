@@ -8,11 +8,11 @@
 	import { Button } from '$lib/components/ui/button'
 	import {
 		Calendar,
-		CheckCircle2,
+		CircleCheck,
 		Database,
 		Download,
 		FileIcon,
-		Fingerprint,
+		FingerprintPattern,
 		FolderOpen,
 		HardDrive,
 		Hash,
@@ -343,7 +343,7 @@
 									<h3 class="text-sm font-semibold text-zinc-200">preview</h3>
 									<p class="text-xs text-zinc-500">{currentPreviewKind}</p>
 								</div>
-								<CheckCircle2 class="h-4 w-4 text-emerald-400" />
+								<CircleCheck class="h-4 w-4 text-emerald-400" />
 							</div>
 
 							{#if isPreviewLoading}
@@ -476,7 +476,9 @@
 							</div>
 							{#if file.checksum_sha256}
 								<div class="flex items-center gap-3 px-4 py-2.5 text-sm">
-									<Fingerprint class="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+									<FingerprintPattern
+										class="h-3.5 w-3.5 shrink-0 text-zinc-500"
+									/>
 									<span class="w-24 shrink-0 text-xs text-zinc-500">sha256</span>
 									<span class="min-w-0 truncate font-mono text-xs text-zinc-400"
 										>{file.checksum_sha256}</span
@@ -484,7 +486,7 @@
 								</div>
 							{/if}
 							<div class="flex items-center gap-3 px-4 py-2.5 text-sm">
-								<CheckCircle2 class="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+								<CircleCheck class="h-3.5 w-3.5 shrink-0 text-zinc-500" />
 								<span class="w-24 shrink-0 text-xs text-zinc-500">status</span>
 								<span
 									class="text-xs font-medium capitalize {statusColor(

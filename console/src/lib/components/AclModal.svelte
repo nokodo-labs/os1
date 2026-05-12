@@ -88,55 +88,55 @@
 		try {
 			if (resourceType === 'thread') {
 				entries = unwrap(
-					await api.GET('/v1/threads/{thread_id}/access-rules', {
+					await api.GET('/v1/threads/{thread_id}/access/rules', {
 						params: { path: { thread_id: resourceId } },
 					})
 				)
 			} else if (resourceType === 'project') {
 				entries = unwrap(
-					await api.GET('/v1/projects/{project_id}/access-rules', {
+					await api.GET('/v1/projects/{project_id}/access/rules', {
 						params: { path: { project_id: resourceId } },
 					})
 				)
 			} else if (resourceType === 'agent') {
 				entries = unwrap(
-					await api.GET('/v1/agents/{agent_id}/access-rules', {
+					await api.GET('/v1/agents/{agent_id}/access/rules', {
 						params: { path: { agent_id: resourceId } },
 					})
 				)
 			} else if (resourceType === 'group') {
 				entries = unwrap(
-					await api.GET('/v1/groups/{group_id}/access-rules', {
+					await api.GET('/v1/groups/{group_id}/access/rules', {
 						params: { path: { group_id: resourceId } },
 					})
 				)
 			} else if (resourceType === 'file') {
 				entries = unwrap(
-					await api.GET('/v1/files/{file_id}/access-rules', {
+					await api.GET('/v1/files/{file_id}/access/rules', {
 						params: { path: { file_id: resourceId } },
 					})
 				)
 			} else if (resourceType === 'note') {
 				entries = unwrap(
-					await api.GET('/v1/notes/{note_id}/access-rules', {
+					await api.GET('/v1/notes/{note_id}/access/rules', {
 						params: { path: { note_id: resourceId } },
 					})
 				)
 			} else if (resourceType === 'memory') {
 				entries = unwrap(
-					await api.GET('/v1/memories/{memory_id}/access-rules', {
+					await api.GET('/v1/memories/{memory_id}/access/rules', {
 						params: { path: { memory_id: resourceId } },
 					})
 				)
 			} else if (resourceType === 'reminder_list') {
 				entries = unwrap(
-					await api.GET('/v1/reminder-lists/{list_id}/access-rules', {
+					await api.GET('/v1/reminder-lists/{list_id}/access/rules', {
 						params: { path: { list_id: resourceId } },
 					})
 				)
 			} else if (resourceType === 'calendar') {
 				entries = unwrap(
-					await api.GET('/v1/calendars/{calendar_id}/access-rules', {
+					await api.GET('/v1/calendars/{calendar_id}/access/rules', {
 						params: { path: { calendar_id: resourceId } },
 					})
 				)
@@ -221,63 +221,63 @@
 			const body = entries.map((entry, index) => toCreate(entry, index))
 			if (resourceType === 'thread') {
 				entries = unwrap(
-					await api.PUT('/v1/threads/{thread_id}/access-rules', {
+					await api.PUT('/v1/threads/{thread_id}/access/rules', {
 						params: { path: { thread_id: resourceId } },
 						body,
 					})
 				)
 			} else if (resourceType === 'project') {
 				entries = unwrap(
-					await api.PUT('/v1/projects/{project_id}/access-rules', {
+					await api.PUT('/v1/projects/{project_id}/access/rules', {
 						params: { path: { project_id: resourceId } },
 						body,
 					})
 				)
 			} else if (resourceType === 'agent') {
 				entries = unwrap(
-					await api.PUT('/v1/agents/{agent_id}/access-rules', {
+					await api.PUT('/v1/agents/{agent_id}/access/rules', {
 						params: { path: { agent_id: resourceId } },
 						body,
 					})
 				)
 			} else if (resourceType === 'group') {
 				entries = unwrap(
-					await api.PUT('/v1/groups/{group_id}/access-rules', {
+					await api.PUT('/v1/groups/{group_id}/access/rules', {
 						params: { path: { group_id: resourceId } },
 						body,
 					})
 				)
 			} else if (resourceType === 'file') {
 				entries = unwrap(
-					await api.PUT('/v1/files/{file_id}/access-rules', {
+					await api.PUT('/v1/files/{file_id}/access/rules', {
 						params: { path: { file_id: resourceId } },
 						body,
 					})
 				)
 			} else if (resourceType === 'note') {
 				entries = unwrap(
-					await api.PUT('/v1/notes/{note_id}/access-rules', {
+					await api.PUT('/v1/notes/{note_id}/access/rules', {
 						params: { path: { note_id: resourceId } },
 						body,
 					})
 				)
 			} else if (resourceType === 'memory') {
 				entries = unwrap(
-					await api.PUT('/v1/memories/{memory_id}/access-rules', {
+					await api.PUT('/v1/memories/{memory_id}/access/rules', {
 						params: { path: { memory_id: resourceId } },
 						body,
 					})
 				)
 			} else if (resourceType === 'reminder_list') {
 				entries = unwrap(
-					await api.PUT('/v1/reminder-lists/{list_id}/access-rules', {
+					await api.PUT('/v1/reminder-lists/{list_id}/access/rules', {
 						params: { path: { list_id: resourceId } },
 						body,
 					})
 				)
 			} else if (resourceType === 'calendar') {
 				entries = unwrap(
-					await api.PUT('/v1/calendars/{calendar_id}/access-rules', {
+					await api.PUT('/v1/calendars/{calendar_id}/access/rules', {
 						params: { path: { calendar_id: resourceId } },
 						body,
 					})

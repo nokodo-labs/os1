@@ -13,19 +13,19 @@
 	import ThreadFlowView from '$lib/components/thread-flow/ThreadFlowView.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
-		AlertTriangle,
 		Ban,
 		Brain,
-		CheckCircle2,
 		ChevronDown,
 		Circle,
+		CircleCheck,
 		Clock3,
 		Download,
-		FileJson,
+		FileBraces,
 		FileText,
 		GitBranch,
 		LoaderCircle,
 		Trash2,
+		TriangleAlert,
 		X,
 	} from '@lucide/svelte'
 	import { Dialog, DropdownMenu } from 'bits-ui'
@@ -347,7 +347,7 @@
 					params: {
 						query: {
 							spawned_thread_id: id,
-							limit: 100,
+							limit: 50,
 							sort_by: 'last_event_at',
 							sort_dir: 'desc',
 						},
@@ -491,14 +491,14 @@
 										class="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
 										onSelect={exportJson}
 									>
-										<FileJson class="h-3.5 w-3.5" />
+										<FileBraces class="h-3.5 w-3.5" />
 										full thread (json)
 									</DropdownMenu.Item>
 									<DropdownMenu.Item
 										class="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
 										onSelect={exportMessagesOnly}
 									>
-										<FileJson class="h-3.5 w-3.5" />
+										<FileBraces class="h-3.5 w-3.5" />
 										messages only (json)
 									</DropdownMenu.Item>
 									<DropdownMenu.Item
@@ -627,7 +627,7 @@
 											: 'text-zinc-400 hover:text-zinc-200'}"
 										onclick={() => (activeTab = 'messages')}
 									>
-										<FileJson class="h-3.5 w-3.5" />
+										<FileBraces class="h-3.5 w-3.5" />
 										messages
 									</button>
 									<button
@@ -941,11 +941,11 @@
 																			class="h-3 w-3 animate-spin"
 																		/>
 																	{:else if task.status === 'complete'}
-																		<CheckCircle2
+																		<CircleCheck
 																			class="h-3 w-3"
 																		/>
 																	{:else if task.status === 'failed'}
-																		<AlertTriangle
+																		<TriangleAlert
 																			class="h-3 w-3"
 																		/>
 																	{:else if task.status === 'cancelled'}

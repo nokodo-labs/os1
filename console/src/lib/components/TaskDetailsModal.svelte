@@ -4,13 +4,13 @@
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
-		AlertTriangle,
 		Ban,
-		CheckCircle2,
 		Circle,
+		CircleCheck,
 		Clock3,
 		LoaderCircle,
 		RefreshCw,
+		TriangleAlert,
 		X,
 	} from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
@@ -196,9 +196,9 @@
 									{:else if task.status === 'pending'}
 										<Clock3 class="h-5 w-5 text-sky-400" />
 									{:else if task.status === 'complete'}
-										<CheckCircle2 class="h-5 w-5 text-emerald-400" />
+										<CircleCheck class="h-5 w-5 text-emerald-400" />
 									{:else if task.status === 'failed'}
-										<AlertTriangle class="h-5 w-5 text-red-400" />
+										<TriangleAlert class="h-5 w-5 text-red-400" />
 									{:else}
 										<Ban class="h-5 w-5 text-zinc-400" />
 									{/if}

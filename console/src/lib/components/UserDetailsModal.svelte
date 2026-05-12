@@ -15,22 +15,22 @@
 		Brain,
 		CheckCircle,
 		Circle,
+		CircleX,
 		Clock,
+		FileIcon,
+		FileText,
 		Hash,
+		ListChecks,
 		Mail,
 		MessageSquare,
 		Pencil,
 		Save,
 		Shield,
 		User as UserIcon,
+		Users,
 		UserX,
 		Wifi,
 		X,
-		XCircle,
-		FileIcon,
-		FileText,
-		Users,
-		ListChecks,
 	} from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 
@@ -293,7 +293,7 @@
 								{#if user.is_active !== false}
 									<CheckCircle class="h-3.5 w-3.5 shrink-0 text-emerald-400" />
 								{:else}
-									<XCircle class="h-3.5 w-3.5 shrink-0 text-red-400" />
+									<CircleX class="h-3.5 w-3.5 shrink-0 text-red-400" />
 								{/if}
 								<span class="w-28 shrink-0 text-xs text-zinc-500">active</span>
 								<span

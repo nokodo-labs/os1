@@ -49,21 +49,17 @@
 	let saveSuccess = $state(false)
 
 	// user search for adding members
-	let allUsers = $state<UserRecord[]>([])
+	const USER_SEARCH_LIMIT = 20
+	let userResults = $state<UserRecord[]>([])
 	let userQuery = $state('')
 	let isLoadingUsers = $state(false)
+	let userSearchSkip = $state(0)
+	let hasMoreUserResults = $state(false)
+	let userSearchRequestId = 0
+	let userSearchTimer: ReturnType<typeof setTimeout> | null = null
 
-	let filteredUsers = $derived(
-		allUsers.filter((u: UserRecord) => {
-			if (group?.memberships.some((m) => m.user_id === u.id)) return false
-			if (!userQuery.trim()) return false
-			const q = userQuery.toLowerCase()
-			return (
-				u.email.toLowerCase().includes(q) ||
-				u.username.toLowerCase().includes(q) ||
-				(u.display_name ?? '').toLowerCase().includes(q)
-			)
-		})
+	let availableUserResults = $derived(
+		userResults.filter((u: UserRecord) => !group?.memberships.some((m) => m.user_id === u.id))
 	)
 
 	// add member
@@ -105,22 +101,66 @@
 		deleteError = null
 		saveSuccess = false
 		userQuery = ''
+		userResults = []
+		userSearchSkip = 0
+		hasMoreUserResults = false
 	}
 
 	function errMsg(e: unknown): string {
 		return e instanceof Error ? e.message : String(e)
 	}
 
-	async function loadUsers() {
-		isLoadingUsers = true
-		try {
-			const r = await api.GET('/v1/users', { params: { query: { limit: 200 } } })
-			allUsers = unwrap(r)
-		} catch {
-			// non-critical - silently ignore
-		} finally {
-			isLoadingUsers = false
+	async function searchUsers(reset = false) {
+		const q = userQuery.trim()
+		if (!q) {
+			userResults = []
+			userSearchSkip = 0
+			hasMoreUserResults = false
+			return
 		}
+		isLoadingUsers = true
+		const requestId = ++userSearchRequestId
+		const skip = reset ? 0 : userSearchSkip
+		try {
+			const r = await api.GET('/v1/users', {
+				params: {
+					query: {
+						q,
+						limit: USER_SEARCH_LIMIT,
+						skip,
+						sort_by: 'display_name',
+						sort_dir: 'asc',
+					},
+				},
+			})
+			const result = unwrap(r)
+			if (requestId !== userSearchRequestId) return
+			userResults = reset ? result : [...userResults, ...result]
+			userSearchSkip = skip + result.length
+			hasMoreUserResults = result.length === USER_SEARCH_LIMIT
+		} catch {
+			if (requestId === userSearchRequestId) {
+				userResults = reset ? [] : userResults
+				hasMoreUserResults = false
+			}
+		} finally {
+			if (requestId === userSearchRequestId) isLoadingUsers = false
+		}
+	}
+
+	function scheduleUserSearch() {
+		if (userSearchTimer) clearTimeout(userSearchTimer)
+		userSearchTimer = setTimeout(() => {
+			void searchUsers(true)
+		}, 250)
+	}
+
+	function handleUserSearchScroll(event: Event) {
+		if (!(event.currentTarget instanceof HTMLElement)) return
+		const target = event.currentTarget
+		if (target.scrollTop + target.clientHeight < target.scrollHeight - 24) return
+		if (!hasMoreUserResults || isLoadingUsers) return
+		void searchUsers(false)
 	}
 
 	$effect(() => {
@@ -141,7 +181,6 @@
 			.finally(() => {
 				isLoading = false
 			})
-		loadUsers()
 	})
 
 	async function save() {
@@ -186,6 +225,9 @@
 			})
 			group = unwrap(r)
 			userQuery = ''
+			userResults = []
+			userSearchSkip = 0
+			hasMoreUserResults = false
 			newMemberRole = 'member'
 		} catch (e) {
 			addMemberError = errMsg(e)
@@ -504,6 +546,7 @@
 										bind:value={userQuery}
 										placeholder="search by name or email…"
 										class="w-full min-w-0 rounded-xl border-zinc-700 bg-zinc-900 pl-8 text-xs text-zinc-100 placeholder-zinc-600"
+										oninput={scheduleUserSearch}
 									/>
 								</div>
 								<Select
@@ -521,11 +564,12 @@
 									</SelectContent>
 								</Select>
 							</div>
-							{#if filteredUsers.length > 0}
+							{#if availableUserResults.length > 0}
 								<div
 									class="max-h-40 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900"
+									onscroll={handleUserSearchScroll}
 								>
-									{#each filteredUsers.slice(0, 8) as u (u.id)}
+									{#each availableUserResults as u (u.id)}
 										<button
 											type="button"
 											class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-xs hover:bg-zinc-800 disabled:opacity-50"
@@ -540,7 +584,22 @@
 											<Plus class="h-3 w-3 shrink-0 text-zinc-500" />
 										</button>
 									{/each}
+									{#if isLoadingUsers && hasMoreUserResults}
+										<div class="px-4 py-2 text-center text-xs text-zinc-500">
+											loading more...
+										</div>
+									{:else if hasMoreUserResults}
+										<button
+											type="button"
+											class="w-full border-t border-zinc-800 px-4 py-2 text-center text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+											onclick={() => searchUsers(false)}
+										>
+											load more
+										</button>
+									{/if}
 								</div>
+							{:else if userQuery.trim() && isLoadingUsers}
+								<p class="px-1 text-xs text-zinc-600">loading users...</p>
 							{:else if userQuery.trim() && !isLoadingUsers}
 								<p class="px-1 text-xs text-zinc-600">no matching users found</p>
 							{/if}

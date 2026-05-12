@@ -46,7 +46,13 @@
 	let addUserEmail = $state('')
 	let isAddingUser = $state(false)
 	let addUserError = $state<string | null>(null)
-	let allUsers = $state<User[]>([])
+	const USER_SEARCH_LIMIT = 20
+	let userResults = $state<User[]>([])
+	let isSearchingUsers = $state(false)
+	let userSearchSkip = $state(0)
+	let hasMoreUserResults = $state(false)
+	let userSearchRequestId = 0
+	let userSearchTimer: ReturnType<typeof setTimeout> | null = null
 
 	function normalizePermissions(input: DefaultPermissions): DefaultPermissions {
 		return {
@@ -97,25 +103,62 @@
 		}
 	}
 
-	async function fetchAllUsers() {
+	async function searchUsers(reset = false) {
+		const q = addUserEmail.trim()
+		if (!q) {
+			userResults = []
+			userSearchSkip = 0
+			hasMoreUserResults = false
+			return
+		}
+
+		isSearchingUsers = true
+		const requestId = ++userSearchRequestId
+		const skip = reset ? 0 : userSearchSkip
 		try {
-			allUsers = unwrap(await api.GET('/v1/users', { params: { query: { limit: 200 } } }))
+			const result = unwrap(
+				await api.GET('/v1/users', {
+					params: {
+						query: {
+							q,
+							limit: USER_SEARCH_LIMIT,
+							skip,
+							sort_by: 'display_name',
+							sort_dir: 'asc',
+						},
+					},
+				})
+			)
+			if (requestId !== userSearchRequestId) return
+			userResults = reset ? result : [...userResults, ...result]
+			userSearchSkip = skip + result.length
+			hasMoreUserResults = result.length === USER_SEARCH_LIMIT
 		} catch {
-			allUsers = []
+			if (requestId === userSearchRequestId) {
+				userResults = reset ? [] : userResults
+				hasMoreUserResults = false
+			}
+		} finally {
+			if (requestId === userSearchRequestId) isSearchingUsers = false
 		}
 	}
 
-	const availableUsers = $derived(allUsers.filter((u) => !members.some((m) => m.id === u.id)))
+	const availableUsers = $derived(userResults.filter((u) => !members.some((m) => m.id === u.id)))
 
-	const filteredUsers = $derived(
-		addUserEmail.trim()
-			? availableUsers.filter(
-					(u) =>
-						u.email.toLowerCase().includes(addUserEmail.toLowerCase()) ||
-						(u.display_name ?? '').toLowerCase().includes(addUserEmail.toLowerCase())
-				)
-			: []
-	)
+	function scheduleUserSearch() {
+		if (userSearchTimer) clearTimeout(userSearchTimer)
+		userSearchTimer = setTimeout(() => {
+			void searchUsers(true)
+		}, 250)
+	}
+
+	function handleUserSearchScroll(event: Event) {
+		if (!(event.currentTarget instanceof HTMLElement)) return
+		const target = event.currentTarget
+		if (target.scrollTop + target.clientHeight < target.scrollHeight - 24) return
+		if (!hasMoreUserResults || isSearchingUsers) return
+		void searchUsers(false)
+	}
 
 	async function saveMemberList(nextIds: string[]) {
 		if (!roleId) return
@@ -129,6 +172,9 @@
 				})
 			)
 			addUserEmail = ''
+			userResults = []
+			userSearchSkip = 0
+			hasMoreUserResults = false
 		} catch (e) {
 			addUserError = e instanceof Error ? e.message : 'failed to update members'
 		} finally {
@@ -217,6 +263,9 @@
 		saveSuccess = null
 		members = []
 		addUserEmail = ''
+		userResults = []
+		userSearchSkip = 0
+		hasMoreUserResults = false
 		addUserError = null
 
 		api.GET('/v1/roles/{role_id}', { params: { path: { role_id: roleId } } })
@@ -233,7 +282,6 @@
 			})
 
 		fetchMembers()
-		fetchAllUsers()
 	})
 </script>
 
@@ -336,13 +384,16 @@
 								placeholder="search users by email or name..."
 								class="rounded-xl"
 								disabled={isAddingUser}
+								oninput={scheduleUserSearch}
 							/>
-							{#if filteredUsers.length > 0}
+							{#if availableUsers.length > 0}
 								<div
 									class="absolute top-full right-0 left-0 z-10 mt-1 max-h-48 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 shadow-lg"
+									onscroll={handleUserSearchScroll}
 								>
-									{#each filteredUsers.slice(0, 8) as user (user.id)}
+									{#each availableUsers as user (user.id)}
 										<button
+											type="button"
 											class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800"
 											onclick={() => addMember(user.id)}
 											disabled={isAddingUser}
@@ -355,6 +406,31 @@
 											>
 										</button>
 									{/each}
+									{#if isSearchingUsers && hasMoreUserResults}
+										<div class="px-3 py-2 text-center text-xs text-zinc-500">
+											loading more...
+										</div>
+									{:else if hasMoreUserResults}
+										<button
+											type="button"
+											class="w-full border-t border-zinc-800 px-3 py-2 text-center text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+											onclick={() => searchUsers(false)}
+										>
+											load more
+										</button>
+									{/if}
+								</div>
+							{:else if addUserEmail.trim() && isSearchingUsers}
+								<div
+									class="absolute top-full right-0 left-0 z-10 mt-1 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-4 text-center text-sm text-zinc-500 shadow-lg"
+								>
+									loading users...
+								</div>
+							{:else if addUserEmail.trim()}
+								<div
+									class="absolute top-full right-0 left-0 z-10 mt-1 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-4 text-center text-sm text-zinc-500 shadow-lg"
+								>
+									no users found
 								</div>
 							{/if}
 						</div>
