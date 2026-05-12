@@ -53,6 +53,7 @@
 		"@dayflow/plugin-drag": "^1.5.0",
 		"@dayflow/svelte": "^3.6.0",
 		"@floating-ui/dom": "^1.7.6",
+		"@humanspeak/svelte-virtual-list": "^0.4.6",
 		"@internationalized/date": "^3.12.1",
 		"@tiptap/core": "^3.22.5",
 		"@tiptap/extension-placeholder": "^3.22.5",
