@@ -32,6 +32,7 @@ from api.v1.service.chat.message_metadata import (
 	get_message_id,
 )
 from api.v1.service.prompt_runtime import SENTINEL_CITATION_SOURCES
+from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
 	AssistantMessage as SDKAssistantMessage,
@@ -55,14 +56,15 @@ class CitationIndexFilter(Filter):
 
 	async def process(
 		self,
-		thread: SDKThread,
+		state: AgentIterationState[AppContext],
 		agent_context: AgentContext,
 		app_context: AppContext | None,
-	) -> SDKThread:
+	) -> AgentIterationState[AppContext]:
 		"""assign citation indices and inject the citation manifest for a run."""
 		_ = agent_context
 		if app_context is None:
-			return thread
+			return state
+		thread = state.thread
 
 		entries = app_context.citations
 
@@ -100,7 +102,7 @@ class CitationIndexFilter(Filter):
 					)
 				)
 
-		return thread
+		return state
 
 	def _assign_new_citations(
 		self,

@@ -10,6 +10,7 @@ from pydantic import PrivateAttr
 from nokodo_ai import (
 	Agent,
 	AgentContext,
+	AgentIterationState,
 	AssistantMessage,
 	ChatModel,
 	SystemMessage,
@@ -20,6 +21,7 @@ from nokodo_ai import (
 	UserMessage,
 )
 from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
+from nokodo_ai.agents import _should_continue_agent_run
 from nokodo_ai.filters import Filter
 from nokodo_ai.hooks import Hook
 from nokodo_ai.messages import Message
@@ -147,6 +149,35 @@ async def test_agent_sync_without_tools_tool_choice_none() -> None:
 	assert isinstance(params, ChatGenerationParams)
 	assert params.tool_choice is None
 	assert call["tools"] == []
+
+
+def _state_from(thread: Thread) -> AgentIterationState[None]:
+	return AgentIterationState(thread=thread, tools=[])
+
+
+def test_should_continue_agent_run_from_thread_state() -> None:
+	empty = Thread()
+	assert _should_continue_agent_run(_state_from(empty)) is True
+
+	complete = Thread()
+	complete.add(SystemMessage.from_text("system"))
+	complete.add(AssistantMessage.from_text("done"))
+	assert _should_continue_agent_run(_state_from(complete)) is False
+
+	awaiting_user_response = Thread()
+	awaiting_user_response.add(AssistantMessage.from_text("done"))
+	awaiting_user_response.add(UserMessage.from_text("next"))
+	assert _should_continue_agent_run(_state_from(awaiting_user_response)) is True
+
+	awaiting_tool_response = Thread()
+	awaiting_tool_response.add(ToolMessage(tool_call_id="tc1", tool_output="ok"))
+	assert _should_continue_agent_run(_state_from(awaiting_tool_response)) is True
+
+	tool_request = Thread()
+	tool_request.add(
+		AssistantMessage(tool_calls=[ToolCall(id="tc1", name="echo", arguments={})])
+	)
+	assert _should_continue_agent_run(_state_from(tool_request)) is True
 
 
 @pytest.mark.asyncio
@@ -347,14 +378,14 @@ async def test_agent_sync_applies_filters_and_hooks() -> None:
 
 		async def process(
 			self,
-			thread: Thread,
+			state: AgentIterationState[None],
 			agent_context: AgentContext,
 			app_context: None,
-		) -> Thread:
-			assert agent_context.iteration == 0
-			seen.append("filter")
-			thread.add(SystemMessage.from_text("injected"))
-			return thread
+		) -> AgentIterationState[None]:
+			seen.append(f"filter:{agent_context.iteration}")
+			if agent_context.iteration == 0:
+				state.thread.add(SystemMessage.from_text("injected"))
+			return state
 
 	class _TestHook(Hook[None]):
 		name: str = "test_hook"
@@ -367,11 +398,13 @@ async def test_agent_sync_applies_filters_and_hooks() -> None:
 			app_context: None,
 		) -> None:
 			assert agent_context.tool_call_id is None
-			seen.append("hook")
+			seen.append(f"hook:{agent_context.iteration}")
 
 	adapter = _QueuedChatAdapter(sync_responses=[AssistantMessage.from_text("ok")])
 	chat_model = _make_chat_model(adapter)
-	agent = Agent(chat_model=chat_model, filters=[_TestFilter()], hooks=[_TestHook()])
+	filters: list[Filter[None]] = [_TestFilter()]
+	hooks: list[Hook[None]] = [_TestHook()]
+	agent = Agent(chat_model=chat_model, filters=filters, hooks=hooks)
 	thread = Thread()
 	thread.add(UserMessage.from_text("hi"))
 
@@ -380,12 +413,97 @@ async def test_agent_sync_applies_filters_and_hooks() -> None:
 	assert len(result) == 1
 	assert isinstance(result[0], AssistantMessage)
 	assert result[0].text == "ok"
-	assert seen == ["filter", "hook"]
+	assert seen == ["filter:0", "hook:0", "filter:1"]
 	call_messages = adapter.calls[-1]["messages"]
 	assert isinstance(call_messages, list)
 	assert any(
 		isinstance(m, SystemMessage) and m.text == "injected" for m in call_messages
 	)
+
+
+@pytest.mark.asyncio
+async def test_agent_sync_filter_can_inject_after_terminal_response() -> None:
+	class _LateUserFilter(Filter[None]):
+		name: str = "late_user"
+		description: str = "late user"
+
+		calls: int = 0
+
+		async def process(
+			self,
+			state: AgentIterationState[None],
+			agent_context: AgentContext,
+			app_context: None,
+		) -> AgentIterationState[None]:
+			_ = (agent_context, app_context)
+			self.calls += 1
+			if self.calls == 2:
+				state.thread.add(UserMessage.from_text("late"))
+			return state
+
+	adapter = _QueuedChatAdapter(
+		sync_responses=[
+			AssistantMessage.from_text("first"),
+			AssistantMessage.from_text("second"),
+		]
+	)
+	chat_model = _make_chat_model(adapter)
+	filters: list[Filter[None]] = [_LateUserFilter()]
+	agent = Agent(chat_model=chat_model, filters=filters)
+	thread = Thread()
+	thread.add(UserMessage.from_text("start"))
+
+	result = await agent.run(thread)
+
+	assert [m.text for m in result if isinstance(m, AssistantMessage)] == [
+		"first",
+		"second",
+	]
+	assert len(adapter.calls) == 2
+	assert [m.role for m in thread.messages] == [
+		"user",
+		"assistant",
+		"user",
+		"assistant",
+	]
+
+
+@pytest.mark.asyncio
+async def test_agent_sync_filter_can_change_iteration_tools_and_choice() -> None:
+	class _DisableToolsFilter(Filter[None]):
+		name: str = "disable_tools"
+		description: str = "disable tools"
+
+		async def process(
+			self,
+			state: AgentIterationState[None],
+			agent_context: AgentContext,
+			app_context: None,
+		) -> AgentIterationState[None]:
+			_ = (agent_context, app_context)
+			state.tools = []
+			state.tool_choice = "required"
+			return state
+
+	adapter = _QueuedChatAdapter(sync_responses=[AssistantMessage.from_text("done")])
+	chat_model = _make_chat_model(adapter)
+	tools: list[Tool[None]] = [_EchoTool(name="echo", description="echo")]
+	filters: list[Filter[None]] = [_DisableToolsFilter()]
+	agent = Agent(
+		chat_model=chat_model,
+		tools=tools,
+		filters=filters,
+	)
+	thread = Thread()
+	thread.add(UserMessage.from_text("start"))
+
+	await agent.run(thread)
+
+	call = adapter.calls[-1]
+	assert call["tools"] == []
+	params = call["params"]
+	assert isinstance(params, ChatGenerationParams)
+	assert params.tool_choice is None
 
 
 @pytest.mark.asyncio
@@ -544,14 +662,14 @@ async def test_agent_streaming_applies_filters_and_hooks() -> None:
 
 		async def process(
 			self,
-			thread: Thread,
+			state: AgentIterationState[None],
 			agent_context: AgentContext,
 			app_context: None,
-		) -> Thread:
-			assert agent_context.iteration == 0
-			seen.append("filter")
-			thread.add(SystemMessage.from_text("injected"))
-			return thread
+		) -> AgentIterationState[None]:
+			seen.append(f"filter:{agent_context.iteration}")
+			if agent_context.iteration == 0:
+				state.thread.add(SystemMessage.from_text("injected"))
+			return state
 
 	class _TestHook(Hook[None]):
 		name: str = "test_hook"
@@ -564,11 +682,13 @@ async def test_agent_streaming_applies_filters_and_hooks() -> None:
 			app_context: None,
 		) -> None:
 			assert agent_context.tool_call_id is None
-			seen.append("hook")
+			seen.append(f"hook:{agent_context.iteration}")
 
 	adapter = _QueuedChatAdapter(stream_responses=[[AssistantMessage.from_text("ok")]])
 	chat_model = _make_chat_model(adapter)
-	agent = Agent(chat_model=chat_model, filters=[_TestFilter()], hooks=[_TestHook()])
+	filters: list[Filter[None]] = [_TestFilter()]
+	hooks: list[Hook[None]] = [_TestHook()]
+	agent = Agent(chat_model=chat_model, filters=filters, hooks=hooks)
 	thread = Thread()
 	thread.add(UserMessage.from_text("hi"))
 
@@ -576,12 +696,63 @@ async def test_agent_streaming_applies_filters_and_hooks() -> None:
 	deltas = [d async for d in stream]
 
 	assert deltas[-1].done is True
-	assert seen == ["filter", "hook"]
+	assert seen == ["filter:0", "hook:0", "filter:1"]
 	call_messages = adapter.calls[-1]["messages"]
 	assert isinstance(call_messages, list)
 	assert any(
 		isinstance(m, SystemMessage) and m.text == "injected" for m in call_messages
 	)
+
+
+@pytest.mark.asyncio
+async def test_agent_stream_filter_can_inject_after_terminal_response() -> None:
+	class _LateUserFilter(Filter[None]):
+		name: str = "late_user"
+		description: str = "late user"
+
+		calls: int = 0
+
+		async def process(
+			self,
+			state: AgentIterationState[None],
+			agent_context: AgentContext,
+			app_context: None,
+		) -> AgentIterationState[None]:
+			_ = (agent_context, app_context)
+			self.calls += 1
+			if self.calls == 2:
+				state.thread.add(UserMessage.from_text("late"))
+			return state
+
+	adapter = _QueuedChatAdapter(
+		stream_responses=[
+			[AssistantMessage.from_text("first")],
+			[AssistantMessage.from_text("second")],
+		]
+	)
+	chat_model = _make_chat_model(adapter)
+	filters: list[Filter[None]] = [_LateUserFilter()]
+	agent = Agent(chat_model=chat_model, filters=filters)
+	thread = Thread()
+	thread.add(UserMessage.from_text("start"))
+
+	stream = await agent.run(thread, stream=True)
+	deltas = [delta async for delta in stream]
+
+	texts = [
+		delta.chat.message.text
+		for delta in deltas
+		if delta.chat is not None and delta.chat.message.text
+	]
+	assert texts == ["first", "second"]
+	assert deltas[-1].done is True
+	assert len(adapter.calls) == 2
+	assert [m.role for m in thread.messages] == [
+		"user",
+		"assistant",
+		"user",
+		"assistant",
+	]
 
 
 @pytest.mark.asyncio

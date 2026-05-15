@@ -25,7 +25,7 @@ usage:
 
 from __future__ import annotations
 
-from .agents import Agent
+from .agents import Agent, AgentIterationState, AgentToolChoice
 from .chat_models import ChatModel
 from .context import AgentContext
 from .deltas import AgentDelta, ChatModelDelta
@@ -62,6 +62,8 @@ __all__ = [
 	"ImageModel",
 	"Vectorstore",
 	"Agent",
+	"AgentIterationState",
+	"AgentToolChoice",
 	"ChatModelDelta",
 	"AgentDelta",
 	# tools

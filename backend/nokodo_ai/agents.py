@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
-from functools import cached_property
+from dataclasses import dataclass
 from typing import Literal, overload
 
 from pydantic import Field, SkipValidation, ValidationError
@@ -20,9 +20,11 @@ from .hooks import Hook
 from .messages import (
 	PROVIDER_DATA_KEY,
 	AssistantMessage,
+	SystemMessage,
 	TextContent,
 	ToolCall,
 	ToolMessage,
+	UserMessage,
 )
 from .threads import Thread
 from .tool import Tool, ToolDefinition
@@ -33,12 +35,39 @@ from .utils.dicts import deep_merge
 logger = logging.getLogger(__name__)
 
 AgentProducedMessages = list[AssistantMessage | ToolMessage]
+type AgentToolChoice = Literal["auto", "none", "required"] | str | None
+
+
+@dataclass(slots=True)
+class AgentIterationState[AppContextT = None]:
+	"""mutable state for one agent loop iteration."""
+
+	thread: Thread
+	tools: list[Tool[AppContextT]]
+	# todo: if filters need context-aware model selection, move the chat model
+	# set into iteration state instead of adding model params piecemeal.
+	tool_choice: AgentToolChoice = "auto"
 
 
 # strong references to fire-and-forget cancel tasks so the event loop does
 # not GC them before they have a chance to call the provider cancel API.
 # python 3.12+ keeps only weak references from asyncio.create_task().
 _cancel_tasks: set[asyncio.Task[None]] = set()
+
+
+def _should_continue_agent_run[AppContextT](
+	state: AgentIterationState[AppContextT],
+) -> bool:
+	"""return whether this thread state needs another model call."""
+	thread = state.thread
+	for message in reversed(thread.messages):
+		if isinstance(message, SystemMessage):
+			continue
+		if isinstance(message, (UserMessage, ToolMessage)):
+			return True
+		if isinstance(message, AssistantMessage):
+			return bool(message.tool_calls)
+	return True
 
 
 class Agent[AppContextT = None](Base):
@@ -106,12 +135,12 @@ class Agent[AppContextT = None](Base):
 	)
 	max_iterations: int = Field(default=10, description="maximum Agent iterations")
 
-	@cached_property
+	@property
 	def tools_map(self) -> dict[str, Tool[AppContextT]]:
 		"""map of tool names to tool instances for fast lookup."""
 		return {t.name: t for t in self.tools}
 
-	@cached_property
+	@property
 	def tool_definitions(self) -> list[ToolDefinition]:
 		"""get tool definitions for chat_model.generate() calls."""
 		return [t.definition for t in self.tools]
@@ -121,7 +150,7 @@ class Agent[AppContextT = None](Base):
 		self,
 		thread: Thread,
 		app_context: AppContextT | None = None,
-		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		tool_choice: AgentToolChoice = "auto",
 		stream: Literal[False] = False,
 	) -> AgentProducedMessages: ...
 
@@ -130,7 +159,7 @@ class Agent[AppContextT = None](Base):
 		self,
 		thread: Thread,
 		app_context: AppContextT | None = None,
-		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		tool_choice: AgentToolChoice = "auto",
 		stream: Literal[True] = True,
 	) -> AsyncIterator[AgentDelta]: ...
 
@@ -138,7 +167,7 @@ class Agent[AppContextT = None](Base):
 		self,
 		thread: Thread,
 		app_context: AppContextT | None = None,
-		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		tool_choice: AgentToolChoice = "auto",
 		stream: bool = False,
 	) -> AgentProducedMessages | AsyncIterator[AgentDelta]:
 		"""run the agent against a thread.
@@ -178,47 +207,46 @@ class Agent[AppContextT = None](Base):
 		self,
 		thread: Thread,
 		app_context: AppContextT | None,
-		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		tool_choice: AgentToolChoice = "auto",
 	) -> AgentProducedMessages:
 		"""run the agent loop synchronously, returning all produced messages."""
 		produced: AgentProducedMessages = []
+		state = self._initial_iteration_state(thread, tool_choice)
+		model_calls = 0
+		iteration = 0
 
-		for iteration in range(self.max_iterations):
+		while True:
 			agent_context = AgentContext(
-				thread=thread,
+				thread=state.thread,
 				model=self.chat_model,
 				iteration=iteration,
 			)
-			# apply filters to thread messages (pre-processing). filters can
-			# also inject messages from external sources (see SteeringFilter).
-			filtered_thread = thread
-			for filter_ in self.filters:
-				filtered_thread = await filter_.process(
-					filtered_thread,
-					agent_context=agent_context,
-					app_context=app_context,
-				)
+			state = await self._apply_filters(state, agent_context, app_context)
+			self.tools = state.tools
 
-			current_tool_choice = tool_choice if self.tools else None
+			if not _should_continue_agent_run(state):
+				return produced
 
+			if model_calls >= self.max_iterations:
+				break
+
+			tool_choice_for_generation = state.tool_choice if self.tools else None
 			assistant_response = await self.chat_model.generate(
-				filtered_thread,
+				state.thread,
 				tools=self.tool_definitions,
-				tool_choice=current_tool_choice,
+				tool_choice=tool_choice_for_generation,
 			)
-			thread.add(assistant_response)
+			model_calls += 1
+			state.thread.add(assistant_response)
 			produced.append(assistant_response)
 
 			# execute hooks after response (read-only observation)
 			for hook in self.hooks:
 				await hook.execute(
-					thread,
+					state.thread,
 					agent_context=agent_context,
 					app_context=app_context,
 				)
-
-			if not assistant_response.tool_calls:
-				return produced
 
 			for tool_call in assistant_response.tool_calls:
 				tool_message = await self._execute_tools(
@@ -226,16 +254,17 @@ class Agent[AppContextT = None](Base):
 					agent_context=agent_context,
 					app_context=app_context,
 				)
-				thread.add(tool_message)
+				state.thread.add(tool_message)
 				produced.append(tool_message)
+			iteration += 1
 
-		# max iterations reached - call chat model one more time without tools
+		# max iterations reached. call chat model one more time without tools
 		final_response = await self.chat_model.generate(
-			thread,
+			state.thread,
 			tools=self.tool_definitions,
 			tool_choice="none",
 		)
-		thread.add(final_response)
+		state.thread.add(final_response)
 		produced.append(final_response)
 
 		return produced
@@ -244,35 +273,37 @@ class Agent[AppContextT = None](Base):
 		self,
 		thread: Thread,
 		app_context: AppContextT | None,
-		tool_choice: Literal["auto", "none", "required"] | str | None = "auto",
+		tool_choice: AgentToolChoice = "auto",
 	) -> AsyncIterator[AgentDelta]:
 		"""run the agent loop, yielding deltas as they are produced."""
 		chunk_index = 0
+		state = self._initial_iteration_state(thread, tool_choice)
+		model_calls = 0
+		iteration = 0
 
-		for iteration in range(self.max_iterations):
+		while True:
 			agent_context = AgentContext(
-				thread=thread,
+				thread=state.thread,
 				model=self.chat_model,
 				iteration=iteration,
 			)
-			# apply filters to thread (pre-processing). filters can also inject
-			# messages from external sources (see SteeringFilter).
-			filtered_thread = thread
-			for filter_ in self.filters:
-				filtered_thread = await filter_.process(
-					filtered_thread,
-					agent_context=agent_context,
-					app_context=app_context,
-				)
+			state = await self._apply_filters(state, agent_context, app_context)
+			self.tools = state.tools
 
-			current_tool_choice = tool_choice if self.tools else None
+			if not _should_continue_agent_run(state):
+				yield AgentDelta.done_sentinel(chunk_index=chunk_index)
+				return
 
+			if model_calls >= self.max_iterations:
+				break
+
+			tool_choice_for_generation = state.tool_choice if self.tools else None
 			# stream from chat model and accumulate full message
 			assistant_message = AssistantMessage()
 			async for chat_delta in self._stream_with_cancel(
-				filtered_thread,
+				state.thread,
 				tools=self.tool_definitions,
-				tool_choice=current_tool_choice,
+				tool_choice=tool_choice_for_generation,
 			):
 				# accumulate into complete message for thread
 				assistant_message = assistant_message.merge(chat_delta.message)
@@ -282,20 +313,16 @@ class Agent[AppContextT = None](Base):
 				chunk_index += 1
 
 			# add completed message to thread
-			thread.add(assistant_message)
+			model_calls += 1
+			state.thread.add(assistant_message)
 
 			# execute hooks (read-only observation)
 			for hook in self.hooks:
 				await hook.execute(
-					thread,
+					state.thread,
 					agent_context=agent_context,
 					app_context=app_context,
 				)
-
-			# no tool calls = final response, we're done
-			if not assistant_message.tool_calls:
-				yield AgentDelta.done_sentinel(chunk_index=chunk_index)
-				return
 
 			# execute each tool call
 			for tool_call in assistant_message.tool_calls:
@@ -304,14 +331,15 @@ class Agent[AppContextT = None](Base):
 					agent_context=agent_context,
 					app_context=app_context,
 				)
-				thread.add(tool_message)
+				state.thread.add(tool_message)
 				yield AgentDelta(tool=tool_message, chunk_index=chunk_index)
 				chunk_index += 1
+			iteration += 1
 
 		# max iterations reached - final call without tools
 		final_message = AssistantMessage()
 		async for chat_delta in self._stream_with_cancel(
-			thread,
+			state.thread,
 			tools=self.tool_definitions,
 			tool_choice="none",
 		):
@@ -319,7 +347,7 @@ class Agent[AppContextT = None](Base):
 			yield AgentDelta(chat=chat_delta, chunk_index=chunk_index)
 			chunk_index += 1
 
-		thread.add(final_message)
+		state.thread.add(final_message)
 
 		# add fallback text if empty
 		if not final_message.text:
@@ -335,7 +363,7 @@ class Agent[AppContextT = None](Base):
 		self,
 		thread: Thread,
 		tools: list[ToolDefinition],
-		tool_choice: Literal["auto", "none", "required"] | str | None,
+		tool_choice: AgentToolChoice,
 	) -> AsyncIterator[ChatModelDelta]:
 		"""stream chat model deltas; notify provider on any non-natural exit.
 
@@ -385,6 +413,35 @@ class Agent[AppContextT = None](Base):
 			await self.chat_model.cancel_generation(latest_message)
 		except Exception:
 			logger.debug("provider cancel_generation raised", exc_info=True)
+
+	def _initial_iteration_state(
+		self,
+		thread: Thread,
+		tool_choice: AgentToolChoice,
+	) -> AgentIterationState[AppContextT]:
+		"""build the starting state for an agent run."""
+		return AgentIterationState(
+			thread=thread,
+			tools=self.tools,
+			tool_choice=tool_choice,
+		)
+
+	async def _apply_filters(
+		self,
+		state: AgentIterationState[AppContextT],
+		agent_context: AgentContext,
+		app_context: AppContextT | None,
+	) -> AgentIterationState[AppContextT]:
+		"""apply pre-model filters to iteration state."""
+		for filter_ in self.filters:
+			agent_context.thread = state.thread
+			state = await filter_.process(
+				state,
+				agent_context=agent_context,
+				app_context=app_context,
+			)
+		agent_context.thread = state.thread
+		return state
 
 	async def _execute_tools(
 		self,

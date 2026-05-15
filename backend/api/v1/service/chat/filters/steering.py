@@ -14,10 +14,10 @@ from collections.abc import Awaitable, Callable
 
 from pydantic import ConfigDict, Field, SkipValidation
 
+from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
 from nokodo_ai.filters import Filter
 from nokodo_ai.messages import UserMessage as SDKUserMessage
-from nokodo_ai.threads import Thread as SDKThread
 
 
 logger = logging.getLogger(__name__)
@@ -72,19 +72,19 @@ class SteeringFilter[AppContextT = None](Filter[AppContextT]):
 
 	async def process(
 		self,
-		thread: SDKThread,
+		state: AgentIterationState[AppContextT],
 		agent_context: AgentContext,
 		app_context: AppContextT | None,
-	) -> SDKThread:
+	) -> AgentIterationState[AppContextT]:
 		_ = (agent_context, app_context)  # steering is application-agnostic
 		drained = await self.claim()
 		if not drained:
-			return thread
+			return state
 		for msg in drained:
-			thread.add(msg)
+			state.thread.add(msg)
 		if self.on_injected is not None:
 			try:
 				await self.on_injected(drained)
 			except Exception:
 				logger.exception("SteeringFilter on_injected callback raised")
-		return thread
+		return state

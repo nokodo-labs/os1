@@ -9,10 +9,10 @@ from pydantic import Field
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.message_metadata import CREATED_AT_KEY
+from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import Message, TextContent, UserContentPart
 from nokodo_ai.messages import UserMessage as SDKUserMessage
-from nokodo_ai.threads import Thread as SDKThread
 
 
 class UserMessageTimestampFilter(Filter):
@@ -27,12 +27,13 @@ class UserMessageTimestampFilter(Filter):
 
 	async def process(
 		self,
-		thread: SDKThread,
+		state: AgentIterationState[AppContext],
 		agent_context: AgentContext,
 		app_context: AppContext | None,
-	) -> SDKThread:
+	) -> AgentIterationState[AppContext]:
 		"""prepend each user message with its persisted creation timestamp."""
 		_ = (agent_context, app_context)
+		thread = state.thread
 		new_messages: list[Message] = []
 		for msg in thread.messages:
 			if not isinstance(msg, SDKUserMessage):
@@ -68,7 +69,7 @@ class UserMessageTimestampFilter(Filter):
 			)
 
 		thread.messages = new_messages
-		return thread
+		return state
 
 	@staticmethod
 	def _resolve_timestamp(msg: SDKUserMessage) -> str | None:

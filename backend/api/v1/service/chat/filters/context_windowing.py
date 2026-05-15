@@ -31,6 +31,7 @@ from api.v1.tasks.threads import (
 	start_condense_summaries_task,
 	start_summarize_messages_task,
 )
+from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
 from nokodo_ai.threads import Thread as SDKThread
 
@@ -69,19 +70,22 @@ class ContextWindowingFilter(Filter):
 
 	async def process(
 		self,
-		thread: SDKThread,
+		state: AgentIterationState[AppContext],
 		agent_context: AgentContext,
 		app_context: AppContext | None,
-	) -> SDKThread:
+	) -> AgentIterationState[AppContext]:
 		_ = agent_context
 		if app_context is None:
-			return thread
+			return state
 
 		if not self._initialized:
 			self._initialized = True
-			return await self._first_pass(thread, app_context)
+			projected = await self._first_pass(state.thread, app_context)
+		else:
+			projected = await self._guard_pass(state.thread, app_context)
 
-		return await self._guard_pass(thread, app_context)
+		state.thread = projected
+		return state
 
 	async def _first_pass(
 		self,

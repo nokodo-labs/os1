@@ -1,4 +1,4 @@
-"""chat context filter - injects context from other chats into the system prompt."""
+"""chat context filter. injects context from other chats into the system prompt."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from api.v1.service.authorization import thread_access_predicate
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.listing import apply_sort
 from api.v1.service.prompt_runtime import SENTINEL_CHAT_CONTEXT
+from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
@@ -55,27 +56,28 @@ class ChatContextFilter(Filter):
 
 	async def process(
 		self,
-		thread: SDKThread,
+		state: AgentIterationState[AppContext],
 		agent_context: AgentContext,
 		app_context: AppContext | None,
-	) -> SDKThread:
+	) -> AgentIterationState[AppContext]:
 		_ = agent_context
 		if app_context is None:
 			raise ValueError("AppContext is required for ChatContextFilter")
+		thread = state.thread
 
 		cfg = app_settings.ai.chat_context
 		if not cfg.enabled:
 			self._replace_sentinel(thread, SENTINEL_CHAT_CONTEXT, "")
-			return thread
+			return state
 
 		# locate system message and check for the injection sentinel.
 		system_msg = thread.system_message
 		if system_msg is None:
-			return thread
+			return state
 
 		system_text = system_msg.text
 		if not system_text or SENTINEL_CHAT_CONTEXT not in system_text:
-			return thread
+			return state
 
 		current_thread_id = app_context.thread_id
 
@@ -90,7 +92,7 @@ class ChatContextFilter(Filter):
 
 		content = self._format_threads(threads) if threads else ""
 		self._replace_sentinel(thread, SENTINEL_CHAT_CONTEXT, content)
-		return thread
+		return state
 
 	# -- mode implementations --
 

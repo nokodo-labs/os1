@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 from pydantic import Field
 
 from .base import Base
 from .context import AgentContext
-from .threads import Thread
+
+
+if TYPE_CHECKING:
+	from .agents import AgentIterationState
 
 
 class Filter[AppContextT = None](Base, ABC):
 	"""base class for filters.
 
-	filters run BEFORE an agent sends messages to the model.
-	they can modify, augment, or filter the input messages.
+	filters run before an agent sends messages to the model.
+	they can modify, augment, or filter the iteration state.
 
 	filters are generic over AppContextT, allowing application-specific
 	context to be passed through the entire agent execution pipeline.
@@ -33,18 +37,18 @@ class Filter[AppContextT = None](Base, ABC):
 	@abstractmethod
 	async def process(
 		self,
-		thread: Thread,
+		state: AgentIterationState[AppContextT],
 		agent_context: AgentContext,
 		app_context: AppContextT | None,
-	) -> Thread:
-		"""process messages through this filter.
+	) -> AgentIterationState[AppContextT]:
+		"""process iteration state through this filter.
 
 		args:
-			thread: the current conversation thread
+			state: the current iteration state
 			agent_context: runtime context for this agent iteration
 			app_context: application-specific context
 
 		returns:
-			processed thread (may be modified, augmented, or filtered)
+			processed iteration state
 		"""
 		raise NotImplementedError("process method must be implemented by subclasses")

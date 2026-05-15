@@ -34,6 +34,7 @@ from api.v1.service import threads as thread_service
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.message_metadata import get_message_id
 from api.v1.service.prompt_runtime import SENTINEL_REFERENCED_ATTACHMENTS
+from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
 	AssistantMessage as SDKAssistantMessage,
@@ -451,15 +452,16 @@ class AttachmentDecayFilter(Filter):
 
 	async def process(
 		self,
-		thread: SDKThread,
+		state: AgentIterationState[AppContext],
 		agent_context: AgentContext,
 		app_context: AppContext | None,
-	) -> SDKThread:
+	) -> AgentIterationState[AppContext]:
 		"""replace decayed attachments with prompt references for this turn."""
 		_ = agent_context
 		if app_context is None:
 			raise ValueError("AppContext is required for AttachmentDecayFilter")
 
+		thread = state.thread
 		messages = thread.messages
 
 		# locate the system message and check for the injection sentinel.
@@ -470,20 +472,20 @@ class AttachmentDecayFilter(Filter):
 			None,
 		)
 		if system_idx is None:
-			return thread
+			return state
 
 		system_msg = messages[system_idx]
 		system_text = (
 			system_msg.text if isinstance(system_msg, SDKSystemMessage) else ""
 		) or ""
 		if SENTINEL_REFERENCED_ATTACHMENTS not in system_text:
-			return thread
+			return state
 
 		decay_settings = app_settings.ai.attachments
 
 		if not messages:
 			self._inject_sentinel(messages, system_idx, system_text, "")
-			return thread
+			return state
 
 		# compute turn indices for every message
 		turn_indices = _compute_turn_indices(messages)
@@ -493,7 +495,7 @@ class AttachmentDecayFilter(Filter):
 		all_attachments = _find_attachments(messages, turn_indices)
 		if not all_attachments:
 			self._inject_sentinel(messages, system_idx, system_text, "")
-			return thread
+			return state
 
 		# fetch model's supported input modalities
 		supported_modalities = await _fetch_model_input_modalities(
@@ -588,7 +590,7 @@ class AttachmentDecayFilter(Filter):
 		if not decayed_file_ids:
 			manifest = _format_attachment_manifest(attachment_entries)
 			self._inject_sentinel(messages, system_idx, system_text, manifest)
-			return thread
+			return state
 
 		# replace decayed attachment content parts with text markers
 		for msg in messages:
@@ -652,7 +654,7 @@ class AttachmentDecayFilter(Filter):
 		manifest = _format_attachment_manifest(attachment_entries)
 		self._inject_sentinel(messages, system_idx, system_text, manifest)
 
-		return thread
+		return state
 
 	@staticmethod
 	def _inject_sentinel(

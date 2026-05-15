@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from nokodo_ai.adapters.chat import resolve_chat_adapter
 from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
+from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.context import AgentContext
 from nokodo_ai.deltas import (
@@ -379,17 +380,14 @@ async def test_filters_and_hooks_not_implemented_raise_async() -> None:
 	class MyFilter(Filter[None]):
 		async def process(
 			self,
-			thread: Thread,
+			state: AgentIterationState[None],
 			agent_context: AgentContext,
 			app_context: None,
-		) -> Thread:
-			return cast(
-				Thread,
-				await cast(Any, super()).process(
-					thread,
-					agent_context,
-					app_context,
-				),
+		) -> AgentIterationState[None]:
+			return await cast(Any, super()).process(
+				state,
+				agent_context,
+				app_context,
 			)
 
 	class MyHook(Hook[None]):
@@ -403,17 +401,17 @@ async def test_filters_and_hooks_not_implemented_raise_async() -> None:
 
 	f = MyFilter(name="f")
 	h = MyHook(name="h")
-	thread = Thread()
+	state = AgentIterationState[None](thread=Thread(), tools=[])
 	agent_context = AgentContext(
-		thread=thread,
+		thread=state.thread,
 		model=ChatModel.model_construct(model_name="test"),
 	)
 
 	with pytest.raises(NotImplementedError, match="process method must be"):
-		await f.process(thread, agent_context, None)
+		await f.process(state, agent_context, None)
 
 	with pytest.raises(NotImplementedError, match="execute method must be"):
-		await h.execute(thread, agent_context, None)
+		await h.execute(state.thread, agent_context, None)
 
 
 # deep_merge
