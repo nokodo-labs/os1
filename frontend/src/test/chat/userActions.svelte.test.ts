@@ -1,4 +1,3 @@
-import type { RunInput } from '$lib/api/streaming'
 import { handleSendMessage } from '$lib/chat/userActions'
 import type { ApiMessage, ChatContext, QueuedSteeringMessage } from '$lib/chat/types'
 import { ToolExecutionTracker } from '$lib/tools'
@@ -12,6 +11,10 @@ const activeRunsMocks = vi.hoisted(() => ({
 
 const steeringMocks = vi.hoisted(() => ({
 	steerRun: vi.fn(),
+}))
+
+const streamProcessorMocks = vi.hoisted(() => ({
+	runThreadStream: vi.fn(),
 }))
 
 vi.mock('$lib/api/client', () => ({
@@ -28,7 +31,7 @@ vi.mock('$lib/chat/steering', () => ({
 }))
 
 vi.mock('$lib/chat/streamProcessor', () => ({
-	runThreadStream: vi.fn(),
+	runThreadStream: streamProcessorMocks.runThreadStream,
 }))
 
 vi.mock('$lib/chat/dataLoader', () => ({
@@ -78,6 +81,9 @@ function makeContext(overrides: Partial<ChatContext> = {}): ChatContext {
 			const index = staged.findIndex((message) => message.id === messageId)
 			if (index >= 0) staged.splice(index, 1)
 		},
+		confirmQueuedSteeringMessage() {
+			return false
+		},
 		async flushPendingSteeringMessages() {},
 		injectQueuedSteeringMessage() {
 			return false
@@ -95,9 +101,6 @@ function makeContext(overrides: Partial<ChatContext> = {}): ChatContext {
 		fetchedToolEventMessageIds: new SvelteSet<string>(),
 		toolEventsPendingIds: new SvelteSet<string>(),
 		toolEventsInFlight: false,
-		confirmDeleteMessage: null,
-		isDeletingMessage: false,
-		deleteMessageError: null,
 		pendingActions: new SvelteMap<string, 'reveal' | 'reference'>(),
 		attachmentStates: new SvelteMap(),
 		threadAttachments: [],
@@ -129,23 +132,28 @@ describe('handleSendMessage steering', () => {
 		resetIdCounter()
 		activeRunsMocks.getRunsForThread.mockReset()
 		steeringMocks.steerRun.mockReset()
+		streamProcessorMocks.runThreadStream.mockReset()
 		activeRunsMocks.getRunsForThread.mockReturnValue([
 			{ threadId: 'thread_1', runId: 'run_1', agentId: 'agent_1', startedAt: 1 },
 		])
-		steeringMocks.steerRun.mockResolvedValue({ messageId: 'queued_1', state: 'queued' })
 	})
 
-	it('does not send a streaming placeholder as the steering parent', async () => {
+	it('uses the stable streaming parent instead of the placeholder as steering parent', async () => {
+		const flushPendingSteeringMessages = vi.fn()
+		const parentMessage = makeApiMessage({ id: 'parent_1', thread_id: 'thread_1' })
 		const streamingMessage = makeApiMessage({
 			id: 'assistant_local',
 			thread_id: 'thread_1',
 			type: 'assistant',
+			parent_id: 'parent_1',
 			content: [],
 			sender_agent_id: 'agent_1',
 		})
 		const ctx = makeContext({
 			currentLeafId: 'assistant_local',
+			flushPendingSteeringMessages,
 			streamingLeafId: 'assistant_local',
+			streamingAssistantParentId: 'parent_1',
 			streamingAssistant: {
 				runId: 'run_1',
 				messageId: 'assistant_local',
@@ -157,30 +165,119 @@ describe('handleSendMessage steering', () => {
 				errorMessage: null,
 			},
 		})
+		ctx.messageTree.set(parentMessage.id, parentMessage)
 		ctx.messageTree.set(streamingMessage.id, streamingMessage)
 
 		await handleSendMessage('steer me', ctx)
 
-		expect(steeringMocks.steerRun).toHaveBeenCalledWith(
-			'run_1',
-			expect.objectContaining<Partial<RunInput>>({ text: 'steer me' }),
-			null
-		)
+		expect(steeringMocks.steerRun).not.toHaveBeenCalled()
+		expect(flushPendingSteeringMessages).toHaveBeenCalledWith('run_1', 'parent_1')
 		expect(ctx.inputValue).toBe('')
 		expect(ctx.queuedSteeringMessages).toHaveLength(1)
+		expect(ctx.queuedSteeringMessages[0]).toMatchObject({
+			runId: 'run_1',
+			deliveryState: 'sending',
+			text: 'steer me',
+		})
+		expect(ctx.queuedSteeringMessages[0].clientSteeringId).toBe(
+			ctx.queuedSteeringMessages[0].id
+		)
 	})
 
 	it('keeps a known persisted leaf as the steering parent', async () => {
 		const persistedMessage = makeApiMessage({ id: 'message_1', thread_id: 'thread_1' })
-		const ctx = makeContext({ currentLeafId: persistedMessage.id })
+		const flushPendingSteeringMessages = vi.fn()
+		const ctx = makeContext({
+			currentLeafId: persistedMessage.id,
+			flushPendingSteeringMessages,
+		})
 		ctx.messageTree.set(persistedMessage.id, persistedMessage)
 
 		await handleSendMessage('steer me', ctx)
 
-		expect(steeringMocks.steerRun).toHaveBeenCalledWith(
-			'run_1',
-			expect.objectContaining<Partial<RunInput>>({ text: 'steer me' }),
-			'message_1'
+		expect(flushPendingSteeringMessages).toHaveBeenCalledWith('run_1', 'message_1')
+	})
+
+	it('parents later queued steering messages to the previous queued message', async () => {
+		const persistedMessage = makeApiMessage({ id: 'message_1', thread_id: 'thread_1' })
+		const flushParents: (string | null)[] = []
+		let queuedIndex = 0
+		const ctx = makeContext({
+			currentLeafId: persistedMessage.id,
+			async flushPendingSteeringMessages(_runId, parentId) {
+				flushParents.push(parentId)
+				const pending = ctx.queuedSteeringMessages.find(
+					(message) => message.deliveryState === 'sending'
+				)
+				if (!pending) return
+				ctx.removeQueuedSteeringMessage(pending.id)
+				queuedIndex += 1
+				ctx.stageQueuedSteeringMessage({
+					...pending,
+					id: `queued_${queuedIndex}`,
+					runId: 'run_1',
+					deliveryState: 'queued',
+					input: undefined,
+				})
+			},
+		})
+		ctx.messageTree.set(persistedMessage.id, persistedMessage)
+
+		await handleSendMessage('first steer', ctx)
+		await handleSendMessage('second steer', ctx)
+
+		expect(flushParents).toEqual(['message_1', 'queued_1'])
+	})
+
+	it('queues steering during a run before the active run store catches up', async () => {
+		activeRunsMocks.getRunsForThread.mockReturnValue([])
+		const flushPendingSteeringMessages = vi.fn()
+		const ctx = makeContext({
+			flushPendingSteeringMessages,
+			optimisticUserMessage: null,
+			streamingAssistant: {
+				runId: null,
+				messageId: 'pending-regen',
+				content: '',
+				timestamp: new Date(),
+				senderAgentId: 'agent_1',
+				toolCalls: [],
+				isError: false,
+				errorMessage: null,
+			},
+		})
+
+		await handleSendMessage('steer while regen starts', ctx)
+
+		expect(flushPendingSteeringMessages).not.toHaveBeenCalled()
+		expect(ctx.queuedSteeringMessages).toHaveLength(1)
+		expect(ctx.queuedSteeringMessages[0]).toMatchObject({
+			runId: '',
+			deliveryState: 'sending',
+			text: 'steer while regen starts',
+		})
+	})
+
+	it('starts a new run instead of steering against a stale active run', async () => {
+		const persistedMessage = makeApiMessage({ id: 'message_1', thread_id: 'thread_1' })
+		const ctx = makeContext({
+			isGenerating: false,
+			streamingAssistant: null,
+			currentLeafId: persistedMessage.id,
+		})
+		ctx.messageTree.set(persistedMessage.id, persistedMessage)
+
+		await handleSendMessage('new message after run settled', ctx)
+
+		expect(ctx.queuedSteeringMessages).toHaveLength(0)
+		expect(streamProcessorMocks.runThreadStream).toHaveBeenCalledWith(
+			expect.objectContaining({
+				threadId: 'thread_1',
+				agentId: 'agent_1',
+				parentId: 'message_1',
+				input: { text: 'new message after run settled' },
+			}),
+			ctx
 		)
 	})
 })

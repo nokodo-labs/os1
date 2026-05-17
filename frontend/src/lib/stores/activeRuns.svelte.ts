@@ -102,6 +102,10 @@ class ActiveRunsStore {
 		}
 	}
 
+	forgetRun = (runId: string): void => {
+		this.runs.delete(runId)
+	}
+
 	#handleEvent = (msg: StreamMessage): void => {
 		if (msg.type === 'runs.active') {
 			const runs = Array.isArray(msg.data)

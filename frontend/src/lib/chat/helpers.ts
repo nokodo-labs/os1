@@ -288,6 +288,33 @@ export function getMessageCreatedAt(msg: ApiMessage): Date {
 	return msg.created_at ? new Date(msg.created_at) : new Date(0)
 }
 
+function getUserRunItemAuthor(item: RunItem): string | null {
+	if (item.kind === 'user') return item.message.sender_user_id ?? `align:${item.align}`
+	if (item.kind === 'optimistic_user') return 'optimistic:user'
+	return null
+}
+
+function getUserRunItemCreatedAt(item: RunItem): Date | null {
+	if (item.kind === 'user') return getMessageCreatedAt(item.message)
+	if (item.kind === 'optimistic_user') return item.timestamp
+	return null
+}
+
+export function getUserRunItemTimestamp(
+	item: RunItem,
+	previousItem: RunItem | undefined
+): Date | undefined {
+	const timestamp = getUserRunItemCreatedAt(item)
+	if (!timestamp) return undefined
+	if (!previousItem) return timestamp
+
+	const previousTimestamp = getUserRunItemCreatedAt(previousItem)
+	if (!previousTimestamp) return timestamp
+	if (timestamp.getTime() !== previousTimestamp.getTime()) return timestamp
+	if (getUserRunItemAuthor(item) !== getUserRunItemAuthor(previousItem)) return timestamp
+	return undefined
+}
+
 /**
  * buffer distance for auto-scroll detection.
  */
@@ -558,7 +585,6 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 			targetBlock.responseRootId = streamingAssistant.messageId
 		}
 
-		targetBlock.items.push({ kind: 'streaming_assistant' })
 		for (const tc of streamingAssistant.toolCalls) {
 			collectedToolCalls.push(tc)
 			if (!targetBlockState.seenToolCalls.has(tc.id)) {
@@ -566,6 +592,7 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 				targetBlock.items.push({ kind: 'streaming_tool', toolCallId: tc.id })
 			}
 		}
+		targetBlock.items.push({ kind: 'streaming_assistant' })
 	} else if (optimisticUserMessage && viewingStreamingBranch) {
 		const runId = `pending-user-${optimisticUserMessage.timestamp.getTime()}`
 		const block = createBlock(

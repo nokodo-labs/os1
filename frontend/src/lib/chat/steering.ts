@@ -6,6 +6,16 @@ import type { ApiMessage, SteeringState } from './types'
 
 export type { SteeringState }
 
+export class SteeringRunNotFoundError extends Error {
+	runId: string
+
+	constructor(runId: string, message = 'run not found') {
+		super(message)
+		this.name = 'SteeringRunNotFoundError'
+		this.runId = runId
+	}
+}
+
 export function getMessageSteeringState(
 	message: Pick<ApiMessage, 'metadata_'>
 ): SteeringState | null {
@@ -20,6 +30,11 @@ export function getMessageSteeringRunId(message: Pick<ApiMessage, 'metadata_'>):
 	return typeof meta.run_id === 'string' ? meta.run_id : null
 }
 
+export function getMessageClientSteeringId(message: Pick<ApiMessage, 'metadata_'>): string | null {
+	const meta = (message.metadata_ ?? {}) as Record<string, unknown>
+	return typeof meta.client_steering_id === 'string' ? meta.client_steering_id : null
+}
+
 function errorMessage(error: unknown, fallback: string): string {
 	if (typeof error === 'object' && error !== null && 'detail' in error) {
 		return String((error as { detail: unknown }).detail)
@@ -30,17 +45,23 @@ function errorMessage(error: unknown, fallback: string): string {
 export async function steerRun(
 	runId: string,
 	input: RunInput,
-	parentId: string | null
+	parentId: string | null,
+	clientSteeringId: string
 ): Promise<{ messageId: string; state: 'queued' | 'dropped' }> {
 	const { data, error } = await api.POST('/v1/runs/{run_id}/steer', {
 		params: { path: { run_id: runId } },
 		body: {
 			input,
 			parent_id: parentId,
+			client_steering_id: clientSteeringId,
 		},
 	})
 	if (error || !data) {
-		throw new Error(errorMessage(error, 'failed to steer run'))
+		const message = errorMessage(error, 'failed to steer run')
+		if (message.toLowerCase().includes('run not found')) {
+			throw new SteeringRunNotFoundError(runId, message)
+		}
+		throw new Error(message)
 	}
 	return { messageId: data.message_id, state: data.state }
 }

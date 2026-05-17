@@ -1,4 +1,4 @@
-import { buildRunBlocks } from '$lib/chat/helpers'
+import { buildRunBlocks, getUserRunItemTimestamp } from '$lib/chat/helpers'
 import type { ApiMessage } from '$lib/chat/types'
 import { describe, expect, it } from 'vitest'
 import { makeApiMessage } from './fixtures'
@@ -23,6 +23,59 @@ function message(overrides: Partial<ApiMessage>): ApiMessage {
 }
 
 describe('buildRunBlocks', () => {
+	it('only timestamps the first same-author user item at the same time', () => {
+		const timestamp = new Date('2026-01-01T00:00:00.000Z')
+		const first = {
+			kind: 'user' as const,
+			align: 'right' as const,
+			message: message({
+				id: 'u1',
+				type: 'user',
+				sender_user_id: userId,
+				created_at: timestamp.toISOString(),
+			}),
+		}
+		const second = {
+			kind: 'user' as const,
+			align: 'right' as const,
+			message: message({
+				id: 'u2',
+				type: 'user',
+				sender_user_id: userId,
+				created_at: timestamp.toISOString(),
+			}),
+		}
+
+		expect(getUserRunItemTimestamp(first, undefined)).toEqual(timestamp)
+		expect(getUserRunItemTimestamp(second, first)).toBeUndefined()
+	})
+
+	it('timestamps same-time user items from different authors', () => {
+		const timestamp = new Date('2026-01-01T00:00:00.000Z')
+		const first = {
+			kind: 'user' as const,
+			align: 'right' as const,
+			message: message({
+				id: 'u1',
+				type: 'user',
+				sender_user_id: 'user_1',
+				created_at: timestamp.toISOString(),
+			}),
+		}
+		const second = {
+			kind: 'user' as const,
+			align: 'left' as const,
+			message: message({
+				id: 'u2',
+				type: 'user',
+				sender_user_id: 'user_2',
+				created_at: timestamp.toISOString(),
+			}),
+		}
+
+		expect(getUserRunItemTimestamp(second, first)).toEqual(timestamp)
+	})
+
 	it('splits one backend run into visible turns after injected steering user messages', () => {
 		const firstUser = message({
 			id: 'u1',
@@ -253,5 +306,49 @@ describe('buildRunBlocks', () => {
 		expect(result.blocks[1].items.map((item) => item.kind)).toEqual(['assistant'])
 		expect(result.blocks[0].agentId).toBe(agentId)
 		expect(result.blocks[1].agentId).toBe(otherAgentId)
+	})
+
+	it('places the streaming placeholder after active streaming tools', () => {
+		const firstUser = message({
+			id: 'u1',
+			type: 'user',
+			parent_id: null,
+			sender_user_id: userId,
+			created_at: at(1),
+		})
+		const firstAssistant = message({
+			id: 'a1',
+			type: 'assistant',
+			parent_id: 'u1',
+			sender_user_id: null,
+			sender_agent_id: agentId,
+			content: [{ type: 'text', text: 'checking' }],
+			created_at: at(2),
+		})
+
+		const result = buildRunBlocks({
+			messages: [firstUser, firstAssistant],
+			userId,
+			streamingAssistant: {
+				runId,
+				messageId: 'streaming_1',
+				content: '',
+				timestamp: new Date(at(3)),
+				senderAgentId: agentId,
+				toolCalls: [{ id: 'tc_live', name: 'agentic_web_search', arguments: {} }],
+				isError: false,
+				errorMessage: null,
+			},
+			optimisticUserMessage: null,
+			viewingStreamingBranch: true,
+		})
+
+		expect(result.blocks).toHaveLength(1)
+		expect(result.blocks[0].items.map((item) => item.kind)).toEqual([
+			'user',
+			'assistant',
+			'streaming_tool',
+			'streaming_assistant',
+		])
 	})
 })

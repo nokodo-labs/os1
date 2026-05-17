@@ -31,6 +31,7 @@ export {
 	getBlockFirstAssistant,
 	getBlockResponseItems,
 	getMessageCreatedAt,
+	getUserRunItemTimestamp,
 	getRunId,
 	groupResponseItems,
 	hasAttachmentParts,

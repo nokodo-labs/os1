@@ -20,7 +20,12 @@ import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 import { parseToolEvent } from '$lib/tools'
 import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { buildMessageChildren, type ApiMessage } from './helpers'
-import { getMessageSteeringRunId, getMessageSteeringState, type SteeringState } from './steering'
+import {
+	getMessageClientSteeringId,
+	getMessageSteeringRunId,
+	getMessageSteeringState,
+	type SteeringState,
+} from './steering'
 import { consumeStream } from './streamProcessor'
 import { getLatestLeaf } from './treeNavigation'
 import type { ApiCitation, ChatContext } from './types'
@@ -76,13 +81,24 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 				const newMsg = data as unknown as ApiMessage
 				const steeringState = getMessageSteeringState(newMsg)
 				if (newMsg.type === 'user' && steeringState === 'queued') {
+					const runId = getMessageSteeringRunId(newMsg)
+					const clientSteeringId = getMessageClientSteeringId(newMsg)
 					const stashed = pendingSteeringStates.get(newMsg.id)
 					if (stashed?.state === 'dropped') {
 						pendingSteeringStates.delete(newMsg.id)
 						ctx.removeQueuedSteeringMessage(newMsg.id)
+						if (clientSteeringId) ctx.removeQueuedSteeringMessage(clientSteeringId)
 						return
 					}
 					if (stashed?.state === 'injected') {
+						if (clientSteeringId && runId) {
+							ctx.confirmQueuedSteeringMessage(
+								clientSteeringId,
+								newMsg.id,
+								runId,
+								newMsg
+							)
+						}
 						if (
 							ctx.injectQueuedSteeringMessage(newMsg.id, newMsg, {
 								runId: stashed.runId,
@@ -90,17 +106,28 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 								createdAt: stashed.createdAt,
 							})
 						) {
-							ctx.setSteeringParentOverride(stashed.runId, newMsg.id)
-							attachActiveAssistantAfterSteering(stashed.runId, newMsg.id)
+							pendingSteeringStates.delete(newMsg.id)
+							if (isInjectedSteeringTail(newMsg.id)) {
+								ctx.setSteeringParentOverride(stashed.runId, newMsg.id)
+								attachActiveAssistantAfterSteering(stashed.runId, newMsg.id)
+							}
 							ctx.rebuildRunBlocks()
 						}
-						pendingSteeringStates.delete(newMsg.id)
 						return
 					}
-					const runId = getMessageSteeringRunId(newMsg)
-					if (runId) {
+					const confirmed =
+						clientSteeringId && runId
+							? ctx.confirmQueuedSteeringMessage(
+									clientSteeringId,
+									newMsg.id,
+									runId,
+									newMsg
+								)
+							: false
+					if (runId && !confirmed) {
 						ctx.stageQueuedSteeringMessage({
 							id: newMsg.id,
+							clientSteeringId: clientSteeringId ?? undefined,
 							runId,
 							content: newMsg.content,
 							text: '',
@@ -128,7 +155,7 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 				// re-apply the stashed state now that the message is known.
 				const stashed = pendingSteeringStates.get(newMsg.id)
 				if (stashed) {
-					applySteeringState(newMsg.id, stashed.state)
+					applySteeringState(newMsg.id, stashed.state, stashed.createdAt)
 					pendingSteeringStates.delete(newMsg.id)
 				}
 				// if the new message extends the current branch, move leaf
@@ -227,9 +254,10 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		ctx.isGenerating = true
 		ctx.viewingStreamingBranch = true
 		ctx.streamingLeafId = null
-		ctx.streamingAssistantParentId = ctx.currentLeafId
+		const resumeParentId = ctx.currentLeafId
+		ctx.streamingAssistantParentId = resumeParentId
 		ctx.streamingAssistant = {
-			runId: null,
+			runId,
 			messageId: `resume-${runId}`,
 			content: '',
 			timestamp: new SvelteDate(),
@@ -244,7 +272,7 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 			signal: ac.signal,
 		})
 
-		consumeStream(stream, { runId: runGen, threadId, parentId: null, agentId }, ctx)
+		consumeStream(stream, { runId: runGen, threadId, parentId: resumeParentId, agentId }, ctx)
 			.catch((err: unknown) => {
 				// intentional abort (navigate away, run completed/errored) - ignore
 				if (ac.signal.aborted) return
@@ -331,13 +359,20 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 
 	const pendingSteeringStates = new SvelteMap<string, PendingSteeringState>()
 
-	function applySteeringState(messageId: string, state: SteeringState): boolean {
+	function applySteeringState(
+		messageId: string,
+		state: SteeringState,
+		createdAt: string | null
+	): boolean {
 		const existing = ctx.messageTree.get(messageId)
 		if (!existing) return false
 		const prevMeta = (existing.metadata_ ?? {}) as Record<string, unknown>
+		const metadata: Record<string, unknown> = { ...prevMeta, steering_state: state }
+		if (state === 'injected' && createdAt) metadata.steering_injected_at = createdAt
+		if (state === 'dropped' && createdAt) metadata.steering_dropped_at = createdAt
 		ctx.messageTree.set(messageId, {
 			...existing,
-			metadata_: { ...prevMeta, steering_state: state },
+			metadata_: metadata,
 		} as ApiMessage)
 		return true
 	}
@@ -350,6 +385,22 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		ctx.messageTree.set(active.messageId, { ...existing, parent_id: messageId })
 		ctx.streamingAssistantParentId = messageId
 		if (ctx.viewingStreamingBranch) ctx.currentLeafId = active.messageId
+		return true
+	}
+
+	function isInjectedSteeringTail(messageId: string): boolean {
+		for (const pending of pendingSteeringStates.values()) {
+			if (pending.state === 'injected' && pending.parentId === messageId) return false
+		}
+		for (const message of ctx.messageTree.values()) {
+			if (
+				message.parent_id === messageId &&
+				message.type === 'user' &&
+				getMessageSteeringState(message) === 'injected'
+			) {
+				return false
+			}
+		}
 		return true
 	}
 
@@ -401,7 +452,15 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		else if (ev.type === 'run.steering.injected') nextState = 'injected'
 		else if (ev.type === 'run.steering.dropped') nextState = 'dropped'
 		else return
-		let touched = false
+		const steeringCreatedAt =
+			nextState === 'queued' && typeof data.steering_enqueued_at === 'string'
+				? data.steering_enqueued_at
+				: nextState === 'injected' && typeof data.steering_injected_at === 'string'
+					? data.steering_injected_at
+					: nextState === 'dropped' && typeof data.steering_dropped_at === 'string'
+						? data.steering_dropped_at
+						: (ev.created_at ?? null)
+		let droppedChanged = false
 		let nextInjectedParentId = eventParentId ?? ctx.currentLeafId
 		for (const mid of messageIds) {
 			if (nextState === 'queued') {
@@ -409,37 +468,40 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 					state: nextState,
 					runId,
 					parentId: null,
-					createdAt: ev.created_at ?? null,
+					createdAt: steeringCreatedAt,
 				})
 				continue
 			}
 			if (nextState === 'dropped') {
 				ctx.removeQueuedSteeringMessage(mid)
-				if (applySteeringState(mid, nextState)) touched = true
+				if (applySteeringState(mid, nextState, steeringCreatedAt)) droppedChanged = true
 				pendingSteeringStates.set(mid, {
 					state: nextState,
 					runId,
 					parentId: null,
-					createdAt: ev.created_at ?? null,
+					createdAt: steeringCreatedAt,
 				})
 				continue
 			}
 
 			const parentId = nextInjectedParentId
-			const injected = injectSteeringMessage(mid, runId, parentId, ev.created_at ?? null)
+			const injected = injectSteeringMessage(mid, runId, parentId, steeringCreatedAt)
+			nextInjectedParentId = mid
 			if (injected) {
-				nextInjectedParentId = mid
 				pendingSteeringStates.delete(mid)
 			} else {
 				pendingSteeringStates.set(mid, {
 					state: nextState,
 					runId,
 					parentId,
-					createdAt: ev.created_at ?? null,
+					createdAt: steeringCreatedAt,
 				})
 			}
 		}
-		if (touched) ctx.rebuildRunBlocks()
+		if (nextState === 'injected') {
+			ctx.setSteeringParentOverride(runId, messageIds[messageIds.length - 1])
+		}
+		if (droppedChanged) ctx.rebuildRunBlocks()
 	}
 
 	// single unified listener (no run.* lifecycle handling - see activeRunsStore)

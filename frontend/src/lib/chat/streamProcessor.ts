@@ -10,6 +10,7 @@ import {
 	type UnknownSseEvent,
 } from '$lib/api/streaming/chatStream'
 import type { ToolChoiceValue } from '$lib/chat/types'
+import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 import { chat as chatStore, type Thread } from '$lib/stores/chat.svelte'
 import { notifications } from '$lib/stores/notifications.svelte'
 import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
@@ -17,7 +18,11 @@ import { hapticFeedback, throttledHapticFeedback } from '$lib/utils/haptics'
 import { SvelteDate } from 'svelte/reactivity'
 import { syncCacheAfterRun } from './dataLoader'
 import { sdkPartsToText, upsertToolCalls, type ApiMessage } from './helpers'
-import { getMessageSteeringRunId, getMessageSteeringState } from './steering'
+import {
+	getMessageClientSteeringId,
+	getMessageSteeringRunId,
+	getMessageSteeringState,
+} from './steering'
 import type { ChatContext, StreamDeltaContext } from './types'
 
 /**
@@ -33,15 +38,24 @@ export function processDelta(
 		case 'error':
 			throw new Error(delta.data.message || 'generation failed')
 		case 'done':
+			if (ctx.streamingAssistant?.runId) {
+				activeRunsStore.forgetRun(ctx.streamingAssistant.runId)
+			}
 			return 'done'
 		case 'message_created': {
 			const msg = delta.data as unknown as ApiMessage
 			const steeringState = getMessageSteeringState(msg)
 			if (msg.type === 'user' && steeringState === 'queued') {
 				const runId = getMessageSteeringRunId(msg)
-				if (runId) {
+				const clientSteeringId = getMessageClientSteeringId(msg)
+				const confirmed =
+					clientSteeringId && runId
+						? ctx.confirmQueuedSteeringMessage(clientSteeringId, msg.id, runId, msg)
+						: false
+				if (runId && !confirmed) {
 					ctx.stageQueuedSteeringMessage({
 						id: msg.id,
+						clientSteeringId: clientSteeringId ?? undefined,
 						runId,
 						content: msg.content,
 						text: '',
@@ -76,7 +90,10 @@ export function processDelta(
 			const senderAgentId = envelopeAgentId ?? sctx.agentId ?? selectedAgent.id
 
 			// agent done sentinel
-			if (d && d.done === true) return 'done'
+			if (d && d.done === true) {
+				if (runId) activeRunsStore.forgetRun(runId)
+				return 'done'
+			}
 
 			// tool results
 			if (d && typeof d === 'object' && d.tool) {
@@ -182,6 +199,9 @@ export function processDelta(
 							sctx.setAssistantParentId(resolvedParent)
 							ctx.streamingAssistantParentId = resolvedParent
 							ctx.currentLeafId = resolvedParent
+						}
+						if (runId) {
+							void ctx.flushPendingSteeringMessages(runId, resolvedParent)
 						}
 						ctx.messageTree.set(messageId, {
 							id: messageId,

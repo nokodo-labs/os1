@@ -275,6 +275,11 @@ async function* readSseFrames(
 			}
 		}
 	} finally {
+		try {
+			await reader.cancel()
+		} catch {
+			// stream may already be closed or aborted by the fetch signal.
+		}
 		reader.releaseLock()
 	}
 }

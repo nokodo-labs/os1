@@ -10,6 +10,7 @@
 	import Document from '$lib/components/icons/Document.svelte'
 	import Eye from '$lib/components/icons/Eye.svelte'
 	import Film from '$lib/components/icons/Film.svelte'
+	import FinderFolder from '$lib/components/icons/FinderFolder.svelte'
 	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
 	import Headphone from '$lib/components/icons/Headphone.svelte'
 	import Note from '$lib/components/icons/Note.svelte'
@@ -111,6 +112,10 @@
 			<Brain class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{:else if name === 'note_get' || name === 'note_write'}
 			<Note class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
+		{:else if name === 'project_get'}
+			<FinderFolder
+				class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}"
+			/>
 		{:else if name === 'reminder_get' || name === 'reminder_write'}
 			<Bell class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{:else if name === 'file_get'}

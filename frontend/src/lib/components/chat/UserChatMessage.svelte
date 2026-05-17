@@ -277,15 +277,15 @@
 	{#if content.trim().length > 0 || isEditing}
 		<div
 			class="flex items-center gap-2"
-			class:flex-row-reverse={align === 'right' && !isEditing}
+			class:flex-row-reverse={align === 'right' && !isEditing && !sending}
 			class:w-full={isEditing}
 		>
 			{#if sending && !isEditing}
 				<div
-					class="liquid-glass text-foreground/55 flex h-7 w-7 shrink-0 items-center justify-center rounded-full backdrop-blur-[20px] [backdrop-saturate:180%]"
+					class="text-foreground/55 flex size-4 shrink-0 items-center justify-center"
 					aria-label="sending"
 				>
-					<span class="sending-clock-tick flex h-4 w-4 items-center justify-center">
+					<span class="sending-clock-tick flex size-4 items-center justify-center">
 						<Clock class="h-4 w-4" strokeWidth="2" />
 					</span>
 				</div>

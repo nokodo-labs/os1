@@ -35,21 +35,21 @@
 
 {#if messages.length > 0}
 	<div
-		class="mb-3 flex max-h-44 flex-col items-end gap-2 overflow-y-auto"
+		class="mb-3 flex max-h-[33vh] flex-col items-end gap-2 overflow-y-auto"
 		aria-label="steering queue"
 	>
 		{#each messages as message (message.id)}
 			<div
 				class="flex max-w-[80%] animate-[queuedMessageIn_0.32s_cubic-bezier(0.34,1.56,0.64,1)] items-center justify-end gap-2"
 			>
-				<div
-					class="liquid-glass text-foreground/55 flex h-7 w-7 shrink-0 items-center justify-center rounded-full backdrop-blur-[20px] [backdrop-saturate:180%]"
+				<span
+					class="text-foreground/55 flex size-4 shrink-0 items-center justify-center"
 					aria-hidden="true"
 				>
-					<span class="clock-tick flex h-4 w-4 items-center justify-center">
+					<span class="clock-tick flex size-4 items-center justify-center">
 						<Clock class="h-4 w-4" strokeWidth="2" />
 					</span>
-				</div>
+				</span>
 
 				<LiquidGlass
 					class="text-foreground/70 min-w-0 rounded-3xl px-3 py-2 opacity-75 backdrop-blur-[20px] [backdrop-saturate:180%]"

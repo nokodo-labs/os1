@@ -90,6 +90,7 @@ export type SteeringState = 'queued' | 'injected' | 'dropped'
 
 export interface QueuedSteeringMessage {
 	id: string
+	clientSteeringId?: string
 	runId: string
 	content: ApiMessage['content']
 	text: string
@@ -164,7 +165,13 @@ export interface ChatContext {
 	runAbortController: AbortController | null
 	stageQueuedSteeringMessage(message: QueuedSteeringMessage): void
 	removeQueuedSteeringMessage(messageId: string): void
-	flushPendingSteeringMessages(runId: string | null, parentId: string): Promise<void>
+	confirmQueuedSteeringMessage(
+		clientSteeringId: string,
+		messageId: string,
+		runId: string,
+		message?: ApiMessage
+	): boolean
+	flushPendingSteeringMessages(runId: string | null, parentId: string | null): Promise<void>
 	injectQueuedSteeringMessage(
 		messageId: string,
 		message?: ApiMessage,
@@ -187,11 +194,6 @@ export interface ChatContext {
 	readonly fetchedToolEventMessageIds: SvelteSet<string>
 	readonly toolEventsPendingIds: SvelteSet<string>
 	toolEventsInFlight: boolean
-
-	// delete confirmation
-	confirmDeleteMessage: { id: string; preview: string } | null
-	isDeletingMessage: boolean
-	deleteMessageError: string | null
 
 	// attachment tray
 	readonly pendingActions: Map<string, 'reveal' | 'reference'>

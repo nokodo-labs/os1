@@ -17,6 +17,7 @@
 import type { components } from '$lib/api/types'
 import { files } from '$lib/stores/files.svelte'
 import { notes } from '$lib/stores/notes.svelte'
+import { projects } from '$lib/stores/projects.svelte'
 import { countWebSearchSources, formatWebSearchProgressLine } from './webSearch'
 
 // re-export the reactive tracker
@@ -93,8 +94,8 @@ export type ToolSummary = {
 	subtitle?: string
 	/** resource ID extracted from tool result (for widget rendering) */
 	resourceId?: string
-	/** type hint for the resource (note, reminder, file) */
-	resourceType?: 'note' | 'reminder' | 'file'
+	/** type hint for the resource (note, reminder, file, project) */
+	resourceType?: 'note' | 'reminder' | 'file' | 'project'
 }
 
 // Native Tool Registry
@@ -170,6 +171,14 @@ const nativeTools = new Map<string, NativeToolDefinition>([
 		{
 			displayName: 'write note',
 			icon: 'note',
+			inline: true,
+		},
+	],
+	[
+		'project_get',
+		{
+			displayName: 'check projects',
+			icon: 'folder',
 			inline: true,
 		},
 	],
@@ -628,6 +637,35 @@ export function getToolSummary(execution: ToolExecution): ToolSummary {
 					resultId ?? (typeof args.note_id === 'string' ? args.note_id : undefined),
 				resourceType: 'note',
 			}
+		}
+
+		case 'project_get': {
+			const projectId = typeof args.project_id === 'string' ? args.project_id : null
+			if (isFailed) return { title: 'could not check projects' }
+			if (projectId) {
+				const cached = projects.getById(projectId)
+				const label = cached?.name
+				if (isActive) return { title: label ? `checking "${label}"` : 'checking project' }
+				const output = parseToolOutput(execution)
+				const name = (output?.name as string) ?? label
+				return {
+					title: name ? `checked "${name}"` : 'checked project',
+					resourceId: projectId,
+					resourceType: 'project',
+				}
+			}
+			const query = typeof args.query === 'string' ? args.query : null
+			if (isActive) return { title: 'searching projects', subtitle: query ?? undefined }
+			const output = parseToolOutput(execution)
+			const count = typeof output?.count === 'number' ? output.count : null
+			if (count !== null) {
+				if (count === 0) return { title: 'no projects found', subtitle: query ?? undefined }
+				return {
+					title: `found ${count} ${count === 1 ? 'project' : 'projects'}`,
+					subtitle: query ?? undefined,
+				}
+			}
+			return { title: 'searched projects', subtitle: query ?? undefined }
 		}
 
 		case 'reminder_get': {

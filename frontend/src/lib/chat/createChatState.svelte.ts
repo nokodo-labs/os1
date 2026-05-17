@@ -8,6 +8,7 @@
  */
 
 import { agents } from '$lib/stores/agents.svelte'
+import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 import { chat as chatStore, type Thread } from '$lib/stores/chat.svelte'
 import { session } from '$lib/stores/session.svelte'
 import { ToolExecutionTracker } from '$lib/tools'
@@ -24,7 +25,11 @@ import {
 	type RunBlock,
 	type StreamingAssistantState,
 } from './helpers'
-import { dropSteering as dropSteeringApi, steerRun as steerRunApi } from './steering'
+import {
+	dropSteering as dropSteeringApi,
+	SteeringRunNotFoundError,
+	steerRun as steerRunApi,
+} from './steering'
 import { resumeCreateAndRun } from './streamProcessor'
 import { findRunUserMessage, switchBranch } from './treeNavigation'
 import type {
@@ -55,6 +60,7 @@ export function createChatState(): ChatState {
 	let activeRun = 0
 	let optimisticUserMessage = $state<OptimisticUserMessage | null>(null)
 	const queuedSteeringById = new SvelteMap<string, QueuedSteeringMessage>()
+	const queuedSteeringServerIdsByClientId = new SvelteMap<string, string>()
 	const steeringParentOverrides = new SvelteMap<string, string>()
 	let pendingSteeringFlushInFlight = false
 	let streamingAssistant = $state<StreamingAssistantState | null>(null)
@@ -93,11 +99,6 @@ export function createChatState(): ChatState {
 	const fetchedToolEventMessageIds = new SvelteSet<string>()
 	const toolEventsPendingIds = new SvelteSet<string>()
 	let toolEventsInFlight = $state(false)
-
-	// delete confirmation
-	let confirmDeleteMessage = $state<{ id: string; preview: string } | null>(null)
-	let isDeletingMessage = $state(false)
-	let deleteMessageError = $state<string | null>(null)
 
 	// attachment tray - pending user actions (reveal/reference) accumulated
 	// until sent with the next RunInput, then cleared.
@@ -191,6 +192,37 @@ export function createChatState(): ChatState {
 
 	function removeQueuedSteeringMessage(messageId: string): void {
 		queuedSteeringById.delete(messageId)
+		for (const [clientId, serverId] of queuedSteeringServerIdsByClientId) {
+			if (clientId === messageId || serverId === messageId) {
+				queuedSteeringServerIdsByClientId.delete(clientId)
+			}
+		}
+	}
+
+	function confirmQueuedSteeringMessage(
+		clientSteeringId: string,
+		messageId: string,
+		runId: string,
+		message?: ApiMessage
+	): boolean {
+		const activeId = queuedSteeringServerIdsByClientId.get(clientSteeringId) ?? clientSteeringId
+		const current = queuedSteeringById.get(activeId) ?? queuedSteeringById.get(messageId)
+		queuedSteeringServerIdsByClientId.set(clientSteeringId, messageId)
+		if (!current) return false
+
+		if (activeId !== messageId) queuedSteeringById.delete(activeId)
+		queuedSteeringById.set(messageId, {
+			...current,
+			id: messageId,
+			clientSteeringId,
+			runId,
+			content: message?.content ?? current.content,
+			createdAt: message?.created_at ? new SvelteDate(message.created_at) : current.createdAt,
+			message: message ?? current.message,
+			deliveryState: 'queued',
+			input: undefined,
+		})
+		return true
 	}
 
 	function nextPendingSteeringMessage(runId: string | null): QueuedSteeringMessage | null {
@@ -204,7 +236,7 @@ export function createChatState(): ChatState {
 
 	async function flushPendingSteeringMessages(
 		runId: string | null,
-		parentId: string
+		parentId: string | null
 	): Promise<void> {
 		if (pendingSteeringFlushInFlight) return
 		pendingSteeringFlushInFlight = true
@@ -217,8 +249,17 @@ export function createChatState(): ChatState {
 				if (!targetRunId || !pending.input) return
 
 				try {
-					const queued = await steerRunApi(targetRunId, pending.input, nextParentId)
-					if (!queuedSteeringById.has(pending.id)) {
+					const clientSteeringId = pending.clientSteeringId ?? pending.id
+					const queued = await steerRunApi(
+						targetRunId,
+						pending.input,
+						nextParentId,
+						clientSteeringId
+					)
+					const activeId =
+						queuedSteeringServerIdsByClientId.get(clientSteeringId) ?? pending.id
+					const current = queuedSteeringById.get(activeId)
+					if (!current) {
 						if (queued.state === 'queued') {
 							try {
 								await dropSteeringApi(targetRunId, queued.messageId)
@@ -232,17 +273,25 @@ export function createChatState(): ChatState {
 						continue
 					}
 
-					queuedSteeringById.delete(pending.id)
-					if (queued.state !== 'queued') continue
-					queuedSteeringById.set(queued.messageId, {
-						...pending,
-						id: queued.messageId,
-						runId: targetRunId,
-						deliveryState: 'queued',
-						input: undefined,
-					})
+					if (queued.state !== 'queued') {
+						removeQueuedSteeringMessage(activeId)
+						continue
+					}
+					confirmQueuedSteeringMessage(clientSteeringId, queued.messageId, targetRunId)
 					nextParentId = queued.messageId
 				} catch (error) {
+					if (error instanceof SteeringRunNotFoundError) {
+						activeRunsStore.forgetRun(error.runId)
+						for (const queued of [...queuedSteeringById.values()]) {
+							if (
+								queued.deliveryState === 'sending' &&
+								(queued.runId === error.runId || queued.id === pending.id)
+							) {
+								removeQueuedSteeringMessage(queued.id)
+							}
+						}
+						return
+					}
 					console.error('failed to flush pending steering message', error)
 					return
 				}
@@ -261,6 +310,7 @@ export function createChatState(): ChatState {
 		const runId = options?.runId ?? (typeof meta.run_id === 'string' ? meta.run_id : null)
 		const metadata: Record<string, unknown> = { ...meta, steering_state: 'injected' }
 		if (runId) metadata.run_id = runId
+		if (options?.createdAt) metadata.steering_injected_at = options.createdAt
 		return {
 			...message,
 			parent_id: options?.parentId ?? message.parent_id,
@@ -284,6 +334,12 @@ export function createChatState(): ChatState {
 					? ([{ type: 'text', text: message.text.trim() }] as ApiMessage['content'])
 					: []
 		const createdAt = new SvelteDate(message.createdAt).toISOString()
+		const metadata: Record<string, unknown> = {
+			steering_state: 'queued',
+			run_id: message.runId,
+			steering_enqueued_at: createdAt,
+		}
+		if (message.clientSteeringId) metadata.client_steering_id = message.clientSteeringId
 		return {
 			id: messageId,
 			thread_id: activeThread.id,
@@ -291,7 +347,7 @@ export function createChatState(): ChatState {
 			type: 'user',
 			content,
 			tool_calls: [],
-			metadata_: { steering_state: 'queued', run_id: message.runId },
+			metadata_: metadata,
 			sender_agent_id: null,
 			sender_user_id: currentUserId,
 			created_at: createdAt,
@@ -508,6 +564,7 @@ export function createChatState(): ChatState {
 		},
 		stageQueuedSteeringMessage,
 		removeQueuedSteeringMessage,
+		confirmQueuedSteeringMessage,
 		flushPendingSteeringMessages,
 		injectQueuedSteeringMessage,
 		setSteeringParentOverride,
@@ -580,26 +637,6 @@ export function createChatState(): ChatState {
 		},
 		set toolEventsInFlight(v) {
 			toolEventsInFlight = v
-		},
-
-		// delete
-		get confirmDeleteMessage() {
-			return confirmDeleteMessage
-		},
-		set confirmDeleteMessage(v) {
-			confirmDeleteMessage = v
-		},
-		get isDeletingMessage() {
-			return isDeletingMessage
-		},
-		set isDeletingMessage(v) {
-			isDeletingMessage = v
-		},
-		get deleteMessageError() {
-			return deleteMessageError
-		},
-		set deleteMessageError(v) {
-			deleteMessageError = v
 		},
 
 		// attachment tray
