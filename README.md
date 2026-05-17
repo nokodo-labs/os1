@@ -1,11 +1,10 @@
 <div align="center">
 
-<img src="https://nokodo.net/media/images/logo_full.svg" alt="nokodo" width=83% />
+<img src="https://nokodo.net/static/os1/logo-sidebar.svg" alt="nokodo" width=83% />
 <div style="height: 30px;"></div>
 
 **the AI workspace you actually want to use**
 
-[![License](https://img.shields.io/github/license/nokodo-labs/os1)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/nokodo-labs/os1?style=social)](https://github.com/nokodo-labs/os1/stargazers)
 [![Discord](https://img.shields.io/badge/discord-join-5865F2)](https://discord.gg/VsYwyTqzDM)
 [![Issues](https://img.shields.io/github/issues/nokodo-labs/os1)](https://github.com/nokodo-labs/os1/issues)
