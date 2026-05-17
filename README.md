@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://nokodo.net/static/os1/logo-sidebar.svg" alt="nokodo" width=83% />
+<img src="https://nokodo.net/static/os1/sidebar-logo.svg" alt="nokodo" width=83% />
 <div style="height: 30px;"></div>
 
 **the AI workspace you actually want to use**
