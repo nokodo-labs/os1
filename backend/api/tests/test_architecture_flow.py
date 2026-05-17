@@ -218,7 +218,7 @@ async def test_async_agentic_flow(
 	)
 	assert memory_resp.status_code == 201
 
-	memories = await client.get(f"/v1/memories?user_id={user['id']}", headers=headers)
+	memories = await client.get(f"/v1/memories?owner_id={user['id']}", headers=headers)
 	assert memories.status_code == 200
 	assert len(memories.json()) == 1
 

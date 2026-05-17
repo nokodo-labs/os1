@@ -19,6 +19,7 @@ from api.v1.service.chat.filters.citation_index import (
 	resolve_assistant_citations,
 )
 from api.v1.service.prompt_runtime import SENTINEL_CITATION_SOURCES
+from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
@@ -996,8 +997,9 @@ class TestCitationIndexFilterProcess:
 	async def test_returns_thread_when_no_app_context(self) -> None:
 		f = CitationIndexFilter()
 		thread = Thread(messages=[])
-		result = await f.process(thread, _agent_context(thread), None)
-		assert result is thread
+		state = AgentIterationState(thread=thread, tools=[])
+		result = await f.process(state, _agent_context(thread), None)
+		assert result.thread is thread
 
 	async def test_full_flow_assigns_and_resolves(self) -> None:
 		f = CitationIndexFilter()
@@ -1017,17 +1019,18 @@ class TestCitationIndexFilterProcess:
 				),
 			]
 		)
-		result = await f.process(thread, _agent_context(thread), ctx)
+		state = AgentIterationState(thread=thread, tools=[])
+		result = await f.process(state, _agent_context(thread), ctx)
 		# citation should be assigned
 		assert len(ctx.citations) == 1
 		assert ctx.citations[0].index == 1
 		assert ctx.citations[0].source_id == "https://x.com"
 		# sentinel should be replaced
-		sys_msg = result.messages[0]
+		sys_msg = result.thread.messages[0]
 		assert isinstance(sys_msg, SystemMessage)
 		assert "[1] X" in sys_msg.text
 		# tool output should have marker
-		tool_msg = result.messages[1]
+		tool_msg = result.thread.messages[1]
 		assert isinstance(tool_msg, ToolMessage)
 		assert "[1] X" in tool_msg.tool_output
 
@@ -1055,7 +1058,8 @@ class TestCitationIndexFilterProcess:
 				),
 			]
 		)
-		result = await f.process(thread, _agent_context(thread), ctx)
+		state = AgentIterationState(thread=thread, tools=[])
+		result = await f.process(state, _agent_context(thread), ctx)
 		# entries should contain both rebuilt and new
 		assert len(ctx.citations) == 2
 		assert ctx.citations[0].index == 1
@@ -1063,7 +1067,7 @@ class TestCitationIndexFilterProcess:
 		assert ctx.citations[1].index == 2
 		assert ctx.citations[1].source_id == "note_1"
 		# manifest should contain both
-		sys_msg = result.messages[0]
+		sys_msg = result.thread.messages[0]
 		assert isinstance(sys_msg, SystemMessage)
 		assert "[1] Old" in sys_msg.text
 		assert "[2] New Note" in sys_msg.text
@@ -1087,7 +1091,8 @@ class TestCitationIndexFilterProcess:
 				),
 			]
 		)
-		await f.process(thread, _agent_context(thread), ctx)
+		state = AgentIterationState(thread=thread, tools=[])
+		await f.process(state, _agent_context(thread), ctx)
 		assert len(ctx.citations) == 1
 		assert ctx.citations[0].index == 1
 		assert ctx.citations[0].source_id == "https://x.com"
@@ -1114,7 +1119,8 @@ class TestCitationIndexFilterProcess:
 				),
 			]
 		)
-		await f.process(thread, _agent_context(thread), ctx)
+		state = AgentIterationState(thread=thread, tools=[])
+		await f.process(state, _agent_context(thread), ctx)
 		result = resolve_assistant_citations("check [1] out", ctx.citations)
 		assert len(result) == 1
 		assert result[0].index == 1

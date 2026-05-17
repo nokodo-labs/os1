@@ -11,6 +11,7 @@ from api.v1.service.chat.filters.tool_result_truncation import (
 	_compute_char_limit,
 	_truncate_text,
 )
+from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
@@ -127,9 +128,10 @@ class TestToolResultTruncationFilter:
 				AssistantMessage(content=[TextContent(text="hi")]),
 			]
 		)
-		result = await filter_.process(thread, _agent_context(thread), ctx)
-		assert result.messages[0] == thread.messages[0]
-		assert result.messages[1] == thread.messages[1]
+		state = AgentIterationState(thread=thread, tools=[])
+		result = await filter_.process(state, _agent_context(thread), ctx)
+		assert result.thread.messages[0] == thread.messages[0]
+		assert result.thread.messages[1] == thread.messages[1]
 
 	@pytest.mark.asyncio()
 	async def test_short_tool_result_unchanged(
@@ -145,8 +147,9 @@ class TestToolResultTruncationFilter:
 				),
 			]
 		)
-		result = await filter_.process(thread, _agent_context(thread), ctx)
-		msg = result.messages[0]
+		state = AgentIterationState(thread=thread, tools=[])
+		result = await filter_.process(state, _agent_context(thread), ctx)
+		msg = result.thread.messages[0]
 		assert isinstance(msg, ToolMessage)
 		assert msg.tool_output == "short result"
 
@@ -165,8 +168,9 @@ class TestToolResultTruncationFilter:
 				),
 			]
 		)
-		result = await filter_.process(thread, _agent_context(thread), ctx)
-		msg = result.messages[0]
+		state = AgentIterationState(thread=thread, tools=[])
+		result = await filter_.process(state, _agent_context(thread), ctx)
+		msg = result.thread.messages[0]
 		assert isinstance(msg, ToolMessage)
 		truncated = msg.tool_output
 		assert len(truncated) < len(big_output)
@@ -190,8 +194,9 @@ class TestToolResultTruncationFilter:
 				),
 			]
 		)
-		result = await filter_.process(thread, _agent_context(thread), ctx_small)
-		msg = result.messages[0]
+		state = AgentIterationState(thread=thread, tools=[])
+		result = await filter_.process(state, _agent_context(thread), ctx_small)
+		msg = result.thread.messages[0]
 		assert isinstance(msg, ToolMessage)
 		truncated = msg.tool_output
 		assert "[... truncated:" in truncated
@@ -216,13 +221,14 @@ class TestToolResultTruncationFilter:
 				ToolMessage(tool_call_id="tc_2", tool_output="small result"),
 			]
 		)
-		result = await filter_.process(thread, _agent_context(thread), ctx)
+		state = AgentIterationState(thread=thread, tools=[])
+		result = await filter_.process(state, _agent_context(thread), ctx)
 		# first tool message should be truncated
-		msg2 = result.messages[2]
+		msg2 = result.thread.messages[2]
 		assert isinstance(msg2, ToolMessage)
 		assert "[... truncated:" in msg2.tool_output
 		# second tool message should be unchanged
-		msg3 = result.messages[3]
+		msg3 = result.thread.messages[3]
 		assert isinstance(msg3, ToolMessage)
 		assert msg3.tool_output == "small result"
 
@@ -238,8 +244,9 @@ class TestToolResultTruncationFilter:
 				SystemMessage(content=[TextContent(text=long_system)]),
 			]
 		)
-		result = await filter_.process(thread, _agent_context(thread), ctx)
-		msg = result.messages[0]
+		state = AgentIterationState(thread=thread, tools=[])
+		result = await filter_.process(state, _agent_context(thread), ctx)
+		msg = result.thread.messages[0]
 		assert isinstance(msg, SystemMessage)
 		assert isinstance(msg.content[0], TextContent)
 		assert msg.content[0].text == long_system
@@ -255,8 +262,9 @@ class TestToolResultTruncationFilter:
 				ToolMessage(tool_call_id="tc_1", tool_output=""),
 			]
 		)
-		result = await filter_.process(thread, _agent_context(thread), ctx)
-		msg = result.messages[0]
+		state = AgentIterationState(thread=thread, tools=[])
+		result = await filter_.process(state, _agent_context(thread), ctx)
+		msg = result.thread.messages[0]
 		assert isinstance(msg, ToolMessage)
 		assert msg.tool_output == ""
 
@@ -273,8 +281,9 @@ class TestToolResultTruncationFilter:
 				ToolMessage(tool_call_id="tc_1", tool_output=output),
 			]
 		)
-		result = await filter_.process(thread, _agent_context(thread), ctx_none)
-		msg = result.messages[0]
+		state = AgentIterationState(thread=thread, tools=[])
+		result = await filter_.process(state, _agent_context(thread), ctx_none)
+		msg = result.thread.messages[0]
 		assert isinstance(msg, ToolMessage)
 		assert "[... truncated:" in msg.tool_output
 
@@ -290,5 +299,6 @@ class TestToolResultTruncationFilter:
 				ToolMessage(tool_call_id="tc_1", tool_output="ok"),
 			]
 		)
-		result = await filter_.process(thread, _agent_context(thread), ctx)
-		assert result is thread
+		state = AgentIterationState(thread=thread, tools=[])
+		result = await filter_.process(state, _agent_context(thread), ctx)
+		assert result is state
