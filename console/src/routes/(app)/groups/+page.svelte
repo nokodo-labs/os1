@@ -47,7 +47,7 @@
 
 	let sortKey = $state<SortKey>(DEFAULT_SORT)
 	let sortDir = $state<SortDir>(defaultSortDir(DEFAULT_SORT))
-	let memberFilter = $state<string | null>(null)
+	let ownerIdFilter = $state<string | null>(null)
 	let pageIndex = $state(0)
 	let limit = $state(50)
 	let refreshToken = $state(0)
@@ -119,8 +119,8 @@
 		updateQueryParams({ [SORT_DIR_PARAM]: next })
 	}
 
-	function clearMemberFilter() {
-		memberFilter = null
+	function clearOwnerFilter() {
+		ownerIdFilter = null
 		pageIndex = 0
 		updateQueryParams({ [USER_PARAM]: null })
 	}
@@ -137,15 +137,15 @@
 		const dir = sp.get(SORT_DIR_PARAM)
 		const nextDir = dir === 'asc' || dir === 'desc' ? dir : defaultSortDir(nextSort)
 		const user = sp.get(USER_PARAM)
-		const nextMember = user?.trim() || null
+		const nextOwner = user?.trim() || null
 
-		if (sortKey !== nextSort || sortDir !== nextDir || memberFilter !== nextMember) {
+		if (sortKey !== nextSort || sortDir !== nextDir || ownerIdFilter !== nextOwner) {
 			pageIndex = 0
 		}
 
 		sortKey = nextSort
 		sortDir = nextDir
-		memberFilter = nextMember
+		ownerIdFilter = nextOwner
 	})
 
 	$effect(() => {
@@ -160,7 +160,7 @@
 		api.GET('/v1/groups', {
 			params: {
 				query: {
-					user_id: memberFilter ?? undefined,
+					owner_id: ownerIdFilter ?? undefined,
 					skip,
 					limit,
 					sort_by: sortKey,
@@ -233,15 +233,15 @@
 				</Button>
 			</div>
 			<div class="flex w-full items-center gap-2 sm:w-auto">
-				{#if memberFilter}
+				{#if ownerIdFilter}
 					<Button
 						variant="outline"
 						class="flex-1 rounded-xl sm:flex-none"
-						onclick={() => clearMemberFilter()}
+						onclick={() => clearOwnerFilter()}
 						disabled={isLoading}
 					>
 						<X class="mr-2 h-4 w-4" />
-						member: {memberFilter}
+						owner: {ownerIdFilter}
 					</Button>
 				{/if}
 				<Button

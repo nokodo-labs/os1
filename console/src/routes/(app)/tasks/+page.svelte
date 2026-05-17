@@ -173,7 +173,7 @@
 		api.GET('/v1/tasks', {
 			params: {
 				query: {
-					user_id: userId || undefined,
+					owner_id: userId || undefined,
 					spawned_thread_id: threadId || undefined,
 					state_filter: 'active',
 					skip: 0,
@@ -200,7 +200,7 @@
 		api.GET('/v1/tasks', {
 			params: {
 				query: {
-					user_id: userId || undefined,
+					owner_id: userId || undefined,
 					spawned_thread_id: threadId || undefined,
 					status_filter: historyStatusFilter === 'all' ? undefined : historyStatusFilter,
 					state_filter: 'ended',

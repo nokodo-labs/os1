@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SettingsAssetSourceRow from '$lib/components/settings/SettingsAssetSourceRow.svelte'
 	import SettingsPublicBadge from '$lib/components/settings/SettingsPublicBadge.svelte'
 	import {
 		Card,
@@ -7,107 +8,74 @@
 		CardHeader,
 		CardTitle,
 	} from '$lib/components/ui/card'
-	import { Input } from '$lib/components/ui/input'
-	import { Label } from '$lib/components/ui/label'
+
+	type MediaAssetSource = 'default' | 'cdn' | 'custom'
 
 	type Props = {
-		baseUrl?: string
+		publicCdnOrigin?: string
+		faviconSource?: MediaAssetSource
 		faviconUrl?: string
+		appleTouchIconSource?: MediaAssetSource
 		appleTouchIconUrl?: string
-		sidebarLogoUrl?: string
-		splashLogoUrl?: string
 	}
 
 	let {
-		baseUrl = $bindable(''),
+		publicCdnOrigin = '',
+		faviconSource = $bindable<MediaAssetSource>('default'),
 		faviconUrl = $bindable(''),
+		appleTouchIconSource = $bindable<MediaAssetSource>('default'),
 		appleTouchIconUrl = $bindable(''),
-		sidebarLogoUrl = $bindable(''),
-		splashLogoUrl = $bindable(''),
 	}: Props = $props()
+
+	function stripTrailingSlash(url: string): string {
+		return url.replace(/\/+$/, '')
+	}
+
+	function cdnUrl(path: string): string {
+		const trimmed = publicCdnOrigin.trim()
+		return trimmed ? `${stripTrailingSlash(trimmed)}/${path}` : ''
+	}
 </script>
 
 <Card class="border-zinc-800 bg-zinc-900">
 	<CardHeader>
 		<CardTitle>media</CardTitle>
 		<CardDescription>
-			URL overrides for individual frontend media assets. these take precedence over the base
-			URL.
+			frontend media tags only: browser favicon and iOS home-screen icon. PWA manifest icons
+			and screenshots are controlled by branding.
 		</CardDescription>
 	</CardHeader>
 	<CardContent class="space-y-5">
-		<div class="space-y-2">
-			<div class="flex items-center gap-2">
-				<Label for="media_base_url">base URL</Label>
-				<SettingsPublicBadge />
-			</div>
-			<p class="text-xs text-zinc-500">
-				fallback base URL for all media assets not explicitly overridden below.
-			</p>
-			<Input
-				id="media_base_url"
-				bind:value={baseUrl}
-				placeholder="https://cdn.nokodo.net/media"
-				class="rounded-xl"
-			/>
+		<div class="rounded-lg border border-zinc-800 bg-zinc-950/35 p-3 text-xs text-zinc-500">
+			<span class="font-medium text-zinc-300">CDN-default</span> uses the public CDN origin
+			from branding. Leave assets on <span class="font-medium text-zinc-300">default</span> to
+			use nokodo-hosted defaults, or choose
+			<span class="font-medium text-zinc-300">custom URL</span>
+			for a full per-file override. <SettingsPublicBadge />
 		</div>
+
 		<div class="grid gap-4 md:grid-cols-2">
-			<div class="space-y-2">
-				<div class="flex items-center gap-2">
-					<Label for="media_favicon_url">favicon URL</Label>
-					<SettingsPublicBadge />
-				</div>
-				<p class="text-xs text-zinc-500">
-					overrides the branding favicon for frontend pages.
-				</p>
-				<Input
-					id="media_favicon_url"
-					bind:value={faviconUrl}
-					placeholder="https://…"
-					class="rounded-xl"
-				/>
-			</div>
-			<div class="space-y-2">
-				<div class="flex items-center gap-2">
-					<Label for="media_apple_touch_icon_url">Apple touch icon URL</Label>
-					<SettingsPublicBadge />
-				</div>
-				<p class="text-xs text-zinc-500">
-					icon used when adding the app to an iOS home screen.
-				</p>
-				<Input
-					id="media_apple_touch_icon_url"
-					bind:value={appleTouchIconUrl}
-					placeholder="https://…"
-					class="rounded-xl"
-				/>
-			</div>
-			<div class="space-y-2">
-				<div class="flex items-center gap-2">
-					<Label for="media_sidebar_logo_url">sidebar logo URL</Label>
-					<SettingsPublicBadge />
-				</div>
-				<p class="text-xs text-zinc-500">logo shown in the frontend sidebar.</p>
-				<Input
-					id="media_sidebar_logo_url"
-					bind:value={sidebarLogoUrl}
-					placeholder="https://…"
-					class="rounded-xl"
-				/>
-			</div>
-			<div class="space-y-2">
-				<div class="flex items-center gap-2">
-					<Label for="media_splash_logo_url">splash logo URL</Label>
-					<SettingsPublicBadge />
-				</div>
-				<p class="text-xs text-zinc-500">logo shown on the splash/loading screen.</p>
-				<Input
-					id="media_splash_logo_url"
-					bind:value={splashLogoUrl}
-					placeholder="https://…"
-					class="rounded-xl"
-				/>
-			</div>
+			<SettingsAssetSourceRow
+				id="media_favicon"
+				title="favicon"
+				description="browser tab icon"
+				bind:source={faviconSource}
+				bind:url={faviconUrl}
+				defaultUrl="https://nokodo.net/static/os1/favicon.svg"
+				cdnUrl={cdnUrl('static/os1/favicon.svg')}
+				customPlaceholder="https://cdn.example.com/static/os1/favicon.svg"
+			/>
+
+			<SettingsAssetSourceRow
+				id="media_apple_touch_icon"
+				title="Apple touch icon"
+				description="iOS home-screen icon"
+				bind:source={appleTouchIconSource}
+				bind:url={appleTouchIconUrl}
+				defaultUrl="https://nokodo.net/static/os1/icon-512-any.png"
+				cdnUrl={cdnUrl('static/os1/icon-512-any.png')}
+				customPlaceholder="https://cdn.example.com/static/os1/icon-512-any.png"
+			/>
 		</div>
 	</CardContent>
 </Card>

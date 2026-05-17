@@ -101,6 +101,15 @@
 			],
 		},
 		{
+			title: 'user social',
+			items: [
+				{ value: 'user.friendships:create', label: 'create friendships' },
+				{ value: 'user.friendships:manage', label: 'manage friendships' },
+				{ value: 'user.blocks:create', label: 'create blocks' },
+				{ value: 'user.blocks:manage', label: 'manage blocks' },
+			],
+		},
+		{
 			title: 'roles',
 			items: [
 				{ value: 'roles:read', label: 'read' },

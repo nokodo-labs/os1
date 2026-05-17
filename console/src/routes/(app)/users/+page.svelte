@@ -94,6 +94,14 @@
 		isUserDetailsOpen = true
 	}
 
+	function handleUserUpdated(updated: User) {
+		users = users.map((user) => (user.id === updated.id ? updated : user))
+	}
+
+	function handleUserDeleted(userId: string) {
+		users = users.filter((user) => user.id !== userId)
+	}
+
 	function replaceUrl(target: string) {
 		if (!browser) return
 		history.replaceState(history.state, '', target)
@@ -308,9 +316,13 @@
 				>
 					<div class="flex min-w-0 flex-1 items-center gap-4">
 						<div
-							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-500/15 text-orange-400"
+							class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-orange-500/15 text-orange-400"
 						>
-							<UserIcon class="h-5 w-5" />
+							{#if u.avatar_url}
+								<img src={u.avatar_url} alt="" class="h-full w-full object-cover" />
+							{:else}
+								<UserIcon class="h-5 w-5" />
+							{/if}
 						</div>
 						<div class="min-w-0 flex-1 space-y-1">
 							<div class="flex flex-wrap items-center gap-2">
@@ -401,4 +413,9 @@
 	}}
 />
 
-<UserDetailsModal bind:open={isUserDetailsOpen} userId={selectedUserId} />
+<UserDetailsModal
+	bind:open={isUserDetailsOpen}
+	userId={selectedUserId}
+	onUpdated={handleUserUpdated}
+	onDeleted={handleUserDeleted}
+/>

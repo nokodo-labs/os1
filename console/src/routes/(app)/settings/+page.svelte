@@ -10,6 +10,9 @@
 	type SettingsResponse = Schemas['SettingsResponse']
 	type SettingsUpdateRequest = Schemas['SettingsUpdateRequest']
 	type SettingsPatch = SettingsUpdateRequest['data']
+	type NotificationSettingsPatch = NonNullable<SettingsPatch['notifications']>
+	type BrandingSettingsPatch = NonNullable<SettingsPatch['branding']>
+	type PwaManifestAssetsPatch = NonNullable<BrandingSettingsPatch['pwa_assets']>
 	type AISettingsPatch = NonNullable<SettingsPatch['ai']>
 	type AIMediaSettingsPatch = NonNullable<AISettingsPatch['media']>
 	type ImageGenerationSettingsPatch = NonNullable<AIMediaSettingsPatch['images']>
@@ -51,6 +54,7 @@
 	import SettingsIntegrations from '$lib/components/settings/SettingsIntegrations.svelte'
 	import SettingsLimits from '$lib/components/settings/SettingsLimits.svelte'
 	import SettingsMedia from '$lib/components/settings/SettingsMedia.svelte'
+	import SettingsNotifications from '$lib/components/settings/SettingsNotifications.svelte'
 	import SettingsSecurity from '$lib/components/settings/SettingsSecurity.svelte'
 	import SettingsSoftDelete from '$lib/components/settings/SettingsSoftDelete.svelte'
 	import SettingsTasks from '$lib/components/settings/SettingsTasks.svelte'
@@ -58,6 +62,7 @@
 	import SettingsWebSearch from '$lib/components/settings/SettingsWebSearch.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import {
+		Bell,
 		Brain,
 		CodeXml,
 		Database,
@@ -81,6 +86,191 @@
 
 	type ThemeMode = 'light' | 'dark' | 'system'
 	type StorageBackend = 'local' | 's3'
+	type MediaAssetSource = 'default' | 'cdn' | 'custom'
+	type OptionalAssetSource = MediaAssetSource | 'disabled'
+
+	type MediaAssetDraft = {
+		source: MediaAssetSource
+		url: string
+	}
+
+	type PwaAssetDraft = {
+		source: OptionalAssetSource
+		url: string
+	}
+
+	type PwaManifestAssetsDraft = {
+		icon_1024_maskable: PwaAssetDraft
+		icon_512_any: PwaAssetDraft
+		shortcut_notes: PwaAssetDraft
+		shortcut_reminders: PwaAssetDraft
+		shortcut_calendar: PwaAssetDraft
+		shortcut_messages: PwaAssetDraft
+		shortcut_projects: PwaAssetDraft
+		shortcut_library: PwaAssetDraft
+		shortcut_social: PwaAssetDraft
+		shortcut_settings: PwaAssetDraft
+		screenshot_narrow_1: PwaAssetDraft
+		screenshot_narrow_2: PwaAssetDraft
+		screenshot_narrow_3: PwaAssetDraft
+		screenshot_narrow_4: PwaAssetDraft
+		screenshot_narrow_5: PwaAssetDraft
+		screenshot_wide_1: PwaAssetDraft
+		screenshot_wide_2: PwaAssetDraft
+		screenshot_wide_3: PwaAssetDraft
+		screenshot_wide_4: PwaAssetDraft
+		screenshot_wide_5: PwaAssetDraft
+		screenshot_wide_6: PwaAssetDraft
+		screenshot_wide_7: PwaAssetDraft
+		screenshot_wide_8: PwaAssetDraft
+	}
+
+	type AssetResponse = {
+		source?: string | null
+		url?: string | null
+	}
+
+	function pwaAsset(): PwaAssetDraft {
+		return { source: 'default', url: '' }
+	}
+
+	function defaultPwaAssets(): PwaManifestAssetsDraft {
+		return {
+			icon_1024_maskable: pwaAsset(),
+			icon_512_any: pwaAsset(),
+			shortcut_notes: pwaAsset(),
+			shortcut_reminders: pwaAsset(),
+			shortcut_calendar: pwaAsset(),
+			shortcut_messages: pwaAsset(),
+			shortcut_projects: pwaAsset(),
+			shortcut_library: pwaAsset(),
+			shortcut_social: pwaAsset(),
+			shortcut_settings: pwaAsset(),
+			screenshot_narrow_1: pwaAsset(),
+			screenshot_narrow_2: pwaAsset(),
+			screenshot_narrow_3: pwaAsset(),
+			screenshot_narrow_4: pwaAsset(),
+			screenshot_narrow_5: pwaAsset(),
+			screenshot_wide_1: pwaAsset(),
+			screenshot_wide_2: pwaAsset(),
+			screenshot_wide_3: pwaAsset(),
+			screenshot_wide_4: pwaAsset(),
+			screenshot_wide_5: pwaAsset(),
+			screenshot_wide_6: pwaAsset(),
+			screenshot_wide_7: pwaAsset(),
+			screenshot_wide_8: pwaAsset(),
+		}
+	}
+
+	function toMediaAsset(value: AssetResponse | undefined): MediaAssetDraft {
+		if (value?.url) return { source: 'custom', url: value.url }
+		const source =
+			value?.source === 'cdn' || value?.source === 'custom' ? value.source : 'default'
+		return { source, url: '' }
+	}
+
+	function toPwaAsset(value: AssetResponse | undefined): PwaAssetDraft {
+		const source =
+			value?.source === 'cdn' || value?.source === 'custom' || value?.source === 'disabled'
+				? value.source
+				: 'default'
+		if (source !== 'disabled' && value?.url) return { source: 'custom', url: value.url }
+		return { source, url: '' }
+	}
+
+	function clonePwaAssets(value: PwaManifestAssetsDraft): PwaManifestAssetsDraft {
+		return {
+			icon_1024_maskable: { ...value.icon_1024_maskable },
+			icon_512_any: { ...value.icon_512_any },
+			shortcut_notes: { ...value.shortcut_notes },
+			shortcut_reminders: { ...value.shortcut_reminders },
+			shortcut_calendar: { ...value.shortcut_calendar },
+			shortcut_messages: { ...value.shortcut_messages },
+			shortcut_projects: { ...value.shortcut_projects },
+			shortcut_library: { ...value.shortcut_library },
+			shortcut_social: { ...value.shortcut_social },
+			shortcut_settings: { ...value.shortcut_settings },
+			screenshot_narrow_1: { ...value.screenshot_narrow_1 },
+			screenshot_narrow_2: { ...value.screenshot_narrow_2 },
+			screenshot_narrow_3: { ...value.screenshot_narrow_3 },
+			screenshot_narrow_4: { ...value.screenshot_narrow_4 },
+			screenshot_narrow_5: { ...value.screenshot_narrow_5 },
+			screenshot_wide_1: { ...value.screenshot_wide_1 },
+			screenshot_wide_2: { ...value.screenshot_wide_2 },
+			screenshot_wide_3: { ...value.screenshot_wide_3 },
+			screenshot_wide_4: { ...value.screenshot_wide_4 },
+			screenshot_wide_5: { ...value.screenshot_wide_5 },
+			screenshot_wide_6: { ...value.screenshot_wide_6 },
+			screenshot_wide_7: { ...value.screenshot_wide_7 },
+			screenshot_wide_8: { ...value.screenshot_wide_8 },
+		}
+	}
+
+	function pwaAssetsKey(value: PwaManifestAssetsDraft): string {
+		return JSON.stringify(value)
+	}
+
+	function pwaAssetsFromResponse(
+		value: Partial<Record<keyof PwaManifestAssetsDraft, AssetResponse>> | null | undefined
+	): PwaManifestAssetsDraft {
+		return {
+			icon_1024_maskable: toPwaAsset(value?.icon_1024_maskable),
+			icon_512_any: toPwaAsset(value?.icon_512_any),
+			shortcut_notes: toPwaAsset(value?.shortcut_notes),
+			shortcut_reminders: toPwaAsset(value?.shortcut_reminders),
+			shortcut_calendar: toPwaAsset(value?.shortcut_calendar),
+			shortcut_messages: toPwaAsset(value?.shortcut_messages),
+			shortcut_projects: toPwaAsset(value?.shortcut_projects),
+			shortcut_library: toPwaAsset(value?.shortcut_library),
+			shortcut_social: toPwaAsset(value?.shortcut_social),
+			shortcut_settings: toPwaAsset(value?.shortcut_settings),
+			screenshot_narrow_1: toPwaAsset(value?.screenshot_narrow_1),
+			screenshot_narrow_2: toPwaAsset(value?.screenshot_narrow_2),
+			screenshot_narrow_3: toPwaAsset(value?.screenshot_narrow_3),
+			screenshot_narrow_4: toPwaAsset(value?.screenshot_narrow_4),
+			screenshot_narrow_5: toPwaAsset(value?.screenshot_narrow_5),
+			screenshot_wide_1: toPwaAsset(value?.screenshot_wide_1),
+			screenshot_wide_2: toPwaAsset(value?.screenshot_wide_2),
+			screenshot_wide_3: toPwaAsset(value?.screenshot_wide_3),
+			screenshot_wide_4: toPwaAsset(value?.screenshot_wide_4),
+			screenshot_wide_5: toPwaAsset(value?.screenshot_wide_5),
+			screenshot_wide_6: toPwaAsset(value?.screenshot_wide_6),
+			screenshot_wide_7: toPwaAsset(value?.screenshot_wide_7),
+			screenshot_wide_8: toPwaAsset(value?.screenshot_wide_8),
+		}
+	}
+
+	function pwaAssetToPatch(value: PwaAssetDraft) {
+		return { source: value.source, url: value.source === 'custom' ? value.url || null : null }
+	}
+
+	function pwaAssetsToPatch(value: PwaManifestAssetsDraft): PwaManifestAssetsPatch {
+		return {
+			icon_1024_maskable: pwaAssetToPatch(value.icon_1024_maskable),
+			icon_512_any: pwaAssetToPatch(value.icon_512_any),
+			shortcut_notes: pwaAssetToPatch(value.shortcut_notes),
+			shortcut_reminders: pwaAssetToPatch(value.shortcut_reminders),
+			shortcut_calendar: pwaAssetToPatch(value.shortcut_calendar),
+			shortcut_messages: pwaAssetToPatch(value.shortcut_messages),
+			shortcut_projects: pwaAssetToPatch(value.shortcut_projects),
+			shortcut_library: pwaAssetToPatch(value.shortcut_library),
+			shortcut_social: pwaAssetToPatch(value.shortcut_social),
+			shortcut_settings: pwaAssetToPatch(value.shortcut_settings),
+			screenshot_narrow_1: pwaAssetToPatch(value.screenshot_narrow_1),
+			screenshot_narrow_2: pwaAssetToPatch(value.screenshot_narrow_2),
+			screenshot_narrow_3: pwaAssetToPatch(value.screenshot_narrow_3),
+			screenshot_narrow_4: pwaAssetToPatch(value.screenshot_narrow_4),
+			screenshot_narrow_5: pwaAssetToPatch(value.screenshot_narrow_5),
+			screenshot_wide_1: pwaAssetToPatch(value.screenshot_wide_1),
+			screenshot_wide_2: pwaAssetToPatch(value.screenshot_wide_2),
+			screenshot_wide_3: pwaAssetToPatch(value.screenshot_wide_3),
+			screenshot_wide_4: pwaAssetToPatch(value.screenshot_wide_4),
+			screenshot_wide_5: pwaAssetToPatch(value.screenshot_wide_5),
+			screenshot_wide_6: pwaAssetToPatch(value.screenshot_wide_6),
+			screenshot_wide_7: pwaAssetToPatch(value.screenshot_wide_7),
+			screenshot_wide_8: pwaAssetToPatch(value.screenshot_wide_8),
+		}
+	}
 
 	let isFetching = $state(true)
 	let isSaving = $state(false)
@@ -99,6 +289,7 @@
 		| 'section-web-search'
 		| 'section-code-interpreter'
 		| 'section-tasks'
+		| 'section-notifications'
 		| 'section-security'
 		| 'section-permissions'
 		| 'section-integrations'
@@ -147,7 +338,7 @@
 			id: 'section-media',
 			label: 'media',
 			keywords:
-				'base url favicon apple touch icon ios home screen sidebar logo splash logo loading screen cdn url overrides frontend media assets',
+				'base url favicon apple touch icon ios home screen cdn url overrides frontend media assets',
 			icon: ImageIcon,
 			color: 'text-rose-400',
 			activeBg: 'bg-rose-500/10',
@@ -201,10 +392,19 @@
 			id: 'section-tasks',
 			label: 'tasks',
 			keywords:
-				'taskiq background task scheduling thread maintenance backfill cron batch lookback inactivity sweep metadata summaries',
+				'taskiq background task scheduling thread maintenance backfill cron batch lookback inactivity sweep metadata summaries timeout replacement cleanup',
 			icon: ListChecks,
 			color: 'text-lime-400',
 			activeBg: 'bg-lime-500/10',
+		},
+		{
+			id: 'section-notifications',
+			label: 'notifications',
+			keywords:
+				'notifications web push VAPID keys public key private key browser push ttl missed grace lookahead scheduling delivery',
+			icon: Bell,
+			color: 'text-yellow-400',
+			activeBg: 'bg-yellow-500/10',
 		},
 		{
 			id: 'section-security',
@@ -359,6 +559,7 @@
 
 	let limitsMaxThreadsPerUser = $state<string>('')
 	let limitsMaxMessagesPerThread = $state<string>('')
+	let limitsMaxChatInputChars = $state<string>('')
 	let limitsMaxFileSizeMb = $state<string>('')
 	let limitsRateLimitRequestsPerMinute = $state<string>('')
 	let cacheAccessibleUsersTtlSeconds = $state<string>('')
@@ -419,18 +620,29 @@
 	let brandingPublicConsoleOrigin = $state('')
 	let brandingSupportEmail = $state('')
 	let brandingAdminEmail = $state('')
+	let brandingPwaAssets = $state<PwaManifestAssetsDraft>(defaultPwaAssets())
 
 	// media
-	let mediaBaseUrl = $state('')
+	let mediaFaviconSource = $state<MediaAssetSource>('default')
 	let mediaFaviconUrl = $state('')
+	let mediaAppleTouchIconSource = $state<MediaAssetSource>('default')
 	let mediaAppleTouchIconUrl = $state('')
-	let mediaSidebarLogoUrl = $state('')
-	let mediaSplashLogoUrl = $state('')
 
 	// soft delete
 	let softDeleteThreads = $state(true)
 	let softDeleteNotes = $state(true)
 	let softDeleteFiles = $state(true)
+
+	// notifications
+	let notificationsWebPushEnabled = $state(false)
+	let notificationsWebPushTtlSeconds = $state<string>('')
+	let notificationsNotificationTtlSeconds = $state<string>('')
+	let notificationsMissedGraceDays = $state<string>('')
+	let notificationsLookaheadDays = $state<string>('')
+	let notificationsVapidPublicKey = $state('')
+	let notificationsVapidPrivateKey = $state('')
+	let isGeneratingVapidKeys = $state(false)
+	let vapidGenerationError = $state<string | null>(null)
 
 	// web search
 	let webSearchMaxChars = $state<string>('')
@@ -473,6 +685,11 @@
 	let taskiqMaxConnections = $state<string>('')
 	let taskiqAutoWorkersMax = $state<string>('')
 	let taskiqSchedulePrefix = $state('')
+	let taskMaintenanceInactivityHours = $state<string>('')
+	let taskMaintenanceQueuedSupersedeAfterMinutes = $state<string>('')
+	let taskMaintenanceActiveSupersedeAfterMinutes = $state<string>('')
+	let taskMaintenanceRunnerTimeoutSeconds = $state<string>('')
+	let taskMaintenanceStaleTaskCleanupAfterMinutes = $state<string>('')
 	let taskMaintenanceBackfillEnabled = $state(false)
 	let taskMaintenanceBackfillCron = $state('')
 	let taskMaintenanceBackfillBatchSize = $state<string>('')
@@ -547,8 +764,10 @@
 		brandingPublicCdnOrigin: '',
 		brandingPublicConsoleOrigin: '',
 		brandingPwaManifestUrl: '',
+		brandingPwaAssets: defaultPwaAssets() as PwaManifestAssetsDraft,
 		limitsMaxThreadsPerUser: '',
 		limitsMaxMessagesPerThread: '',
+		limitsMaxChatInputChars: '',
 		limitsMaxFileSizeMb: '',
 		limitsRateLimitRequestsPerMinute: '',
 		cacheAccessibleUsersTtlSeconds: '',
@@ -601,14 +820,20 @@
 		assetsStorageS3RetryMode: 'adaptive' as 'legacy' | 'standard' | 'adaptive',
 		brandingSupportEmail: '',
 		brandingAdminEmail: '',
-		mediaBaseUrl: '',
+		mediaFaviconSource: 'default' as MediaAssetSource,
 		mediaFaviconUrl: '',
+		mediaAppleTouchIconSource: 'default' as MediaAssetSource,
 		mediaAppleTouchIconUrl: '',
-		mediaSidebarLogoUrl: '',
-		mediaSplashLogoUrl: '',
 		softDeleteThreads: true,
 		softDeleteNotes: true,
 		softDeleteFiles: true,
+		notificationsWebPushEnabled: false,
+		notificationsWebPushTtlSeconds: '',
+		notificationsNotificationTtlSeconds: '',
+		notificationsMissedGraceDays: '',
+		notificationsLookaheadDays: '',
+		notificationsVapidPublicKey: '',
+		notificationsVapidPrivateKey: '',
 		webSearchMaxChars: '',
 		webSearchAgenticAgent: 'native' as SearchAgent,
 		webSearchAgenticModelId: '',
@@ -645,6 +870,11 @@
 		taskiqMaxConnections: '',
 		taskiqAutoWorkersMax: '',
 		taskiqSchedulePrefix: '',
+		taskMaintenanceInactivityHours: '',
+		taskMaintenanceQueuedSupersedeAfterMinutes: '',
+		taskMaintenanceActiveSupersedeAfterMinutes: '',
+		taskMaintenanceRunnerTimeoutSeconds: '',
+		taskMaintenanceStaleTaskCleanupAfterMinutes: '',
 		taskMaintenanceBackfillEnabled: false,
 		taskMaintenanceBackfillCron: '',
 		taskMaintenanceBackfillBatchSize: '',
@@ -678,6 +908,7 @@
 			aiChatContextMode !== original.aiChatContextMode ||
 			aiChatContextTopK !== original.aiChatContextTopK ||
 			aiChatContextSimilarityThreshold !== original.aiChatContextSimilarityThreshold ||
+			aiRetrievalTurns !== original.aiRetrievalTurns ||
 			aiRetrievalPreBuild !== original.aiRetrievalPreBuild ||
 			aiTaskDefaultModelId !== original.aiTaskDefaultModelId ||
 			aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
@@ -713,10 +944,12 @@
 			brandingPublicCdnOrigin !== original.brandingPublicCdnOrigin ||
 			brandingPublicConsoleOrigin !== original.brandingPublicConsoleOrigin ||
 			brandingPwaManifestUrl !== original.brandingPwaManifestUrl ||
+			pwaAssetsKey(brandingPwaAssets) !== pwaAssetsKey(original.brandingPwaAssets) ||
 			brandingSupportEmail !== original.brandingSupportEmail ||
 			brandingAdminEmail !== original.brandingAdminEmail ||
 			limitsMaxThreadsPerUser !== original.limitsMaxThreadsPerUser ||
 			limitsMaxMessagesPerThread !== original.limitsMaxMessagesPerThread ||
+			limitsMaxChatInputChars !== original.limitsMaxChatInputChars ||
 			limitsMaxFileSizeMb !== original.limitsMaxFileSizeMb ||
 			limitsRateLimitRequestsPerMinute !== original.limitsRateLimitRequestsPerMinute ||
 			cacheAccessibleUsersTtlSeconds !== original.cacheAccessibleUsersTtlSeconds ||
@@ -768,14 +1001,20 @@
 			assetsStorageS3MultipartChunkSize !== original.assetsStorageS3MultipartChunkSize ||
 			assetsStorageS3MaxRetries !== original.assetsStorageS3MaxRetries ||
 			assetsStorageS3RetryMode !== original.assetsStorageS3RetryMode ||
-			mediaBaseUrl !== original.mediaBaseUrl ||
+			mediaFaviconSource !== original.mediaFaviconSource ||
 			mediaFaviconUrl !== original.mediaFaviconUrl ||
+			mediaAppleTouchIconSource !== original.mediaAppleTouchIconSource ||
 			mediaAppleTouchIconUrl !== original.mediaAppleTouchIconUrl ||
-			mediaSidebarLogoUrl !== original.mediaSidebarLogoUrl ||
-			mediaSplashLogoUrl !== original.mediaSplashLogoUrl ||
 			softDeleteThreads !== original.softDeleteThreads ||
 			softDeleteNotes !== original.softDeleteNotes ||
 			softDeleteFiles !== original.softDeleteFiles ||
+			notificationsWebPushEnabled !== original.notificationsWebPushEnabled ||
+			notificationsWebPushTtlSeconds !== original.notificationsWebPushTtlSeconds ||
+			notificationsNotificationTtlSeconds !== original.notificationsNotificationTtlSeconds ||
+			notificationsMissedGraceDays !== original.notificationsMissedGraceDays ||
+			notificationsLookaheadDays !== original.notificationsLookaheadDays ||
+			notificationsVapidPublicKey !== original.notificationsVapidPublicKey ||
+			notificationsVapidPrivateKey !== original.notificationsVapidPrivateKey ||
 			aiMediaImagesEnabled !== original.aiMediaImagesEnabled ||
 			aiMediaImagesModel !== original.aiMediaImagesModel ||
 			aiMediaImagesDefaultSize !== original.aiMediaImagesDefaultSize ||
@@ -820,6 +1059,14 @@
 			codeInterpreterE2bTemplate !== original.codeInterpreterE2bTemplate ||
 			codeInterpreterE2bAvailablePackages !== original.codeInterpreterE2bAvailablePackages ||
 			codeInterpreterTimeout !== original.codeInterpreterTimeout ||
+			taskMaintenanceInactivityHours !== original.taskMaintenanceInactivityHours ||
+			taskMaintenanceQueuedSupersedeAfterMinutes !==
+				original.taskMaintenanceQueuedSupersedeAfterMinutes ||
+			taskMaintenanceActiveSupersedeAfterMinutes !==
+				original.taskMaintenanceActiveSupersedeAfterMinutes ||
+			taskMaintenanceRunnerTimeoutSeconds !== original.taskMaintenanceRunnerTimeoutSeconds ||
+			taskMaintenanceStaleTaskCleanupAfterMinutes !==
+				original.taskMaintenanceStaleTaskCleanupAfterMinutes ||
 			taskMaintenanceBackfillEnabled !== original.taskMaintenanceBackfillEnabled ||
 			taskMaintenanceBackfillCron !== original.taskMaintenanceBackfillCron ||
 			taskMaintenanceBackfillBatchSize !== original.taskMaintenanceBackfillBatchSize ||
@@ -961,7 +1208,7 @@
 		const aiMediaImages = aiMedia?.images
 		aiMediaImagesEnabled = aiMediaImages?.enabled ?? true
 		aiMediaImagesModel = aiMediaImages?.model ?? ''
-		aiMediaImagesDefaultSize = aiMediaImages?.default_size ?? ''
+		aiMediaImagesDefaultSize = toStringOrEmpty(aiMediaImages?.default_size)
 		aiMediaImagesDefaultSteps = toStringOrEmpty(aiMediaImages?.default_steps)
 		aiMediaImagesDefaultN = toStringOrEmpty(aiMediaImages?.default_n)
 		aiMediaImagesMaxN = toStringOrEmpty(aiMediaImages?.max_n)
@@ -969,14 +1216,15 @@
 		aiMediaAudioEnabled = aiMedia?.audio?.enabled ?? false
 
 		const branding = r.data.branding
-		brandingSiteName = branding?.site_name ?? ''
+		brandingSiteName = toStringOrEmpty(branding?.site_name)
 		brandingLogoUrl = toStringOrEmpty(branding?.logo_url)
 		brandingFaviconUrl = toStringOrEmpty(branding?.favicon_url)
-		brandingPrimaryColor = branding?.primary_color ?? ''
+		brandingPrimaryColor = toStringOrEmpty(branding?.primary_color)
 		brandingPublicFrontendOrigin = toStringOrEmpty(branding?.public_frontend_origin)
 		brandingPublicCdnOrigin = toStringOrEmpty(branding?.public_cdn_origin)
 		brandingPublicConsoleOrigin = toStringOrEmpty(branding?.public_console_origin)
 		brandingPwaManifestUrl = toStringOrEmpty(branding?.pwa_manifest_url)
+		brandingPwaAssets = pwaAssetsFromResponse(branding?.pwa_assets)
 		brandingSupportEmail = toStringOrEmpty(branding?.support_email)
 		brandingAdminEmail = toStringOrEmpty(branding?.admin_email)
 
@@ -984,16 +1232,26 @@
 		brandingAnalyticsKeyConfigured = Boolean(branding?.analytics_key)
 
 		const media = r.data.media
-		mediaBaseUrl = toStringOrEmpty(media?.base_url)
-		mediaFaviconUrl = toStringOrEmpty(media?.favicon_url)
-		mediaAppleTouchIconUrl = toStringOrEmpty(media?.apple_touch_icon_url)
-		mediaSidebarLogoUrl = toStringOrEmpty(media?.sidebar_logo_url)
-		mediaSplashLogoUrl = toStringOrEmpty(media?.splash_logo_url)
-
+		const mediaFavicon = toMediaAsset(media?.favicon)
+		mediaFaviconSource = mediaFavicon.source
+		mediaFaviconUrl = mediaFavicon.url
+		const mediaAppleTouchIcon = toMediaAsset(media?.apple_touch_icon)
+		mediaAppleTouchIconSource = mediaAppleTouchIcon.source
+		mediaAppleTouchIconUrl = mediaAppleTouchIcon.url
 		const softDelete = r.data.soft_delete
 		softDeleteThreads = softDelete?.threads ?? true
 		softDeleteNotes = softDelete?.notes ?? true
 		softDeleteFiles = softDelete?.files ?? true
+		const notificationSettings = r.data.notifications
+		notificationsWebPushEnabled = notificationSettings?.web_push_enabled ?? false
+		notificationsWebPushTtlSeconds = toStringOrEmpty(notificationSettings?.web_push_ttl_seconds)
+		notificationsNotificationTtlSeconds = toStringOrEmpty(
+			notificationSettings?.notification_ttl_seconds
+		)
+		notificationsMissedGraceDays = toStringOrEmpty(notificationSettings?.missed_grace_days)
+		notificationsLookaheadDays = toStringOrEmpty(notificationSettings?.lookahead_days)
+		notificationsVapidPublicKey = notificationSettings?.vapid_public_key ?? ''
+		notificationsVapidPrivateKey = notificationSettings?.vapid_private_key ?? ''
 
 		const webSearch = r.data.web_search
 		webSearchMaxChars = toStringOrEmpty(webSearch?.max_chars)
@@ -1014,7 +1272,7 @@
 		const webLoader = webSearch?.web_loaders
 		webSearchWebLoaderEngine = (webLoader?.engine ?? 'native') as WebLoaderEngine
 		webSearchWebLoaderTimeoutSeconds = toStringOrEmpty(webLoader?.timeout_seconds)
-		webSearchWebLoaderUserAgent = webLoader?.user_agent ?? ''
+		webSearchWebLoaderUserAgent = toStringOrEmpty(webLoader?.user_agent)
 		webSearchWebLoaderMaxChars = toStringOrEmpty(webLoader?.max_chars)
 		const tavily = webLoader?.tavily
 		webSearchTavilyExtractDepth = (tavily?.extract_depth ?? 'advanced') as 'basic' | 'advanced'
@@ -1035,7 +1293,7 @@
 		codeInterpreterEnabled = ci?.enabled ?? true
 		codeInterpreterEngine = (ci?.engine ?? 'e2b') as CodeInterpreterEngine
 		codeInterpreterE2bApiKey = ci?.e2b?.api_key ?? ''
-		codeInterpreterE2bTemplate = ci?.e2b?.template ?? ''
+		codeInterpreterE2bTemplate = toStringOrEmpty(ci?.e2b?.template)
 		codeInterpreterE2bAvailablePackages = (ci?.e2b?.available_packages ?? []).join(', ')
 		codeInterpreterTimeout = toStringOrEmpty(ci?.timeout)
 
@@ -1046,9 +1304,21 @@
 		taskiqMaxConnections = toStringOrEmpty(taskiq?.max_connections)
 		taskiqAutoWorkersMax = toStringOrEmpty(taskiq?.auto_workers_max)
 		taskiqSchedulePrefix = taskiq?.schedule_prefix ?? ''
+		const maintenance = taskSettings?.thread_maintenance
+		taskMaintenanceInactivityHours = toStringOrEmpty(maintenance?.inactivity_hours)
+		taskMaintenanceQueuedSupersedeAfterMinutes = toStringOrEmpty(
+			maintenance?.queued_supersede_after_minutes
+		)
+		taskMaintenanceActiveSupersedeAfterMinutes = toStringOrEmpty(
+			maintenance?.active_supersede_after_minutes
+		)
+		taskMaintenanceRunnerTimeoutSeconds = toStringOrEmpty(maintenance?.runner_timeout_seconds)
+		taskMaintenanceStaleTaskCleanupAfterMinutes = toStringOrEmpty(
+			maintenance?.stale_task_cleanup_after_minutes
+		)
 		const maintenanceBackfill = taskSettings?.maintenance_backfill
 		taskMaintenanceBackfillEnabled = maintenanceBackfill?.enabled ?? false
-		taskMaintenanceBackfillCron = maintenanceBackfill?.cron ?? ''
+		taskMaintenanceBackfillCron = toStringOrEmpty(maintenanceBackfill?.cron)
 		taskMaintenanceBackfillBatchSize = toStringOrEmpty(maintenanceBackfill?.batch_size)
 		taskMaintenanceBackfillMaxLookbackDays = toStringOrEmpty(
 			maintenanceBackfill?.max_lookback_days
@@ -1060,6 +1330,7 @@
 		const limits = r.data.limits
 		limitsMaxThreadsPerUser = toStringOrEmpty(limits?.max_threads_per_user)
 		limitsMaxMessagesPerThread = toStringOrEmpty(limits?.max_messages_per_thread)
+		limitsMaxChatInputChars = toStringOrEmpty(limits?.max_chat_input_chars)
 		limitsMaxFileSizeMb = toStringOrEmpty(limits?.max_file_size_mb)
 		limitsRateLimitRequestsPerMinute = toStringOrEmpty(limits?.rate_limit_requests_per_minute)
 
@@ -1120,7 +1391,10 @@
 									: assetsVectorDatabaseProvider === 'redis'
 										? redisVectorDatabase
 										: opensearchVectorDatabase
-		assetsVectorDatabaseUrl = activeVectorDatabase?.url ?? ''
+		assetsVectorDatabaseUrl =
+			assetsVectorDatabaseProvider === 'qdrant'
+				? toStringOrEmpty(activeVectorDatabase?.url)
+				: (activeVectorDatabase?.url ?? '')
 		assetsVectorDatabaseQdrantUseGrpc = qdrantVectorDatabase?.use_grpc ?? true
 		assetsVectorDatabaseQdrantApiKey = qdrantVectorDatabase?.api_key ?? ''
 		assetsVectorDatabaseChromaApiKey = chromaVectorDatabase?.api_key ?? ''
@@ -1130,7 +1404,7 @@
 		assetsVectorDatabaseRedisPassword = redisVectorDatabase?.password ?? ''
 		assetsVectorDatabaseOpensearchApiKey = opensearchVectorDatabase?.api_key ?? ''
 		const vector = assets?.vector
-		assetsVectorCollectionTemplate = vector?.collection_template ?? ''
+		assetsVectorCollectionTemplate = toStringOrEmpty(vector?.collection_template)
 		assetsVectorSparseEnabled = vector?.sparse_vectors_enabled ?? true
 		assetsVectorFusionAlgorithm = vector?.fusion_algorithm ?? 'rrf'
 		assetsVectorNormalizeScores = vector?.normalize_scores ?? true
@@ -1143,10 +1417,10 @@
 
 		const storage = assets?.storage
 		assetsStorageBackend = (storage?.backend ?? 'local') as StorageBackend
-		assetsStorageLocalRootPath = storage?.local?.root_path ?? ''
+		assetsStorageLocalRootPath = toStringOrEmpty(storage?.local?.root_path)
 		assetsStorageS3EndpointUrl = storage?.s3?.endpoint_url ?? ''
-		assetsStorageS3Bucket = storage?.s3?.bucket ?? ''
-		assetsStorageS3Region = storage?.s3?.region ?? ''
+		assetsStorageS3Bucket = toStringOrEmpty(storage?.s3?.bucket)
+		assetsStorageS3Region = toStringOrEmpty(storage?.s3?.region)
 		assetsStorageS3AccessKeyId = storage?.s3?.access_key_id ?? ''
 		assetsStorageS3SecretAccessKey = storage?.s3?.secret_access_key ?? ''
 		assetsStorageS3Prefix = storage?.s3?.prefix ?? ''
@@ -1210,10 +1484,12 @@
 			brandingPublicCdnOrigin,
 			brandingPublicConsoleOrigin,
 			brandingPwaManifestUrl,
+			brandingPwaAssets: clonePwaAssets(brandingPwaAssets),
 			brandingSupportEmail,
 			brandingAdminEmail,
 			limitsMaxThreadsPerUser,
 			limitsMaxMessagesPerThread,
+			limitsMaxChatInputChars,
 			limitsMaxFileSizeMb,
 			limitsRateLimitRequestsPerMinute,
 			cacheAccessibleUsersTtlSeconds,
@@ -1264,14 +1540,20 @@
 			assetsStorageS3MultipartChunkSize,
 			assetsStorageS3MaxRetries,
 			assetsStorageS3RetryMode,
-			mediaBaseUrl,
+			mediaFaviconSource,
 			mediaFaviconUrl,
+			mediaAppleTouchIconSource,
 			mediaAppleTouchIconUrl,
-			mediaSidebarLogoUrl,
-			mediaSplashLogoUrl,
 			softDeleteThreads,
 			softDeleteNotes,
 			softDeleteFiles,
+			notificationsWebPushEnabled,
+			notificationsWebPushTtlSeconds,
+			notificationsNotificationTtlSeconds,
+			notificationsMissedGraceDays,
+			notificationsLookaheadDays,
+			notificationsVapidPublicKey,
+			notificationsVapidPrivateKey,
 			aiMediaImagesEnabled,
 			aiMediaImagesModel,
 			aiMediaImagesDefaultSize,
@@ -1316,6 +1598,11 @@
 			taskiqMaxConnections,
 			taskiqAutoWorkersMax,
 			taskiqSchedulePrefix,
+			taskMaintenanceInactivityHours,
+			taskMaintenanceQueuedSupersedeAfterMinutes,
+			taskMaintenanceActiveSupersedeAfterMinutes,
+			taskMaintenanceRunnerTimeoutSeconds,
+			taskMaintenanceStaleTaskCleanupAfterMinutes,
 			taskMaintenanceBackfillEnabled,
 			taskMaintenanceBackfillCron,
 			taskMaintenanceBackfillBatchSize,
@@ -1432,10 +1719,12 @@
 		brandingPublicCdnOrigin = original.brandingPublicCdnOrigin
 		brandingPublicConsoleOrigin = original.brandingPublicConsoleOrigin
 		brandingPwaManifestUrl = original.brandingPwaManifestUrl
+		brandingPwaAssets = clonePwaAssets(original.brandingPwaAssets)
 		brandingSupportEmail = original.brandingSupportEmail
 		brandingAdminEmail = original.brandingAdminEmail
 		limitsMaxThreadsPerUser = original.limitsMaxThreadsPerUser
 		limitsMaxMessagesPerThread = original.limitsMaxMessagesPerThread
+		limitsMaxChatInputChars = original.limitsMaxChatInputChars
 		limitsMaxFileSizeMb = original.limitsMaxFileSizeMb
 		limitsRateLimitRequestsPerMinute = original.limitsRateLimitRequestsPerMinute
 		cacheAccessibleUsersTtlSeconds = original.cacheAccessibleUsersTtlSeconds
@@ -1486,14 +1775,20 @@
 		assetsStorageS3MultipartChunkSize = original.assetsStorageS3MultipartChunkSize
 		assetsStorageS3MaxRetries = original.assetsStorageS3MaxRetries
 		assetsStorageS3RetryMode = original.assetsStorageS3RetryMode
-		mediaBaseUrl = original.mediaBaseUrl
+		mediaFaviconSource = original.mediaFaviconSource
 		mediaFaviconUrl = original.mediaFaviconUrl
+		mediaAppleTouchIconSource = original.mediaAppleTouchIconSource
 		mediaAppleTouchIconUrl = original.mediaAppleTouchIconUrl
-		mediaSidebarLogoUrl = original.mediaSidebarLogoUrl
-		mediaSplashLogoUrl = original.mediaSplashLogoUrl
 		softDeleteThreads = original.softDeleteThreads
 		softDeleteNotes = original.softDeleteNotes
 		softDeleteFiles = original.softDeleteFiles
+		notificationsWebPushEnabled = original.notificationsWebPushEnabled
+		notificationsWebPushTtlSeconds = original.notificationsWebPushTtlSeconds
+		notificationsNotificationTtlSeconds = original.notificationsNotificationTtlSeconds
+		notificationsMissedGraceDays = original.notificationsMissedGraceDays
+		notificationsLookaheadDays = original.notificationsLookaheadDays
+		notificationsVapidPublicKey = original.notificationsVapidPublicKey
+		notificationsVapidPrivateKey = original.notificationsVapidPrivateKey
 		webSearchMaxChars = original.webSearchMaxChars
 		webSearchAgenticAgent = original.webSearchAgenticAgent
 		webSearchAgenticModelId = original.webSearchAgenticModelId
@@ -1530,6 +1825,14 @@
 		taskiqMaxConnections = original.taskiqMaxConnections
 		taskiqAutoWorkersMax = original.taskiqAutoWorkersMax
 		taskiqSchedulePrefix = original.taskiqSchedulePrefix
+		taskMaintenanceInactivityHours = original.taskMaintenanceInactivityHours
+		taskMaintenanceQueuedSupersedeAfterMinutes =
+			original.taskMaintenanceQueuedSupersedeAfterMinutes
+		taskMaintenanceActiveSupersedeAfterMinutes =
+			original.taskMaintenanceActiveSupersedeAfterMinutes
+		taskMaintenanceRunnerTimeoutSeconds = original.taskMaintenanceRunnerTimeoutSeconds
+		taskMaintenanceStaleTaskCleanupAfterMinutes =
+			original.taskMaintenanceStaleTaskCleanupAfterMinutes
 		taskMaintenanceBackfillEnabled = original.taskMaintenanceBackfillEnabled
 		taskMaintenanceBackfillCron = original.taskMaintenanceBackfillCron
 		taskMaintenanceBackfillBatchSize = original.taskMaintenanceBackfillBatchSize
@@ -1584,6 +1887,7 @@
 			aiChatContextMode !== original.aiChatContextMode ||
 			aiChatContextTopK !== original.aiChatContextTopK ||
 			aiChatContextSimilarityThreshold !== original.aiChatContextSimilarityThreshold ||
+			aiRetrievalTurns !== original.aiRetrievalTurns ||
 			aiRetrievalPreBuild !== original.aiRetrievalPreBuild ||
 			aiTaskDefaultModelId !== original.aiTaskDefaultModelId ||
 			aiTaskThreadMetadataModelId !== original.aiTaskThreadMetadataModelId ||
@@ -1591,6 +1895,7 @@
 			aiTaskInputAutocompleteModelId !== original.aiTaskInputAutocompleteModelId ||
 			aiTaskSummarizationModelId !== original.aiTaskSummarizationModelId ||
 			aiTaskMemoryPostProcessingModelId !== original.aiTaskMemoryPostProcessingModelId ||
+			aiTaskWebSearchModelId !== original.aiTaskWebSearchModelId ||
 			aiTaskMaintenanceMaxCharsPerMessage !== original.aiTaskMaintenanceMaxCharsPerMessage ||
 			aiAttachmentImageDecayTurns !== original.aiAttachmentImageDecayTurns ||
 			aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns ||
@@ -1856,6 +2161,7 @@
 			brandingPublicCdnOrigin !== original.brandingPublicCdnOrigin ||
 			brandingPublicConsoleOrigin !== original.brandingPublicConsoleOrigin ||
 			brandingPwaManifestUrl !== original.brandingPwaManifestUrl ||
+			pwaAssetsKey(brandingPwaAssets) !== pwaAssetsKey(original.brandingPwaAssets) ||
 			brandingSupportEmail !== original.brandingSupportEmail ||
 			brandingAdminEmail !== original.brandingAdminEmail
 		) {
@@ -1876,6 +2182,8 @@
 				data.branding.public_console_origin = brandingPublicConsoleOrigin || null
 			if (brandingPwaManifestUrl !== original.brandingPwaManifestUrl)
 				data.branding.pwa_manifest_url = brandingPwaManifestUrl || null
+			if (pwaAssetsKey(brandingPwaAssets) !== pwaAssetsKey(original.brandingPwaAssets))
+				data.branding.pwa_assets = pwaAssetsToPatch(brandingPwaAssets)
 			if (brandingSupportEmail !== original.brandingSupportEmail)
 				data.branding.support_email = brandingSupportEmail || null
 			if (brandingAdminEmail !== original.brandingAdminEmail)
@@ -1885,6 +2193,7 @@
 		if (
 			limitsMaxThreadsPerUser !== original.limitsMaxThreadsPerUser ||
 			limitsMaxMessagesPerThread !== original.limitsMaxMessagesPerThread ||
+			limitsMaxChatInputChars !== original.limitsMaxChatInputChars ||
 			limitsMaxFileSizeMb !== original.limitsMaxFileSizeMb ||
 			limitsRateLimitRequestsPerMinute !== original.limitsRateLimitRequestsPerMinute
 		) {
@@ -1895,6 +2204,8 @@
 				data.limits.max_messages_per_thread = asNumberOrUndefined(
 					limitsMaxMessagesPerThread
 				)
+			if (limitsMaxChatInputChars !== original.limitsMaxChatInputChars)
+				data.limits.max_chat_input_chars = asNumberOrNull(limitsMaxChatInputChars)
 			if (limitsMaxFileSizeMb !== original.limitsMaxFileSizeMb)
 				data.limits.max_file_size_mb = asNumberOrUndefined(limitsMaxFileSizeMb)
 			if (limitsRateLimitRequestsPerMinute !== original.limitsRateLimitRequestsPerMinute)
@@ -2299,22 +2610,33 @@
 		}
 
 		if (
-			mediaBaseUrl !== original.mediaBaseUrl ||
+			mediaFaviconSource !== original.mediaFaviconSource ||
 			mediaFaviconUrl !== original.mediaFaviconUrl ||
-			mediaAppleTouchIconUrl !== original.mediaAppleTouchIconUrl ||
-			mediaSidebarLogoUrl !== original.mediaSidebarLogoUrl ||
-			mediaSplashLogoUrl !== original.mediaSplashLogoUrl
+			mediaAppleTouchIconSource !== original.mediaAppleTouchIconSource ||
+			mediaAppleTouchIconUrl !== original.mediaAppleTouchIconUrl
 		) {
 			data.media = {}
-			if (mediaBaseUrl !== original.mediaBaseUrl) data.media.base_url = mediaBaseUrl || null
-			if (mediaFaviconUrl !== original.mediaFaviconUrl)
-				data.media.favicon_url = mediaFaviconUrl || null
-			if (mediaAppleTouchIconUrl !== original.mediaAppleTouchIconUrl)
-				data.media.apple_touch_icon_url = mediaAppleTouchIconUrl || null
-			if (mediaSidebarLogoUrl !== original.mediaSidebarLogoUrl)
-				data.media.sidebar_logo_url = mediaSidebarLogoUrl || null
-			if (mediaSplashLogoUrl !== original.mediaSplashLogoUrl)
-				data.media.splash_logo_url = mediaSplashLogoUrl || null
+			if (
+				mediaFaviconSource !== original.mediaFaviconSource ||
+				mediaFaviconUrl !== original.mediaFaviconUrl
+			) {
+				data.media.favicon = {
+					source: mediaFaviconSource,
+					url: mediaFaviconSource === 'custom' ? mediaFaviconUrl || null : null,
+				}
+			}
+			if (
+				mediaAppleTouchIconSource !== original.mediaAppleTouchIconSource ||
+				mediaAppleTouchIconUrl !== original.mediaAppleTouchIconUrl
+			) {
+				data.media.apple_touch_icon = {
+					source: mediaAppleTouchIconSource,
+					url:
+						mediaAppleTouchIconSource === 'custom'
+							? mediaAppleTouchIconUrl || null
+							: null,
+				}
+			}
 		}
 
 		if (
@@ -2329,6 +2651,41 @@
 				data.soft_delete.notes = softDeleteNotes
 			if (softDeleteFiles !== original.softDeleteFiles)
 				data.soft_delete.files = softDeleteFiles
+		}
+
+		if (
+			notificationsWebPushEnabled !== original.notificationsWebPushEnabled ||
+			notificationsWebPushTtlSeconds !== original.notificationsWebPushTtlSeconds ||
+			notificationsNotificationTtlSeconds !== original.notificationsNotificationTtlSeconds ||
+			notificationsMissedGraceDays !== original.notificationsMissedGraceDays ||
+			notificationsLookaheadDays !== original.notificationsLookaheadDays ||
+			notificationsVapidPublicKey !== original.notificationsVapidPublicKey ||
+			notificationsVapidPrivateKey !== original.notificationsVapidPrivateKey
+		) {
+			const notificationsPatch: NotificationSettingsPatch = {}
+			if (notificationsWebPushEnabled !== original.notificationsWebPushEnabled)
+				notificationsPatch.web_push_enabled = notificationsWebPushEnabled
+			if (notificationsWebPushTtlSeconds !== original.notificationsWebPushTtlSeconds)
+				notificationsPatch.web_push_ttl_seconds = asNumberOrUndefined(
+					notificationsWebPushTtlSeconds
+				)
+			if (
+				notificationsNotificationTtlSeconds !== original.notificationsNotificationTtlSeconds
+			)
+				notificationsPatch.notification_ttl_seconds = asNumberOrNull(
+					notificationsNotificationTtlSeconds
+				)
+			if (notificationsMissedGraceDays !== original.notificationsMissedGraceDays)
+				notificationsPatch.missed_grace_days = asNumberOrUndefined(
+					notificationsMissedGraceDays
+				)
+			if (notificationsLookaheadDays !== original.notificationsLookaheadDays)
+				notificationsPatch.lookahead_days = asNumberOrUndefined(notificationsLookaheadDays)
+			if (notificationsVapidPublicKey !== original.notificationsVapidPublicKey)
+				notificationsPatch.vapid_public_key = notificationsVapidPublicKey || null
+			if (notificationsVapidPrivateKey !== original.notificationsVapidPrivateKey)
+				notificationsPatch.vapid_private_key = notificationsVapidPrivateKey || null
+			data.notifications = notificationsPatch
 		}
 
 		if (
@@ -2549,6 +2906,14 @@
 		}
 
 		if (
+			taskMaintenanceInactivityHours !== original.taskMaintenanceInactivityHours ||
+			taskMaintenanceQueuedSupersedeAfterMinutes !==
+				original.taskMaintenanceQueuedSupersedeAfterMinutes ||
+			taskMaintenanceActiveSupersedeAfterMinutes !==
+				original.taskMaintenanceActiveSupersedeAfterMinutes ||
+			taskMaintenanceRunnerTimeoutSeconds !== original.taskMaintenanceRunnerTimeoutSeconds ||
+			taskMaintenanceStaleTaskCleanupAfterMinutes !==
+				original.taskMaintenanceStaleTaskCleanupAfterMinutes ||
 			taskMaintenanceBackfillEnabled !== original.taskMaintenanceBackfillEnabled ||
 			taskMaintenanceBackfillCron !== original.taskMaintenanceBackfillCron ||
 			taskMaintenanceBackfillBatchSize !== original.taskMaintenanceBackfillBatchSize ||
@@ -2557,7 +2922,66 @@
 			taskMaintenanceBackfillMinInactivityHours !==
 				original.taskMaintenanceBackfillMinInactivityHours
 		) {
-			data.tasks = { maintenance_backfill: {} }
+			data.tasks = {}
+			if (
+				taskMaintenanceInactivityHours !== original.taskMaintenanceInactivityHours ||
+				taskMaintenanceQueuedSupersedeAfterMinutes !==
+					original.taskMaintenanceQueuedSupersedeAfterMinutes ||
+				taskMaintenanceActiveSupersedeAfterMinutes !==
+					original.taskMaintenanceActiveSupersedeAfterMinutes ||
+				taskMaintenanceRunnerTimeoutSeconds !==
+					original.taskMaintenanceRunnerTimeoutSeconds ||
+				taskMaintenanceStaleTaskCleanupAfterMinutes !==
+					original.taskMaintenanceStaleTaskCleanupAfterMinutes
+			) {
+				data.tasks.thread_maintenance = {}
+				const maintenancePatch = data.tasks.thread_maintenance
+				if (maintenancePatch) {
+					if (taskMaintenanceInactivityHours !== original.taskMaintenanceInactivityHours)
+						maintenancePatch.inactivity_hours = asNumberOrUndefined(
+							taskMaintenanceInactivityHours
+						)
+					if (
+						taskMaintenanceQueuedSupersedeAfterMinutes !==
+						original.taskMaintenanceQueuedSupersedeAfterMinutes
+					)
+						maintenancePatch.queued_supersede_after_minutes = asNumberOrUndefined(
+							taskMaintenanceQueuedSupersedeAfterMinutes
+						)
+					if (
+						taskMaintenanceActiveSupersedeAfterMinutes !==
+						original.taskMaintenanceActiveSupersedeAfterMinutes
+					)
+						maintenancePatch.active_supersede_after_minutes = asNumberOrUndefined(
+							taskMaintenanceActiveSupersedeAfterMinutes
+						)
+					if (
+						taskMaintenanceRunnerTimeoutSeconds !==
+						original.taskMaintenanceRunnerTimeoutSeconds
+					)
+						maintenancePatch.runner_timeout_seconds = asNumberOrUndefined(
+							taskMaintenanceRunnerTimeoutSeconds
+						)
+					if (
+						taskMaintenanceStaleTaskCleanupAfterMinutes !==
+						original.taskMaintenanceStaleTaskCleanupAfterMinutes
+					)
+						maintenancePatch.stale_task_cleanup_after_minutes = asNumberOrUndefined(
+							taskMaintenanceStaleTaskCleanupAfterMinutes
+						)
+				}
+			}
+			if (
+				taskMaintenanceBackfillEnabled !== original.taskMaintenanceBackfillEnabled ||
+				taskMaintenanceBackfillCron !== original.taskMaintenanceBackfillCron ||
+				taskMaintenanceBackfillBatchSize !== original.taskMaintenanceBackfillBatchSize ||
+				taskMaintenanceBackfillMaxLookbackDays !==
+					original.taskMaintenanceBackfillMaxLookbackDays ||
+				taskMaintenanceBackfillMinInactivityHours !==
+					original.taskMaintenanceBackfillMinInactivityHours
+			) {
+				data.tasks.maintenance_backfill = {}
+			}
 			const backfillPatch = data.tasks.maintenance_backfill
 			if (backfillPatch) {
 				if (taskMaintenanceBackfillEnabled !== original.taskMaintenanceBackfillEnabled)
@@ -2622,6 +3046,36 @@
 		}
 	}
 
+	async function generateVapidKeys() {
+		if (!response || isGeneratingVapidKeys) return
+		if (notificationsVapidPublicKey.trim() || notificationsVapidPrivateKey.trim()) return
+
+		isGeneratingVapidKeys = true
+		vapidGenerationError = null
+		saveSuccess = null
+
+		try {
+			const result = await api.POST('/v1/settings/vapid-keypair', {})
+			if (result.error) {
+				const detail = result.error?.detail
+				vapidGenerationError =
+					typeof detail === 'string' ? detail : 'failed to generate VAPID keys'
+				return
+			}
+			if (!result.data) {
+				vapidGenerationError = 'failed to generate VAPID keys'
+				return
+			}
+			notificationsVapidPublicKey = result.data.public_key
+			notificationsVapidPrivateKey = result.data.private_key
+		} catch (e) {
+			console.error('Failed to generate VAPID keys', e)
+			vapidGenerationError = 'failed to generate VAPID keys'
+		} finally {
+			isGeneratingVapidKeys = false
+		}
+	}
+
 	onMount(() => {
 		Promise.all([fetchSettings(), fetchAgents(), fetchModels(), fetchProviders()])
 	})
@@ -2638,7 +3092,7 @@
 				variant="secondary"
 				class="rounded-xl"
 				onclick={fetchSettings}
-				disabled={isFetching || isSaving}
+				disabled={isFetching || isSaving || isGeneratingVapidKeys}
 			>
 				<RefreshCw class="mr-1.5 h-4 w-4" />
 				reload
@@ -2647,7 +3101,11 @@
 				variant="secondary"
 				class="rounded-xl"
 				onclick={resetDraft}
-				disabled={!response || isFetching || isSaving || !hasChanges}
+				disabled={!response ||
+					isFetching ||
+					isSaving ||
+					isGeneratingVapidKeys ||
+					!hasChanges}
 			>
 				<RotateCcw class="mr-1.5 h-4 w-4" />
 				reset
@@ -2655,7 +3113,11 @@
 			<Button
 				class="rounded-xl"
 				onclick={save}
-				disabled={!response || isFetching || isSaving || !hasChanges}
+				disabled={!response ||
+					isFetching ||
+					isSaving ||
+					isGeneratingVapidKeys ||
+					!hasChanges}
 			>
 				<Save class="mr-1.5 h-4 w-4" />
 				{isSaving ? 'saving...' : 'save'}
@@ -2832,6 +3294,7 @@
 										bind:publicCdnOrigin={brandingPublicCdnOrigin}
 										bind:publicConsoleOrigin={brandingPublicConsoleOrigin}
 										bind:pwaManifestUrl={brandingPwaManifestUrl}
+										bind:pwaAssets={brandingPwaAssets}
 										appVersion={brandingAppVersion}
 										analyticsKeyConfigured={brandingAnalyticsKeyConfigured}
 									/>
@@ -2839,11 +3302,11 @@
 							{:else if activeSection === 'section-media'}
 								<section>
 									<SettingsMedia
-										bind:baseUrl={mediaBaseUrl}
+										publicCdnOrigin={brandingPublicCdnOrigin}
+										bind:faviconSource={mediaFaviconSource}
 										bind:faviconUrl={mediaFaviconUrl}
+										bind:appleTouchIconSource={mediaAppleTouchIconSource}
 										bind:appleTouchIconUrl={mediaAppleTouchIconUrl}
-										bind:sidebarLogoUrl={mediaSidebarLogoUrl}
-										bind:splashLogoUrl={mediaSplashLogoUrl}
 									/>
 								</section>
 							{:else if activeSection === 'section-assets'}
@@ -2918,6 +3381,7 @@
 									<SettingsLimits
 										bind:maxThreadsPerUser={limitsMaxThreadsPerUser}
 										bind:maxMessagesPerThread={limitsMaxMessagesPerThread}
+										bind:maxChatInputChars={limitsMaxChatInputChars}
 										bind:maxFileSizeMb={limitsMaxFileSizeMb}
 										bind:rateLimitRequestsPerMinute={
 											limitsRateLimitRequestsPerMinute
@@ -3002,6 +3466,21 @@
 										{taskiqMaxConnections}
 										{taskiqAutoWorkersMax}
 										{taskiqSchedulePrefix}
+										bind:maintenanceInactivityHours={
+											taskMaintenanceInactivityHours
+										}
+										bind:maintenanceQueuedSupersedeAfterMinutes={
+											taskMaintenanceQueuedSupersedeAfterMinutes
+										}
+										bind:maintenanceActiveSupersedeAfterMinutes={
+											taskMaintenanceActiveSupersedeAfterMinutes
+										}
+										bind:maintenanceRunnerTimeoutSeconds={
+											taskMaintenanceRunnerTimeoutSeconds
+										}
+										bind:maintenanceStaleTaskCleanupAfterMinutes={
+											taskMaintenanceStaleTaskCleanupAfterMinutes
+										}
 										bind:backfillEnabled={taskMaintenanceBackfillEnabled}
 										bind:backfillCron={taskMaintenanceBackfillCron}
 										bind:backfillBatchSize={taskMaintenanceBackfillBatchSize}
@@ -3011,6 +3490,23 @@
 										bind:backfillMinInactivityHours={
 											taskMaintenanceBackfillMinInactivityHours
 										}
+									/>
+								</section>
+							{:else if activeSection === 'section-notifications'}
+								<section>
+									<SettingsNotifications
+										bind:webPushEnabled={notificationsWebPushEnabled}
+										bind:webPushTtlSeconds={notificationsWebPushTtlSeconds}
+										bind:notificationTtlSeconds={
+											notificationsNotificationTtlSeconds
+										}
+										bind:missedGraceDays={notificationsMissedGraceDays}
+										bind:lookaheadDays={notificationsLookaheadDays}
+										bind:vapidPublicKey={notificationsVapidPublicKey}
+										bind:vapidPrivateKey={notificationsVapidPrivateKey}
+										{isGeneratingVapidKeys}
+										{vapidGenerationError}
+										onGenerateVapidKeys={generateVapidKeys}
 									/>
 								</section>
 							{:else if activeSection === 'section-security'}

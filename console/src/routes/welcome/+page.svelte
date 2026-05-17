@@ -45,7 +45,7 @@
 		<div class="max-w-md space-y-6 p-6 text-center">
 			<div class="space-y-2">
 				<img
-					src="https://nokodo.net/media/images/logo_full.svg"
+					src="https://nokodo.net/static/os1/splash-logo.svg"
 					alt="nokodo logo"
 					class="mx-auto h-7 w-auto object-contain"
 				/>

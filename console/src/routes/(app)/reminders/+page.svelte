@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
+	import { page } from '$app/state'
 	import { api, unwrap, type Schemas } from '$lib/api'
 
 	type ReminderListWithCounts = Schemas['ReminderListWithCounts']
@@ -26,6 +27,7 @@
 		Search,
 		User,
 	} from '@lucide/svelte'
+	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type ListSortKey = 'updated_at' | 'created_at' | 'name' | 'position'
 	type SortDir = 'asc' | 'desc'
@@ -37,6 +39,7 @@
 		{ value: 'position', label: 'position' },
 	]
 	const REMINDER_LIST_PAGE_LIMIT = 50
+	const USER_PARAM = 'user'
 
 	function defaultSortDir(sort: ListSortKey): SortDir {
 		if (sort === 'name') return 'asc'
@@ -46,6 +49,7 @@
 
 	let sortKey = $state<ListSortKey>('updated_at')
 	let sortDir = $state<SortDir>('desc')
+	let ownerIdFilter = $state<string | null>(null)
 	let searchQuery = $state('')
 	let refreshToken = $state(0)
 
@@ -108,6 +112,23 @@
 		refreshToken += 1
 	}
 
+	function replaceUrl(target: string) {
+		if (!browser) return
+		history.replaceState(history.state, '', target)
+	}
+
+	function updateQueryParams(updates: Record<string, string | null>) {
+		if (!browser) return
+		const url = page.url
+		const params = new SvelteURLSearchParams(url.searchParams)
+		for (const [key, value] of Object.entries(updates)) {
+			if (!value) params.delete(key)
+			else params.set(key, value)
+		}
+		const qs = params.toString()
+		replaceUrl(qs ? `${url.pathname}?${qs}` : url.pathname)
+	}
+
 	function setSort(next: ListSortKey) {
 		sortKey = next
 		sortDir = defaultSortDir(next)
@@ -117,6 +138,12 @@
 	function toggleSortDir() {
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc'
 		pageIndex = 0
+	}
+
+	function clearOwnerFilter() {
+		ownerIdFilter = null
+		pageIndex = 0
+		updateQueryParams({ [USER_PARAM]: null })
 	}
 
 	function pageOffset(index: number): number {
@@ -134,6 +161,14 @@
 
 	$effect(() => {
 		if (!browser) return
+		const user = page.url.searchParams.get(USER_PARAM)
+		const nextOwner = user?.trim() || null
+		if (ownerIdFilter !== nextOwner) pageIndex = 0
+		ownerIdFilter = nextOwner
+	})
+
+	$effect(() => {
+		if (!browser) return
 
 		// depend on refreshToken to allow manual refresh
 		void refreshToken
@@ -145,6 +180,7 @@
 		api.GET('/v1/reminder-lists', {
 			params: {
 				query: {
+					owner_id: ownerIdFilter ?? undefined,
 					include_counts: true,
 					sort_by: sortKey,
 					sort_dir: sortDir,
@@ -216,6 +252,16 @@
 				</Button>
 			</div>
 			<div class="flex w-full items-center gap-2 sm:w-auto">
+				{#if ownerIdFilter}
+					<Button
+						variant="outline"
+						class="flex-1 rounded-xl sm:flex-none"
+						onclick={clearOwnerFilter}
+						disabled={isLoading}
+					>
+						owner: {ownerIdFilter}
+					</Button>
+				{/if}
 				<Button
 					variant="outline"
 					class="flex-1 rounded-xl sm:flex-none"

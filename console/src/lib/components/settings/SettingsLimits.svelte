@@ -12,6 +12,7 @@
 	type Props = {
 		maxThreadsPerUser?: string
 		maxMessagesPerThread?: string
+		maxChatInputChars?: string
 		maxFileSizeMb?: string
 		rateLimitRequestsPerMinute?: string
 		accessibleUsersTtlSeconds?: string
@@ -20,6 +21,7 @@
 	let {
 		maxThreadsPerUser = $bindable(''),
 		maxMessagesPerThread = $bindable(''),
+		maxChatInputChars = $bindable(''),
 		maxFileSizeMb = $bindable(''),
 		rateLimitRequestsPerMinute = $bindable(''),
 		accessibleUsersTtlSeconds = $bindable(''),
@@ -40,6 +42,7 @@
 			<Input
 				id="max_threads"
 				type="number"
+				placeholder="100"
 				bind:value={maxThreadsPerUser}
 				class="rounded-xl"
 			/>
@@ -50,14 +53,32 @@
 			<Input
 				id="max_messages"
 				type="number"
+				placeholder="1000"
 				bind:value={maxMessagesPerThread}
+				class="rounded-xl"
+			/>
+		</div>
+		<div class="space-y-2">
+			<Label for="max_chat_input_chars">max chat input characters</Label>
+			<p class="text-xs text-zinc-500">hard cap on a single chat input.</p>
+			<Input
+				id="max_chat_input_chars"
+				type="number"
+				placeholder="200000"
+				bind:value={maxChatInputChars}
 				class="rounded-xl"
 			/>
 		</div>
 		<div class="space-y-2">
 			<Label for="max_file_size">max file size (MB)</Label>
 			<p class="text-xs text-zinc-500">maximum allowed size for a single file upload.</p>
-			<Input id="max_file_size" type="number" bind:value={maxFileSizeMb} class="rounded-xl" />
+			<Input
+				id="max_file_size"
+				type="number"
+				placeholder="50"
+				bind:value={maxFileSizeMb}
+				class="rounded-xl"
+			/>
 		</div>
 		<div class="space-y-2">
 			<Label for="rate_limit">rate limit (requests/min)</Label>
@@ -67,6 +88,7 @@
 			<Input
 				id="rate_limit"
 				type="number"
+				placeholder="1500"
 				bind:value={rateLimitRequestsPerMinute}
 				class="rounded-xl"
 			/>
@@ -79,6 +101,7 @@
 			<Input
 				id="accessible_users_ttl"
 				type="number"
+				placeholder="86400"
 				bind:value={accessibleUsersTtlSeconds}
 				class="rounded-xl"
 			/>

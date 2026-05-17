@@ -184,12 +184,13 @@
 	$effect(() => {
 		if (!browser) return
 
-		// Memories API requires user_id, so only fetch when we have one
+		// memories are user-owned, so only fetch when an owner filter is present
 		if (!userIdFilter) {
 			memories = []
 			hasNext = false
 			return
 		}
+		const ownerId = userIdFilter
 
 		const skip = pageIndex * limit + refreshToken * 0
 
@@ -197,7 +198,7 @@
 		error = null
 		api.GET('/v1/memories', {
 			params: {
-				query: { user_id: userIdFilter!, skip, limit, sort_by: sortKey, sort_dir: sortDir },
+				query: { owner_id: ownerId, skip, limit, sort_by: sortKey, sort_dir: sortDir },
 			},
 		})
 			.then((r) => unwrap(r))

@@ -183,6 +183,7 @@
 					id="ws_max_chars"
 					type="number"
 					min="100"
+					placeholder="50000"
 					bind:value={maxChars}
 					class="rounded-xl"
 				/>
@@ -296,6 +297,7 @@
 						id="ws_searxng_max_results"
 						type="number"
 						min="1"
+						placeholder="20"
 						bind:value={searxngMaxResults}
 						class="rounded-xl"
 					/>
@@ -306,6 +308,7 @@
 						id="ws_searxng_concurrent"
 						type="number"
 						min="1"
+						placeholder="5"
 						bind:value={searxngMaxConcurrentRequests}
 						class="rounded-xl"
 					/>
@@ -316,6 +319,7 @@
 						id="ws_searxng_timeout"
 						type="number"
 						min="1"
+						placeholder="10"
 						bind:value={searxngTimeoutSeconds}
 						class="rounded-xl"
 					/>
@@ -348,6 +352,7 @@
 						id="ws_loader_timeout"
 						type="number"
 						min="1"
+						placeholder="10"
 						bind:value={webLoaderTimeoutSeconds}
 						class="rounded-xl"
 					/>
@@ -358,6 +363,7 @@
 						id="ws_loader_max_chars"
 						type="number"
 						min="100"
+						placeholder="50000"
 						bind:value={webLoaderMaxChars}
 						class="rounded-xl"
 					/>
@@ -366,6 +372,7 @@
 					<Label for="ws_loader_ua">user agent</Label>
 					<Input
 						id="ws_loader_ua"
+						placeholder="Mozilla/5.0 (compatible; NokodoAI/1.0; +https://nokodo.ai)"
 						bind:value={webLoaderUserAgent}
 						class="rounded-xl font-mono text-xs"
 					/>
@@ -396,6 +403,7 @@
 							id="ws_tavily_concurrent"
 							type="number"
 							min="1"
+							placeholder="10"
 							bind:value={tavilyMaxConcurrentRequests}
 							class="rounded-xl"
 						/>
@@ -486,6 +494,7 @@
 						step="0.05"
 						min="0"
 						max="2"
+						placeholder="0.2"
 						bind:value={perplexityTemperature}
 						class="rounded-xl"
 					/>
@@ -496,6 +505,7 @@
 						id="ws_px_concurrent"
 						type="number"
 						min="1"
+						placeholder="10"
 						bind:value={perplexityMaxConcurrentRequests}
 						class="rounded-xl"
 					/>
@@ -590,6 +600,7 @@
 							type="number"
 							min="1"
 							max="20"
+							placeholder="4"
 							bind:value={nativeAgentDraftMaxIterations}
 							class="rounded-xl"
 						/>

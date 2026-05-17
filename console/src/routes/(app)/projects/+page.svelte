@@ -23,7 +23,6 @@
 		RefreshCw,
 		Search,
 		User,
-		X,
 	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
@@ -128,14 +127,15 @@
 		const dir = sp.get(SORT_DIR_PARAM)
 		const nextDir = dir === 'asc' || dir === 'desc' ? dir : defaultSortDir(nextSort)
 		const user = sp.get(USER_PARAM)
+		const nextOwner = user?.trim() || null
 
-		if (sortKey !== nextSort || sortDir !== nextDir || ownerIdFilter !== user) {
+		if (sortKey !== nextSort || sortDir !== nextDir || ownerIdFilter !== nextOwner) {
 			pageIndex = 0
 		}
 
 		sortKey = nextSort
 		sortDir = nextDir
-		ownerIdFilter = user?.trim() || null
+		ownerIdFilter = nextOwner
 	})
 
 	$effect(() => {
@@ -149,6 +149,7 @@
 		api.GET('/v1/projects', {
 			params: {
 				query: {
+					owner_id: ownerIdFilter ?? undefined,
 					skip,
 					limit,
 					sort_by: sortKey,
@@ -247,7 +248,6 @@
 						onclick={() => clearOwnerFilter()}
 						disabled={isLoading}
 					>
-						<X class="mr-2 h-4 w-4" />
 						owner: {ownerIdFilter}
 					</Button>
 				{/if}

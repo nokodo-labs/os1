@@ -183,7 +183,7 @@
 		api.GET('/v1/notes', {
 			params: {
 				query: {
-					user_id: ownerIdFilter ?? undefined,
+					owner_id: ownerIdFilter ?? undefined,
 					skip,
 					limit,
 					sort_by: sortKey,
@@ -262,7 +262,7 @@
 						disabled={isLoading}
 					>
 						<X class="mr-2 h-4 w-4" />
-						user: {ownerIdFilter}
+						owner: {ownerIdFilter}
 					</Button>
 				{/if}
 				<Button

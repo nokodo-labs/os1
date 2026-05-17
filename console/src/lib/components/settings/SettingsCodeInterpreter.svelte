@@ -77,6 +77,7 @@
 						id="ci_timeout"
 						type="number"
 						min="5"
+						placeholder="60"
 						bind:value={timeout}
 						class="rounded-xl"
 					/>

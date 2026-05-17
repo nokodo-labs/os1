@@ -60,6 +60,11 @@
 		taskiqMaxConnections?: string
 		taskiqAutoWorkersMax?: string
 		taskiqSchedulePrefix?: string
+		maintenanceInactivityHours?: string
+		maintenanceQueuedSupersedeAfterMinutes?: string
+		maintenanceActiveSupersedeAfterMinutes?: string
+		maintenanceRunnerTimeoutSeconds?: string
+		maintenanceStaleTaskCleanupAfterMinutes?: string
 		backfillEnabled?: boolean
 		backfillCron?: string
 		backfillBatchSize?: string
@@ -73,6 +78,11 @@
 		taskiqMaxConnections = '',
 		taskiqAutoWorkersMax = '',
 		taskiqSchedulePrefix = '',
+		maintenanceInactivityHours = $bindable(''),
+		maintenanceQueuedSupersedeAfterMinutes = $bindable(''),
+		maintenanceActiveSupersedeAfterMinutes = $bindable(''),
+		maintenanceRunnerTimeoutSeconds = $bindable(''),
+		maintenanceStaleTaskCleanupAfterMinutes = $bindable(''),
 		backfillEnabled = $bindable(false),
 		backfillCron = $bindable(''),
 		backfillBatchSize = $bindable(''),
@@ -387,9 +397,82 @@
 	<Card class="border-zinc-800 bg-zinc-900">
 		<CardHeader>
 			<CardTitle>thread maintenance</CardTitle>
-			<CardDescription>retroactive metadata and summary backfill.</CardDescription>
+			<CardDescription>live metadata, summaries, and recovery policy.</CardDescription>
 		</CardHeader>
 		<CardContent class="space-y-5">
+			<div class="grid gap-4 md:grid-cols-2">
+				<div class="space-y-2">
+					<Label for="maintenance_inactivity_hours">inactivity delay</Label>
+					<p class="text-xs text-zinc-500">
+						hours before deferred summary maintenance runs after activity stops.
+					</p>
+					<Input
+						id="maintenance_inactivity_hours"
+						type="number"
+						min="1"
+						placeholder="8"
+						bind:value={maintenanceInactivityHours}
+						class="rounded-xl"
+					/>
+				</div>
+				<div class="space-y-2">
+					<Label for="maintenance_queued_supersede">queued replacement delay</Label>
+					<p class="text-xs text-zinc-500">
+						minutes a zero-progress queued task can idle before replacement.
+					</p>
+					<Input
+						id="maintenance_queued_supersede"
+						type="number"
+						min="1"
+						placeholder="5"
+						bind:value={maintenanceQueuedSupersedeAfterMinutes}
+						class="rounded-xl"
+					/>
+				</div>
+				<div class="space-y-2">
+					<Label for="maintenance_active_supersede">active replacement delay</Label>
+					<p class="text-xs text-zinc-500">
+						minutes an active task can go silent before replacement.
+					</p>
+					<Input
+						id="maintenance_active_supersede"
+						type="number"
+						min="1"
+						placeholder="30"
+						bind:value={maintenanceActiveSupersedeAfterMinutes}
+						class="rounded-xl"
+					/>
+				</div>
+				<div class="space-y-2">
+					<Label for="maintenance_runner_timeout">runner timeout</Label>
+					<p class="text-xs text-zinc-500">
+						seconds before thread-related durable task runners fail.
+					</p>
+					<Input
+						id="maintenance_runner_timeout"
+						type="number"
+						min="1"
+						placeholder="1800"
+						bind:value={maintenanceRunnerTimeoutSeconds}
+						class="rounded-xl"
+					/>
+				</div>
+				<div class="space-y-2">
+					<Label for="maintenance_cleanup_delay">cleanup delay</Label>
+					<p class="text-xs text-zinc-500">
+						minutes before startup cleanup fails stale thread-related tasks.
+					</p>
+					<Input
+						id="maintenance_cleanup_delay"
+						type="number"
+						min="1"
+						placeholder="45"
+						bind:value={maintenanceStaleTaskCleanupAfterMinutes}
+						class="rounded-xl"
+					/>
+				</div>
+			</div>
+
 			<div
 				class="flex items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4"
 			>
@@ -523,6 +606,7 @@
 						id="maintenance_backfill_batch"
 						type="number"
 						min="1"
+						placeholder="10"
 						bind:value={backfillBatchSize}
 						class="rounded-xl"
 					/>
@@ -534,6 +618,7 @@
 						id="maintenance_backfill_lookback"
 						type="number"
 						min="1"
+						placeholder="30"
 						bind:value={backfillMaxLookbackDays}
 						class="rounded-xl"
 					/>
@@ -547,6 +632,7 @@
 						id="maintenance_backfill_inactivity"
 						type="number"
 						min="1"
+						placeholder="8"
 						bind:value={backfillMinInactivityHours}
 						class="rounded-xl"
 					/>

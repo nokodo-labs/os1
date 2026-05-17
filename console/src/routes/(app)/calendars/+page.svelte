@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
+	import { page } from '$app/state'
 	import { api, unwrap, type Schemas } from '$lib/api'
 	import CalendarDetailsModal from '$lib/components/CalendarDetailsModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
@@ -17,6 +18,7 @@
 		Search,
 		User,
 	} from '@lucide/svelte'
+	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type CalendarRecord = Schemas['Calendar']
 	type SearchResultItem = Schemas['SearchResultItem']
@@ -25,6 +27,7 @@
 
 	const CALENDAR_PAGE_LIMIT = 50
 	const CALENDAR_EVENT_SEARCH_LIMIT = 20
+	const USER_PARAM = 'user'
 
 	const sortOptions: Array<{ value: SortKey; label: string }> = [
 		{ value: 'position', label: 'position' },
@@ -42,6 +45,7 @@
 	let calendars = $state<CalendarRecord[]>([])
 	let sortKey = $state<SortKey>('position')
 	let sortDir = $state<SortDir>('asc')
+	let ownerIdFilter = $state<string | null>(null)
 	let pageIndex = $state(0)
 	let searchQuery = $state('')
 	let refreshToken = $state(0)
@@ -70,6 +74,23 @@
 		refreshToken += 1
 	}
 
+	function replaceUrl(target: string) {
+		if (!browser) return
+		history.replaceState(history.state, '', target)
+	}
+
+	function updateQueryParams(updates: Record<string, string | null>) {
+		if (!browser) return
+		const url = page.url
+		const params = new SvelteURLSearchParams(url.searchParams)
+		for (const [key, value] of Object.entries(updates)) {
+			if (!value) params.delete(key)
+			else params.set(key, value)
+		}
+		const qs = params.toString()
+		replaceUrl(qs ? `${url.pathname}?${qs}` : url.pathname)
+	}
+
 	function setSort(next: string) {
 		const option = sortOptions.find((item) => item.value === next)
 		if (!option) return
@@ -81,6 +102,12 @@
 	function toggleSortDir() {
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc'
 		pageIndex = 0
+	}
+
+	function clearOwnerFilter() {
+		ownerIdFilter = null
+		pageIndex = 0
+		updateQueryParams({ [USER_PARAM]: null })
 	}
 
 	function openUser(userId: string) {
@@ -163,6 +190,14 @@
 
 	$effect(() => {
 		if (!browser) return
+		const user = page.url.searchParams.get(USER_PARAM)
+		const nextOwner = user?.trim() || null
+		if (ownerIdFilter !== nextOwner) pageIndex = 0
+		ownerIdFilter = nextOwner
+	})
+
+	$effect(() => {
+		if (!browser) return
 		if (searchQuery.trim()) return
 		void refreshToken
 
@@ -173,6 +208,7 @@
 		api.GET('/v1/calendars', {
 			params: {
 				query: {
+					owner_id: ownerIdFilter ?? undefined,
 					skip: pageOffset(pageIndex),
 					limit: CALENDAR_PAGE_LIMIT,
 					sort_by: sortKey,
@@ -271,6 +307,16 @@
 					{/each}
 				</SelectContent>
 			</Select>
+			{#if ownerIdFilter}
+				<Button
+					variant="outline"
+					class="rounded-xl"
+					onclick={clearOwnerFilter}
+					disabled={isLoading || isSearching}
+				>
+					owner: {ownerIdFilter}
+				</Button>
+			{/if}
 			<Button
 				variant="outline"
 				class="rounded-xl px-3"
@@ -309,7 +355,6 @@
 			{searchError}
 		</div>
 	{/if}
-
 	<section class="space-y-4">
 		<div class="flex items-center justify-end">
 			<div class="flex items-center gap-2">

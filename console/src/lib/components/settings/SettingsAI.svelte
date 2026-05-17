@@ -289,6 +289,7 @@
 							step="0.01"
 							min="0"
 							max="1"
+							placeholder="0.65"
 							bind:value={memorySimilarityThreshold}
 							class="rounded-xl"
 						/>
@@ -302,6 +303,7 @@
 							id="ai_top_k"
 							type="number"
 							min="1"
+							placeholder="15"
 							bind:value={memoryTopK}
 							class="rounded-xl"
 						/>
@@ -315,6 +317,7 @@
 							id="ai_messages"
 							type="number"
 							min="1"
+							placeholder="20"
 							bind:value={memoryMessagesToConsider}
 							class="rounded-xl"
 						/>
@@ -361,6 +364,7 @@
 						id="ai_chat_top_k"
 						type="number"
 						min="1"
+						placeholder="3"
 						bind:value={chatContextTopK}
 						class="rounded-xl"
 					/>
@@ -376,6 +380,7 @@
 						min="0"
 						max="1"
 						step="0.05"
+						placeholder="0.65"
 						bind:value={chatContextSimilarityThreshold}
 						class="rounded-xl"
 					/>
@@ -614,6 +619,7 @@
 						id="attach_image_decay"
 						type="number"
 						min="1"
+						placeholder="4"
 						bind:value={attachmentImageDecayTurns}
 						class="rounded-xl"
 					/>
@@ -624,6 +630,7 @@
 						id="attach_audio_decay"
 						type="number"
 						min="1"
+						placeholder="3"
 						bind:value={attachmentAudioDecayTurns}
 						class="rounded-xl"
 					/>
@@ -634,6 +641,7 @@
 						id="attach_video_decay"
 						type="number"
 						min="1"
+						placeholder="2"
 						bind:value={attachmentVideoDecayTurns}
 						class="rounded-xl"
 					/>
@@ -647,6 +655,7 @@
 						id="attach_reveal_decay"
 						type="number"
 						min="1"
+						placeholder="3"
 						bind:value={attachmentRevealDecayTurns}
 						class="rounded-xl"
 					/>
@@ -681,6 +690,7 @@
 							id="win_max_messages"
 							type="number"
 							min="1"
+							placeholder="50"
 							bind:value={windowingMaxMessages}
 							class="rounded-xl"
 						/>
@@ -697,6 +707,7 @@
 							step="0.01"
 							min="0.1"
 							max="0.95"
+							placeholder="0.7"
 							bind:value={windowingTriggerRatio}
 							class="rounded-xl"
 						/>
@@ -712,6 +723,7 @@
 							step="0.01"
 							min="0.5"
 							max="1.0"
+							placeholder="0.9"
 							bind:value={windowingHardRatio}
 							class="rounded-xl"
 						/>
@@ -723,6 +735,7 @@
 							id="win_summary_batch"
 							type="number"
 							min="1"
+							placeholder="20"
 							bind:value={windowingSummaryBatchSize}
 							class="rounded-xl"
 						/>
@@ -736,6 +749,7 @@
 							id="win_max_summaries"
 							type="number"
 							min="2"
+							placeholder="4"
 							bind:value={windowingMaxSummariesBeforeCondense}
 							class="rounded-xl"
 						/>
@@ -747,6 +761,7 @@
 							id="win_response_headroom"
 							type="number"
 							min="256"
+							placeholder="4096"
 							bind:value={windowingResponseHeadroom}
 							class="rounded-xl"
 						/>
@@ -762,6 +777,7 @@
 							step="0.01"
 							min="0.05"
 							max="0.75"
+							placeholder="0.25"
 							bind:value={windowingToolResultMaxShare}
 							class="rounded-xl"
 						/>
@@ -775,6 +791,7 @@
 							id="win_tool_hard_cap"
 							type="number"
 							min="1000"
+							placeholder="100000"
 							bind:value={windowingToolResultHardCap}
 							class="rounded-xl"
 						/>
@@ -791,6 +808,7 @@
 							step="0.01"
 							min="0.10"
 							max="0.95"
+							placeholder="0.5"
 							bind:value={windowingToolResultsCombinedMaxShare}
 							class="rounded-xl"
 						/>
@@ -875,6 +893,7 @@
 								id="ai_img_steps"
 								type="number"
 								min="1"
+								placeholder="provider default"
 								bind:value={mediaImagesDefaultSteps}
 								class="rounded-xl"
 							/>
@@ -887,6 +906,7 @@
 								type="number"
 								min="1"
 								max="10"
+								placeholder="1"
 								bind:value={mediaImagesDefaultN}
 								class="rounded-xl"
 							/>
@@ -899,6 +919,7 @@
 								type="number"
 								min="1"
 								max="10"
+								placeholder="4"
 								bind:value={mediaImagesMaxN}
 								class="rounded-xl"
 							/>

@@ -166,6 +166,7 @@
 				<Input
 					id="access_expire"
 					type="number"
+					placeholder="30"
 					bind:value={accessTokenExpireMinutes}
 					class="rounded-xl"
 				/>
@@ -178,6 +179,7 @@
 				<Input
 					id="refresh_expire"
 					type="number"
+					placeholder="90"
 					bind:value={refreshTokenExpireDays}
 					class="rounded-xl"
 				/>
@@ -193,6 +195,7 @@
 				<Input
 					id="session_timeout"
 					type="number"
+					placeholder="30"
 					bind:value={sessionTimeoutMinutes}
 					class="rounded-xl"
 				/>

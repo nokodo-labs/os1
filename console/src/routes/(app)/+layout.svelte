@@ -269,9 +269,9 @@
 		<div class="mb-8 flex shrink-0 items-start justify-between">
 			<div>
 				<img
-					src="https://nokodo.net/media/images/logo_full.svg"
+					src="https://nokodo.net/static/os1/sidebar-logo.svg"
 					alt="nokodo logo"
-					class="h-6 w-auto object-contain"
+					class="block h-6 w-36 max-w-full object-contain object-left"
 				/>
 				<h1 class="text-xl font-semibold">console</h1>
 			</div>
@@ -323,9 +323,9 @@
 			</button>
 			<div class="flex items-center gap-2">
 				<img
-					src="https://nokodo.net/media/images/logo_full.svg"
+					src="https://nokodo.net/static/os1/sidebar-logo.svg"
 					alt="nokodo logo"
-					class="h-5 w-auto object-contain"
+					class="block h-5 w-28 object-contain object-left"
 				/>
 				<span class="text-sm font-semibold text-zinc-100">console</span>
 			</div>

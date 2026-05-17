@@ -554,7 +554,7 @@
 						id="s3_multipart_threshold"
 						type="number"
 						bind:value={storageS3MultipartThreshold}
-						placeholder="8388608"
+						placeholder="104857600"
 						class="rounded-xl"
 					/>
 				</div>
@@ -565,7 +565,7 @@
 						id="s3_multipart_chunk"
 						type="number"
 						bind:value={storageS3MultipartChunkSize}
-						placeholder="8388608"
+						placeholder="10485760"
 						class="rounded-xl"
 					/>
 				</div>
