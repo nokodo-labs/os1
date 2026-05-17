@@ -1,4 +1,4 @@
-"""Notification routers."""
+"""notification routers."""
 
 from __future__ import annotations
 
@@ -8,11 +8,16 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
+from api.models.event_types import EventType
 from api.models.notification import Notification
 from api.schemas.notification import Notification as NotificationSchema
-from api.schemas.notification import NotificationCreate, NotificationListFilters
+from api.schemas.notification import (
+	NotificationCreate,
+	NotificationListFilters,
+)
 from api.v1.service import notifications as notification_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authorization import require_admin
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -29,12 +34,13 @@ async def create_notifications(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Notification]:
-	"""Create notification(s)."""
-	return await notification_service.send_agent_notification(
+	"""create ad hoc notification(s) for admin testing and management."""
+	require_admin(principal)
+	return await notification_service.create_notifications(
 		db,
-		title=payload.title,
-		body=payload.body,
+		payload=payload,
 		user_ids=payload.user_ids,
+		event_type=EventType.NOTIFICATION_CUSTOM,
 	)
 
 
@@ -45,7 +51,7 @@ async def list_user_notifications(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Notification]:
-	"""Return notifications for a user."""
+	"""return notifications for a user."""
 	return await notification_service.list_user_notifications(
 		db,
 		principal=principal,
@@ -60,7 +66,7 @@ async def mark_notification_read(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> Notification:
-	"""Mark a notification as read."""
+	"""mark a notification as read."""
 	return await notification_service.mark_notification_read(
 		notification_id,
 		db,
@@ -74,7 +80,7 @@ async def dismiss_notification(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> Notification:
-	"""Dismiss a notification without marking it read."""
+	"""dismiss a notification without marking it read."""
 	return await notification_service.dismiss_notification(
 		notification_id,
 		db,
@@ -88,10 +94,7 @@ async def mark_all_notifications_read(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> int:
-	"""
-	Mark all notifications as read for a user.
-	Returns count of updated notifications.
-	"""
+	"""mark all notifications as read for a user and return the update count."""
 	return await notification_service.mark_all_notifications_read(
 		db,
 		principal=principal,
@@ -105,7 +108,7 @@ async def delete_notification(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> None:
-	"""Delete a notification."""
+	"""delete a notification."""
 	await notification_service.delete_notification(
 		notification_id,
 		db,

@@ -21,7 +21,9 @@ from api.schemas.user import (
 	UserSummary,
 	UserUpdate,
 )
+from api.v1.routers import blocks as blocks_router
 from api.v1.routers import friends as friends_router
+from api.v1.routers import user_clients as user_clients_router
 from api.v1.service import friends as friends_service
 from api.v1.service import users as user_service
 from api.v1.service.auth import (
@@ -35,7 +37,9 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/users", tags=["users"])
+router.include_router(blocks_router.router)
 router.include_router(friends_router.router)
+router.include_router(user_clients_router.router)
 
 
 def _user_with_online(user: User, active_ids: set[str]) -> UserSchema:

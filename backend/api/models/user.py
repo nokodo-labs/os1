@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 	from api.models.task import Task
 	from api.models.thread import Thread
 	from api.models.thread_participant import ThreadParticipant
+	from api.models.user_client import UserClient
 	from api.schemas.preferences import UserPreferences
 
 
@@ -112,6 +113,11 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	)
 	notifications: Mapped[list[Notification]] = relationship(
 		"Notification",
+		back_populates="user",
+		cascade="all, delete-orphan",
+	)
+	clients: Mapped[list[UserClient]] = relationship(
+		"UserClient",
 		back_populates="user",
 		cascade="all, delete-orphan",
 	)

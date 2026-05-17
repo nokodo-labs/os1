@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.database import async_session_local
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.permissions import ResourceType
+from api.schemas.notification import NotificationPayload
 from api.v1.service import notifications as notification_service
 from api.v1.service.authorization import list_accessible_user_ids
 from api.v1.service.chat.context import AppContext
@@ -23,36 +24,28 @@ from nokodo_ai.utils.typeid import TypeID
 logger = logging.getLogger(__name__)
 
 
-_TOOL_PARAMETERS: JSONObject = {
-	"type": "object",
-	"properties": {
-		"title": {
-			"type": "string",
-			"description": (
-				"short title for the notification. keep it concise and informative."
-			),
-			"maxLength": 100,
-		},
-		"body": {
-			"type": "string",
-			"description": (
-				"main content/message of the notification. "
-				"provide helpful context for the user."
-			),
-			"maxLength": 500,
-		},
-		"user_id": {
-			"type": "string",
-			"description": (
-				"optional: specific user ID to send to. "
-				"if omitted, notification goes to all thread participants "
-				"(including the thread owner)."
-			),
-		},
-	},
-	"required": ["title", "body"],
-	"additionalProperties": False,
-}
+class SendNotificationInput(BaseModel):
+	"""input schema for send_notification tool."""
+
+	model_config = ConfigDict(extra="forbid")
+
+	title: str = Field(
+		...,
+		description="short title for the notification. keep it concise.",
+		max_length=100,
+	)
+	body: str | None = Field(
+		default=None,
+		description="optional message body with helpful context when needed.",
+		max_length=500,
+	)
+	user_id: str | None = Field(
+		default=None,
+		description=(
+			"optional specific user ID. omit to notify all thread participants "
+			"including the thread owner."
+		),
+	)
 
 
 class SendNotificationTool(Tool[AppContext]):
@@ -72,7 +65,9 @@ class SendNotificationTool(Tool[AppContext]):
 			"optionally target a specific user."
 		)
 	)
-	parameters: JSONObject = Field(default=_TOOL_PARAMETERS)
+	parameters: JSONObject = Field(
+		default_factory=lambda: SendNotificationInput.model_json_schema()
+	)
 
 	async def call(
 		self,
@@ -86,15 +81,7 @@ class SendNotificationTool(Tool[AppContext]):
 		ctx = __app_context__
 		tool_call_id = __agent_context__.tool_call_id
 
-		title = str(kwargs.get("title", ""))
-		body = str(kwargs.get("body", ""))
-		target_user_id = kwargs.get("user_id")
-
-		if not title or not body:
-			return self.error(
-				"both title and body are required for notifications",
-				__agent_context__,
-			)
+		inp = SendNotificationInput.model_validate(kwargs)
 
 		agent_id = ctx.agent_id
 		thread_id = ctx.thread_id
@@ -103,8 +90,8 @@ class SendNotificationTool(Tool[AppContext]):
 		# if any DB operation fails, only this session is affected.
 		try:
 			async with async_session_local() as tool_session:
-				if target_user_id:
-					target_user_ids: list[TypeID] = [TypeID(str(target_user_id))]
+				if inp.user_id:
+					target_user_ids: list[TypeID] = [TypeID(inp.user_id)]
 				elif ctx.thread_id is not None:
 					target_user_ids = await list_accessible_user_ids(
 						ResourceType.THREAD,
@@ -118,10 +105,10 @@ class SendNotificationTool(Tool[AppContext]):
 					)
 
 				# thread-scoped by default; user_id is opt-in for single-user targeting
-				notifications = await notification_service.send_agent_notification(
+				notifications = await notification_service.create_notifications(
 					tool_session,
-					title=title,
-					body=body,
+					payload=NotificationPayload(title=inp.title, body=inp.body),
+					event_type=EventType.NOTIFICATION_AGENT,
 					agent_id=agent_id,
 					user_ids=target_user_ids,
 				)
@@ -145,9 +132,9 @@ class SendNotificationTool(Tool[AppContext]):
 				"tool_name": self.name,
 				"notification_id": first_notification_id,
 				"notification_count": recipient_count,
-				"title": title,
-				"body": body,
-				"target_user_id": str(target_user_id) if target_user_id else None,
+				"title": inp.title,
+				"body": inp.body,
+				"target_user_id": inp.user_id,
 				"status": "sent",
 			},
 			user_id=ctx.user_id,
@@ -157,10 +144,10 @@ class SendNotificationTool(Tool[AppContext]):
 
 		if recipient_count == 1:
 			return self.success(
-				f'notification sent: "{title}"',
+				f'notification sent: "{inp.title}"',
 				__agent_context__,
 			)
 		return self.success(
-			f'notification sent to {recipient_count} participants: "{title}"',
+			f'notification sent to {recipient_count} participants: "{inp.title}"',
 			__agent_context__,
 		)

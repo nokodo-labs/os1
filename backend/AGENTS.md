@@ -27,47 +27,64 @@
 backend/
 ├── api/                         # FastAPI backend app
 │   ├── main.py                  # app entrypoint and startup wiring
-│   ├── exceptions.py            # exception handlers
-│   ├── logging.py               # logging configuration and utilities
-│   ├── openapi.py               # OpenAPI response defaults
-│   ├── runtime.py               # event loop and runtime configuration
-│   ├── tasks.py                 # shared background task utilities
-│   ├── ...                      # perplexity, tavily, searxng API clients, etc.
-│   ├── database/                # DB init and search cursor helpers
-│   ├── middleware/              # API versioning, request id, logging, headers
+│   ├── boot_settings.py         # early boot settings (loaded before full settings)
+│   ├── permissions.py           # permission enums + DefaultPermissions (shared by models/settings)
+│   ├── local_tasks.py           # in-process fire-and-forget asyncio task helpers
+│   ├── taskiq.py                # TaskIQ broker startup/shutdown wiring
+│   ├── ...                      # exceptions, logging, openapi, runtime, constants, external API clients
+│   ├── database/                # DB engine init, async session, search cursor helpers
+│   ├── middleware/              # rate limiting, request id, logging, api version, security headers
 │   ├── migrations/              # Alembic config and migration scripts
-│   ├── models/                  # SQLAlchemy ORM models
+│   ├── models/                  # SQLAlchemy ORM models (one file per entity)
+│   ├── redis/                   # Redis client, pub/sub, cache, cache invalidation
 │   ├── routers/                 # top-level/system routers
-│   ├── schemas/                 # shared Pydantic schemas and API DTOs
-│   ├── settings/                # settings models and DB/env loading
+│   ├── schemas/                 # shared Pydantic schemas and API DTOs (one file per domain)
+│   ├── settings/                # settings models + DB/env loading
 │   ├── storage/                 # storage backends (local/s3)
+│   ├── tasks/                   # top-level TaskIQ task registry
 │   ├── tests/                   # API/service/unit coverage for backend package
 │   └── v1/                      # versioned API composition
-│       ├── app.py               # v1 app setup
 │       ├── router.py            # v1 router mount
-│       ├── routers/             # v1 route handlers
-│       ├── schemas/             # v1-only schemas
-│       ├── service/             # v1 service layer (auth/chat/files/etc.)
-│       │   ├── chat/            # ai chat orchestration
+│       ├── routers/             # v1 route handlers (one file per domain) + integrations/
+│       ├── schemas/             # v1-only schemas (auth, settings, web_search)
+│       ├── service/             # v1 service layer
+│       │   ├── chat/            # AI chat orchestration
+│       │   │   ├── run_bus.py   # cross-worker run SSE bus (Redis pub/sub + catchup log)
+│       │   │   ├── models.py    # chat model resolution + JSON schema calls
 │       │   │   ├── tools/       # chat tool implementations + registry
-│       │   │   ├── hooks/       # post-execution hooks + registry
-│       │   │   ├── filters/     # pre-execution filters (context injection)
-│       │   │   └── models.py    # chat model resolution + JSON schema calls
-│       │   ├── web_search/      # agentic web search + web loaders
+│       │   │   ├── hooks/       # post-execution hooks
+│       │   │   ├── filters/     # pre-execution filters (context injection, windowing, citations, etc.)
+│       │   │   └── ...          # agents, context, steering, summarization, windowing, etc.
+│       │   ├── threads/         # thread CRUD, messages, participants, summaries, search, maintenance
+│       │   ├── calendar/        # calendar + event management, recurrence, search, cache
+│       │   ├── reminders/       # reminder CRUD, lists, search, cache
+│       │   ├── scheduling/      # recurrence rule helpers
+│       │   ├── web_search/      # agentic web search, loaders, progress tracking
 │       │   ├── media/           # media generation (images, video, audio)
-│       │   └── ...              # auth, files, memories, threads, etc.
-│       └── tasks/               # v1 async/background task modules
+│       │   ├── integrations/    # third-party integration services (open_webui)
+│       │   ├── social/          # friendship, privacy, visibility helpers
+│       │   ├── event_bus.py     # cross-process WebSocket fanout relay (Redis pub/sub)
+│       │   ├── task_bus.py      # cross-worker task SSE bus (Redis pub/sub)
+│       │   ├── collaborative_documents.py  # CRDT-based collaborative doc editing
+│       │   ├── listing.py       # shared list-endpoint filtering + sorting helpers
+│       │   ├── resource_payload_cache.py   # per-resource Redis payload cache
+│       │   └── ...              # auth, events, files, friends, groups, memories, models, notes,
+│       │                        #   notifications, plugins, projects, prompts, providers, roles,
+│       │                        #   runs, search, settings, tasks, users, vectorstores, web_push, ...
+│       └── tasks/               # v1 TaskIQ task modules (calendar, reminders, threads, open_webui)
 ├── nokodo_ai/                   # standalone SDK/runtime library
-│   ├── adapters/                # provider adapters + base adapter contracts
+│   ├── adapters/                # provider adapters (openai, anthropic, google, ollama, qdrant) + base/
 │   ├── agents.py                # agent orchestration
 │   ├── chat_models.py           # chat model abstractions
-│   ├── embeddings.py            # embedding abstractions
-│   ├── vectorstores.py          # vectorstore abstractions
 │   ├── messages.py              # message domain primitives
 │   ├── threads.py               # thread domain primitives
 │   ├── tool.py                  # tool interfaces/decorators
+│   ├── filters.py               # filter pipeline interfaces
+│   ├── hooks.py                 # hook pipeline interfaces
+│   ├── deltas.py                # streaming delta primitives
+│   ├── ...                      # audio/image/video models, embeddings, vectorstores, context, token_estimation
 │   ├── types/                   # SDK type helpers
-│   ├── utils/                   # SDK utility helpers
+│   ├── utils/                   # SDK utilities (typeid, sse, tokens, security, vectors, etc.)
 │   └── tests/                   # SDK unit tests
 └── tests/                       # backend integration/e2e-style tests
 ```

@@ -35,6 +35,11 @@ from api.permissions import (
 	strip_unknown_action_permissions,
 )
 from api.schemas.preferences import BackgroundType
+from api.service.web_assets import (
+	MEDIA_ASSETS,
+	cdn_asset_url,
+	resolve_asset_source,
+)
 from nokodo_ai.utils.typing import extract_literal_values
 
 
@@ -47,6 +52,9 @@ ENV_PREFIX: Final[str] = "NOKODO__"
 ENV_NESTED_DELIMITER: Final[str] = "__"
 DEFAULT_SECRET_KEY: Final[str] = "dev-secret-key-change-me-in-production"
 MINIMUM_SECRET_KEY_BYTES: Final[int] = 14
+DEFAULT_API_PORT: Final[int] = 1383
+DEFAULT_FRONTEND_PORT: Final[int] = 888
+DEFAULT_CONSOLE_PORT: Final[int] = 8383
 UNSAFE_SECRET_KEYS: Final[frozenset[str]] = frozenset(
 	{
 		DEFAULT_SECRET_KEY,
@@ -568,6 +576,137 @@ class AISettings(BaseModel):
 	)
 
 
+AssetSource = Literal["default", "cdn", "custom"]
+OptionalAssetSource = Literal["default", "cdn", "custom", "disabled"]
+
+
+class ManifestAssetSettings(BaseModel):
+	"""source control for one optional generated manifest asset."""
+
+	source: OptionalAssetSource = settings_field(
+		default="default",
+		public=True,
+		description="asset source: default, cdn, custom, or disabled",
+	)
+	url: HttpUrl | None = settings_field(
+		default=None,
+		public=True,
+		description="custom asset url override",
+	)
+
+
+class MediaAssetSettings(BaseModel):
+	"""source control for one frontend media asset."""
+
+	source: AssetSource = settings_field(
+		default="default",
+		public=True,
+		description="asset source: default, cdn, or custom",
+	)
+	url: HttpUrl | None = settings_field(
+		default=None,
+		public=True,
+		description="custom asset url override",
+	)
+
+
+class PwaManifestAssetsSettings(BaseModel):
+	"""per-file asset source controls for the generated PWA manifest."""
+
+	icon_1024_maskable: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="1024x1024 maskable app icon",
+	)
+	icon_512_any: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="512x512 any-purpose app icon",
+	)
+	shortcut_notes: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="notes shortcut icon",
+	)
+	shortcut_reminders: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="reminders shortcut icon",
+	)
+	shortcut_calendar: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="calendar shortcut icon",
+	)
+	shortcut_messages: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="messages shortcut icon",
+	)
+	shortcut_projects: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="projects shortcut icon",
+	)
+	shortcut_library: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="files shortcut icon",
+	)
+	shortcut_social: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="social shortcut icon",
+	)
+	shortcut_settings: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="settings shortcut icon",
+	)
+	screenshot_narrow_1: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="narrow screenshot 1",
+	)
+	screenshot_narrow_2: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="narrow screenshot 2",
+	)
+	screenshot_narrow_3: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="narrow screenshot 3",
+	)
+	screenshot_narrow_4: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="narrow screenshot 4",
+	)
+	screenshot_narrow_5: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="narrow screenshot 5",
+	)
+	screenshot_wide_1: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="wide screenshot 1",
+	)
+	screenshot_wide_2: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="wide screenshot 2",
+	)
+	screenshot_wide_3: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="wide screenshot 3",
+	)
+	screenshot_wide_4: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="wide screenshot 4",
+	)
+	screenshot_wide_5: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="wide screenshot 5",
+	)
+	screenshot_wide_6: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="wide screenshot 6",
+	)
+	screenshot_wide_7: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="wide screenshot 7",
+	)
+	screenshot_wide_8: ManifestAssetSettings = settings_field(
+		default_factory=ManifestAssetSettings,
+		description="wide screenshot 8",
+	)
+
+
 class BrandingSettings(BaseModel):
 	site_name: str = settings_field(default="OS1", public=True, description="site name")
 	app_version: str = settings_field(
@@ -620,6 +759,10 @@ class BrandingSettings(BaseModel):
 		write_locked=True,
 		description="analytics key (env-only)",
 	)
+	pwa_assets: PwaManifestAssetsSettings = settings_field(
+		default_factory=PwaManifestAssetsSettings,
+		description="PWA manifest asset source controls",
+	)
 
 
 class LimitsSettings(BaseModel):
@@ -628,6 +771,12 @@ class LimitsSettings(BaseModel):
 	)
 	max_messages_per_thread: int = settings_field(
 		default=1000, ge=1, description="max messages per thread"
+	)
+	max_chat_input_chars: int | None = settings_field(
+		default=200_000,
+		ge=1,
+		public=True,
+		description="max characters accepted in chat input. null disables the cap",
 	)
 	max_file_size_mb: int = settings_field(
 		default=50, ge=1, description="max file size mb"
@@ -648,45 +797,29 @@ class LimitsSettings(BaseModel):
 
 
 class MediaSettings(BaseModel):
-	"""external media / asset URLs.
+	"""frontend media asset source controls.
 
-	base_url provides a common prefix for well-known asset filenames.
-	individual url fields override the base_url + filename convention.
-
-	resolution order per asset: individual field > base_url/filename > null.
-
-	well-known filenames (appended to base_url):
-		favicon.ico, apple-touch-icon.png, sidebar-logo.svg, splash-logo.svg
+	resolution order per asset is controlled by its source field:
+	the asset url field is an explicit override, cdn uses
+	branding.public_cdn_origin when configured, and default uses
+	nokodo-hosted defaults.
 	"""
 
-	base_url: HttpUrl | None = settings_field(
-		default=None,
-		public=True,
-		description="base url for all media assets",
-		examples=[
-			"https://cdn.example.com/brand/",
-			"https://raw.githubusercontent.com/org/repo/branch/path/to/assets/",
-		],
+	favicon: MediaAssetSettings = settings_field(
+		default_factory=MediaAssetSettings,
+		description="browser tab favicon",
 	)
-	favicon_url: HttpUrl | None = settings_field(
-		default=None,
-		public=True,
-		description="favicon url override",
+	apple_touch_icon: MediaAssetSettings = settings_field(
+		default_factory=MediaAssetSettings,
+		description="iOS home screen icon",
 	)
-	apple_touch_icon_url: HttpUrl | None = settings_field(
-		default=None,
-		public=True,
-		description="apple touch icon url override",
+	sidebar_logo: MediaAssetSettings = settings_field(
+		default_factory=MediaAssetSettings,
+		description="sidebar logo",
 	)
-	sidebar_logo_url: HttpUrl | None = settings_field(
-		default=None,
-		public=True,
-		description="sidebar banner logo url override",
-	)
-	splash_logo_url: HttpUrl | None = settings_field(
-		default=None,
-		public=True,
-		description="splash screen logo url override",
+	splash_logo: MediaAssetSettings = settings_field(
+		default_factory=MediaAssetSettings,
+		description="splash screen logo",
 	)
 
 
@@ -1107,8 +1240,8 @@ class SecuritySettings(BaseModel):
 	)
 	cors_origins: list[str] = settings_field(
 		default=[
-			"http://localhost:888",
-			"http://localhost:8383",
+			f"http://localhost:{DEFAULT_FRONTEND_PORT}",
+			f"http://localhost:{DEFAULT_CONSOLE_PORT}",
 		],
 		write_locked=True,
 		description="cors origins (env-only)",
@@ -1414,6 +1547,40 @@ class IntegrationsSettings(BaseModel):
 class NotificationSettings(BaseModel):
 	"""notification delivery tuning."""
 
+	web_push_enabled: bool = settings_field(
+		default=False,
+		public=True,
+		description=(
+			"enable server-side Web Push delivery when VAPID keys are configured"
+		),
+	)
+	vapid_public_key: str | None = settings_field(
+		default=None,
+		public=True,
+		description="VAPID public key for browser push subscription",
+	)
+	vapid_private_key: str | None = settings_field(
+		default=None,
+		description="VAPID private key for Web Push delivery",
+	)
+	vapid_subject: str = settings_field(
+		default="mailto:admin@localhost",
+		write_locked=True,
+		description="VAPID subject claim for Web Push delivery",
+	)
+	web_push_ttl_seconds: int = settings_field(
+		default=86_400,
+		ge=60,
+		description="Web Push TTL in seconds",
+	)
+	notification_ttl_seconds: int | None = settings_field(
+		default=None,
+		ge=60,
+		description=(
+			"native notification TTL in seconds; null keeps notifications indefinitely"
+		),
+	)
+
 	missed_grace_days: int = settings_field(
 		default=7,
 		ge=1,
@@ -1571,6 +1738,49 @@ class ThreadMaintenanceBackfillSettings(BaseModel):
 	)
 
 
+class ThreadMaintenanceSettings(BaseModel):
+	"""live thread maintenance scheduling and execution policy."""
+
+	inactivity_hours: int = settings_field(
+		default=8,
+		ge=1,
+		description=(
+			"hours a thread must stay inactive before deferred metadata and "
+			"summary maintenance is dispatched. mandatory missing metadata still "
+			"runs immediately."
+		),
+	)
+	queued_supersede_after_minutes: int = settings_field(
+		default=5,
+		ge=1,
+		description=(
+			"minutes a zero-progress queued thread maintenance task may stay "
+			"idle before a new same-thread task supersedes it."
+		),
+	)
+	active_supersede_after_minutes: int = settings_field(
+		default=30,
+		ge=1,
+		description=(
+			"minutes an active thread maintenance task may stop reporting "
+			"progress before a new same-thread task supersedes it."
+		),
+	)
+	runner_timeout_seconds: int = settings_field(
+		default=30 * 60,
+		ge=1,
+		description="seconds before thread-related durable task runners time out.",
+	)
+	stale_task_cleanup_after_minutes: int = settings_field(
+		default=45,
+		ge=1,
+		description=(
+			"minutes of inactivity before startup cleanup fails stale active "
+			"thread-related tasks."
+		),
+	)
+
+
 class TasksSettings(BaseModel):
 	"""task execution settings."""
 
@@ -1578,6 +1788,10 @@ class TasksSettings(BaseModel):
 		default_factory=TaskiqSettings,
 		write_locked=True,
 		description="TaskIQ execution and scheduling settings",
+	)
+	thread_maintenance: ThreadMaintenanceSettings = settings_field(
+		default_factory=ThreadMaintenanceSettings,
+		description="live thread maintenance scheduling and execution settings",
 	)
 	maintenance_backfill: ThreadMaintenanceBackfillSettings = settings_field(
 		default_factory=ThreadMaintenanceBackfillSettings,
@@ -1612,6 +1826,8 @@ class DefaultPermissionsSettings(BaseModel):
 			ActionPermission.MEMORIES_CREATE,
 			ActionPermission.TASKS_CREATE,
 			ActionPermission.FILES_CREATE,
+			ActionPermission.USER_FRIENDSHIPS_CREATE,
+			ActionPermission.USER_BLOCKS_CREATE,
 		],
 		description="action permissions granted by default",
 	)
@@ -1760,13 +1976,55 @@ class Settings(BaseSettings):
 		exclude, _has_public = Settings._build_public_exclude_state(schema)
 		return exclude
 
+	def _resolved_media_url(self, asset: MediaAssetSettings, key: str) -> str:
+		spec = MEDIA_ASSETS[key]
+		cdn = (
+			str(self.branding.public_cdn_origin).rstrip("/")
+			if self.branding.public_cdn_origin
+			else None
+		)
+		resolved = resolve_asset_source(
+			asset.source,
+			asset.url,
+			spec.default_url,
+			cdn_asset_url(cdn, spec.cdn_path) if cdn else None,
+		)
+		return resolved or spec.default_url
+
+	def _resolve_public_media(self, data: dict[str, Any]) -> None:
+		media = data.get("media")
+		if not isinstance(media, dict):
+			return
+		media["favicon"] = {
+			**media.get("favicon", {}),
+			"url": self._resolved_media_url(self.media.favicon, "favicon"),
+		}
+		media["apple_touch_icon"] = {
+			**media.get("apple_touch_icon", {}),
+			"url": self._resolved_media_url(
+				self.media.apple_touch_icon,
+				"apple_touch_icon",
+			),
+		}
+		media["sidebar_logo"] = {
+			**media.get("sidebar_logo", {}),
+			"url": self._resolved_media_url(self.media.sidebar_logo, "sidebar_logo"),
+		}
+		media["splash_logo"] = {
+			**media.get("splash_logo", {}),
+			"url": self._resolved_media_url(self.media.splash_logo, "splash_logo"),
+		}
+
 	def custom_dump(self, exclude_private: bool = False) -> dict[str, Any]:
 		"""model_dump with custom excludes."""
 		exclude = {}
 		if exclude_private:
 			exclude.update(self._build_public_exclude(schema=type(self)))
 
-		return self.model_dump(exclude=exclude or None)
+		data = self.model_dump(exclude=exclude or None)
+		if exclude_private:
+			self._resolve_public_media(data)
+		return data
 
 	def validate_runtime_security(self) -> None:
 		"""fail production startup when the signing/encryption key is unsafe."""

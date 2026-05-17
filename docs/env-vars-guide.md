@@ -127,27 +127,36 @@ These settings are write-locked because API, worker, and scheduler processes mus
 | `NOKODO__BRANDING__FAVICON_URL`            | URL    | `null`    |                       | Favicon URL.                                                                       |
 | `NOKODO__BRANDING__SUPPORT_EMAIL`          | string | `null`    |                       | Support email shown to users awaiting account approval.                            |
 | `NOKODO__BRANDING__ADMIN_EMAIL`            | string | `null`    |                       | Internal/escalation admin email.                                                   |
-| `NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN` | URL    | `null`    |                       | Public frontend origin (e.g. `https://app.example.com`). Used for link generation. |
-| `NOKODO__BRANDING__PUBLIC_CDN_ORIGIN`      | URL    | `null`    |                       | Public CDN origin for static assets.                                               |
+| `NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN` | URL    | `null`    |                       | Public frontend origin (e.g. `https://app.example.com`). Used for link generation. Blank falls back to the request origin host with the default frontend port `888`; if no request origin is available, the API origin is assumed to be `http://localhost:1383`. |
+| `NOKODO__BRANDING__PUBLIC_CDN_ORIGIN`      | URL    | `null`    |                       | Public CDN origin used by assets whose source is `cdn`.                            |
 | `NOKODO__BRANDING__PUBLIC_CONSOLE_ORIGIN`  | URL    | `null`    |                       | Public admin console origin.                                                       |
 | `NOKODO__BRANDING__PWA_MANIFEST_URL`       | URL    | `null`    |                       | External PWA manifest.json URL.                                                    |
 | `NOKODO__BRANDING__ANALYTICS_KEY`          | string | `null`    | private, write-locked | Analytics provider key (env-only, never returned to clients).                      |
+
+Generated manifest asset controls live under `NOKODO__BRANDING__PWA_ASSETS__*`.
+Each asset has `SOURCE` (`default`, `cdn`, `custom`, or `disabled`) and `URL`
+(full custom URL override). See [pwa-cdn-setup.md](pwa-cdn-setup.md) for
+the full asset list and path map.
 
 ---
 
 ### Media (`NOKODO__MEDIA__*`)
 
-Used to serve well-known brand assets. Individual URL fields override the `base_url + filename` convention.
+Used to serve frontend media tags. Each asset has `SOURCE` (`default`, `cdn`,
+or `custom`) and `URL` (full custom URL override). `cdn` uses
+`NOKODO__BRANDING__PUBLIC_CDN_ORIGIN` plus the well-known path documented in
+[pwa-cdn-setup.md](pwa-cdn-setup.md).
 
-Well-known filenames appended to `base_url`: `favicon.ico`, `apple-touch-icon.png`, `sidebar-logo.svg`, `splash-logo.svg`.
-
-| Variable                              | Type | Default | Description                           |
-| ------------------------------------- | ---- | ------- | ------------------------------------- |
-| `NOKODO__MEDIA__BASE_URL`             | URL  | `null`  | Base URL prefix for all media assets. |
-| `NOKODO__MEDIA__FAVICON_URL`          | URL  | `null`  | Favicon URL override.                 |
-| `NOKODO__MEDIA__APPLE_TOUCH_ICON_URL` | URL  | `null`  | Apple touch icon URL override.        |
-| `NOKODO__MEDIA__SIDEBAR_LOGO_URL`     | URL  | `null`  | Sidebar banner logo URL override.     |
-| `NOKODO__MEDIA__SPLASH_LOGO_URL`      | URL  | `null`  | Splash screen logo URL override.      |
+| Variable | Type | Default | Description |
+| -------- | ---- | ------- | ----------- |
+| `NOKODO__MEDIA__FAVICON__SOURCE` | enum | `default` | Browser tab favicon source. |
+| `NOKODO__MEDIA__FAVICON__URL` | URL | `null` | Custom browser tab favicon URL. |
+| `NOKODO__MEDIA__APPLE_TOUCH_ICON__SOURCE` | enum | `default` | iOS home-screen icon source. |
+| `NOKODO__MEDIA__APPLE_TOUCH_ICON__URL` | URL | `null` | Custom iOS home-screen icon URL. |
+| `NOKODO__MEDIA__SIDEBAR_LOGO__SOURCE` | enum | `default` | Sidebar logo source. |
+| `NOKODO__MEDIA__SIDEBAR_LOGO__URL` | URL | `null` | Custom sidebar logo URL. |
+| `NOKODO__MEDIA__SPLASH_LOGO__SOURCE` | enum | `default` | Splash logo source. |
+| `NOKODO__MEDIA__SPLASH_LOGO__URL` | URL | `null` | Custom splash logo URL. |
 
 ---
 

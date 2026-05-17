@@ -12,7 +12,7 @@ from api.models.memory import Memory
 from api.models.message import Message
 from api.models.model import Model
 from api.models.note import Note
-from api.models.notification import Notification
+from api.models.notification import Notification, NotificationPushSubscription
 from api.models.plugin import Plugin
 from api.models.project import Project
 from api.models.prompt import Prompt
@@ -25,6 +25,7 @@ from api.models.thread import Thread
 from api.models.thread_participant import ThreadParticipant
 from api.models.thread_summary import ThreadSummary
 from api.models.user import User
+from api.models.user_client import UserClient
 from api.permissions import AccessLevel
 
 
@@ -46,6 +47,7 @@ __all__ = [
 	"Model",
 	"Note",
 	"Notification",
+	"NotificationPushSubscription",
 	"Plugin",
 	"Project",
 	"Provider",
@@ -60,4 +62,5 @@ __all__ = [
 	"ThreadParticipant",
 	"ThreadSummary",
 	"User",
+	"UserClient",
 ]

@@ -49,29 +49,67 @@ class UISettingsPatch(BaseModel):
 	)
 
 
+class ManifestAssetSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	source: Literal["default", "cdn", "custom", "disabled"] | MissingType = Field(
+		default=MISSING,
+		description="asset source: default, cdn, custom, or disabled",
+	)
+	url: str | None | MissingType = Field(
+		default=MISSING,
+		description="custom asset url override",
+	)
+
+
+class MediaAssetSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	source: Literal["default", "cdn", "custom"] | MissingType = Field(
+		default=MISSING,
+		description="asset source: default, cdn, or custom",
+	)
+	url: str | None | MissingType = Field(
+		default=MISSING,
+		description="custom asset url override",
+	)
+
+
 class MediaSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
-	base_url: str | None | MissingType = Field(
-		default=MISSING,
-		description="base url for all media assets",
-	)
-	favicon_url: str | None | MissingType = Field(
-		default=MISSING,
-		description="favicon url override",
-	)
-	apple_touch_icon_url: str | None | MissingType = Field(
-		default=MISSING,
-		description="apple touch icon url override",
-	)
-	sidebar_logo_url: str | None | MissingType = Field(
-		default=MISSING,
-		description="sidebar banner logo url override",
-	)
-	splash_logo_url: str | None | MissingType = Field(
-		default=MISSING,
-		description="splash screen logo url override",
-	)
+	favicon: MediaAssetSettingsPatch | MissingType = MISSING
+	apple_touch_icon: MediaAssetSettingsPatch | MissingType = MISSING
+	sidebar_logo: MediaAssetSettingsPatch | MissingType = MISSING
+	splash_logo: MediaAssetSettingsPatch | MissingType = MISSING
+
+
+class PwaManifestAssetsSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	icon_1024_maskable: ManifestAssetSettingsPatch | MissingType = MISSING
+	icon_512_any: ManifestAssetSettingsPatch | MissingType = MISSING
+	shortcut_notes: ManifestAssetSettingsPatch | MissingType = MISSING
+	shortcut_reminders: ManifestAssetSettingsPatch | MissingType = MISSING
+	shortcut_calendar: ManifestAssetSettingsPatch | MissingType = MISSING
+	shortcut_messages: ManifestAssetSettingsPatch | MissingType = MISSING
+	shortcut_projects: ManifestAssetSettingsPatch | MissingType = MISSING
+	shortcut_library: ManifestAssetSettingsPatch | MissingType = MISSING
+	shortcut_social: ManifestAssetSettingsPatch | MissingType = MISSING
+	shortcut_settings: ManifestAssetSettingsPatch | MissingType = MISSING
+	screenshot_narrow_1: ManifestAssetSettingsPatch | MissingType = MISSING
+	screenshot_narrow_2: ManifestAssetSettingsPatch | MissingType = MISSING
+	screenshot_narrow_3: ManifestAssetSettingsPatch | MissingType = MISSING
+	screenshot_narrow_4: ManifestAssetSettingsPatch | MissingType = MISSING
+	screenshot_narrow_5: ManifestAssetSettingsPatch | MissingType = MISSING
+	screenshot_wide_1: ManifestAssetSettingsPatch | MissingType = MISSING
+	screenshot_wide_2: ManifestAssetSettingsPatch | MissingType = MISSING
+	screenshot_wide_3: ManifestAssetSettingsPatch | MissingType = MISSING
+	screenshot_wide_4: ManifestAssetSettingsPatch | MissingType = MISSING
+	screenshot_wide_5: ManifestAssetSettingsPatch | MissingType = MISSING
+	screenshot_wide_6: ManifestAssetSettingsPatch | MissingType = MISSING
+	screenshot_wide_7: ManifestAssetSettingsPatch | MissingType = MISSING
+	screenshot_wide_8: ManifestAssetSettingsPatch | MissingType = MISSING
 
 
 class QdrantVectorDatabaseSettingsPatch(BaseModel):
@@ -355,6 +393,7 @@ class BrandingSettingsPatch(BaseModel):
 		default=MISSING,
 		description="external pwa manifest.json url",
 	)
+	pwa_assets: PwaManifestAssetsSettingsPatch | MissingType = MISSING
 
 
 class LimitsSettingsPatch(BaseModel):
@@ -369,6 +408,11 @@ class LimitsSettingsPatch(BaseModel):
 		default=MISSING,
 		ge=1,
 		description="max messages per thread",
+	)
+	max_chat_input_chars: int | None | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="max characters accepted in chat input. null disables the cap",
 	)
 	max_file_size_mb: int | MissingType = Field(
 		default=MISSING,
@@ -795,6 +839,30 @@ class DefaultPermissionsSettingsPatch(BaseModel):
 class NotificationSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
+	web_push_enabled: bool | MissingType = Field(
+		default=MISSING,
+		description="enable server-side Web Push delivery when configured",
+	)
+	vapid_public_key: str | None | MissingType = Field(
+		default=MISSING,
+		description="VAPID public key for browser push subscription",
+	)
+	vapid_private_key: str | None | MissingType = Field(
+		default=MISSING,
+		description="VAPID private key for Web Push delivery",
+	)
+	web_push_ttl_seconds: int | MissingType = Field(
+		default=MISSING,
+		ge=60,
+		description="Web Push TTL in seconds",
+	)
+	notification_ttl_seconds: int | None | MissingType = Field(
+		default=MISSING,
+		ge=60,
+		description=(
+			"native notification TTL in seconds; null keeps notifications indefinitely"
+		),
+	)
 	missed_grace_days: int | MissingType = Field(
 		default=MISSING,
 		ge=1,
@@ -1044,6 +1112,36 @@ class TaskiqSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
 
+class ThreadMaintenanceSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	inactivity_hours: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="hours before deferred thread maintenance runs",
+	)
+	queued_supersede_after_minutes: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="minutes before stale queued maintenance is superseded",
+	)
+	active_supersede_after_minutes: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="minutes before stale active maintenance is superseded",
+	)
+	runner_timeout_seconds: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="seconds before thread-related durable task runners time out",
+	)
+	stale_task_cleanup_after_minutes: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="minutes before stale thread-related tasks are cleaned up",
+	)
+
+
 class ThreadMaintenanceBackfillSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -1076,6 +1174,7 @@ class TasksSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
 	taskiq: TaskiqSettingsPatch | MissingType = MISSING
+	thread_maintenance: ThreadMaintenanceSettingsPatch | MissingType = MISSING
 	maintenance_backfill: ThreadMaintenanceBackfillSettingsPatch | MissingType = MISSING
 
 
@@ -1131,3 +1230,10 @@ class SettingsResponse(BaseModel):
 
 	versions: SettingsVersions
 	data: Settings
+
+
+class VapidKeypairResponse(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	public_key: str
+	private_key: str

@@ -34,6 +34,7 @@ api = [
     "taskiq-redis>=1.2.2",
     "perplexityai>=0.32.1",
     "python-dateutil>=2.9.0.post0",
+    "pywebpush>=2.3.0",
 ]
 
 dev = [

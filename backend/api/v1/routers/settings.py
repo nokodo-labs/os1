@@ -15,9 +15,11 @@ from api.settings import Settings, settings
 from api.v1.schemas.settings import (
 	SettingsResponse,
 	SettingsUpdateRequest,
+	VapidKeypairResponse,
 )
 from api.v1.service import settings as svc
 from api.v1.service import vectorstores as vectorstores_service
+from api.v1.service import web_push as web_push_service
 from api.v1.service.auth import Principal, get_current_principal, get_optional_user
 from api.v1.service.authorization import require_permission
 from api.v1.service.events import SessionId
@@ -93,4 +95,17 @@ async def update_settings(
 			"versions": new_versions,
 			"data": settings,
 		}
+	)
+
+
+@router.post("/vapid-keypair", response_model=VapidKeypairResponse)
+async def generate_vapid_keypair(
+	principal: Principal = Depends(get_current_principal),
+) -> VapidKeypairResponse:
+	"""generate a VAPID key pair (admin only)."""
+	require_permission(principal, "settings:manage")
+	keypair = web_push_service.generate_vapid_keypair()
+	return VapidKeypairResponse(
+		public_key=keypair.public_key,
+		private_key=keypair.private_key,
 	)

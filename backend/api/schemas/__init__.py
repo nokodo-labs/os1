@@ -32,6 +32,7 @@ from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.task import Task, TaskCreate, TaskUpdate
 from api.schemas.thread import Thread, ThreadCreate, ThreadUpdate
 from api.schemas.user import User, UserCreate, UserUpdate
+from api.schemas.user_client import UserClient, UserClientPatch, UserClientUpsert
 
 
 __all__ = [
@@ -82,6 +83,9 @@ __all__ = [
 	"NotificationPreferences",
 	"PrivacyPreferences",
 	"User",
+	"UserClient",
+	"UserClientPatch",
+	"UserClientUpsert",
 	"UserCreate",
 	"UserPreferences",
 	"UserUpdate",

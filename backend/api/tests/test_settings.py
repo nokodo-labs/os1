@@ -6,12 +6,15 @@ import os
 from typing import Any
 
 import pytest
+from httpx import AsyncClient
 from pydantic import BaseModel, Field, ValidationError
 from pydantic_settings import PydanticBaseSettingsSource
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from api.boot_settings import boot_settings
 from api.models.setting import SettingsDocument
+from api.schemas.user import UserCreate
 from api.settings import (
 	DEFAULT_SECRET_KEY,
 	BrandingSettings,
@@ -23,6 +26,8 @@ from api.settings import (
 )
 from api.settings import database as settings_db
 from api.settings.settings import (
+	MediaAssetSettings,
+	MediaSettings,
 	_LenientDotEnvSettingsSource,
 	_LenientEnvSettingsSource,
 	get_field_flags,
@@ -30,6 +35,7 @@ from api.settings.settings import (
 )
 from api.v1.schemas.settings import SettingsPatch
 from api.v1.service import settings as settings_svc
+from api.v1.service import users as user_service
 
 
 def test_settings_model_config_has_env_file() -> None:
@@ -90,8 +96,8 @@ def test_settings_field_flags_and_private_dump() -> None:
 	assert "branding" in public
 	assert "media" in public
 	assert "assets" not in public
-	assert "limits" not in public
-	assert "notifications" not in public
+	assert set(public["limits"]) == {"max_chat_input_chars"}
+	assert set(public["notifications"]) == {"web_push_enabled", "vapid_public_key"}
 	assert "soft_delete" not in public
 	assert "web_search" not in public
 	assert "code_interpreter" not in public
@@ -105,6 +111,9 @@ def test_settings_field_flags_and_private_dump() -> None:
 	assert set(public["security"]) == {"allow_signups", "oidc"}
 	assert set(public["security"]["oidc"]) == {"only"}
 	assert "analytics_key" not in public["branding"]
+	assert str(public["media"]["favicon"]["url"]) == (
+		"https://nokodo.net/static/os1/favicon.svg"
+	)
 
 	# exercise both branches of the cors_origins validator
 	security_from_list = SecuritySettings.model_validate({"cors_origins": ["http://x"]})
@@ -258,13 +267,20 @@ def test_settings_patch_accepts_web_search_and_integration_updates() -> None:
 				"resource_payload_ttl_seconds": 45,
 			},
 			"tasks": {
+				"thread_maintenance": {
+					"inactivity_hours": 6,
+					"queued_supersede_after_minutes": 3,
+					"active_supersede_after_minutes": 20,
+					"runner_timeout_seconds": 1200,
+					"stale_task_cleanup_after_minutes": 35,
+				},
 				"maintenance_backfill": {
 					"enabled": True,
 					"cron": "*/30 * * * *",
 					"batch_size": 25,
 					"max_lookback_days": 90,
 					"min_inactivity_hours": 12,
-				}
+				},
 			},
 		}
 	)
@@ -273,6 +289,8 @@ def test_settings_patch_accepts_web_search_and_integration_updates() -> None:
 	assert dumped["web_search"]["agentic"]["agent"] == "native"
 	assert dumped["web_search"]["web_loaders"]["max_chars"] == 40000
 	assert dumped["integrations"]["perplexity"]["image_results_enabled"] is True
+	assert dumped["tasks"]["thread_maintenance"]["inactivity_hours"] == 6
+	assert dumped["tasks"]["thread_maintenance"]["runner_timeout_seconds"] == 1200
 	assert dumped["tasks"]["maintenance_backfill"]["enabled"] is True
 	assert dumped["tasks"]["maintenance_backfill"]["batch_size"] == 25
 
@@ -295,9 +313,20 @@ def test_settings_patch_rejects_old_web_search_integration_nesting() -> None:
 
 def test_settings_patch_distinguishes_missing_and_nullable_null() -> None:
 	assert SettingsPatch.model_validate({}).model_dump(exclude_unset=True) == {}
-	assert SettingsPatch.model_validate({"media": {"base_url": None}}).model_dump(
-		exclude_unset=True
-	) == {"media": {"base_url": None}}
+	assert SettingsPatch.model_validate(
+		{"media": {"favicon": {"url": None}}}
+	).model_dump(exclude_unset=True) == {"media": {"favicon": {"url": None}}}
+	assert SettingsPatch.model_validate(
+		{
+			"branding": {
+				"pwa_assets": {"screenshot_wide_8": {"source": "disabled", "url": None}}
+			}
+		}
+	).model_dump(exclude_unset=True) == {
+		"branding": {
+			"pwa_assets": {"screenshot_wide_8": {"source": "disabled", "url": None}}
+		}
+	}
 
 	with pytest.raises(ValidationError):
 		SettingsPatch.model_validate({"ui": None})
@@ -309,8 +338,158 @@ def test_settings_patch_distinguishes_missing_and_nullable_null() -> None:
 		schema["$defs"]["UISettingsPatch"]["properties"]["default_theme"]
 	)
 	assert "null" in str(
-		schema["$defs"]["MediaSettingsPatch"]["properties"]["base_url"]
+		schema["$defs"]["MediaAssetSettingsPatch"]["properties"]["url"]
 	)
+
+
+def test_public_media_asset_urls_resolve_from_raw_settings() -> None:
+	runtime_settings = Settings(
+		branding=BrandingSettings.model_validate(
+			{"public_cdn_origin": "https://cdn.example.com"}
+		),
+		media=MediaSettings(
+			favicon=MediaAssetSettings(source="cdn"),
+			apple_touch_icon=MediaAssetSettings.model_validate(
+				{
+					"source": "custom",
+					"url": "https://assets.example.com/apple.png",
+				}
+			),
+			sidebar_logo=MediaAssetSettings.model_validate(
+				{
+					"source": "default",
+					"url": "https://assets.example.com/logo.svg",
+				}
+			),
+		),
+	)
+
+	assert runtime_settings.media.model_dump(mode="json") == {
+		"favicon": {
+			"source": "cdn",
+			"url": None,
+		},
+		"apple_touch_icon": {
+			"source": "custom",
+			"url": "https://assets.example.com/apple.png",
+		},
+		"sidebar_logo": {
+			"source": "default",
+			"url": "https://assets.example.com/logo.svg",
+		},
+		"splash_logo": {
+			"source": "default",
+			"url": None,
+		},
+	}
+
+	public = runtime_settings.custom_dump(exclude_private=True)
+	assert public["media"] == {
+		"favicon": {
+			"source": "cdn",
+			"url": "https://cdn.example.com/static/os1/favicon.svg",
+		},
+		"apple_touch_icon": {
+			"source": "custom",
+			"url": "https://assets.example.com/apple.png",
+		},
+		"sidebar_logo": {
+			"source": "default",
+			"url": "https://assets.example.com/logo.svg",
+		},
+		"splash_logo": {
+			"source": "default",
+			"url": "https://nokodo.net/static/os1/splash-logo.svg",
+		},
+	}
+
+
+@pytest.mark.asyncio
+async def test_settings_update_persists_pwa_asset_sources(
+	db_session: AsyncSession,
+) -> None:
+	patch = SettingsPatch.model_validate(
+		{
+			"branding": {
+				"pwa_assets": {
+					"screenshot_narrow_1": {"source": "disabled", "url": None},
+					"screenshot_wide_8": {"source": "disabled", "url": None},
+				}
+			}
+		}
+	)
+
+	await settings_svc.update(db_session, patch)
+	await db_session.commit()
+
+	result = await db_session.execute(
+		select(SettingsDocument).where(SettingsDocument.namespace == "branding")
+	)
+	doc = result.scalar_one()
+	assert doc.data["pwa_assets"]["screenshot_narrow_1"] == {
+		"source": "disabled",
+		"url": None,
+	}
+	assert doc.data["pwa_assets"]["screenshot_wide_8"] == {
+		"source": "disabled",
+		"url": None,
+	}
+
+
+@pytest.mark.asyncio
+async def test_generate_vapid_keypair_endpoint_returns_keys_without_persisting(
+	client: AsyncClient,
+	db_session: AsyncSession,
+) -> None:
+	user = await user_service.create_user(
+		UserCreate(
+			email="vapid_admin@example.com",
+			username="vapid_admin",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	login_resp = await client.post(
+		"/v1/auth/login/access-token",
+		data={"username": user.email, "password": "password123"},
+	)
+	assert login_resp.status_code == 200
+	token = login_resp.json()["access_token"]
+
+	resp = await client.post(
+		"/v1/settings/vapid-keypair",
+		headers={"Authorization": f"Bearer {token}"},
+	)
+	assert resp.status_code == 200
+	keypair = resp.json()
+	assert keypair["public_key"]
+	assert keypair["private_key"].startswith("-----BEGIN PRIVATE KEY-----")
+
+	result = await db_session.execute(
+		select(SettingsDocument).where(SettingsDocument.namespace == "notifications")
+	)
+	assert result.scalar_one_or_none() is None
+
+	patch_resp = await client.patch(
+		"/v1/settings",
+		json={
+			"data": {
+				"notifications": {
+					"vapid_public_key": keypair["public_key"],
+					"vapid_private_key": keypair["private_key"],
+				}
+			}
+		},
+		headers={"Authorization": f"Bearer {token}"},
+	)
+	assert patch_resp.status_code == 200
+	result = await db_session.execute(
+		select(SettingsDocument).where(SettingsDocument.namespace == "notifications")
+	)
+	doc = result.scalar_one()
+	assert doc.data["vapid_public_key"] == keypair["public_key"]
+	assert doc.data["vapid_private_key"] == keypair["private_key"]
 
 
 @pytest.mark.asyncio
@@ -384,10 +563,27 @@ async def test_db_settings_source_loads_overrides_sync_and_excludes_write_locked
 			version=1,
 		)
 	)
+	db_session.add(
+		SettingsDocument(
+			namespace="notifications",
+			data={
+				"vapid_public_key": "public",
+				"vapid_private_key": "private",
+				"vapid_subject": "mailto:wrong@example.com",
+			},
+			version=1,
+		)
+	)
 	await db_session.commit()
 
 	overrides = settings_db._load_db_overrides(Settings)
-	assert overrides == {"branding": {"site_name": "from_db"}}
+	assert overrides == {
+		"branding": {"site_name": "from_db"},
+		"notifications": {
+			"vapid_public_key": "public",
+			"vapid_private_key": "private",
+		},
+	}
 
 	source = DbSettingsSource(Settings)
 	assert source.get_field_value(None, "x") == (None, "x", False)
