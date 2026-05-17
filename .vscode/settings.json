@@ -36,6 +36,7 @@
 	"githubIssues.issueBranchTitle": "issues/${issueNumber}-${user}",
 
 	// Python
+	"python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv",
 	"[python]": {
 		"editor.defaultFormatter": "charliermarsh.ruff",
 		"editor.formatOnSave": true,
@@ -221,7 +222,9 @@
 		"/^uv run alembic -c api/migrations/alembic\\.ini check 2>&1$/": {
 			"approve": true,
 			"matchCommandLine": true
-		}
+		},
+		"Push-Location": true,
+		"Pop-Location": true
 	},
 	"postman.settings.dotenv-detection-notification-visibility": false
 }
