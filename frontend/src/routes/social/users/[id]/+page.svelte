@@ -6,7 +6,6 @@
 	import Camera from '$lib/components/icons/Camera.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import PencilSquare from '$lib/components/icons/PencilSquare.svelte'
-	import User from '$lib/components/icons/User.svelte'
 	import UserGroup from '$lib/components/icons/UserGroup.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
@@ -374,18 +373,6 @@
 			</div>
 
 			<div class="mt-4 flex flex-col gap-6">
-				<section class="flex flex-col gap-3">
-					<div class="flex items-center gap-2">
-						<User class="text-foreground/50 h-4 w-4" />
-						<h2 class="text-foreground/60 text-sm font-semibold">shared with you</h2>
-					</div>
-					<div class="bg-foreground/5 rounded-2xl py-8 text-center">
-						<p class="text-foreground/40 text-sm">
-							shared notes, threads, and reminders will appear here
-						</p>
-					</div>
-				</section>
-
 				<section class="flex flex-col gap-3">
 					<div class="flex items-center gap-2">
 						<UserGroup class="text-foreground/50 h-4 w-4" />

@@ -288,11 +288,11 @@
 	}
 </script>
 
-<div class="flex min-h-0 flex-col {isMobile ? '' : 'h-full'}">
+<div class="flex h-full min-h-0 flex-col">
 	<header
 		class="{isMobile
-			? 'mt-0'
-			: 'mt-7'} relative z-10 flex max-h-22 items-center justify-between gap-3 px-2 pt-5 pb-2"
+			? 'pt-5 pb-4'
+			: 'mt-(--master-detail-header-top) mb-(--spacing-island-content) h-(--master-detail-header-height) py-0'} relative z-10 flex shrink-0 items-center justify-between gap-3 px-2"
 	>
 		<PageTitle icon={Document} label="notes" iconColor="text-(--accent-primary)" tag="h2" />
 		{#if !isMobile}
@@ -477,7 +477,7 @@
 							<div class="px-3 {rowIndex === noteRows.length - 1 ? 'pb-5' : ''}">
 								<button
 									type="button"
-									class="text-foreground/70 hover:text-foreground/90 flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-1 py-2 text-xs font-semibold tracking-wide uppercase transition-colors duration-150"
+									class="text-foreground/70 hover:text-foreground/90 flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-2 py-2 text-xs font-semibold tracking-wide uppercase transition-colors duration-150"
 									onclick={() => {
 										if (row.id === 'my') myNotesOpen = !myNotesOpen
 										else sharedNotesOpen = !sharedNotesOpen

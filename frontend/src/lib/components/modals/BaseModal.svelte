@@ -15,7 +15,6 @@
 	let {
 		open,
 		title,
-		description,
 		onClose,
 		widthClassName = 'max-w-xl',
 		children,
@@ -45,7 +44,7 @@
 {#if open}
 	<div
 		use:portal
-		class="fixed inset-0 z-50 flex items-center justify-center px-4 sm:px-6"
+		class="fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4"
 		style="padding-top: max(1rem, env(safe-area-inset-top)); padding-bottom: max(1rem, env(safe-area-inset-bottom));"
 		role="presentation"
 		onpointerdown={onPointerDown}
@@ -69,16 +68,11 @@
 			transition:scale={{ duration: 220, start: 0.96, opacity: 0, easing: quintOut }}
 		>
 			<div class="relative z-10 flex max-h-[calc(100dvh-2rem)] min-h-0 flex-col">
-				<header class="flex shrink-0 items-start justify-between gap-3 px-6 pt-6 pb-5">
-					<div class="min-w-0">
+				<header class="flex shrink-0 items-start justify-between gap-3 px-4 pt-4 pb-2">
+					<div class="flex min-h-9 min-w-0 items-center">
 						<div class="text-card-foreground text-lg font-semibold">
 							{title}
 						</div>
-						{#if description}
-							<div class="text-muted-foreground mt-1 text-sm">
-								{description}
-							</div>
-						{/if}
 					</div>
 					<button
 						type="button"
@@ -90,7 +84,7 @@
 					</button>
 				</header>
 
-				<div class="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+				<div class="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
 					{@render children?.()}
 				</div>
 			</div>

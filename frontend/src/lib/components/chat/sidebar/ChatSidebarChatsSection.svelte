@@ -155,7 +155,7 @@
 					containerClass="relative h-full min-h-0 w-full overflow-hidden"
 					viewportClass="chat-sidebar-thread-viewport absolute inset-0 w-full overflow-y-auto"
 					contentClass="relative min-h-full w-full"
-					itemsClass="absolute top-0 left-0 flex w-full flex-col gap-0.5 px-3"
+					itemsClass="absolute top-0 left-0 flex w-full flex-col gap-0.5 pr-1 pl-2"
 				>
 					{#snippet renderItem(row)}
 						{#if row.kind === 'header'}

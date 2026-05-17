@@ -34,8 +34,7 @@
 :root {
 	--radius-container-base: 2.5rem;
 	--radius-popup-base: 1.5rem;
-	/* dynamic app height: defaults to 100dvh (adapts to browser chrome).
-	   overridden to visualViewport.height by device store when virtual keyboard is open. */
+	/* dynamic app height: defaults to 100dvh and is synced to visualViewport on mobile. */
 	--app-height: 100dvh;
 	/* Island chrome offset: container top padding + Island height + container bottom padding.
 	   used by pages that need content to clear the sticky Island (e.g., chat). */
@@ -207,8 +206,7 @@
 		user-select: none;
 	}
 
-	/* app viewport height: uses --app-height which adapts to
-	   browser chrome (100dvh) and virtual keyboard (visualViewport) */
+	/* app viewport height: uses --app-height from the device store on mobile */
 	.h-app {
 		height: var(--app-height, 100dvh);
 	}
@@ -362,6 +360,19 @@
 	animation: 260ms ease 80ms both vt-fade-in;
 }
 
+/* central home chat/search banners cross-fade on same-path mode switches */
+::view-transition-old(mode-banner) {
+	animation: 180ms ease both vt-fade-out;
+}
+
+::view-transition-new(mode-banner) {
+	animation: 240ms ease 80ms both vt-fade-in;
+}
+
+.home-mode-banner {
+	animation: 220ms ease both vt-fade-in;
+}
+
 /* thread body fades away when leaving /c/[id] */
 ::view-transition-old(thread-body) {
 	animation: 220ms ease both vt-fade-out;
@@ -450,6 +461,7 @@ html[data-vt-active='1'] .chat-sidebar {
 @media (max-width: 888px) {
 	:root {
 		--spacing-page-x: var(--spacing-mobile-inset);
+		--spacing-header-content: 1.25rem;
 	}
 }
 

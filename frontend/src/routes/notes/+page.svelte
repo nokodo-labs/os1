@@ -97,7 +97,9 @@
 {/snippet}
 
 {#if device.isMobile}
-	<NotesSidebar selectedNoteId={null} isMobile={true} />
+	<div class="flex h-full min-h-0 flex-1 flex-col">
+		<NotesSidebar selectedNoteId={null} isMobile={true} />
+	</div>
 {:else}
 	<div
 		class="flex h-[calc(100vh-var(--chrome-island-offset,0)-var(--spacing-island-content)-2.5rem)] items-center justify-center"

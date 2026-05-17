@@ -1,13 +1,15 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import EmptyState from '$lib/components/EmptyState.svelte'
+	import Check from '$lib/components/icons/Check.svelte'
 	import UserPlus from '$lib/components/icons/UserPlusSolid.svelte'
 	import Users from '$lib/components/icons/Users.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import PageTitle from '$lib/components/PageTitle.svelte'
+	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
+	import { device } from '$lib/stores/device.svelte'
 	import { friends, type FriendResponse, type FriendshipDetail } from '$lib/stores/friends.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { getUserInitials } from '$lib/utils'
@@ -19,10 +21,17 @@
 		'id' | 'username' | 'display_name' | 'email' | 'avatar_url'
 	>
 
+	const chrome = useSystemChrome()
+
 	let actionPending = $state<Set<string>>(new Set())
 
 	onMount(() => {
 		void friends.load()
+	})
+
+	$effect(() => {
+		chrome.setContextActions(islandContextActions)
+		return () => chrome.setContextActions(null)
 	})
 
 	function navigateToProfile(uid: string) {
@@ -47,6 +56,15 @@
 		}
 	}
 
+	async function handleCancel(request: FriendshipDetail) {
+		actionPending = new Set([...actionPending, request.id])
+		try {
+			await friends.cancelRequest(request.id)
+		} finally {
+			actionPending = new Set([...actionPending].filter((id) => id !== request.id))
+		}
+	}
+
 	async function handleRemoveFriend(friend: FriendResponse) {
 		actionPending = new Set([...actionPending, friend.id])
 		try {
@@ -65,21 +83,20 @@
 	}
 </script>
 
-<div class="flex flex-1 flex-col gap-6 py-4">
-	<div
-		class="flex items-center justify-between"
-		style="view-transition-name: social-page-header;"
+{#snippet islandContextActions()}
+	<button
+		type="button"
+		class="flex cursor-pointer items-center justify-center opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+		onclick={() => modals.open('add-friends')}
+		aria-label="add friend"
 	>
+		<UserPlus />
+	</button>
+{/snippet}
+
+<div class="flex flex-1 flex-col gap-6 py-4">
+	<div class="flex items-center" style="view-transition-name: social-page-header;">
 		<PageTitle icon={Users} label="friends" />
-		<LiquidGlass class="rounded-full" style="view-transition-name: social-action-btn;">
-			<button
-				class="interactive text-foreground/80 hover:text-foreground flex items-center gap-1.5 rounded-full border-none bg-transparent px-4 py-2 text-sm font-medium"
-				onclick={() => modals.open('add-friends')}
-			>
-				<UserPlus class="h-4 w-4" />
-				<span>add friend</span>
-			</button>
-		</LiquidGlass>
 	</div>
 
 	{#if !friends.isReady}
@@ -113,9 +130,13 @@
 						{#if user}
 							{@const label = userLabel(user)}
 							<div
-								class="bg-foreground/3 hover:bg-foreground/5 flex items-center gap-3 rounded-2xl p-3 transition-all"
+								class="bg-foreground/5 hover:bg-foreground/8 rounded-pill flex items-center gap-3 p-2.5 transition-all"
 							>
-								<button class="shrink-0" onclick={() => navigateToProfile(user.id)}>
+								<button
+									type="button"
+									class="shrink-0 cursor-pointer"
+									onclick={() => navigateToProfile(user.id)}
+								>
 									{#if user.avatar_url}
 										<img
 											src={user.avatar_url}
@@ -131,7 +152,8 @@
 									{/if}
 								</button>
 								<button
-									class="flex min-w-0 flex-1 flex-col text-left"
+									type="button"
+									class="flex min-w-0 flex-1 cursor-pointer flex-col text-left"
 									onclick={() => navigateToProfile(user.id)}
 								>
 									<span class="text-foreground truncate text-sm font-medium">
@@ -146,15 +168,19 @@
 								{:else}
 									<div class="flex shrink-0 items-center gap-1.5">
 										<button
-											class="rounded-lg bg-green-500/20 px-3 py-1.5 text-xs font-medium text-green-600 transition-all hover:bg-green-500/30 active:scale-[0.97] dark:text-green-400"
+											type="button"
+											class="rounded-pill flex cursor-pointer items-center gap-1.5 bg-green-500/20 px-3 py-1.5 text-xs font-semibold text-green-600 transition-all hover:bg-green-500/30 active:scale-[0.97] dark:text-green-400"
 											onclick={() => handleAccept(request)}
 										>
+											<Check class="h-3.5 w-3.5" />
 											accept
 										</button>
 										<button
-											class="bg-foreground/8 text-foreground/50 hover:bg-foreground/12 rounded-lg px-3 py-1.5 text-xs font-medium transition-all active:scale-[0.97]"
+											type="button"
+											class="rounded-pill bg-foreground/8 text-foreground/55 hover:bg-foreground/12 flex cursor-pointer items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all active:scale-[0.97]"
 											onclick={() => handleDecline(request)}
 										>
+											<XMark class="h-3.5 w-3.5" />
 											decline
 										</button>
 									</div>
@@ -178,9 +204,13 @@
 						{#if user}
 							{@const label = userLabel(user)}
 							<div
-								class="bg-foreground/3 hover:bg-foreground/5 flex items-center gap-3 rounded-2xl p-3 transition-all"
+								class="bg-foreground/5 hover:bg-foreground/8 rounded-pill flex items-center gap-3 p-2.5 transition-all"
 							>
-								<button class="shrink-0" onclick={() => navigateToProfile(user.id)}>
+								<button
+									type="button"
+									class="shrink-0 cursor-pointer"
+									onclick={() => navigateToProfile(user.id)}
+								>
 									{#if user.avatar_url}
 										<img
 											src={user.avatar_url}
@@ -196,7 +226,8 @@
 									{/if}
 								</button>
 								<button
-									class="flex min-w-0 flex-1 flex-col text-left"
+									type="button"
+									class="flex min-w-0 flex-1 cursor-pointer flex-col text-left"
 									onclick={() => navigateToProfile(user.id)}
 								>
 									<span class="text-foreground truncate text-sm font-medium">
@@ -206,9 +237,18 @@
 										{userMeta(user)}
 									</span>
 								</button>
-								<span class="text-foreground/30 shrink-0 text-xs font-medium">
-									pending
-								</span>
+								{#if actionPending.has(request.id)}
+									<ShimmerText className="shrink-0 text-xs">pending</ShimmerText>
+								{:else}
+									<button
+										type="button"
+										class="rounded-pill bg-foreground/8 text-foreground/55 hover:bg-foreground/12 flex shrink-0 cursor-pointer items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all active:scale-[0.97]"
+										onclick={() => handleCancel(request)}
+									>
+										<XMark class="h-3.5 w-3.5" />
+										cancel
+									</button>
+								{/if}
 							</div>
 						{/if}
 					{/each}
@@ -226,9 +266,13 @@
 					{#each friends.list as friend (friend.id)}
 						{@const label = userLabel(friend)}
 						<div
-							class="group hover:bg-foreground/5 flex items-center gap-3 rounded-2xl p-3 transition-all"
+							class="group bg-foreground/5 hover:bg-foreground/8 rounded-pill flex items-center gap-3 p-2.5 transition-all"
 						>
-							<button class="shrink-0" onclick={() => navigateToProfile(friend.id)}>
+							<button
+								type="button"
+								class="shrink-0 cursor-pointer"
+								onclick={() => navigateToProfile(friend.id)}
+							>
 								{#if friend.avatar_url}
 									<img
 										src={friend.avatar_url}
@@ -244,7 +288,8 @@
 								{/if}
 							</button>
 							<button
-								class="flex min-w-0 flex-1 flex-col text-left"
+								type="button"
+								class="flex min-w-0 flex-1 cursor-pointer flex-col text-left"
 								onclick={() => navigateToProfile(friend.id)}
 							>
 								<span class="text-foreground truncate text-sm font-medium">
@@ -258,7 +303,10 @@
 								<ShimmerText className="shrink-0 text-xs">pending</ShimmerText>
 							{:else}
 								<button
-									class="text-foreground/0 group-hover:text-foreground/30 hover:bg-foreground/8 hover:text-foreground/60 shrink-0 rounded-lg p-1.5 transition-all"
+									type="button"
+									class="rounded-pill hover:bg-foreground/8 hover:text-foreground/60 shrink-0 cursor-pointer p-1.5 transition-all {device.isMobile
+										? 'text-foreground/45'
+										: 'text-foreground/0 group-hover:text-foreground/35'}"
 									title="remove friend"
 									onclick={() => handleRemoveFriend(friend)}
 								>

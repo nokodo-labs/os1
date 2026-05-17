@@ -13,6 +13,7 @@
 	import ProjectWidget from '$lib/components/widgets/ProjectWidget.svelte'
 	import RemindersListWidget from '$lib/components/widgets/RemindersListWidget.svelte'
 	import ResourceActionMenu from '$lib/components/widgets/ResourceActionMenu.svelte'
+	import ResourceWidget from '$lib/components/widgets/ResourceWidget.svelte'
 	import type {
 		ResourceFilterMode,
 		ResourceItem,
@@ -21,6 +22,8 @@
 	} from '$lib/components/widgets/types'
 	import { resourceAccess } from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
+
+	type ResourceViewLayout = ResourceLayoutMode | 'pill'
 
 	type ResourceProjectOption = {
 		id: string
@@ -31,9 +34,10 @@
 	interface Props {
 		resources: ResourceItem[]
 		loading?: boolean
-		layout?: ResourceLayoutMode
+		layout?: ResourceViewLayout
+		listVariant?: 'default' | 'pill'
 		filter?: ResourceFilterMode
-		sort?: ResourceSortMode
+		sort?: ResourceSortMode | 'none'
 		pageSize?: number
 		emptyMessage?: string
 		emptyIcon?: typeof Grid
@@ -45,6 +49,8 @@
 		ownedEmptyMessage?: string
 		sharedEmptyMessage?: string
 		showOwnershipSections?: boolean
+		showScrollTopButton?: boolean
+		scrollTopButtonBottom?: string
 		onItemEdit?: (item: ResourceItem) => void
 		onItemShare?: (item: ResourceItem) => void
 		onItemDelete?: (item: ResourceItem) => Promise<boolean> | boolean | void
@@ -68,7 +74,8 @@
 	let {
 		resources,
 		loading = false,
-		layout = $bindable<ResourceLayoutMode>('grid'),
+		layout = $bindable<ResourceViewLayout>('grid'),
+		listVariant = 'default',
 		filter = 'all',
 		sort = 'updated_at:desc',
 		pageSize = 24,
@@ -81,6 +88,8 @@
 		ownedEmptyMessage = emptyMessage,
 		sharedEmptyMessage = 'nothing shared with you',
 		showOwnershipSections = true,
+		showScrollTopButton = true,
+		scrollTopButtonBottom = '1.5rem',
 		onItemEdit,
 		onItemShare,
 		onItemDelete,
@@ -111,6 +120,9 @@
 		| { kind: 'loading'; id: string }
 
 	const GRID_MIN_WIDTH = 340
+	const BIG_PHONE_GRID_MIN_WIDTH = 190
+	const BIG_PHONE_GRID_MIN_VIEWPORT = 420
+	const TABLET_GRID_MIN_VIEWPORT = 640
 	const GRID_GAP = 16
 	const PAGE_LOAD_MORE_THRESHOLD = 720
 
@@ -123,8 +135,7 @@
 	let virtualGridColumns = $state(1)
 	let lastAccessPrefetchKey = ''
 	let loadMoreInFlight: Promise<void> | null = null
-	const resourceGridClass =
-		'grid grid-cols-[repeat(auto-fill,minmax(min(100%,21.25rem),1fr))] gap-4'
+	const resourceGridClass = 'resource-grid grid gap-4'
 	const virtualGridRowStyle = $derived(
 		`grid-template-columns: repeat(${virtualGridColumns}, minmax(0, 1fr));`
 	)
@@ -146,6 +157,7 @@
 
 	// sort resources
 	const sorted = $derived.by(() => {
+		if (sort === 'none') return [...filtered]
 		const [sortBy, sortDir] = sort.split(':') as [string, string]
 		const items = [...filtered]
 		items.sort((a, b) => {
@@ -164,6 +176,10 @@
 
 	// paginate (only used when onLoadMore is NOT provided - client-side mode)
 	const useInfiniteScroll = $derived(!!onLoadMore)
+	const effectiveLayout = $derived<ResourceViewLayout>(
+		layout === 'list' && listVariant === 'pill' ? 'pill' : layout
+	)
+	const concreteLayout = $derived<ResourceLayoutMode>(layout === 'grid' ? 'grid' : 'list')
 	const totalPages = $derived(Math.max(1, Math.ceil(sorted.length / pageSize)))
 	const paginated = $derived(
 		useInfiniteScroll
@@ -179,6 +195,9 @@
 	const showSharedSections = $derived(Boolean(currentUserId && showOwnershipSections))
 	const displayedOwnedSectionCount = $derived(ownedSectionCount ?? ownedResources.length)
 	const displayedSharedSectionCount = $derived(sharedSectionCount ?? sharedResources.length)
+	const effectiveSharedSectionOpen = $derived(
+		displayedSharedSectionCount > 0 ? sharedSectionOpen : false
+	)
 	const hasGenericActions = $derived(
 		Boolean(
 			onItemEdit ||
@@ -206,10 +225,13 @@
 		const updateColumns = () => {
 			const width = el.getBoundingClientRect().width
 			if (!Number.isFinite(width) || width <= 0) return
-			const nextColumns = Math.max(
-				1,
-				Math.floor((width + GRID_GAP) / (GRID_MIN_WIDTH + GRID_GAP))
-			)
+			const viewportWidth = window.visualViewport?.width ?? window.innerWidth
+			const minWidth =
+				viewportWidth >= BIG_PHONE_GRID_MIN_VIEWPORT &&
+				viewportWidth < TABLET_GRID_MIN_VIEWPORT
+					? BIG_PHONE_GRID_MIN_WIDTH
+					: GRID_MIN_WIDTH
+			const nextColumns = Math.max(1, Math.floor((width + GRID_GAP) / (minWidth + GRID_GAP)))
 			if (nextColumns !== virtualGridColumns) virtualGridColumns = nextColumns
 		}
 
@@ -287,16 +309,35 @@
 	}
 
 	function resolvePageScrollTarget(node: HTMLElement): HTMLElement | null {
+		const scrollContainer = findScrollContainer(node)
+		if (scrollContainer) return scrollContainer
 		const main = node.closest('[role="main"]')
 		if (main instanceof HTMLElement) return main
 		if (document.scrollingElement instanceof HTMLElement) return document.scrollingElement
 		return document.documentElement
 	}
 
+	function findScrollContainer(node: HTMLElement): HTMLElement | null {
+		let current: HTMLElement | null = node
+		while (current) {
+			const style = getComputedStyle(current)
+			const overflowY = style.overflowY
+			const canScroll =
+				overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay'
+			if (canScroll) return current
+			current = current.parentElement
+		}
+		return null
+	}
+
 	function maybeLoadMoreFromPage(target: HTMLElement): void {
 		if (!useInfiniteScroll || !hasMore || loadingMore || loadMoreInFlight) return
 		const remaining = target.scrollHeight - target.scrollTop - target.clientHeight
-		if (remaining > PAGE_LOAD_MORE_THRESHOLD) return
+		const threshold = Math.min(
+			PAGE_LOAD_MORE_THRESHOLD,
+			Math.max(160, target.clientHeight * 0.75)
+		)
+		if (remaining > threshold) return
 
 		const result = requestLoadMoreResources()
 		if (!result) return
@@ -377,10 +418,10 @@
 				id: 'section:shared',
 				label: sharedSectionLabel,
 				count: displayedSharedSectionCount,
-				open: sharedSectionOpen,
+				open: effectiveSharedSectionOpen,
 				target: 'shared',
 			})
-			if (sharedSectionOpen) {
+			if (effectiveSharedSectionOpen) {
 				if (sharedResources.length > 0) rows.push(...chunkResourceRows(sharedResources))
 				else rows.push({ kind: 'empty', id: 'empty:shared', message: sharedEmptyMessage })
 			}
@@ -409,27 +450,92 @@
 {#snippet resourceCard(resource: ResourceItem)}
 	{@const displayResource = resourceWithSharing(resource)}
 	{#if resource.type === 'thread'}
-		<ChatWidget resource={displayResource} {layout} />
+		{#if effectiveLayout === 'pill'}
+			<ResourceWidget
+				resource={displayResource}
+				layout="pill"
+				onclick={onItemClick ? () => onItemClick(resource) : undefined}
+			/>
+		{:else}
+			<ChatWidget
+				resource={displayResource}
+				layout={concreteLayout}
+				onclick={onItemClick ? () => onItemClick(resource) : undefined}
+			/>
+		{/if}
 	{:else if resource.type === 'note'}
-		<NoteWidget resource={displayResource} {layout} />
+		{#if effectiveLayout === 'pill'}
+			<ResourceWidget
+				resource={displayResource}
+				layout="pill"
+				onclick={onItemClick ? () => onItemClick(resource) : undefined}
+			/>
+		{:else}
+			<NoteWidget
+				resource={displayResource}
+				layout={concreteLayout}
+				onclick={onItemClick ? () => onItemClick(resource) : undefined}
+			/>
+		{/if}
 	{:else if resource.type === 'reminder_list'}
-		<RemindersListWidget resource={displayResource} {layout} />
+		{#if effectiveLayout === 'pill'}
+			<ResourceWidget
+				resource={displayResource}
+				layout="pill"
+				onclick={onItemClick ? () => onItemClick(resource) : undefined}
+			/>
+		{:else}
+			<RemindersListWidget
+				resource={displayResource}
+				layout={concreteLayout}
+				onclick={onItemClick ? () => onItemClick(resource) : undefined}
+			/>
+		{/if}
 	{:else if resource.type === 'project'}
-		<ProjectWidget
-			resource={displayResource}
-			{layout}
-			onEdit={onItemEdit ? () => onItemEdit(resource) : undefined}
-			onShare={onItemShare ? () => onItemShare(resource) : undefined}
-			onDelete={onItemDelete ? () => onItemDelete(resource) : undefined}
-		/>
+		{#if effectiveLayout === 'pill'}
+			<ResourceWidget
+				resource={displayResource}
+				layout="pill"
+				onclick={onItemClick ? () => onItemClick(resource) : undefined}
+			/>
+		{:else}
+			<ProjectWidget
+				resource={displayResource}
+				layout={concreteLayout}
+				onEdit={onItemEdit ? () => onItemEdit(resource) : undefined}
+				onShare={onItemShare ? () => onItemShare(resource) : undefined}
+				onDelete={onItemDelete ? () => onItemDelete(resource) : undefined}
+				onclick={onItemClick ? () => onItemClick(resource) : undefined}
+			/>
+		{/if}
 	{:else if resource.type === 'file'}
-		<FileWidget
-			resource={displayResource}
-			{layout}
-			onclick={onItemClick ? () => onItemClick(resource) : undefined}
-		/>
+		{#if effectiveLayout === 'pill'}
+			<ResourceWidget
+				resource={displayResource}
+				layout="pill"
+				onclick={onItemClick ? () => onItemClick(resource) : undefined}
+			/>
+		{:else}
+			<FileWidget
+				resource={displayResource}
+				layout={concreteLayout}
+				onclick={onItemClick ? () => onItemClick(resource) : undefined}
+			/>
+		{/if}
 	{:else if resource.type === 'calendar'}
-		<CalendarWidget resource={displayResource} {layout} />
+		{#if effectiveLayout === 'pill'}
+			<ResourceWidget
+				resource={displayResource}
+				layout="pill"
+				onclick={onItemClick ? () => onItemClick(resource) : undefined}
+			/>
+		{:else}
+			<CalendarWidget
+				resource={displayResource}
+				layout={concreteLayout}
+				onclick={onItemClick ? () => onItemClick(resource) : undefined}
+			/>
+		{/if}
 	{/if}
 {/snippet}
 
@@ -440,7 +546,7 @@
 		{#if hasGenericActions && resource.type !== 'project'}
 			<ResourceActionMenu
 				resource={displayResource}
-				{layout}
+				layout={concreteLayout}
 				{projectOptions}
 				selectedProjectIds={selectedProjectIds(resource)}
 				onProperties={onItemEdit ? () => onItemEdit(resource) : undefined}
@@ -529,10 +635,12 @@
 		<div class={layout === 'grid' ? resourceGridClass : 'flex flex-col gap-2'}>
 			{#each [0, 1, 2, 3, 4, 5] as i (i)}
 				<div
-					class="liquid-glass liquid-glass--frosted animate-pulse overflow-hidden rounded-2xl {layout ===
+					class="liquid-glass liquid-glass--frosted animate-pulse overflow-hidden {layout ===
 					'grid'
-						? 'h-80'
-						: 'h-16'}"
+						? 'h-80 rounded-2xl'
+						: effectiveLayout === 'pill'
+							? 'rounded-pill h-12'
+							: 'h-16 rounded-2xl'}"
 				></div>
 			{/each}
 		</div>
@@ -550,11 +658,13 @@
 		</div>
 	{/if}
 
-	<FloatingScrollTopButton
-		target={pageScrollTarget}
-		class="pointer-events-none fixed bottom-6 z-20 flex justify-center"
-		style="left: var(--island-left, 0px); right: 0;"
-	/>
+	{#if showScrollTopButton}
+		<FloatingScrollTopButton
+			target={pageScrollTarget}
+			class="pointer-events-none fixed z-20 flex justify-center"
+			style="left: var(--island-left, 0px); right: 0; bottom: {scrollTopButtonBottom};"
+		/>
+	{/if}
 
 	{#if !useInfiniteScroll && showPagination && totalPages > 1}
 		<div class="flex items-center justify-center gap-3 pt-2">
@@ -580,3 +690,15 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.resource-grid {
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 21.25rem), 1fr));
+	}
+
+	@media (min-width: 420px) and (max-width: 639px) {
+		.resource-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+</style>

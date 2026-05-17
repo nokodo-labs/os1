@@ -33,6 +33,7 @@
 		onEdit?: () => void
 		onShare?: () => void
 		onDelete?: () => Promise<boolean> | boolean | void
+		onclick?: () => void
 	}
 
 	let {
@@ -42,6 +43,7 @@
 		onEdit,
 		onShare,
 		onDelete,
+		onclick,
 	}: Props = $props()
 
 	const countsLoaded = $derived(resource.meta?.counts_loaded === true)
@@ -128,6 +130,12 @@
 		menuOpen = !menuOpen
 	}
 
+	function handleClick(event: MouseEvent): void {
+		if (!onclick) return
+		event.preventDefault()
+		onclick()
+	}
+
 	function countForType(type: ResourceVisualType): number {
 		switch (type) {
 			case 'thread':
@@ -148,6 +156,7 @@
 
 <a
 	href={resolve(`/projects/${resource.id}`)}
+	onclick={handleClick}
 	class="group liquid-glass liquid-glass--frosted relative block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
 		? 'flex items-center gap-4 px-5 py-4'

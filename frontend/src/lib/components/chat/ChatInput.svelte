@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { SEARCH_RESOURCE_TYPES, type SearchResourceType } from '$lib/api/streaming'
 	import {
 		categorizeMediaType,
 		type PendingAttachment,
@@ -8,22 +9,32 @@
 	} from '$lib/chat/attachments'
 	import type { ThreadAttachment } from '$lib/chat/types'
 	import AddContext from '$lib/components/chat/AddContext.svelte'
+	import SearchSettingsPanel from '$lib/components/chat/SearchSettingsPanel.svelte'
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
+	import Funnel from '$lib/components/icons/Funnel.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
+	import Search from '$lib/components/icons/Search.svelte'
 	import Stop from '$lib/components/icons/Stop.svelte'
+	import XMark from '$lib/components/icons/XMark.svelte'
 	import type { ResourceItem } from '$lib/components/widgets/types'
 	import { device } from '$lib/stores/device.svelte'
 	import { files } from '$lib/stores/files.svelte'
+	import { settingsState } from '$lib/stores/settings.svelte'
 	import { tick } from 'svelte'
 
 	interface ChatInputProps {
 		value?: string
+		mode?: 'chat' | 'search'
 		placeholder?: string
 		disabled?: boolean
 		isGenerating?: boolean
+		clearOnSubmit?: boolean
 		focusToken?: number
 		threadAttachments?: ThreadAttachment[]
 		onSubmit?: (message: string, modifiers?: RunModifiers) => void
+		onClear?: () => void
+		searchTypes?: SearchResourceType[]
+		onSearchTypesChange?: (types: SearchResourceType[]) => void
 		onStop?: () => void
 		onKeyDown?: (event: KeyboardEvent) => boolean | void
 		onToggleAttachmentStatus?: (fileId: string, action: 'reveal' | 'reference') => void
@@ -32,12 +43,17 @@
 
 	let {
 		value = $bindable(''),
+		mode = 'chat',
 		placeholder = 'send a message',
 		disabled = false,
 		isGenerating = false,
+		clearOnSubmit = true,
 		focusToken,
 		threadAttachments = [],
 		onSubmit,
+		onClear,
+		searchTypes = SEARCH_RESOURCE_TYPES,
+		onSearchTypesChange,
 		onStop,
 		onKeyDown,
 		onToggleAttachmentStatus,
@@ -48,7 +64,12 @@
 	let formEl = $state<HTMLFormElement | null>(null)
 	let isComposing = $state(false)
 	let isAddContextOpen = $state(false)
+	let isSearchSettingsOpen = $state(false)
 	let isMultiLine = $state(false)
+	const isSearchMode = $derived(mode === 'search')
+	const chatInputMaxChars = $derived(settingsState.data?.limits?.max_chat_input_chars ?? null)
+	const activeSearchTypes = $derived(searchTypes.length > 0 ? searchTypes : SEARCH_RESOURCE_TYPES)
+	const isSearchFiltered = $derived(activeSearchTypes.length < SEARCH_RESOURCE_TYPES.length)
 
 	// attachment + modifier state
 	let webSearchEnabled = $state(false)
@@ -91,11 +112,12 @@
 
 	// track whether context is active for the badge indicator
 	const hasContextActive = $derived(
-		pendingAttachments.length > 0 ||
-			threadAttachments.length > 0 ||
-			webSearchEnabled ||
-			thinkLongerEnabled ||
-			generateImageEnabled
+		!isSearchMode &&
+			(pendingAttachments.length > 0 ||
+				threadAttachments.length > 0 ||
+				webSearchEnabled ||
+				thinkLongerEnabled ||
+				generateImageEnabled)
 	)
 
 	$effect(() => {
@@ -114,16 +136,43 @@
 	// trigger resize when value is changed externally (e.g. quote insertion)
 	$effect(() => {
 		void value
+		const maxChars = chatInputMaxChars
+		if (maxChars !== null && value.length > maxChars) {
+			value = value.slice(0, maxChars)
+		}
 		tick().then(resize)
 	})
+
+	function cappedInput(value: string): string {
+		const maxChars = chatInputMaxChars
+		return maxChars !== null && value.length > maxChars ? value.slice(0, maxChars) : value
+	}
 
 	function closeAddContext() {
 		isAddContextOpen = false
 	}
 
+	function closeSearchSettings() {
+		isSearchSettingsOpen = false
+	}
+
 	function toggleAddContext() {
+		if (isSearchMode) return
 		isAddContextOpen = !isAddContextOpen
 	}
+
+	function toggleSearchSettings() {
+		if (!isSearchMode) return
+		isSearchSettingsOpen = !isSearchSettingsOpen
+	}
+
+	$effect(() => {
+		if (isSearchMode) {
+			isAddContextOpen = false
+			return
+		}
+		isSearchSettingsOpen = false
+	})
 
 	async function handleFileUpload(files: FileList) {
 		isUploading = true
@@ -172,7 +221,17 @@
 		isMultiLine = textarea.scrollHeight > 32
 	}
 
-	function handleInput() {
+	function handleInput(event: Event) {
+		const target = event.currentTarget
+		const maxChars = chatInputMaxChars
+		if (
+			target instanceof HTMLTextAreaElement &&
+			maxChars !== null &&
+			target.value.length > maxChars
+		) {
+			value = target.value.slice(0, maxChars)
+			target.value = value
+		}
 		resize()
 	}
 
@@ -190,7 +249,15 @@
 
 	function handleSubmit() {
 		const hasAttachments = pendingAttachments.length > 0
-		if ((!value.trim() && !hasAttachments) || disabled || !onSubmit) return
+		const message = cappedInput(value)
+		if ((!message.trim() && (!hasAttachments || isSearchMode)) || disabled || !onSubmit) return
+
+		if (isSearchMode) {
+			onSubmit(message)
+			if (clearOnSubmit) value = ''
+			void tick().then(resize)
+			return
+		}
 
 		const modifiers: RunModifiers = {
 			webSearch: webSearchEnabled,
@@ -205,10 +272,10 @@
 			modifiers.generateImage ||
 			modifiers.attachments.length > 0
 
-		onSubmit(value, hasModifiers ? modifiers : undefined)
+		onSubmit(message, hasModifiers ? modifiers : undefined)
 
 		// reset state after send
-		value = ''
+		if (clearOnSubmit) value = ''
 		isMultiLine = false
 		revokePreviewUrls(pendingAttachments)
 		pendingAttachments = []
@@ -218,6 +285,20 @@
 		if (textarea) {
 			textarea.style.height = 'auto'
 		}
+	}
+
+	function handleClearSearch() {
+		if (!isSearchMode || disabled) return
+		value = ''
+		onClear?.()
+		void tick().then(() => {
+			resize()
+			textarea?.focus()
+		})
+	}
+
+	function handleSearchTypesChange(types: SearchResourceType[]): void {
+		onSearchTypesChange?.(types)
 	}
 
 	function handleCompositionStart() {
@@ -260,30 +341,53 @@
 					class:items-center={!isMultiLine}
 					class:items-end={isMultiLine}
 				>
-					<button
-						type="button"
-						aria-label="add context"
-						aria-haspopup="dialog"
-						aria-expanded={isAddContextOpen}
-						class="text-foreground/65 hover:text-foreground relative flex cursor-pointer items-center justify-center bg-transparent p-0 transition-colors duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-						{disabled}
-						onclick={toggleAddContext}
-					>
-						<Plus class="h-8 w-8" strokeWidth="2" />
-						{#if hasContextActive}
-							<span
-								class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full"
-								style="background-color: var(--accent-primary);"
-							></span>
-						{/if}
-					</button>
+					{#if isSearchMode}
+						<button
+							type="button"
+							aria-label="search filters"
+							aria-haspopup="dialog"
+							aria-expanded={isSearchSettingsOpen}
+							class="text-foreground/65 hover:text-foreground relative flex h-8 w-8 cursor-pointer items-center justify-center bg-transparent p-0 transition-colors duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+							{disabled}
+							onclick={toggleSearchSettings}
+						>
+							<Funnel class="h-5 w-5" strokeWidth="2" />
+							{#if isSearchFiltered}
+								<span
+									class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full"
+									style="background-color: var(--accent-primary);"
+								></span>
+							{/if}
+						</button>
+					{:else}
+						<button
+							type="button"
+							aria-label="add context"
+							aria-haspopup="dialog"
+							aria-expanded={isAddContextOpen}
+							class="text-foreground/65 hover:text-foreground relative flex cursor-pointer items-center justify-center bg-transparent p-0 transition-colors duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+							{disabled}
+							onclick={toggleAddContext}
+						>
+							<Plus class="h-8 w-8" strokeWidth="2" />
+							{#if hasContextActive}
+								<span
+									class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full"
+									style="background-color: var(--accent-primary);"
+								></span>
+							{/if}
+						</button>
+					{/if}
 				</div>
 
 				<div class="flex flex-1 items-center px-1">
 					<textarea
 						bind:this={textarea}
 						bind:value
-						placeholder={isGenerating ? 'enqueue a message' : placeholder}
+						maxlength={chatInputMaxChars ?? undefined}
+						placeholder={isGenerating && !isSearchMode
+							? 'enqueue a message'
+							: placeholder}
 						{disabled}
 						oninput={handleInput}
 						onkeydown={handleKeyDown}
@@ -309,43 +413,77 @@
 							<Stop class="h-5 w-5" />
 						</button>
 					{/if}
-					<button
-						type="submit"
-						aria-label={isGenerating ? 'enqueue message' : 'send message'}
-						title={isGenerating ? 'enqueue into the running agent' : undefined}
-						class="send-btn rounded-circle flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
-							(value.trim() === '' && pendingAttachments.length === 0) ||
-							disabled
-						)
-							? 'hover:brightness-110'
-							: 'bg-foreground/10 text-foreground/35'}"
-						disabled={(value.trim() === '' && pendingAttachments.length === 0) ||
-							disabled}
-					>
-						<ArrowUp class="h-5 w-5" strokeWidth="2" />
-					</button>
+					{#if isSearchMode}
+						{#if value.length > 0}
+							<button
+								type="button"
+								aria-label="clear search"
+								class="rounded-circle bg-foreground/15 text-foreground hover:bg-foreground/25 flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+								{disabled}
+								onclick={handleClearSearch}
+							>
+								<XMark class="h-5 w-5" />
+							</button>
+						{/if}
+						<button
+							type="submit"
+							aria-label="search"
+							class="send-btn rounded-circle flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {value.trim() &&
+							!disabled
+								? 'hover:brightness-110'
+								: 'bg-foreground/10 text-foreground/35'}"
+							disabled={!value.trim() || disabled}
+						>
+							<Search class="h-4.5 w-4.5" strokeWidth="2" />
+						</button>
+					{:else}
+						<button
+							type="submit"
+							aria-label={isGenerating ? 'enqueue message' : 'send message'}
+							title={isGenerating ? 'enqueue into the running agent' : undefined}
+							class="send-btn rounded-circle flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
+								(value.trim() === '' && pendingAttachments.length === 0) ||
+								disabled
+							)
+								? 'hover:brightness-110'
+								: 'bg-foreground/10 text-foreground/35'}"
+							disabled={(value.trim() === '' && pendingAttachments.length === 0) ||
+								disabled}
+						>
+							<ArrowUp class="h-5 w-5" strokeWidth="2" />
+						</button>
+					{/if}
 				</div>
 			</div>
 		</div>
 	</div>
 </form>
 
-<AddContext
-	open={isAddContextOpen}
-	onClose={closeAddContext}
-	{activeAttachments}
-	{isUploading}
-	{webSearchEnabled}
-	{thinkLongerEnabled}
-	{generateImageEnabled}
-	onFileUpload={handleFileUpload}
-	onAttachResource={handleAttachResource}
-	onToggleWebSearch={() => (webSearchEnabled = !webSearchEnabled)}
-	onToggleThinkLonger={() => (thinkLongerEnabled = !thinkLongerEnabled)}
-	onToggleGenerateImage={() => (generateImageEnabled = !generateImageEnabled)}
-	onToggleAttachmentStatus={(id, action) => onToggleAttachmentStatus?.(id, action)}
-	onRemoveAttachment={removeAttachment}
-/>
+{#if isSearchMode}
+	<SearchSettingsPanel
+		open={isSearchSettingsOpen}
+		onClose={closeSearchSettings}
+		selectedTypes={activeSearchTypes}
+		onChange={handleSearchTypesChange}
+	/>
+{:else}
+	<AddContext
+		open={isAddContextOpen}
+		onClose={closeAddContext}
+		{activeAttachments}
+		{isUploading}
+		{webSearchEnabled}
+		{thinkLongerEnabled}
+		{generateImageEnabled}
+		onFileUpload={handleFileUpload}
+		onAttachResource={handleAttachResource}
+		onToggleWebSearch={() => (webSearchEnabled = !webSearchEnabled)}
+		onToggleThinkLonger={() => (thinkLongerEnabled = !thinkLongerEnabled)}
+		onToggleGenerateImage={() => (generateImageEnabled = !generateImageEnabled)}
+		onToggleAttachmentStatus={(id, action) => onToggleAttachmentStatus?.(id, action)}
+		onRemoveAttachment={removeAttachment}
+	/>
+{/if}
 
 <style>
 	.chat-input {

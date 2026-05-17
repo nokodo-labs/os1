@@ -108,15 +108,15 @@ export const background = {
 	// ── preference writes ──
 
 	setAutoBackground(enabled: boolean) {
-		void preferences.update('appearance', { autoBackground: enabled })
+		void preferences.updateWallpaper({ autoBackground: enabled })
 	},
 
 	setBackground(bg: BackgroundType) {
-		void preferences.update('appearance', { background: bg })
+		void preferences.updateWallpaper({ background: bg })
 	},
 
 	setStaticColor(color: string) {
-		void preferences.update('appearance', { staticColor: color })
+		void preferences.updateWallpaper({ staticColor: color })
 	},
 
 	// ── page override ──

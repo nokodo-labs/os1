@@ -23,8 +23,10 @@
 	let { panelClass, iconBoxClass, resourceType, title, url, currentLevel }: Props = $props()
 </script>
 
-<section class="{panelClass} flex min-w-0 items-center gap-4 p-5 max-[680px]:flex-wrap">
-	<div class={iconBoxClass}>
+<section
+	class="{panelClass} flex min-w-0 items-center gap-4 p-5 max-[680px]:flex-wrap max-[430px]:items-start max-[430px]:gap-3 max-[430px]:p-4"
+>
+	<div class="{iconBoxClass} max-[430px]:h-10 max-[430px]:w-10 max-[430px]:rounded-[13px]">
 		{#if resourceType === 'thread'}
 			<ChatBubble class="h-5 w-5" />
 		{:else if resourceType === 'note'}
@@ -43,7 +45,7 @@
 			<DocumentArrowDown class="h-5 w-5" />
 		{/if}
 	</div>
-	<div class="min-w-0 flex-1">
+	<div class="min-w-40 flex-1">
 		<p class="text-foreground/50 text-xs font-medium tracking-[0.12em] uppercase">
 			{resourceLabel(resourceType)}
 		</p>
@@ -56,7 +58,7 @@
 	</div>
 	{#if currentLevel}
 		<div
-			class="rounded-pill border border-[color-mix(in_oklch,var(--accent-primary)_25%,transparent)] bg-[color-mix(in_oklch,var(--accent-primary)_10%,transparent)] px-3 py-2 text-xs font-semibold text-(--accent-primary)"
+			class="rounded-pill shrink-0 border border-[color-mix(in_oklch,var(--accent-primary)_25%,transparent)] bg-[color-mix(in_oklch,var(--accent-primary)_10%,transparent)] px-3 py-2 text-xs font-semibold text-(--accent-primary) max-[430px]:w-full max-[430px]:text-center"
 		>
 			{levelLabel(currentLevel)}
 		</div>

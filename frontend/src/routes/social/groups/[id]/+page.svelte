@@ -27,6 +27,8 @@
 	let removingUserId = $state<string | null>(null)
 	let isPropertiesOpen = $state(false)
 	let isAddMemberOpen = $state(false)
+	let isGroupMenuOpen = $state(false)
+	let groupMenuButtonEl: HTMLButtonElement | null = $state(null)
 	let memberMenuUserId = $state<string | null>(null)
 	let memberMenuButtonEl: HTMLButtonElement | null = $state(null)
 	const currentUserId = $derived(session.currentUserId)
@@ -73,11 +75,22 @@
 
 	function shareGroup() {
 		if (!group) return
+		isGroupMenuOpen = false
 		modals.open('resource-access', {
 			resourceType: 'group',
 			resourceId: group.id,
 			title: group.name,
 		})
+	}
+
+	function openAddMember() {
+		isGroupMenuOpen = false
+		isAddMemberOpen = true
+	}
+
+	function openProperties() {
+		isGroupMenuOpen = false
+		isPropertiesOpen = true
 	}
 
 	async function removeMember(userId: string) {
@@ -96,6 +109,13 @@
 		event.stopPropagation()
 		memberMenuButtonEl = event.currentTarget as HTMLButtonElement
 		memberMenuUserId = memberMenuUserId === userId ? null : userId
+	}
+
+	function toggleGroupMenu(event: MouseEvent) {
+		event.preventDefault()
+		event.stopPropagation()
+		groupMenuButtonEl = event.currentTarget as HTMLButtonElement
+		isGroupMenuOpen = !isGroupMenuOpen
 	}
 
 	$effect(() => {
@@ -135,19 +155,24 @@
 		{:else}
 			<div class="mb-8 flex flex-col gap-5 py-2">
 				<div
-					class="liquid-glass liquid-glass--frosted flex items-start gap-4 rounded-[22px] p-4"
+					class="liquid-glass liquid-glass--frosted flex flex-wrap items-start gap-4 rounded-[22px] p-4 max-[430px]:gap-3"
 				>
 					<div
-						class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-(--accent-primary)/15"
+						class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-(--accent-primary)/15 max-[430px]:h-11 max-[430px]:w-11"
 					>
-						<UserGroup class="h-7 w-7 text-(--accent-primary)" variant="solid" />
+						<UserGroup
+							class="h-7 w-7 text-(--accent-primary) max-[430px]:h-5.5 max-[430px]:w-5.5"
+							variant="solid"
+						/>
 					</div>
-					<div class="flex min-w-0 flex-1 flex-col gap-1">
+					<div class="flex min-w-40 flex-1 flex-col gap-1">
 						<h1 class="text-foreground truncate text-xl font-bold">{group.name}</h1>
 						{#if group.description}
 							<p class="text-foreground/60 text-sm">{group.description}</p>
 						{/if}
-						<div class="text-foreground/45 mt-1 flex items-center gap-2 text-xs">
+						<div
+							class="text-foreground/45 mt-1 flex flex-wrap items-center gap-2 text-xs"
+						>
 							<span>{group.memberships?.length ?? 0} members</span>
 							<span class="text-foreground/20">-</span>
 							<span>
@@ -158,7 +183,9 @@
 							</span>
 						</div>
 					</div>
-					<div class="flex shrink-0 items-center gap-1">
+					<div
+						class="ml-auto flex shrink-0 items-center gap-1 max-[430px]:basis-full max-[430px]:justify-end"
+					>
 						<button
 							type="button"
 							class="rounded-pill hover:bg-foreground/8 text-foreground/60 flex size-10 cursor-pointer items-center justify-center border-none bg-transparent transition-colors"
@@ -171,7 +198,7 @@
 							<button
 								type="button"
 								class="rounded-pill hover:bg-foreground/8 text-foreground/60 flex size-10 cursor-pointer items-center justify-center border-none bg-transparent transition-colors"
-								onclick={() => (isAddMemberOpen = true)}
+								onclick={openAddMember}
 								aria-label="add member"
 							>
 								<Plus class="size-4" />
@@ -179,12 +206,41 @@
 							<button
 								type="button"
 								class="rounded-pill hover:bg-foreground/8 text-foreground/60 flex size-10 cursor-pointer items-center justify-center border-none bg-transparent transition-colors"
-								onclick={() => (isPropertiesOpen = true)}
+								onclick={openProperties}
 								aria-label="group properties"
 							>
 								<Pencil class="size-4" />
 							</button>
 						{/if}
+						<button
+							bind:this={groupMenuButtonEl}
+							type="button"
+							class="rounded-pill hover:bg-foreground/8 text-foreground/60 flex size-10 cursor-pointer items-center justify-center border-none bg-transparent transition-colors"
+							onclick={toggleGroupMenu}
+							aria-label="group options"
+						>
+							<EllipsisHorizontal class="size-4" />
+						</button>
+						<PopupMenu
+							open={isGroupMenuOpen}
+							anchorEl={groupMenuButtonEl}
+							onClose={() => (isGroupMenuOpen = false)}
+						>
+							<MenuItem onclick={shareGroup}>
+								{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
+								share
+							</MenuItem>
+							{#if canManageGroup}
+								<MenuItem onclick={openAddMember}>
+									{#snippet icon()}<Plus class="h-4 w-4" />{/snippet}
+									add people
+								</MenuItem>
+								<MenuItem onclick={openProperties}>
+									{#snippet icon()}<Pencil class="h-4 w-4" />{/snippet}
+									properties
+								</MenuItem>
+							{/if}
+						</PopupMenu>
 					</div>
 				</div>
 			</div>

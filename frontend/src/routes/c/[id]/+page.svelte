@@ -14,6 +14,7 @@
 		getBlockFirstAssistant,
 		getBlockResponseItems,
 		getMessageCreatedAt,
+		getUserRunItemTimestamp,
 		groupResponseItems,
 		hasAttachmentParts,
 		pendingAttachmentsToFileParts,
@@ -38,13 +39,14 @@
 	import TypingIndicator from '$lib/components/chat/TypingIndicator.svelte'
 	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
-	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
+	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import GarbageBin from '$lib/components/icons/GarbageBin.svelte'
 	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { accentStore } from '$lib/stores/accent.svelte'
 	import { agents } from '$lib/stores/agents.svelte'
@@ -77,6 +79,7 @@
 
 	// system chrome for agent selector
 	const chrome = useSystemChrome()
+	const sidebar = useSidebar() as { selectChat?: (id: string | null) => void } | null
 
 	// set accent color for auto accent colors feature
 	$effect(() => {
@@ -438,6 +441,12 @@
 		// local streaming and cross-session incoming messages
 		if (chat.autoScroll) void chat.queueScrollToBottom('auto')
 	})
+
+	function handleNewChat() {
+		sidebar?.selectChat?.(null)
+		window.dispatchEvent(new CustomEvent('focus:chat-input'))
+		void goto(resolve('/?chat=new' as unknown as '/'), { keepFocus: true, noScroll: true })
+	}
 </script>
 
 {#snippet islandContextActions()}
@@ -446,6 +455,14 @@
 		onAgentChange={(agentId) => selectedAgent.set(agentId)}
 	/>
 	{#if device.isMobile}
+		<button
+			type="button"
+			class="flex cursor-pointer items-center justify-center opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+			onclick={handleNewChat}
+			aria-label="new chat"
+		>
+			<ChatPlus />
+		</button>
 		<ChatSidebarToggleButton />
 	{/if}
 {/snippet}
@@ -557,6 +574,10 @@
 											? isFirst
 											: isLast}
 								{#if item.kind === 'user'}
+									{@const timestamp = getUserRunItemTimestamp(
+										item,
+										userItems[itemIndex - 1]
+									)}
 									{@const siblings =
 										chat.messageChildren.get(item.message.parent_id ?? null) ??
 										[]}
@@ -571,7 +592,7 @@
 									<UserChatMessage
 										content={contentPartsToText(item.message.content)}
 										contentParts={item.message.content}
-										timestamp={getMessageCreatedAt(item.message)}
+										{timestamp}
 										align={item.align}
 										siblingCount={siblings.length}
 										currentSiblingIndex={siblings.indexOf(item.message.id)}
@@ -607,6 +628,10 @@
 										{/snippet}
 									</UserChatMessage>
 								{:else if item.kind === 'optimistic_user'}
+									{@const timestamp = getUserRunItemTimestamp(
+										item,
+										userItems[itemIndex - 1]
+									)}
 									{@const oMedia = pendingAttachmentsToMediaParts(
 										item.attachments
 									)}
@@ -617,7 +642,7 @@
 										content={item.text}
 										optimisticMediaParts={oMedia}
 										optimisticFileParts={oFiles}
-										timestamp={item.timestamp}
+										{timestamp}
 										tailStyle={bubbleTailStyle}
 										{showTail}
 										sending
@@ -904,100 +929,6 @@
 		</div>
 	{/if}
 </div>
-
-{#if chat.confirmDeleteMessage}
-	<div
-		class="fixed inset-0 z-60 flex items-center justify-center bg-black/55 px-6"
-		role="button"
-		tabindex="0"
-		onclick={() => {
-			if (!chat.isDeletingMessage) {
-				chat.confirmDeleteMessage = null
-				chat.deleteMessageError = null
-			}
-		}}
-		onkeydown={(e) => {
-			if (chat.isDeletingMessage) return
-			if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
-				chat.confirmDeleteMessage = null
-				chat.deleteMessageError = null
-			}
-		}}
-	>
-		<div
-			class="liquid-glass rounded-container w-full max-w-sm px-6 py-5 shadow-[0_32px_64px_rgba(12,10,30,0.6)]"
-			role="dialog"
-			aria-modal="true"
-			tabindex="-1"
-			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.stopPropagation()}
-		>
-			<div class="relative z-10">
-				<div class="text-foreground/90 text-lg font-semibold">delete message?</div>
-				<div class="text-foreground/60 mt-2 text-sm">
-					{chat.confirmDeleteMessage.preview}
-				</div>
-				<div class="text-foreground/40 mt-2 text-xs">
-					this will also delete all replies and branches below this message.
-				</div>
-
-				{#if chat.deleteMessageError}
-					<div
-						class="border-foreground/10 bg-foreground/5 text-foreground/70 mt-3 rounded-2xl border px-3 py-2 text-sm"
-					>
-						{chat.deleteMessageError}
-					</div>
-				{/if}
-
-				<div class="mt-5 flex items-center justify-end gap-2">
-					<button
-						type="button"
-						class="border-foreground/10 text-foreground/80 hover:bg-foreground/5 cursor-pointer rounded-2xl border bg-transparent px-4 py-2 text-sm transition-colors duration-150 disabled:cursor-default"
-						disabled={chat.isDeletingMessage}
-						onclick={() => {
-							chat.confirmDeleteMessage = null
-							chat.deleteMessageError = null
-						}}
-					>
-						cancel
-					</button>
-					<button
-						type="button"
-						class="border-foreground/10 bg-foreground/10 text-foreground/90 hover:bg-foreground/15 cursor-pointer rounded-2xl border px-4 py-2 text-sm transition-colors duration-150 disabled:cursor-default disabled:opacity-60"
-						disabled={chat.isDeletingMessage}
-						onclick={() => {
-							void (async () => {
-								if (!chat.confirmDeleteMessage) return
-								chat.isDeletingMessage = true
-								chat.deleteMessageError = null
-								try {
-									const ok = await chat.deleteUserMessage(
-										chat.confirmDeleteMessage.id
-									)
-									if (!ok) {
-										chat.deleteMessageError = 'could not delete message'
-										return
-									}
-									chat.confirmDeleteMessage = null
-								} catch {
-									chat.deleteMessageError = 'could not delete message'
-								} finally {
-									chat.isDeletingMessage = false
-								}
-							})()
-						}}
-					>
-						{#if chat.isDeletingMessage}
-							<ShimmerText className="inline-block">deleting</ShimmerText>
-						{:else}
-							delete
-						{/if}
-					</button>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
 
 <CitationSourcesModal
 	open={sourcesModalCitations !== null}

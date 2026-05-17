@@ -2,6 +2,7 @@
 	import type { DocParticipant } from '$lib/collaboration'
 	import SharedEditor from '$lib/components/editor/SharedEditor.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
+	import EmptyState from '$lib/components/EmptyState.svelte'
 	import ArrowUturnLeft from '$lib/components/icons/ArrowUturnLeft.svelte'
 	import ArrowUturnRight from '$lib/components/icons/ArrowUturnRight.svelte'
 	import Bars3BottomLeft from '$lib/components/icons/Bars3BottomLeft.svelte'
@@ -439,13 +440,7 @@
 			<NokodoLoader className="opacity-70" expanded={false} />
 		</div>
 	{:else}
-		<div class="mx-auto mt-10 max-w-3xl">
-			<div
-				class="rounded-container liquid-glass liquid-glass--frosted border-foreground/10 text-foreground/70 border p-5 text-sm"
-			>
-				note not found
-			</div>
-		</div>
+		<EmptyState label="note not found" class="flex-1" />
 	{/if}
 {:else}
 	<div class="flex w-full flex-1 flex-col" id="note-editor">

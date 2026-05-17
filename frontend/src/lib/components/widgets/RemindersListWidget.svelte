@@ -11,9 +11,10 @@
 		resource: ResourceItem
 		layout?: 'grid' | 'list'
 		class?: string
+		onclick?: () => void
 	}
 
-	let { resource, layout = 'grid', class: className = '' }: Props = $props()
+	let { resource, layout = 'grid', class: className = '', onclick }: Props = $props()
 
 	const totalCount = $derived((resource.meta?.total_count as number) ?? 0)
 	const pendingCount = $derived((resource.meta?.pending_count as number) ?? 0)
@@ -36,10 +37,17 @@
 			: 'no reminders yet'
 	)
 	const progress = $derived(totalCount > 0 ? (completedCount / totalCount) * 100 : 0)
+
+	function handleClick(event: MouseEvent): void {
+		if (!onclick) return
+		event.preventDefault()
+		onclick()
+	}
 </script>
 
 <a
 	href={resolve(`/reminders/lists/${resource.id}`)}
+	onclick={handleClick}
 	class="group liquid-glass liquid-glass--frosted block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
 		? 'flex items-center gap-4 px-5 py-4'

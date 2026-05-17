@@ -62,11 +62,11 @@
 
 	<div
 		class="flex min-w-0 items-center justify-center overflow-hidden px-2 {showTopLabels
-			? 'translate-y-0 opacity-100'
-			: '-translate-y-0.5 opacity-0'}"
+			? 'opacity-100'
+			: 'opacity-0'}"
 		aria-hidden={!showTopLabels}
 	>
-		<NokodoBrandLogo class="h-7 w-auto -translate-y-1.25 object-contain" />
+		<NokodoBrandLogo class="h-7 w-auto object-contain" />
 	</div>
 
 	<!-- close button -->

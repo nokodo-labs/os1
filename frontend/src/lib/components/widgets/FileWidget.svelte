@@ -106,6 +106,9 @@
 		<h3 class="text-foreground mb-1.5 truncate text-xl font-semibold">
 			{resource.title || 'untitled file'}
 		</h3>
+		{#if fileSize > 0}
+			<p class="text-foreground/50 mb-3 truncate text-sm">{fileSizeLabel}</p>
+		{/if}
 		<div class="mt-auto flex min-w-0 items-center gap-2">
 			<div class="text-foreground/50 flex min-w-0 items-center gap-2 text-xs">
 				{#if authorMeta}
@@ -113,9 +116,6 @@
 						<User class="size-3.5 shrink-0" />
 						<span class="truncate">{authorMeta}</span>
 					</span>
-				{/if}
-				{#if fileSize > 0}
-					<span class="shrink-0">{fileSizeLabel}</span>
 				{/if}
 			</div>
 			<Timestamp
@@ -145,6 +145,9 @@
 				{resource.title || 'untitled file'}
 			</h3>
 			<div class="flex min-w-0 items-center gap-2">
+				{#if fileSize > 0}
+					<span class="text-foreground/50 shrink-0 text-sm">{fileSizeLabel}</span>
+				{/if}
 				<span class="text-foreground/60 min-w-0 truncate text-sm">
 					{fileType}
 				</span>

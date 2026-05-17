@@ -167,7 +167,9 @@
 
 	<div class="mt-4 flex flex-col gap-1">
 		{#if isLoading}
-			<div class="flex justify-center py-4"><NokodoLoader shimmer /></div>
+			<div class="flex min-h-40 items-center justify-center py-4">
+				<NokodoLoader shimmer />
+			</div>
 		{:else if rules.length === 0}
 			<EmptyState label="no one added yet - add people or groups above" compact />
 		{:else}

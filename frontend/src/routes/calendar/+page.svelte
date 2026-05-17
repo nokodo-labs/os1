@@ -801,16 +801,16 @@
 	{/if}
 
 	<header
-		class="liquid-glass liquid-glass--frosted border-foreground/14 flex min-h-17 shrink-0 items-center gap-4 rounded-[18px] border px-4 py-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.12)] max-[888px]:flex-col max-[888px]:items-stretch max-[888px]:gap-3 max-[888px]:p-3"
+		class="liquid-glass liquid-glass--frosted border-foreground/14 flex min-h-17 shrink-0 flex-wrap items-center gap-x-4 gap-y-3 rounded-[18px] border px-4 py-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.12)] max-[640px]:p-3"
 	>
-		<div class="min-w-0 flex-1">
+		<div class="calendar-header-title min-w-0">
 			<div class="text-foreground/45 text-xs font-medium tracking-[0.12em] uppercase">
 				{currentView.toLowerCase()}
 			</div>
 			<h2 class="text-foreground min-w-0 truncate text-xl font-semibold">{rangeTitle}</h2>
 		</div>
 
-		<div class="flex min-w-0 items-center gap-2 max-[888px]:flex-wrap">
+		<div class="ml-auto flex max-w-full shrink-0 items-center justify-end gap-2">
 			<div
 				class="border-foreground/10 bg-foreground/6 flex max-w-full items-center overflow-x-auto rounded-full border p-0.5"
 				role="tablist"
@@ -823,7 +823,7 @@
 						aria-selected={currentView === option.value}
 						class="rounded-pill flex min-h-8 cursor-pointer items-center border-none bg-transparent px-3 text-[0.78rem] font-semibold transition-all duration-150 active:scale-[0.97] {currentView ===
 						option.value
-							? 'text-foreground bg-[color-mix(in_oklch,var(--accent-primary)_28%,transparent)] shadow-[inset_0_1px_0_rgb(255_255_255/0.16)]'
+							? 'bg-(--accent-primary) text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.18)]'
 							: 'text-foreground/75 hover:bg-foreground/6 hover:text-foreground'}"
 						onclick={() => changeView(option.value)}
 					>
@@ -835,7 +835,7 @@
 	</header>
 
 	<div
-		class="nokodo-calendar liquid-glass liquid-glass--frosted border-foreground/16 isolate min-h-0 flex-1 overflow-hidden rounded-(--calendar-radius) border shadow-[0_22px_64px_rgb(0_0_0/0.28),inset_0_1px_0_rgb(255_255_255/0.14)] [--calendar-radius:clamp(16px,1.8vw,24px)] [clip-path:inset(0_round_var(--calendar-radius))] max-[888px]:[--calendar-radius:18px]"
+		class="nokodo-calendar liquid-glass liquid-glass--frosted border-foreground/16 isolate flex min-h-0 flex-1 overflow-hidden rounded-(--calendar-radius) border shadow-[0_22px_64px_rgb(0_0_0/0.28),inset_0_1px_0_rgb(255_255_255/0.14)] [--calendar-radius:clamp(16px,1.8vw,24px)] [clip-path:inset(0_round_var(--calendar-radius))] max-[888px]:[--calendar-radius:18px]"
 	>
 		<DayFlowCalendar {calendar} />
 	</div>
@@ -852,6 +852,22 @@
 </div>
 
 <style>
+	.calendar-header-title {
+		flex: 1 1 auto;
+		width: max-content;
+		max-width: 100%;
+	}
+
+	.nokodo-calendar :global(.df-calendar-wrapper) {
+		display: flex;
+		flex: 1 1 auto;
+		min-height: 0;
+		min-width: 0;
+		height: 100%;
+		width: 100%;
+		max-width: 100%;
+	}
+
 	.nokodo-calendar :global(.df-calendar-container),
 	:global(.df-portal) {
 		--df-color-background: rgb(250 248 246 / 0.64);
@@ -867,8 +883,12 @@
 		--df-color-secondary: rgb(255 255 255 / 0.68);
 		--df-color-secondary-foreground: rgb(28 24 22);
 		--df-calendar-height: 100%;
+		flex: 1 1 auto;
 		height: 100%;
+		width: 100%;
+		max-width: 100%;
 		min-height: 0;
+		min-width: 0;
 		overflow: hidden;
 		background: color-mix(in oklch, var(--background) 58%, transparent);
 		border: 0;
@@ -901,18 +921,32 @@
 	.nokodo-calendar :global(.df-calendar-root),
 	.nokodo-calendar :global(.df-calendar-content-wrap),
 	.nokodo-calendar :global(.df-calendar-renderer),
-	.nokodo-calendar :global(.df-calendar-view-container),
-	.nokodo-calendar :global(.df-header),
-	.nokodo-calendar :global(.df-week-header-row),
-	.nokodo-calendar :global(.df-week-header),
+	.nokodo-calendar :global(.df-calendar-view-container) {
+		height: 100%;
+		min-height: 0;
+		background-color: transparent;
+		border-radius: inherit;
+		overflow: hidden;
+	}
+
 	.nokodo-calendar :global(.df-month-view),
 	.nokodo-calendar :global(.df-calendar),
 	.nokodo-calendar :global(.df-day-view),
 	.nokodo-calendar :global(.df-year-fixed),
 	.nokodo-calendar :global(.df-year-grid) {
+		height: 100%;
 		min-height: 0;
 		background-color: transparent;
 		border-radius: inherit;
+		overflow: hidden;
+	}
+
+	.nokodo-calendar :global(.df-week-header-row),
+	.nokodo-calendar :global(.df-week-header) {
+		flex: 0 0 auto;
+		min-height: 0;
+		background-color: transparent;
+		border-radius: 0;
 		overflow: hidden;
 	}
 
@@ -932,6 +966,30 @@
 	.nokodo-calendar :global(.df-month-segment-event) {
 		border-radius: 10px;
 		box-shadow: 0 8px 18px rgb(0 0 0 / 0.14);
+	}
+
+	.nokodo-calendar :global(.df-scroll-container),
+	.nokodo-calendar :global(.df-year-fixed-content),
+	.nokodo-calendar :global(.df-year-default-scroll),
+	.nokodo-calendar :global(.df-month-view-fade-scroller),
+	.nokodo-calendar :global(.df-month-view-virtual-scroller) {
+		min-height: 0;
+		overflow: auto;
+	}
+
+	.nokodo-calendar :global(.df-month-view-fade-scroller),
+	.nokodo-calendar :global(.df-month-view-virtual-scroller) {
+		position: relative;
+		flex: 1 1 auto;
+		height: 100%;
+	}
+
+	.nokodo-calendar :global(.df-month-view-fade-scroller) {
+		overflow: hidden;
+	}
+
+	.nokodo-calendar :global(.df-month-view-virtual-scroller) {
+		overflow: hidden auto;
 	}
 
 	.nokodo-calendar :global(.df-week-header-row .df-week-grid) {

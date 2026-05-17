@@ -34,7 +34,7 @@
 
 	let {
 		search,
-		searchPlaceholder = 'search...',
+		searchPlaceholder = 'search',
 		sortOptions,
 		sortIndex,
 		loading,
@@ -109,7 +109,7 @@
 	<!-- scrollable list container -->
 	<div bind:this={scrollerEl} class="max-h-[68dvh] min-h-40 overflow-y-auto" onscroll={onScroll}>
 		{#if loading}
-			<div class="flex items-center justify-center py-12">
+			<div class="flex min-h-40 items-center justify-center py-12">
 				<NokodoLoader className="opacity-70" expanded={false} />
 			</div>
 		{:else if isEmpty}

@@ -62,7 +62,7 @@
 	>
 		<div
 			class="relative h-full"
-			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: clamp(12px, 1vw, 32px);"
+			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); --master-detail-header-top: var(--chrome-island-top, clamp(12px, 4vw, 32px)); --master-detail-header-height: calc(var(--chrome-island-offset, 0px) - var(--master-detail-header-top));"
 		>
 			{@render master({ isMobile: false })}
 			<!-- separator (doesn't reach top/bottom) -->
@@ -80,7 +80,7 @@
 	style="padding-top: calc(var(--chrome-island-offset, 0px) + var(--spacing-island-content)); view-transition-name: master-detail-content;"
 >
 	<div
-		class="flex min-h-full flex-col pb-10"
+		class="flex h-full min-h-full min-w-0 flex-col pb-10"
 		style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 	>
 		{@render children()}

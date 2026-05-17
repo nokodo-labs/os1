@@ -11,9 +11,10 @@
 		resource: ResourceItem
 		layout?: 'grid' | 'list'
 		class?: string
+		onclick?: () => void
 	}
 
-	let { resource, layout = 'grid', class: className = '' }: Props = $props()
+	let { resource, layout = 'grid', class: className = '', onclick }: Props = $props()
 
 	const labels = $derived((resource.meta?.labels as string[]) ?? [])
 	const wordCount = $derived((resource.meta?.word_count as number) ?? 0)
@@ -33,10 +34,17 @@
 			.replace(/\n+/g, ' ')
 			.trim()
 	}
+
+	function handleClick(event: MouseEvent): void {
+		if (!onclick) return
+		event.preventDefault()
+		onclick()
+	}
 </script>
 
 <a
 	href={resolve(`/notes/${resource.id}`)}
+	onclick={handleClick}
 	class="group liquid-glass liquid-glass--frosted block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
 		? 'flex items-center gap-4 px-5 py-4'

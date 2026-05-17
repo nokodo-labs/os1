@@ -106,11 +106,11 @@
 
 	function handleSearchClick() {
 		sidebar.selectChat(null)
-		const isAlreadyHome = page.url.pathname === '/' && chatParam === null
-		if (isAlreadyHome && browser) {
-			window.dispatchEvent(new CustomEvent('focus:chat-input'))
+		const isAlreadySearch = page.url.pathname === '/' && page.url.searchParams.has('search')
+		if (isAlreadySearch && browser) {
+			window.dispatchEvent(new CustomEvent('focus:home-search'))
 		} else {
-			void goto(resolve('/'), { keepFocus: true, noScroll: true })
+			void goto(resolve('/?search' as unknown as '/'), { keepFocus: true, noScroll: true })
 		}
 		if (device.isMobile) sidebar.closeChatSidebar()
 	}

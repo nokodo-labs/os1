@@ -10,9 +10,10 @@
 		resource: ResourceItem
 		layout?: 'grid' | 'list'
 		class?: string
+		onclick?: () => void
 	}
 
-	let { resource, layout = 'grid', class: className = '' }: Props = $props()
+	let { resource, layout = 'grid', class: className = '', onclick }: Props = $props()
 
 	const tags = $derived((resource.meta?.tags as string[]) ?? [])
 	const isArchived = $derived((resource.meta?.is_archived as boolean) ?? false)
@@ -30,10 +31,17 @@
 				? tags.slice(0, 3).join(' · ')
 				: 'chat'
 	)
+
+	function handleClick(event: MouseEvent): void {
+		if (!onclick) return
+		event.preventDefault()
+		onclick()
+	}
 </script>
 
 <a
 	href={resolve(`/c/${resource.id}`)}
+	onclick={handleClick}
 	class="group liquid-glass liquid-glass--frosted block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
 		? 'flex items-center gap-4 px-5 py-4'

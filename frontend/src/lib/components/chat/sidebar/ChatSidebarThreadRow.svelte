@@ -105,7 +105,7 @@
 	<SidebarListItem
 		{selected}
 		radiusClass="rounded-container"
-		paddingClass="px-3 py-2"
+		paddingClass="py-2 pr-1.5 pl-2.5"
 		className="gap-2 text-foreground"
 		onPrefetch={() => onPrefetch(thread.id)}
 		onSelect={async () => {

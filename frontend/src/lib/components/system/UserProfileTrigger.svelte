@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { eventStreamClient } from '$lib/api/streaming'
 	import { PopupMenu } from '$lib/components/primitives'
-	import '$lib/styles/liquid-glass.css'
 	import { getUserInitials } from '$lib/utils'
 	import ConnectionIndicator from './ConnectionIndicator.svelte'
 	import UserProfilePanel from './UserProfilePanel.svelte'

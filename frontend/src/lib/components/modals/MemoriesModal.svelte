@@ -64,11 +64,10 @@
 	async function fetchMemoryTotal(): Promise<void> {
 		const userId = session.currentUser?.id
 		if (!userId) return
-		const { data } = await api.GET('/v1/users/{user_id}/counts', {
-			params: { path: { user_id: userId } },
+		const { data } = await api.GET('/v1/memories/count', {
+			params: { query: { owner_id: userId, search: search || undefined } },
 		})
-		const total = data?.memories
-		memoryTotal = typeof total === 'number' ? total : null
+		memoryTotal = typeof data === 'number' ? data : null
 	}
 
 	const currentSort = $derived(sortParsed[sortIndex])
@@ -89,7 +88,7 @@
 			const { data } = await api.GET('/v1/memories', {
 				params: {
 					query: {
-						user_id: userId,
+						owner_id: userId,
 						skip,
 						limit: PAGE_SIZE,
 						sort_by: currentSort.sort_by,
@@ -114,8 +113,9 @@
 	}
 
 	function reload(): void {
+		memoryTotal = null
 		void fetchMemories({ reset: true })
-		if (!search) void fetchMemoryTotal()
+		void fetchMemoryTotal()
 	}
 
 	const debouncedSearch = debounce(() => reload(), 400)
@@ -218,6 +218,9 @@
 
 	function footerCountLabel(): string {
 		const noun = memoryTotal === 1 ? 'memory' : 'memories'
+		if (search && memoryTotal !== null) {
+			return `${memories.length} of ${memoryTotal} matching ${noun} loaded`
+		}
 		if (search) return `${memories.length} loaded`
 		if (memoryTotal !== null) return `${memories.length} of ${memoryTotal} ${noun} loaded`
 		return `${memories.length} ${memories.length === 1 ? 'memory' : 'memories'} loaded`
@@ -233,7 +236,7 @@
 >
 	<ModalListLayout
 		{search}
-		searchPlaceholder="search memories..."
+		searchPlaceholder="search memories"
 		{sortOptions}
 		{sortIndex}
 		{loading}

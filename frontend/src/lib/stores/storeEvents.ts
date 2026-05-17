@@ -30,6 +30,7 @@ export const STORE_EVENT_TYPES = {
 		'friend.request_sent',
 		'friend.request_accepted',
 		'friend.request_declined',
+		'friend.request_cancelled',
 		'friend.removed',
 	],
 	groups: [
@@ -47,7 +48,7 @@ export const STORE_EVENT_TYPES = {
 		'notification.calendar_event_alert',
 	],
 	permissions: ['role.updated', 'role.deleted'],
-	preferences: ['user.preferences_updated'],
+	preferences: ['user.preferences_updated', 'user_client.preferences_updated'],
 	projects: ['project.created', 'project.updated', 'project.deleted'],
 	projectCounts: [
 		'thread.created',

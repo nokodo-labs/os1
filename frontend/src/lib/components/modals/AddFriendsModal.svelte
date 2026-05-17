@@ -24,23 +24,39 @@
 	let hasSearched = $state(false)
 	let results = $state<UserSearchResult[]>([])
 	let pendingIds = $state<Set<string>>(new Set())
+	let sentIds = $state<Set<string>>(new Set())
+	let lastSearchedQuery = $state('')
+	let searchRequestId = 0
 
-	async function handleSearch() {
-		const q = query.trim()
+	async function runSearch(q: string, force = false) {
 		if (!q) return
+		if (!force && q === lastSearchedQuery) return
+		lastSearchedQuery = q
+		const requestId = ++searchRequestId
 		isSearching = true
 		hasSearched = true
 		try {
-			results = await friends.searchUsers(q)
+			const found = await friends.searchUsers(q)
+			if (requestId === searchRequestId) results = found
 		} finally {
-			isSearching = false
+			if (requestId === searchRequestId) isSearching = false
 		}
+	}
+
+	async function handleSearch(force = false) {
+		const q = query.trim()
+		if (!q) return
+		await runSearch(q, force)
 	}
 
 	async function handleSendRequest(userId: string) {
 		pendingIds = new Set([...pendingIds, userId])
 		try {
-			await friends.sendRequest(userId)
+			const sent = await friends.sendRequest(userId)
+			if (sent) {
+				sentIds = new Set([...sentIds, userId])
+				void friends.refresh()
+			}
 		} finally {
 			pendingIds = new Set([...pendingIds].filter((id) => id !== userId))
 		}
@@ -63,7 +79,7 @@
 	function handleKeyDown(e: KeyboardEvent) {
 		if (e.key === 'Enter') {
 			e.preventDefault()
-			void handleSearch()
+			void handleSearch(true)
 		}
 	}
 
@@ -83,18 +99,40 @@
 			hasSearched = false
 			isSearching = false
 			pendingIds = new Set()
+			sentIds = new Set()
+			lastSearchedQuery = ''
+			searchRequestId += 1
 		}
+	})
+
+	$effect(() => {
+		if (!open) return
+		const q = query.trim()
+		if (!q) {
+			searchRequestId += 1
+			results = []
+			hasSearched = false
+			isSearching = false
+			lastSearchedQuery = ''
+			return
+		}
+
+		searchRequestId += 1
+		const timeoutId = window.setTimeout(() => {
+			void runSearch(q)
+		}, 250)
+		return () => window.clearTimeout(timeoutId)
 	})
 </script>
 
-<BaseModal {open} title="add friends" description="search by username or email" {onClose}>
+<BaseModal {open} title="add friends" description="search users" {onClose}>
 	<!-- search input -->
-	<div class="relative mb-4">
+	<div class="relative -mt-1 mb-4 pt-1">
 		<Search class="text-foreground/30 absolute top-1/2 left-3.5 h-4.5 w-4.5 -translate-y-1/2" />
 		<input
-			class="bg-foreground/8 text-foreground ring-foreground/10 placeholder:text-foreground/30 w-full rounded-xl py-3 pr-4 pl-10 text-sm ring-1 transition-all outline-none focus:ring-(--accent-primary)/50"
+			class="bg-foreground/8 text-foreground ring-foreground/10 placeholder:text-foreground/30 rounded-pill w-full py-3 pr-4 pl-10 text-sm ring-1 transition-all outline-none focus:ring-(--accent-primary)/50"
 			type="text"
-			placeholder="search by name or email..."
+			placeholder="search users"
 			bind:value={query}
 			onkeydown={handleKeyDown}
 		/>
@@ -119,10 +157,14 @@
 				{@const displayName = userLabel(user)}
 				{@const relationship = friends.getRelationship(user.id)}
 				<div
-					class="hover:bg-foreground/5 flex items-center gap-3 rounded-xl p-3 transition-all"
+					class="hover:bg-foreground/5 rounded-pill flex items-center gap-3 p-2.5 transition-all"
 				>
 					<!-- avatar (clickable to profile) -->
-					<button class="shrink-0" onclick={() => handleViewProfile(user)}>
+					<button
+						type="button"
+						class="shrink-0 cursor-pointer"
+						onclick={() => handleViewProfile(user)}
+					>
 						{#if user.avatar_url}
 							<img
 								src={user.avatar_url}
@@ -140,7 +182,8 @@
 
 					<!-- user info (clickable to profile) -->
 					<button
-						class="flex min-w-0 flex-1 flex-col text-left"
+						type="button"
+						class="flex min-w-0 flex-1 cursor-pointer flex-col text-left"
 						onclick={() => handleViewProfile(user)}
 					>
 						<span class="text-foreground truncate text-sm font-medium">
@@ -159,20 +202,26 @@
 							<Check class="h-3.5 w-3.5" />
 							friends
 						</span>
-					{:else if relationship?.kind === 'pending_outgoing'}
-						<span class="text-foreground/40 shrink-0 text-xs font-medium">
-							pending
+					{:else if relationship?.kind === 'pending_outgoing' || sentIds.has(user.id)}
+						<span
+							class="text-foreground/55 bg-foreground/8 rounded-pill flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
+						>
+							<Check class="h-3.5 w-3.5" />
+							request sent
 						</span>
 					{:else if relationship?.kind === 'pending_incoming'}
 						<button
-							class="shrink-0 rounded-lg bg-green-500/20 px-3 py-1.5 text-xs font-medium text-green-600 transition-all hover:bg-green-500/30 active:scale-[0.97] dark:text-green-400"
+							type="button"
+							class="rounded-pill flex shrink-0 cursor-pointer items-center gap-1.5 bg-green-500/20 px-3 py-1.5 text-xs font-semibold text-green-600 transition-all hover:bg-green-500/30 active:scale-[0.97] dark:text-green-400"
 							onclick={() => handleAcceptRequest(relationship.friendshipId, user.id)}
 						>
+							<Check class="h-3.5 w-3.5" />
 							accept
 						</button>
 					{:else}
 						<button
-							class="flex shrink-0 items-center gap-1.5 rounded-lg bg-(--accent-primary)/20 px-3 py-1.5 text-xs font-medium text-(--accent-primary) transition-all hover:bg-(--accent-primary)/30 active:scale-[0.97]"
+							type="button"
+							class="rounded-pill flex shrink-0 cursor-pointer items-center gap-1.5 bg-(--accent-primary)/20 px-3 py-1.5 text-xs font-semibold text-(--accent-primary) transition-all hover:bg-(--accent-primary)/30 active:scale-[0.97]"
 							onclick={() => handleSendRequest(user.id)}
 						>
 							<UserPlus class="h-3.5 w-3.5" />
@@ -192,7 +241,8 @@
 				</EmptyState>
 				<!-- invite button -->
 				<button
-					class="flex items-center gap-2 rounded-xl bg-(--accent-primary)/15 px-4 py-2.5 text-sm font-medium text-(--accent-primary) transition-all hover:bg-(--accent-primary)/25 active:scale-[0.97]"
+					type="button"
+					class="rounded-pill flex cursor-pointer items-center gap-2 bg-(--accent-primary)/15 px-4 py-2.5 text-sm font-semibold text-(--accent-primary) transition-all hover:bg-(--accent-primary)/25 active:scale-[0.97]"
 					onclick={() => {
 						// TODO: invite by email flow
 					}}

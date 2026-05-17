@@ -27,6 +27,7 @@ export interface WidgetProps {
 	resource: ResourceItem
 	layout?: ResourceLayoutMode
 	class?: string
+	onclick?: () => void
 }
 
 export interface ResourceItem {

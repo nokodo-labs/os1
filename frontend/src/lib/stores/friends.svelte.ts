@@ -190,6 +190,20 @@ class FriendsStore {
 		return data
 	}
 
+	async cancelRequest(friendshipId: string): Promise<boolean> {
+		const userId = getUserId()
+		if (!userId) return false
+
+		const { error } = await api.DELETE('/v1/users/{user_id}/friends/requests/{friendship_id}', {
+			params: { path: { user_id: userId, friendship_id: friendshipId } },
+		})
+		if (error) return false
+		this.outgoing = this.outgoing.filter((request) => request.id !== friendshipId)
+		this.invalidate()
+		void this.load({ force: true })
+		return true
+	}
+
 	async removeFriend(friendUserId: string): Promise<boolean> {
 		const userId = getUserId()
 		if (!userId) return false

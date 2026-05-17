@@ -182,7 +182,7 @@
 >
 	<ModalListLayout
 		{search}
-		searchPlaceholder="search archived chats..."
+		searchPlaceholder="search archived chats"
 		{sortOptions}
 		{sortIndex}
 		{loading}

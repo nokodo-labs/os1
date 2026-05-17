@@ -1,6 +1,4 @@
 <script lang="ts">
-	import '$lib/styles/liquid-glass.css'
-
 	type Option<T extends string> = {
 		value: T
 		label: string
@@ -36,7 +34,7 @@
 					{isSelected ? 'border-foreground' : 'border-foreground/40'}"
 			>
 				{#if isSelected}
-					<span class="bg-background h-2 w-2 rounded-full"></span>
+					<span class="bg-foreground h-2 w-2 rounded-full"></span>
 				{/if}
 			</span>
 			<span>{option.label}</span>

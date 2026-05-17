@@ -1,6 +1,5 @@
 <script lang="ts">
 	import Tooltip from '$lib/components/Tooltip.svelte'
-	import '$lib/styles/liquid-glass.css'
 
 	interface Props {
 		size?: 'sm' | 'md' | 'lg' | 'xl'

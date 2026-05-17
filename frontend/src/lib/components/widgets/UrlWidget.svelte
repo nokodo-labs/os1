@@ -7,9 +7,10 @@
 		resource: ResourceItem
 		layout?: 'grid' | 'list'
 		class?: string
+		onclick?: () => void
 	}
 
-	let { resource, layout = 'grid', class: className = '' }: Props = $props()
+	let { resource, layout = 'grid', class: className = '', onclick }: Props = $props()
 
 	const domain = $derived.by(() => {
 		try {
@@ -18,10 +19,17 @@
 			return resource.href
 		}
 	})
+
+	function handleClick(event: MouseEvent): void {
+		if (!onclick) return
+		event.preventDefault()
+		onclick()
+	}
 </script>
 
 <a
 	href={resource.href}
+	onclick={handleClick}
 	target="_blank"
 	rel="external noopener noreferrer"
 	class="group liquid-glass liquid-glass--frosted block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===

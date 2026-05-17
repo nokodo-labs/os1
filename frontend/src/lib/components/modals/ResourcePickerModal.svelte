@@ -1,18 +1,17 @@
 <script lang="ts">
 	import { resolve } from '$app/paths'
-	import { searchStream, type SearchResult } from '$lib/api/streaming/searchStream'
-	import EmptyState from '$lib/components/EmptyState.svelte'
+	import { searchStream, type SearchResultType } from '$lib/api/streaming/searchStream'
 	import Grid from '$lib/components/icons/Grid.svelte'
-	import ListBullet from '$lib/components/icons/ListBullet.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
-	import Timestamp from '$lib/components/Timestamp.svelte'
+	import ResourcesView from '$lib/components/ResourcesView.svelte'
 	import { type ResourceFilterMode, type ResourceItem } from '$lib/components/widgets/types'
 	import {
 		resourceAccentStyle,
 		resourceVisual,
 		type ResourceIconComponent,
 	} from '$lib/resources/resourceVisuals'
+	import { searchResultToResource } from '$lib/resources/searchResults'
 	import { calendars, type Calendar as CalendarRecord } from '$lib/stores/calendars.svelte'
 	import type { Thread } from '$lib/stores/chat.svelte'
 	import { chat } from '$lib/stores/chat.svelte'
@@ -21,8 +20,6 @@
 	import { projects, type Project } from '$lib/stores/projects.svelte'
 	import { reminders, type ReminderListWithCounts } from '$lib/stores/reminders.svelte'
 	import { session } from '$lib/stores/session.svelte'
-	import { byAuthor, metadataLine } from '$lib/utils/resourceAuthors'
-	import SvelteVirtualList from '@humanspeak/svelte-virtual-list'
 	import { SvelteSet } from 'svelte/reactivity'
 
 	interface Props {
@@ -45,8 +42,8 @@
 
 	let searchQuery = $state('')
 	let activeFilter = $state<ResourceFilterMode>('all')
-	let layout = $state<'grid' | 'list'>('list')
 	let loading = $state(false)
+	let loadingMore = $state(false)
 	let searchResults = $state<ResourceItem[]>([])
 	let localResults = $state<ResourceItem[]>([])
 	let searchDebounce: ReturnType<typeof setTimeout> | null = null
@@ -107,6 +104,19 @@
 			(option) =>
 				!option.resourceType || !allowedTypeSet || allowedTypeSet.has(option.resourceType)
 		)
+	)
+	const canLoadMoreLocal = $derived(
+		!loading &&
+			!searchQuery.trim() &&
+			((isAllowedType('thread') &&
+				(activeFilter === 'all' || activeFilter === 'threads') &&
+				chat.hasMoreThreads) ||
+				(isAllowedType('file') &&
+					(activeFilter === 'all' || activeFilter === 'files') &&
+					files.hasMore))
+	)
+	const isLoadingMoreLocal = $derived(
+		loadingMore || chat.isLoadingMoreThreads || files.loadingMore
 	)
 
 	function isAllowedType(type: ResourceItem['type']): boolean {
@@ -195,28 +205,6 @@
 		return resources
 	}
 
-	function searchResultToResource(result: SearchResult): ResourceItem {
-		const typeMap: Record<string, ResourceItem['type']> = {
-			thread: 'thread',
-			note: 'note',
-			reminder: 'reminder_list',
-		}
-		const hrefMap: Record<string, string> = {
-			thread: `/c/${result.id}`,
-			note: `/notes/${result.id}`,
-			reminder: `/reminders/lists/${result.id}`,
-		}
-		return {
-			id: result.id,
-			type: typeMap[result.type] ?? 'file',
-			title: result.title,
-			preview: result.preview ?? undefined,
-			href: resolve((hrefMap[result.type] ?? '#') as `/c/${string}`),
-			updatedAt: new Date(result.updated_at).getTime(),
-			createdAt: new Date(result.created_at).getTime(),
-		}
-	}
-
 	function buildLocalResults(): ResourceItem[] {
 		const items: ResourceItem[] = []
 		if (isAllowedType('thread') && (activeFilter === 'all' || activeFilter === 'threads')) {
@@ -284,7 +272,7 @@
 			return
 		}
 
-		const typeMap: Record<string, string[]> = {
+		const typeMap: Record<string, SearchResultType[]> = {
 			all: ['thread', 'note', 'reminder'],
 			threads: ['thread'],
 			notes: ['note'],
@@ -372,19 +360,6 @@
 		return typeof ownerId === 'string' && ownerId.length > 0 ? ownerId : null
 	}
 
-	function resourceAuthorMeta(resource: ResourceItem): string | null {
-		const ownerId = resourceOwnerId(resource)
-		if (!ownerId || ownerId === currentUserId) return null
-		return byAuthor(session.authorLabel(ownerId))
-	}
-
-	function resourceSecondary(resource: ResourceItem): string {
-		return metadataLine(
-			resourceAuthorMeta(resource),
-			resource.subtitle ?? resource.preview ?? null
-		)
-	}
-
 	function handleSelect(resource: ResourceItem) {
 		onSelect(resource)
 	}
@@ -395,6 +370,34 @@
 		await Promise.all([projects.load(), calendars.load()])
 		localResults = await buildLocalResultsWithFiles()
 		loading = false
+	}
+
+	async function loadMoreLocal() {
+		if (loadingMore || loading || searchQuery.trim()) return
+		const tasks: Promise<void>[] = []
+		if (
+			isAllowedType('thread') &&
+			(activeFilter === 'all' || activeFilter === 'threads') &&
+			chat.hasMoreThreads
+		) {
+			tasks.push(chat.loadMoreThreads())
+		}
+		if (
+			isAllowedType('file') &&
+			(activeFilter === 'all' || activeFilter === 'files') &&
+			files.hasMore
+		) {
+			tasks.push(files.loadMore())
+		}
+		if (tasks.length === 0) return
+
+		loadingMore = true
+		try {
+			await Promise.all(tasks)
+			localResults = await buildLocalResultsWithFiles()
+		} finally {
+			loadingMore = false
+		}
 	}
 
 	$effect(() => {
@@ -416,61 +419,7 @@
 			})()
 		}
 	})
-
-	function getTypeInfo(type: ResourceItem['type']): {
-		icon: ResourceIconComponent
-		label: string
-		style: string
-	} {
-		const visual = resourceVisual(type)
-		return {
-			icon: visual.icon,
-			label: visual.label,
-			style: resourceAccentStyle(type),
-		}
-	}
 </script>
-
-{#snippet listResourceItem(resource: ResourceItem)}
-	{@const typeInfo = getTypeInfo(resource.type)}
-	{@const secondary = resourceSecondary(resource)}
-	<button
-		type="button"
-		class="rounded-pill hover:bg-foreground/8 flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2.5 text-left transition-colors duration-150 active:scale-[0.99]"
-		onclick={() => handleSelect(resource)}
-	>
-		{#if files.hasThumbnail(resource.id)}
-			<img
-				src={files.getThumbnailUrl(resource.id)}
-				alt={resource.title}
-				class="size-8 shrink-0 rounded-lg object-cover"
-				draggable="false"
-			/>
-		{:else}
-			<div
-				class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_oklch,var(--resource-accent)_14%,transparent)] text-(--accent-primary)"
-				style={typeInfo.style}
-			>
-				<typeInfo.icon class="size-4" />
-			</div>
-		{/if}
-		<div class="min-w-0 flex-1">
-			<div class="text-foreground/90 truncate text-sm font-medium">
-				{resource.title}
-			</div>
-			{#if secondary}
-				<div class="text-foreground/50 truncate text-xs">
-					{secondary}
-				</div>
-			{/if}
-		</div>
-		<Timestamp
-			timestamp={new Date(resource.updatedAt)}
-			mode="relative"
-			className="shrink-0 text-xs text-foreground/35"
-		/>
-	</button>
-{/snippet}
 
 <BaseModal
 	{open}
@@ -479,7 +428,7 @@
 		abortController?.abort()
 		onClose()
 	}}
-	widthClassName="max-w-2xl"
+	widthClassName="max-w-5xl"
 >
 	<div class="flex flex-col gap-3">
 		<!-- search bar -->
@@ -496,7 +445,7 @@
 			/>
 		</div>
 
-		<!-- filter tabs + layout toggle -->
+		<!-- filter tabs -->
 		<div class="flex items-center gap-2">
 			<div class="scrollbar-none flex flex-1 gap-1 overflow-x-auto">
 				{#each filterOptions as opt (opt.value)}
@@ -525,111 +474,29 @@
 					</button>
 				{/each}
 			</div>
-			<div class="flex gap-0.5">
-				<button
-					type="button"
-					class="flex size-7 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent transition-colors {layout ===
-					'grid'
-						? 'text-foreground/80'
-						: 'text-foreground/30 hover:text-foreground/50'}"
-					onclick={() => (layout = 'grid')}
-					aria-label="grid view"
-				>
-					<Grid class="size-3.5" />
-				</button>
-				<button
-					type="button"
-					class="flex size-7 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent transition-colors {layout ===
-					'list'
-						? 'text-foreground/80'
-						: 'text-foreground/30 hover:text-foreground/50'}"
-					onclick={() => (layout = 'list')}
-					aria-label="list view"
-				>
-					<ListBullet class="size-3.5" />
-				</button>
-			</div>
 		</div>
 
 		<!-- results list -->
-		<div class="h-[min(24rem,55vh)] min-h-48">
-			{#if loading}
-				<div class="flex h-full items-center justify-center py-12">
-					<div
-						class="border-foreground/20 size-5 animate-spin rounded-full border-2 border-t-white/60"
-					></div>
-				</div>
-			{:else if displayResults.length === 0}
-				<EmptyState
-					label={searchQuery.trim()
-						? 'no matching resources found'
-						: 'no resources available'}
-					class="flex h-full items-center justify-center py-12"
-				/>
-			{:else if layout === 'list'}
-				<SvelteVirtualList
-					items={displayResults}
-					defaultEstimatedItemHeight={56}
-					bufferSize={12}
-					containerClass="relative h-full w-full overflow-hidden"
-					viewportClass="absolute inset-0 overflow-y-auto"
-					contentClass="relative min-h-full w-full"
-					itemsClass="absolute top-0 left-0 flex w-full flex-col gap-1"
-				>
-					{#snippet renderItem(resource)}
-						{@render listResourceItem(resource)}
-					{/snippet}
-				</SvelteVirtualList>
-			{:else}
-				<div class="h-full overflow-y-auto">
-					<div class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2">
-						{#each displayResults as resource (resource.id)}
-							{@const typeInfo = getTypeInfo(resource.type)}
-							{@const secondary = resourceSecondary(resource)}
-							<button
-								type="button"
-								class="border-foreground/8 bg-foreground/4 hover:bg-foreground/8 flex cursor-pointer flex-col gap-2 rounded-2xl border p-4 text-left transition-all duration-150 active:scale-[0.98]"
-								onclick={() => handleSelect(resource)}
-							>
-								<div class="flex items-center gap-2">
-									{#if files.hasThumbnail(resource.id)}
-										<img
-											src={files.getThumbnailUrl(resource.id)}
-											alt={resource.title}
-											class="size-8 shrink-0 rounded-lg object-cover"
-											draggable="false"
-										/>
-									{:else}
-										<div
-											class="flex size-8 items-center justify-center rounded-lg bg-[color-mix(in_oklch,var(--resource-accent)_14%,transparent)] text-(--accent-primary)"
-											style={typeInfo.style}
-										>
-											<typeInfo.icon class="size-4" />
-										</div>
-									{/if}
-									<span
-										class="text-[11px] font-semibold text-(--accent-primary)"
-										style={typeInfo.style}>{typeInfo.label}</span
-									>
-								</div>
-								<div class="text-foreground/90 truncate text-sm font-medium">
-									{resource.title}
-								</div>
-								{#if secondary}
-									<div class="text-foreground/50 line-clamp-2 text-xs">
-										{secondary}
-									</div>
-								{/if}
-								<Timestamp
-									timestamp={new Date(resource.updatedAt)}
-									mode="relative"
-									className="mt-auto text-[11px] text-foreground/35"
-								/>
-							</button>
-						{/each}
-					</div>
-				</div>
-			{/if}
+		<div class="h-[min(34rem,68dvh)] min-h-[min(18rem,52dvh)]">
+			<ResourcesView
+				resources={displayResults}
+				{loading}
+				layout="pill"
+				sort="none"
+				showLayoutToggle={false}
+				showPagination={false}
+				showOwnershipSections={false}
+				showScrollTopButton={false}
+				{currentUserId}
+				onLoadMore={loadMoreLocal}
+				hasMore={canLoadMoreLocal}
+				loadingMore={isLoadingMoreLocal}
+				emptyMessage={searchQuery.trim()
+					? 'no matching resources found'
+					: 'no resources available'}
+				onItemClick={handleSelect}
+				class="h-full overflow-y-auto pr-1"
+			/>
 		</div>
 	</div>
 </BaseModal>

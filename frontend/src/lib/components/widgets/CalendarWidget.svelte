@@ -12,9 +12,10 @@
 		resource: ResourceItem
 		layout?: 'grid' | 'list'
 		class?: string
+		onclick?: () => void
 	}
 
-	let { resource, layout = 'grid', class: className = '' }: Props = $props()
+	let { resource, layout = 'grid', class: className = '', onclick }: Props = $props()
 
 	const calendarVisual = resourceVisual('calendar')
 	const CalendarVisualIcon = calendarVisual.icon
@@ -29,10 +30,17 @@
 			: resourceAccentStyle('calendar')
 	)
 	const subtitle = $derived(metadataLine(authorMeta, timezone ?? resource.subtitle ?? 'calendar'))
+
+	function handleClick(event: MouseEvent): void {
+		if (!onclick) return
+		event.preventDefault()
+		onclick()
+	}
 </script>
 
 <a
 	href={resolve('/calendar')}
+	onclick={handleClick}
 	class="group liquid-glass liquid-glass--frosted block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
 		? 'flex items-center gap-4 px-5 py-4'

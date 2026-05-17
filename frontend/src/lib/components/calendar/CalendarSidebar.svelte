@@ -83,6 +83,9 @@
 	const sharedCalendars = $derived(
 		currentUserId ? calendarList.filter((calendar) => calendar.owner_id !== currentUserId) : []
 	)
+	const effectiveSharedCalendarsOpen = $derived(
+		sharedCalendars.length > 0 ? sharedCalendarsOpen : false
+	)
 	const manageableProjectOptions = $derived.by((): ResourceProjectOption[] =>
 		projects.list
 			.filter((project) =>
@@ -404,7 +407,7 @@
 {#snippet sectionHeader(label: string, count: number, open: boolean, onToggle: () => void)}
 	<button
 		type="button"
-		class="text-foreground/70 hover:text-foreground/90 flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-1 py-2 text-xs font-semibold tracking-wide uppercase transition-colors duration-150"
+		class="text-foreground/70 hover:text-foreground/90 flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-5 py-2 text-xs font-semibold tracking-wide uppercase transition-colors duration-150"
 		onclick={onToggle}
 		aria-expanded={open}
 	>
@@ -416,7 +419,7 @@
 
 {#snippet calendarsSection()}
 	<section class="space-y-2 pb-6">
-		<div class="flex items-center gap-2 px-2">
+		<div class="flex items-center gap-2 px-5">
 			<div class="text-foreground/45 text-xs font-medium tracking-[0.12em] uppercase">
 				calendars
 			</div>
@@ -493,12 +496,12 @@
 				{@render sectionHeader(
 					'shared with you',
 					sharedCalendars.length,
-					sharedCalendarsOpen,
+					effectiveSharedCalendarsOpen,
 					() => {
 						sharedCalendarsOpen = !sharedCalendarsOpen
 					}
 				)}
-				{#if sharedCalendarsOpen}
+				{#if effectiveSharedCalendarsOpen}
 					{#if sharedCalendars.length > 0}
 						<div class="space-y-1">
 							{#each sharedCalendars as calendar (calendar.id)}
@@ -521,8 +524,8 @@
 <div class="flex h-full min-h-0 flex-col">
 	<header
 		class="{isMobile
-			? 'mt-0'
-			: 'mt-7'} relative z-10 flex max-h-22 items-center justify-between gap-3 px-2 pt-5 pb-2"
+			? 'pt-5 pb-4'
+			: 'mt-(--master-detail-header-top) mb-(--spacing-island-content) h-(--master-detail-header-height) py-0'} relative z-10 flex shrink-0 items-center justify-between gap-3 px-2"
 	>
 		<PageTitle icon={Calendar} label="calendar" iconColor="text-(--accent-primary)" tag="h2" />
 		{#if isMobile && onClose}
@@ -560,7 +563,7 @@
 
 				<section class="space-y-2 pb-6">
 					<div
-						class="text-foreground/45 px-2 text-xs font-medium tracking-[0.12em] uppercase"
+						class="text-foreground/45 px-5 text-xs font-medium tracking-[0.12em] uppercase"
 					>
 						today
 					</div>
@@ -591,7 +594,7 @@
 
 				<section class="space-y-2 pb-6">
 					<div
-						class="text-foreground/45 px-2 text-xs font-medium tracking-[0.12em] uppercase"
+						class="text-foreground/45 px-5 text-xs font-medium tracking-[0.12em] uppercase"
 					>
 						upcoming
 					</div>

@@ -16,7 +16,7 @@
 	let error = $state<string | null>(null)
 
 	async function runDelete(): Promise<void> {
-		if (!payload) return
+		if (!payload || isDeleting) return
 		isDeleting = true
 		error = null
 		try {
@@ -66,7 +66,7 @@
 		<div class="flex items-center justify-end gap-2">
 			<button
 				type="button"
-				class="rounded-pill inline-flex items-center border border-red-500/25 bg-red-500/20 px-4 py-2 text-sm text-red-100 transition-colors duration-150 hover:bg-red-500/30 disabled:opacity-60"
+				class="rounded-pill inline-flex cursor-pointer items-center border border-red-500/25 bg-red-500/20 px-4 py-2 text-sm text-red-100 transition-colors duration-150 hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-60"
 				disabled={isDeleting}
 				onclick={() => void runDelete()}
 			>
