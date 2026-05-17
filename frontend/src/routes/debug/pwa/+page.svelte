@@ -123,6 +123,11 @@
 				store: <span class="text-foreground/60"
 					>{swUpdate.updateAvailable ? 'update available' : 'up to date'}</span
 				>
+				· checking: <span class="text-foreground/60">{swUpdate.checkingForUpdate}</span>
+				· applying: <span class="text-foreground/60">{swUpdate.applyingUpdate}</span>
+				{#if swUpdate.updateError}
+					· error: <span class="text-red-300/80">{swUpdate.updateError}</span>
+				{/if}
 			</div>
 		</div>
 

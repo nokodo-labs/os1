@@ -29,9 +29,11 @@ import { initDevice, requestGeolocation } from '$lib/stores/device.svelte'
 import { initInstallPrompt } from '$lib/stores/installPrompt.svelte'
 import { initNetwork } from '$lib/stores/network.svelte'
 import { preferences } from '$lib/stores/preferences.svelte'
+import { initPushNotifications } from '$lib/stores/pushNotifications.svelte'
 import { initServiceWorker } from '$lib/stores/serviceWorker.svelte'
 import { session } from '$lib/stores/session.svelte'
 import { loadSettings } from '$lib/stores/settings.svelte'
+import { initUserClient } from '$lib/stores/userClient.svelte'
 
 export interface InitResult {
 	authenticated: boolean
@@ -138,6 +140,8 @@ export async function initApp(options?: { skipAuthRestore?: boolean }): Promise<
 			// 6. event stream + preferences (needs user data from step 5)
 			eventStreamClient.connect()
 			preferences.startSync()
+			initUserClient()
+			initPushNotifications()
 
 			// 7. invalidate all caches when WS drops (missed events = stale data)
 			startCacheLifecycle()

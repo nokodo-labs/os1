@@ -102,12 +102,21 @@ class NotificationsStore {
 		}, 350)
 	}
 
-	#pushToast = (message: StreamMessage) => {
+	#eventNotificationPayload = (message: StreamMessage): Record<string, unknown> | null => {
 		const data = storeEventData(message)
-		const title = (data?.title as string) || message.type || 'notification'
-		const body = (data?.body as string) || ''
-		const iconUrl = (data?.icon_url as string) || null
-		const imageUrl = (data?.image_url as string) || null
+		const payload = data?.payload
+		if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+			return payload as Record<string, unknown>
+		}
+		return data
+	}
+
+	#pushToast = (message: StreamMessage) => {
+		const payload = this.#eventNotificationPayload(message)
+		const title = (payload?.title as string) || message.type || 'notification'
+		const body = (payload?.body as string) || ''
+		const iconUrl = (payload?.icon_url as string) || null
+		const imageUrl = (payload?.image_url as string) || null
 		const eventId = typeof message.id === 'string' ? message.id : null
 		if (!eventId) return
 
@@ -288,7 +297,7 @@ class NotificationsStore {
 				return
 			}
 
-			this.list = data ?? []
+			this.list = Array.isArray(data) ? data : []
 			this.#stale = false
 		} catch {
 			this.error = 'failed to load notifications'
