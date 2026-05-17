@@ -112,7 +112,6 @@ async def update(
 
 	versions_out = SettingsVersions.model_validate(new_versions)
 
-	# emit settings.updated event
 	event = Event(
 		scope=EventScope.SYSTEM,
 		type=EventType.SETTINGS_UPDATED,

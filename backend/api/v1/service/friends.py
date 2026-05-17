@@ -20,6 +20,7 @@ from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.friendship import Friendship, FriendshipEvent, FriendshipStatus
 from api.models.user import User
+from api.permissions import ActionPermission
 from api.schemas.friendship import FriendResponse, UserSearchResult
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
@@ -105,23 +106,56 @@ def _build_user_search_result(
 	)
 
 
+def _ensure_social_graph_read_access(
+	target_user_id: TypeID, principal: Principal
+) -> None:
+	"""ensure the principal can view the target user's social graph.
+
+	self: always allowed.
+	manage permission: allows cross-user read access (admin/moderator).
+	"""
+	if str(target_user_id) == principal.user_id:
+		return
+	if principal.has_permission(ActionPermission.USER_FRIENDSHIPS_MANAGE.value):
+		return
+	raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+
+
+def _ensure_social_graph_write_access(
+	subject_user_id: TypeID, principal: Principal
+) -> None:
+	"""ensure the principal can mutate the target user's social graph.
+
+	self: always allowed (still requires create permission for creation).
+	manage permission: allows cross-user writes (admin/moderator).
+	"""
+	if str(subject_user_id) == principal.user_id:
+		return
+	if principal.has_permission(ActionPermission.USER_FRIENDSHIPS_MANAGE.value):
+		return
+	raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+
+
 async def send_friend_request(
-	addressee_id: str,
+	requester_id: TypeID,
+	addressee_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Friendship:
 	"""send a friend request to another user."""
-	require_permission(principal, "friends:create")
-	requester_id = principal.user_id
+	require_permission(principal, ActionPermission.USER_FRIENDSHIPS_CREATE)
+	_ensure_social_graph_write_access(requester_id, principal)
+	actor_id = str(requester_id)
+	target_id = str(addressee_id)
 
-	if requester_id == addressee_id:
+	if actor_id == target_id:
 		raise HTTPException(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail="cannot send a friend request to yourself",
 		)
 
-	target = await session.get(User, addressee_id)
+	target = await session.get(User, target_id)
 	if not target:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,
@@ -129,13 +163,13 @@ async def send_friend_request(
 		)
 
 	# block check - prevent requests when either party has blocked the other
-	if await relationship_service.is_blocked(requester_id, addressee_id, session):
+	if await relationship_service.is_blocked(actor_id, target_id, session):
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="cannot send friend request",
 		)
 
-	existing = await _find_friendship(requester_id, addressee_id, session)
+	existing = await _find_friendship(actor_id, target_id, session)
 	if existing:
 		if existing.status == FriendshipStatus.ACCEPTED:
 			raise HTTPException(
@@ -144,7 +178,7 @@ async def send_friend_request(
 			)
 		if existing.status == FriendshipStatus.PENDING:
 			# if the OTHER person already requested us, auto-accept
-			if existing.requester_id == addressee_id:
+			if existing.requester_id == target_id:
 				return await _accept(existing, session, principal, origin_session_id)
 			raise HTTPException(
 				status_code=status.HTTP_409_CONFLICT,
@@ -164,8 +198,8 @@ async def send_friend_request(
 			FriendshipStatus.REMOVED,
 		):
 			existing.status = FriendshipStatus.PENDING
-			existing.requester_id = requester_id
-			existing.addressee_id = addressee_id
+			existing.requester_id = actor_id
+			existing.addressee_id = target_id
 			await session.flush()
 			await _record_event(existing, FriendshipStatus.PENDING, principal, session)
 			await _publish_request_event(
@@ -174,8 +208,8 @@ async def send_friend_request(
 			return existing
 
 	friendship = Friendship(
-		requester_id=requester_id,
-		addressee_id=addressee_id,
+		requester_id=actor_id,
+		addressee_id=target_id,
 		status=FriendshipStatus.PENDING,
 	)
 	session.add(friendship)
@@ -187,13 +221,16 @@ async def send_friend_request(
 
 async def accept_friend_request(
 	friendship_id: str,
+	subject_user_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Friendship:
 	"""accept an incoming friend request."""
+	_ensure_social_graph_write_access(subject_user_id, principal)
+	subject_id = str(subject_user_id)
 	friendship = await _get_friendship(friendship_id, session)
-	if friendship.addressee_id != principal.user_id:
+	if friendship.addressee_id != subject_id:
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="only the recipient can accept a friend request",
@@ -208,13 +245,16 @@ async def accept_friend_request(
 
 async def decline_friend_request(
 	friendship_id: str,
+	subject_user_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Friendship:
 	"""decline an incoming friend request."""
+	_ensure_social_graph_write_access(subject_user_id, principal)
+	subject_id = str(subject_user_id)
 	friendship = await _get_friendship(friendship_id, session)
-	if friendship.addressee_id != principal.user_id:
+	if friendship.addressee_id != subject_id:
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="only the recipient can decline a friend request",
@@ -243,8 +283,52 @@ async def decline_friend_request(
 	return friendship
 
 
+async def cancel_friend_request(
+	friendship_id: str,
+	subject_user_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+	origin_session_id: str | None = None,
+) -> None:
+	"""cancel an outgoing friend request."""
+	_ensure_social_graph_write_access(subject_user_id, principal)
+	subject_id = str(subject_user_id)
+	friendship = await _get_friendship(friendship_id, session)
+	if friendship.requester_id != subject_id:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="only the requester can cancel a friend request",
+		)
+	if friendship.status != FriendshipStatus.PENDING:
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail=f"request is {friendship.status}, not pending",
+		)
+	friendship.status = FriendshipStatus.REMOVED
+	await session.flush()
+	await _record_event(friendship, FriendshipStatus.REMOVED, principal, session)
+
+	for target_id in (friendship.requester_id, friendship.addressee_id):
+		event = Event(
+			scope=EventScope.USER,
+			scope_id=target_id,
+			type=EventType.FRIEND_REQUEST_CANCELLED,
+			data={
+				"friendship_id": str(friendship.id),
+				"requester_id": friendship.requester_id,
+				"addressee_id": friendship.addressee_id,
+				"cancelled_by": principal.user_id,
+			},
+			user_id=principal.user_id,
+		)
+		await event_service.persist_and_fanout_event(
+			session, event=event, origin_session_id=origin_session_id
+		)
+
+
 async def remove_friend(
-	friend_user_id: str,
+	subject_user_id: TypeID,
+	friend_user_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
 	origin_session_id: str | None = None,
@@ -254,7 +338,10 @@ async def remove_friend(
 	sets the friendship status to REMOVED rather than deleting the row so the
 	history (and FriendshipEvent log) is preserved.
 	"""
-	friendship = await _find_friendship(principal.user_id, friend_user_id, session)
+	_ensure_social_graph_write_access(subject_user_id, principal)
+	subject_id = str(subject_user_id)
+	friend_id = str(friend_user_id)
+	friendship = await _find_friendship(subject_id, friend_id, session)
 	if not friendship or friendship.status != FriendshipStatus.ACCEPTED:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,
@@ -262,7 +349,7 @@ async def remove_friend(
 		)
 	other_user_id = (
 		friendship.addressee_id
-		if friendship.requester_id == principal.user_id
+		if friendship.requester_id == subject_id
 		else friendship.requester_id
 	)
 	friendship.status = FriendshipStatus.REMOVED
@@ -286,6 +373,7 @@ async def remove_friend(
 async def list_friends(
 	session: AsyncSession,
 	principal: Principal,
+	target_user_id: TypeID,
 ) -> list[tuple[User, TypeID]]:
 	"""list all accepted friends of the current user.
 
@@ -293,7 +381,8 @@ async def list_friends(
 	requester_id / addressee_id. see the module docstring for the dual-row
 	upgrade path that would simplify this to a single equality condition.
 	"""
-	user_id = principal.user_id
+	_ensure_social_graph_read_access(target_user_id, principal)
+	user_id = str(target_user_id)
 	stmt = (
 		select(Friendship)
 		.where(
@@ -330,15 +419,21 @@ async def list_friends(
 async def list_incoming_requests(
 	session: AsyncSession,
 	principal: Principal,
+	target_user_id: TypeID,
 ) -> list[Friendship]:
 	"""list pending friend requests sent TO the current user."""
+	_ensure_social_graph_read_access(target_user_id, principal)
+	target_id = str(target_user_id)
 	stmt = (
 		select(Friendship)
 		.where(
-			Friendship.addressee_id == principal.user_id,
+			Friendship.addressee_id == target_id,
 			Friendship.status == FriendshipStatus.PENDING,
 		)
-		.options(selectinload(Friendship.requester))
+		.options(
+			selectinload(Friendship.requester),
+			selectinload(Friendship.addressee),
+		)
 		.order_by(Friendship.created_at.desc())
 	)
 	result = await session.execute(stmt)
@@ -348,15 +443,21 @@ async def list_incoming_requests(
 async def list_outgoing_requests(
 	session: AsyncSession,
 	principal: Principal,
+	target_user_id: TypeID,
 ) -> list[Friendship]:
 	"""list pending friend requests sent BY the current user."""
+	_ensure_social_graph_read_access(target_user_id, principal)
+	target_id = str(target_user_id)
 	stmt = (
 		select(Friendship)
 		.where(
-			Friendship.requester_id == principal.user_id,
+			Friendship.requester_id == target_id,
 			Friendship.status == FriendshipStatus.PENDING,
 		)
-		.options(selectinload(Friendship.addressee))
+		.options(
+			selectinload(Friendship.requester),
+			selectinload(Friendship.addressee),
+		)
 		.order_by(Friendship.created_at.desc())
 	)
 	result = await session.execute(stmt)
@@ -404,7 +505,15 @@ async def _get_friendship(
 	session: AsyncSession,
 ) -> Friendship:
 	"""load a friendship by id or raise 404."""
-	friendship = await session.get(Friendship, friendship_id)
+	result = await session.execute(
+		select(Friendship)
+		.where(Friendship.id == friendship_id)
+		.options(
+			selectinload(Friendship.requester),
+			selectinload(Friendship.addressee),
+		)
+	)
+	friendship = result.scalar_one_or_none()
 	if not friendship:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,
@@ -439,6 +548,7 @@ async def _accept(
 	friendship.status = FriendshipStatus.ACCEPTED
 	friendship.accepted_at = datetime.now(UTC)
 	await session.flush()
+	await session.refresh(friendship)
 	await _record_event(friendship, FriendshipStatus.ACCEPTED, principal, session)
 
 	for target_id in (friendship.requester_id, friendship.addressee_id):

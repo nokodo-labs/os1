@@ -35,11 +35,13 @@ from nokodo_ai.utils.typeid import TypeID
 
 def _apply_group_filters(stmt: Select, group_filters: GroupListFilters) -> Select:
 	"""apply group list/count filters."""
-	if group_filters.user_id is not None:
+	if group_filters.owner_id is not None:
+		stmt = stmt.where(Group.owner_id == group_filters.owner_id)
+	if group_filters.member_user_id is not None:
 		stmt = stmt.join(
 			GroupMembership,
 			GroupMembership.group_id == Group.id,
-		).where(GroupMembership.user_id == group_filters.user_id)
+		).where(GroupMembership.user_id == group_filters.member_user_id)
 	if group_filters.q and group_filters.q.strip():
 		pattern = contains_pattern(group_filters.q.strip())
 		stmt = stmt.where(
@@ -176,7 +178,7 @@ async def create_group(
 		event=event,
 		origin_session_id=origin_session_id,
 	)
-	return group
+	return await _load_group(TypeID(group_id), session)
 
 
 async def update_group(

@@ -10,16 +10,23 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
+from api.models.block import Block
+from api.models.calendar import Calendar
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.file import File
+from api.models.friendship import Friendship, FriendshipStatus
 from api.models.group import Group
 from api.models.many_to_many import user_role_association
 from api.models.memory import Memory
 from api.models.note import Note
+from api.models.notification import Notification
+from api.models.project import Project
 from api.models.reminder import Reminder, ReminderList
+from api.models.task import Task
 from api.models.thread import Thread
 from api.models.user import USER_TYPEID_PREFIX, User
+from api.models.user_client import UserClient
 from api.permissions import (
 	DEFAULT_ACCESS_RESOURCE_TYPES,
 	ActionPermission,
@@ -192,6 +199,12 @@ async def get_user_counts(
 		"groups": select(func.count())
 		.select_from(Group)
 		.where(Group.owner_id == user_id),
+		"projects": select(func.count())
+		.select_from(Project)
+		.where(Project.owner_id == user_id),
+		"calendars": select(func.count())
+		.select_from(Calendar)
+		.where(Calendar.owner_id == user_id),
 		"reminders": (
 			select(func.count())
 			.select_from(Reminder)
@@ -202,6 +215,37 @@ async def get_user_counts(
 			.select_from(ReminderList)
 			.where(ReminderList.owner_id == user_id)
 		),
+		"tasks": select(func.count()).select_from(Task).where(Task.user_id == user_id),
+		"notifications": select(func.count())
+		.select_from(Notification)
+		.where(Notification.user_id == user_id),
+		"clients": select(func.count())
+		.select_from(UserClient)
+		.where(UserClient.user_id == user_id),
+		"friends": select(func.count())
+		.select_from(Friendship)
+		.where(
+			Friendship.status == FriendshipStatus.ACCEPTED,
+			or_(
+				Friendship.requester_id == user_id,
+				Friendship.addressee_id == user_id,
+			),
+		),
+		"friend_requests_incoming": select(func.count())
+		.select_from(Friendship)
+		.where(
+			Friendship.status == FriendshipStatus.PENDING,
+			Friendship.addressee_id == user_id,
+		),
+		"friend_requests_outgoing": select(func.count())
+		.select_from(Friendship)
+		.where(
+			Friendship.status == FriendshipStatus.PENDING,
+			Friendship.requester_id == user_id,
+		),
+		"blocks": select(func.count())
+		.select_from(Block)
+		.where(Block.blocker_id == user_id),
 	}
 	counts: dict[str, int] = {}
 	for key, stmt in queries.items():
@@ -419,7 +463,6 @@ async def update_user(
 	if "preferences" in changed:
 		preferences = user_in.model_dump(
 			exclude_unset=True,
-			exclude_none=True,
 			mode="json",
 			by_alias=True,
 			include={"preferences"},

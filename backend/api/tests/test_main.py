@@ -126,6 +126,9 @@ async def test_public_settings_endpoint(client: AsyncClient) -> None:
 	assert "public_frontend_origin" in data["data"]["branding"]
 	assert "public_cdn_origin" in data["data"]["branding"]
 	assert "public_console_origin" in data["data"]["branding"]
+	assert data["data"]["media"]["favicon"]["url"] == (
+		"https://nokodo.net/static/os1/favicon.svg"
+	)
 	assert "assets" not in data["data"]
 	assert "cache" not in data["data"]
 	assert "tasks" not in data["data"]

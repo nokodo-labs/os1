@@ -86,6 +86,8 @@ def _api_test_env_defaults() -> Generator[None]:
 		ActionPermission.MEMORIES_CREATE,
 		ActionPermission.TASKS_CREATE,
 		ActionPermission.FILES_CREATE,
+		ActionPermission.USER_FRIENDSHIPS_CREATE,
+		ActionPermission.USER_BLOCKS_CREATE,
 	]
 	try:
 		yield
@@ -178,6 +180,8 @@ async def _api_test_seed_default_embedding_model(
 		ActionPermission.MEMORIES_CREATE,
 		ActionPermission.TASKS_CREATE,
 		ActionPermission.FILES_CREATE,
+		ActionPermission.USER_FRIENDSHIPS_CREATE,
+		ActionPermission.USER_BLOCKS_CREATE,
 	]
 
 

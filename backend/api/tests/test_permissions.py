@@ -166,6 +166,10 @@ class TestActionPermission:
 	def test_string_equality(self) -> None:
 		assert ActionPermission.ROLES_READ == "roles:read"
 		assert ActionPermission.SETTINGS_MANAGE == "settings:manage"
+		assert ActionPermission.USER_FRIENDSHIPS_CREATE == "user.friendships:create"
+		assert ActionPermission.USER_FRIENDSHIPS_MANAGE == "user.friendships:manage"
+		assert ActionPermission.USER_BLOCKS_CREATE == "user.blocks:create"
+		assert ActionPermission.USER_BLOCKS_MANAGE == "user.blocks:manage"
 
 	def test_membership_in_set(self) -> None:
 		perms = {ActionPermission.AGENTS_CREATE, ActionPermission.AGENTS_MANAGE}
@@ -179,6 +183,8 @@ class TestActionPermission:
 		expected = {
 			"roles",
 			"users",
+			"user.friendships",
+			"user.blocks",
 			"settings",
 			"events",
 			"threads",

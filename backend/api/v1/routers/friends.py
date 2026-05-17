@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
@@ -22,15 +22,6 @@ from nokodo_ai.utils.typeid import TypeID
 router = APIRouter(prefix="/{user_id}/friends", tags=["friends"])
 
 
-def _check_self(user_id: str, principal: Principal) -> None:
-	"""ensure the path user_id matches the authenticated user."""
-	if str(user_id) != principal.user_id:
-		raise HTTPException(
-			status_code=status.HTTP_403_FORBIDDEN,
-			detail="cannot access another user's friends",
-		)
-
-
 @router.get("", response_model=list[FriendResponse])
 async def list_friends(
 	user_id: TypeID,
@@ -38,8 +29,9 @@ async def list_friends(
 	db: AsyncSession = Depends(get_db),
 ) -> list[FriendResponse]:
 	"""list all accepted friends."""
-	_check_self(str(user_id), principal)
-	pairs = await friends_service.list_friends(db, principal=principal)
+	pairs = await friends_service.list_friends(
+		db, principal=principal, target_user_id=user_id
+	)
 	return [
 		await friends_service.build_friend_response(
 			friend,
@@ -59,8 +51,9 @@ async def list_incoming_requests(
 	db: AsyncSession = Depends(get_db),
 ) -> list[Friendship]:
 	"""list pending friend requests received by the current user."""
-	_check_self(str(user_id), principal)
-	return await friends_service.list_incoming_requests(db, principal=principal)
+	return await friends_service.list_incoming_requests(
+		db, principal=principal, target_user_id=user_id
+	)
 
 
 @router.get("/requests/outgoing", response_model=list[FriendshipDetail])
@@ -70,8 +63,9 @@ async def list_outgoing_requests(
 	db: AsyncSession = Depends(get_db),
 ) -> list[Friendship]:
 	"""list pending friend requests sent by the current user."""
-	_check_self(str(user_id), principal)
-	return await friends_service.list_outgoing_requests(db, principal=principal)
+	return await friends_service.list_outgoing_requests(
+		db, principal=principal, target_user_id=user_id
+	)
 
 
 @router.post(
@@ -87,9 +81,9 @@ async def send_friend_request(
 	x_session_id: SessionId = None,
 ) -> Friendship:
 	"""send a friend request to another user."""
-	_check_self(str(user_id), principal)
 	return await friends_service.send_friend_request(
-		str(body.addressee_id),
+		user_id,
+		body.addressee_id,
 		db,
 		principal=principal,
 		origin_session_id=x_session_id,
@@ -108,9 +102,9 @@ async def accept_friend_request(
 	x_session_id: SessionId = None,
 ) -> Friendship:
 	"""accept an incoming friend request."""
-	_check_self(str(user_id), principal)
 	return await friends_service.accept_friend_request(
 		str(friendship_id),
+		user_id,
 		db,
 		principal=principal,
 		origin_session_id=x_session_id,
@@ -129,9 +123,27 @@ async def decline_friend_request(
 	x_session_id: SessionId = None,
 ) -> Friendship:
 	"""decline an incoming friend request."""
-	_check_self(str(user_id), principal)
 	return await friends_service.decline_friend_request(
 		str(friendship_id),
+		user_id,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+	)
+
+
+@router.delete("/requests/{friendship_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def cancel_friend_request(
+	user_id: TypeID,
+	friendship_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
+) -> None:
+	"""cancel an outgoing friend request."""
+	await friends_service.cancel_friend_request(
+		str(friendship_id),
+		user_id,
 		db,
 		principal=principal,
 		origin_session_id=x_session_id,
@@ -147,9 +159,9 @@ async def remove_friend(
 	x_session_id: SessionId = None,
 ) -> None:
 	"""remove an existing friend."""
-	_check_self(str(user_id), principal)
 	await friends_service.remove_friend(
-		str(friend_user_id),
+		user_id,
+		friend_user_id,
 		db,
 		principal=principal,
 		origin_session_id=x_session_id,

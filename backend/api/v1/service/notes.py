@@ -10,6 +10,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import Select
 
 from api.database import build_cursor_page, decode_cursor
 from api.database.main import session_scope
@@ -159,32 +160,24 @@ async def list_notes(
 	sort_by: str = "updated_at",
 	sort_dir: SortDir = "desc",
 ) -> list[Note]:
-	stmt = (
-		apply_sort(
-			select(Note).where(
-				Note.deleted_at.is_(None),
-				resource_access_predicate(principal, ResourceType.NOTE),
-			),
-			sort_by=sort_by,
-			sort_dir=sort_dir,
-			columns={
-				"updated_at": Note.updated_at,
-				"created_at": Note.created_at,
-				"title": Note.title,
-			},
-			tie_breaker=Note.id,
-		)
-		.offset(skip)
-		.limit(limit)
-		.options(selectinload(Note.projects))
-	)
 	note_filters = filters or NoteListFilters()
-
-	if note_filters.user_id is not None:
-		stmt = stmt.where(Note.user_id == note_filters.user_id)
-
-	if note_filters.labels:
-		stmt = stmt.where(Note.labels.contains(note_filters.labels))
+	stmt = select(Note).where(
+		Note.deleted_at.is_(None),
+		resource_access_predicate(principal, ResourceType.NOTE),
+	)
+	stmt = _apply_note_filters(stmt, note_filters)
+	stmt = apply_sort(
+		stmt,
+		sort_by=sort_by,
+		sort_dir=sort_dir,
+		columns={
+			"updated_at": Note.updated_at,
+			"created_at": Note.created_at,
+			"title": Note.title,
+		},
+		tie_breaker=Note.id,
+	)
+	stmt = stmt.offset(skip).limit(limit).options(selectinload(Note.projects))
 
 	result = await session.execute(stmt)
 	return list(result.scalars().all())
@@ -204,11 +197,17 @@ async def count_notes(
 			resource_access_predicate(principal, ResourceType.NOTE),
 		)
 	)
-	if note_filters.user_id is not None:
-		stmt = stmt.where(Note.user_id == note_filters.user_id)
-	if note_filters.labels:
-		stmt = stmt.where(Note.labels.contains(note_filters.labels))
+	stmt = _apply_note_filters(stmt, note_filters)
 	return await session.scalar(stmt) or 0
+
+
+def _apply_note_filters(stmt: Select, filters: NoteListFilters) -> Select:
+	"""apply note list/count filters."""
+	if filters.owner_id is not None:
+		stmt = stmt.where(Note.user_id == filters.owner_id)
+	if filters.labels:
+		stmt = stmt.where(Note.labels.contains(filters.labels))
+	return stmt
 
 
 async def get_note(

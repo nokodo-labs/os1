@@ -32,7 +32,7 @@ type MemorySortBy = (
 class MemoryListFilters(BaseModel):
 	"""filters for listing memories."""
 
-	user_id: TypeID
+	owner_id: TypeID
 	search: str | None = Field(default=None, min_length=1, max_length=500)
 
 

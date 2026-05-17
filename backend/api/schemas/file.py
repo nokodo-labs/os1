@@ -27,6 +27,7 @@ type FileCategoryFilter = Literal["image", "audio", "video", "file"]
 class FileListFilters(BaseModel):
 	"""filters for listing files."""
 
+	owner_id: TypeID | None = None
 	project_id: TypeID | None = None
 	source: FileSource | None = None
 	category: FileCategoryFilter | None = None

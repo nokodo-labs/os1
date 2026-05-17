@@ -24,7 +24,7 @@ type NoteSortBy = CommonSortBy | Literal["title"]
 class NoteListFilters(BaseModel):
 	"""filters for listing notes."""
 
-	user_id: TypeID | None = None
+	owner_id: TypeID | None = None
 	labels: list[str] | None = None
 
 

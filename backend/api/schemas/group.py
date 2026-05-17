@@ -25,7 +25,8 @@ type GroupSortBy = CommonSortBy | Literal["name"]
 class GroupListFilters(BaseModel):
 	"""filters for listing groups."""
 
-	user_id: TypeID | None = None
+	owner_id: TypeID | None = None
+	member_user_id: TypeID | None = None
 	q: str | None = None
 
 

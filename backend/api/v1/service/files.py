@@ -490,6 +490,8 @@ def _file_category_predicate(category: FileCategoryFilter) -> ColumnElement[bool
 
 
 def _apply_file_filters(stmt: Select, filters: FileListFilters) -> Select:
+	if filters.owner_id is not None:
+		stmt = stmt.where(File.owner_id == filters.owner_id)
 	if filters.project_id is not None:
 		stmt = stmt.join(
 			file_project_association,

@@ -16,6 +16,11 @@ design rules:
 - resources WITHOUT access rules only need ``{domain}:read`` and
   ``{domain}:manage``. manage includes creation, so no separate
   create permission is needed.
+- user social resources (friendships, blocks) require a ``user.{type}:create``
+	permission to create new entries. users can always manage their own
+	existing social resources (accept/decline/cancel/remove). cross-user
+	moderation requires the corresponding ``user.{type}:manage`` permission
+	or superuser access.
 """
 
 from __future__ import annotations
@@ -53,6 +58,10 @@ class ActionPermission(StrEnum):
 	# user management
 	USERS_READ = "users:read"
 	USERS_MANAGE = "users:manage"
+	USER_FRIENDSHIPS_CREATE = "user.friendships:create"
+	USER_FRIENDSHIPS_MANAGE = "user.friendships:manage"
+	USER_BLOCKS_CREATE = "user.blocks:create"
+	USER_BLOCKS_MANAGE = "user.blocks:manage"
 
 	# settings
 	SETTINGS_READ = "settings:read"

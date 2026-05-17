@@ -169,7 +169,11 @@ async def test_delete_notification_also_deletes_attached_event(
 	db_session.add(event)
 	await db_session.flush()
 
-	notification = Notification(user_id=str(user.id), event_id=str(event.id))
+	notification = Notification(
+		user_id=str(user.id),
+		event_id=str(event.id),
+		title="cascade notification",
+	)
 	db_session.add(notification)
 	await db_session.commit()
 	await db_session.refresh(notification)
