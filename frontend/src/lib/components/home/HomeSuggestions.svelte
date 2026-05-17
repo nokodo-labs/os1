@@ -1,59 +1,66 @@
 <script module lang="ts">
-	import type SearchIcon from '$lib/components/icons/Search.svelte'
+	import type { AccentColorKey } from '$lib/contexts/themeContext.svelte'
 	import type {
 		CalendarRouteId,
+		MessagesRouteId,
 		NotesRouteId,
+		ProjectsRouteId,
 		RemindersRouteId,
 		SettingsRouteId,
+		SocialRouteId,
 	} from '$lib/stores/appNavigation.svelte'
+	import type { Component } from 'svelte'
 
-	type IconComponent = typeof SearchIcon
+	type IconComponent = Component<{
+		class?: string
+		color?: string
+		strokeWidth?: string | number
+		variant?: 'outline' | 'solid'
+	}>
 
 	export type HomeSuggestion = {
 		id: string
 		title: string
 		subtitle?: string
 		icon: IconComponent
+		accent?: AccentColorKey
+		iconVariant?: 'outline' | 'solid'
 	}
 
 	type SuggestionRoute =
 		| '/'
 		| `/c/${string}`
 		| CalendarRouteId
+		| MessagesRouteId
 		| '/library'
 		| NotesRouteId
+		| ProjectsRouteId
 		| RemindersRouteId
 		| SettingsRouteId
+		| SocialRouteId
 
 	export type SuggestionAction =
 		| { type: 'navigate'; path: SuggestionRoute }
 		| { type: 'modal'; id: 'archived-chats' }
+		| { type: 'search'; query: string }
 		| { type: 'toggle-dock' }
 		| { type: 'pulse'; message: string }
 </script>
 
 <script lang="ts">
 	import { searchStream, type SearchResult } from '$lib/api/streaming'
-	import EmptyState from '$lib/components/EmptyState.svelte'
-	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
-	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
-	import BookOpen from '$lib/components/icons/BookOpen.svelte'
-	import Calendar from '$lib/components/icons/Calendar.svelte'
-	import ChatBubbles from '$lib/components/icons/ChatBubbles.svelte'
-	import CheckBox from '$lib/components/icons/CheckBox.svelte'
-	import ClockRotateRight from '$lib/components/icons/ClockRotateRight.svelte'
 	import Cog6 from '$lib/components/icons/Cog6.svelte'
-	import Document from '$lib/components/icons/Document.svelte'
-	import Note from '$lib/components/icons/Note.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
-	import Users from '$lib/components/icons/Users.svelte'
-	import XMark from '$lib/components/icons/XMark.svelte'
+	import ResourceWidget from '$lib/components/widgets/ResourceWidget.svelte'
+	import type { ResourceItem } from '$lib/components/widgets/types'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
+	import { accentColors } from '$lib/contexts/themeContext.svelte'
+	import { appVisuals, type AppVisualId } from '$lib/resources/resourceVisuals'
+	import { searchResultToResource } from '$lib/resources/searchResults'
 	import { appNavigation } from '$lib/stores/appNavigation.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
-	import '$lib/styles/liquid-glass.css'
 
 	interface Props {
 		query: string
@@ -63,11 +70,15 @@
 
 	let { query, onAction, onKeyHandler }: Props = $props()
 
+	type SuggestionEntry =
+		| { kind: 'action'; id: string; suggestion: HomeSuggestion }
+		| { kind: 'resource'; id: string; resource: ResourceItem }
+	type HomepageSuggestionKey = keyof typeof preferences.data.homepage
+	type AppSuggestion = HomeSuggestion & { preferenceKey: HomepageSuggestionKey }
+
 	const chrome = useSystemChrome()
 
 	// search state
-	let isSearching = $state(false)
-	let isSearchError = $state(false)
 	let searchResults = $state<SearchResult[]>([])
 	let highlightedIndex = $state(-1)
 	let isSuggestionNavigationActive = $state(false)
@@ -75,62 +86,77 @@
 	let searchDebounceTimer: number | null = null
 	let searchAbort: AbortController | null = null
 
-	// full (hybrid) search state
-	let isFullSearching = $state(false)
-	let isFullSearchError = $state(false)
-	let hasDoneFullSearch = $state(false)
-	let fullSearchAbort: AbortController | null = null
-
 	const normalizedQuery = $derived(query.trim().toLowerCase())
-	const open = $derived(normalizedQuery.length > 0 && !forceClosed)
 
 	// suggestion data
-	const allAppSuggestions: HomeSuggestion[] = [
-		{ id: 'chats', title: 'chats', subtitle: 'recent conversations', icon: ChatBubbles },
-		{
-			id: 'reminders',
-			title: 'reminders',
-			subtitle: 'upcoming reminders',
-			icon: ClockRotateRight,
-		},
-		{ id: 'notes', title: 'notes', subtitle: 'your notes', icon: Note },
-		{ id: 'friends', title: 'friends', subtitle: 'contacts and people', icon: Users },
-		{ id: 'library', title: 'library', subtitle: 'saved content', icon: BookOpen },
-		{ id: 'calendar', title: 'calendar', subtitle: 'events and schedule', icon: Calendar },
+	function appVisual(id: AppVisualId) {
+		return appVisuals.find((app) => app.id === id)
+	}
+
+	function appSuggestion(id: AppVisualId, preferenceKey: HomepageSuggestionKey): AppSuggestion {
+		const visual = appVisual(id)
+		return {
+			id,
+			title: visual?.title ?? id,
+			subtitle: visual?.description,
+			icon: visual?.icon ?? Search,
+			accent: visual?.accent ?? 'gray',
+			iconVariant: id === 'library' ? 'outline' : 'solid',
+			preferenceKey,
+		}
+	}
+
+	const allAppSuggestions: AppSuggestion[] = [
+		appSuggestion('messages', 'chats'),
+		appSuggestion('reminders', 'reminders'),
+		appSuggestion('notes', 'notes'),
+		appSuggestion('projects', 'projects'),
+		appSuggestion('calendar', 'calendar'),
+		appSuggestion('library', 'library'),
+		appSuggestion('social', 'friends'),
 	]
 
 	const appSuggestions = $derived.by(() => {
 		const hp = preferences.data.homepage
 		return allAppSuggestions.filter((s) => {
-			const key = s.id as keyof typeof hp
-			return hp[key] !== false
+			return hp[s.preferenceKey] !== false
 		})
 	})
 
 	const allSuggestions: HomeSuggestion[] = $derived.by(() => [
 		...appSuggestions,
-		{ id: 'settings', title: 'settings', subtitle: 'open preferences', icon: Cog6 },
+		{
+			id: 'settings',
+			title: 'settings',
+			subtitle: 'open preferences',
+			icon: Cog6,
+			accent: 'gray',
+			iconVariant: 'solid',
+		},
 		{
 			id: 'archived-chats',
 			title: 'archived chats',
 			subtitle: 'browse archived threads',
 			icon: ArchiveBox,
+			accent: 'green',
+			iconVariant: 'solid',
 		},
 		{
 			id: 'dock',
 			title: chrome.isDockOpen ? 'hide dock' : 'show dock',
 			subtitle: 'notifications + control center',
 			icon: AppNotification,
+			accent: 'blue',
+			iconVariant: 'solid',
 		},
 	])
 
-	const searchResultIcons: Record<string, typeof ChatBubbles> = {
-		thread: ChatBubbles,
-		reminder: CheckBox,
-		note: Document,
+	function suggestionAccentStyle(accent: HomeSuggestion['accent']): string {
+		const colors = accentColors[accent ?? 'gray']
+		return `--suggestion-accent: ${colors.primary}; --suggestion-accent-rgb: ${colors.rgb};`
 	}
 
-	const suggestions = $derived.by((): HomeSuggestion[] => {
+	const suggestionEntries = $derived.by((): SuggestionEntry[] => {
 		if (!normalizedQuery) return []
 
 		// local app/action suggestions (always instant)
@@ -149,21 +175,29 @@
 			.map((x) => x.s)
 			.slice(0, 3)
 
-		// API search results mapped to HomeSuggestion format
-		const apiResults: HomeSuggestion[] = searchResults.map((r) => ({
-			id: `search:${r.type}:${r.id}`,
-			title: r.title,
-			subtitle: r.preview ?? r.type,
-			icon: searchResultIcons[r.type] ?? ChatBubbles,
+		const actionEntries: SuggestionEntry[] = localScored.map((suggestion) => ({
+			kind: 'action',
+			id: `action:${suggestion.id}`,
+			suggestion,
 		}))
+		const resourceEntries: SuggestionEntry[] = searchResults.map((result) => {
+			const resource = searchResultToResource(result)
+			return {
+				kind: 'resource',
+				id: `resource:${resource.type}:${resource.id}`,
+				resource,
+			}
+		})
 
-		return [...localScored, ...apiResults].slice(0, 10)
+		return [...actionEntries, ...resourceEntries].slice(0, 10)
 	})
+	const open = $derived(
+		normalizedQuery.length > 0 && suggestionEntries.length > 0 && !forceClosed
+	)
 
 	// search logic
 	async function runAutocomplete(q: string, signal: AbortSignal): Promise<void> {
 		const results: SearchResult[] = []
-		isSearchError = false
 		try {
 			for await (const result of searchStream({
 				query: q,
@@ -177,46 +211,16 @@
 			}
 		} catch {
 			if (signal.aborted) return
-			isSearchError = true
 		} finally {
-			if (!signal.aborted) {
-				isSearching = false
-			}
+			if (!signal.aborted) searchResults = [...results]
 		}
 	}
 
-	function triggerFullSearch() {
-		fullSearchAbort?.abort()
-		fullSearchAbort = null
+	function triggerSearchMode() {
 		const q = query.trim()
 		if (!q) return
-		isFullSearching = true
-		isFullSearchError = false
-		const controller = new AbortController()
-		fullSearchAbort = controller
-		void (async () => {
-			const results: SearchResult[] = []
-			try {
-				for await (const result of searchStream({
-					query: q,
-					limit: 20,
-					mode: 'full',
-					signal: controller.signal,
-				})) {
-					if (controller.signal.aborted) break
-					results.push(result)
-				}
-				if (!controller.signal.aborted) {
-					searchResults = results
-					hasDoneFullSearch = true
-				}
-			} catch {
-				if (!controller.signal.aborted) isFullSearchError = true
-			} finally {
-				if (!controller.signal.aborted) isFullSearching = false
-			}
-			fullSearchAbort = null
-		})()
+		forceClosed = true
+		onAction({ type: 'search', query: q })
 	}
 
 	// debounced search effect - only tracks query prop
@@ -238,13 +242,6 @@
 
 		if (!hasQuery) {
 			cancelPending()
-			isSearching = false
-			isSearchError = false
-			isFullSearching = false
-			isFullSearchError = false
-			hasDoneFullSearch = false
-			fullSearchAbort?.abort()
-			fullSearchAbort = null
 			highlightedIndex = -1
 			isSuggestionNavigationActive = false
 			searchResults = []
@@ -252,11 +249,6 @@
 		}
 
 		cancelPending()
-		isSearching = true
-		isFullSearching = false
-		hasDoneFullSearch = false
-		fullSearchAbort?.abort()
-		fullSearchAbort = null
 		isSuggestionNavigationActive = false
 		highlightedIndex = -1
 
@@ -269,27 +261,40 @@
 	})
 
 	// actions
-	function selectSuggestion(suggestion: HomeSuggestion) {
+	function selectResource(resource: ResourceItem) {
+		switch (resource.type) {
+			case 'thread':
+				onAction({ type: 'navigate', path: `/c/${resource.id}` })
+				return
+			case 'note':
+				onAction({ type: 'navigate', path: `/notes/${resource.id}` })
+				return
+			case 'reminder_list':
+				onAction({ type: 'navigate', path: `/reminders/lists/${resource.id}` })
+				return
+			case 'calendar':
+				onAction({ type: 'navigate', path: appNavigation.getEntryRoute('calendar') })
+				return
+			case 'project':
+				onAction({ type: 'navigate', path: `/projects/${resource.id}` })
+				return
+			case 'file':
+				onAction({ type: 'pulse', message: "can't open this result yet" })
+				return
+		}
+	}
+
+	function selectEntry(entry: SuggestionEntry) {
 		forceClosed = true
 		highlightedIndex = -1
 		isSuggestionNavigationActive = false
 
-		if (suggestion.id.startsWith('search:')) {
-			const parts = suggestion.id.split(':')
-			const type = parts[1]
-			const entityId = parts.slice(2).join(':')
-			if (type === 'thread') {
-				onAction({ type: 'navigate', path: `/c/${entityId}` })
-			} else if (type === 'note') {
-				onAction({ type: 'navigate', path: `/notes/${entityId}` })
-			} else if (type === 'reminder') {
-				onAction({
-					type: 'navigate',
-					path: appNavigation.getEntryRoute('reminders'),
-				})
-			}
+		if (entry.kind === 'resource') {
+			selectResource(entry.resource)
 			return
 		}
+
+		const { suggestion } = entry
 
 		if (suggestion.id === 'settings') {
 			onAction({
@@ -306,8 +311,8 @@
 			onAction({ type: 'toggle-dock' })
 			return
 		}
-		if (suggestion.id === 'chats') {
-			onAction({ type: 'navigate', path: '/' })
+		if (suggestion.id === 'messages') {
+			onAction({ type: 'navigate', path: appNavigation.getEntryRoute('messages') })
 			return
 		}
 		if (suggestion.id === 'notes') {
@@ -326,17 +331,25 @@
 			onAction({ type: 'navigate', path: appNavigation.getEntryRoute('calendar') })
 			return
 		}
+		if (suggestion.id === 'projects') {
+			onAction({ type: 'navigate', path: appNavigation.getEntryRoute('projects') })
+			return
+		}
+		if (suggestion.id === 'social') {
+			onAction({ type: 'navigate', path: appNavigation.getEntryRoute('social') })
+			return
+		}
 		onAction({ type: 'pulse', message: `${suggestion.title}: coming soon` })
 	}
 
 	// keyboard handler exposed to parent via $bindable
 	function handleKeyDown(event: KeyboardEvent): boolean {
-		if (!open || suggestions.length === 0) return false
+		if (!open || suggestionEntries.length === 0) return false
 		if (event.key === 'ArrowDown') {
 			event.preventDefault()
 			isSuggestionNavigationActive = true
 			highlightedIndex =
-				highlightedIndex < 0 ? 0 : (highlightedIndex + 1) % suggestions.length
+				highlightedIndex < 0 ? 0 : (highlightedIndex + 1) % suggestionEntries.length
 			return true
 		}
 		if (event.key === 'ArrowUp') {
@@ -344,8 +357,8 @@
 			isSuggestionNavigationActive = true
 			highlightedIndex =
 				highlightedIndex < 0
-					? suggestions.length - 1
-					: (highlightedIndex - 1 + suggestions.length) % suggestions.length
+					? suggestionEntries.length - 1
+					: (highlightedIndex - 1 + suggestionEntries.length) % suggestionEntries.length
 			return true
 		}
 		if (event.key === 'Escape') {
@@ -358,7 +371,9 @@
 		if (event.key === 'Enter' && !event.shiftKey) {
 			if (!isSuggestionNavigationActive || highlightedIndex < 0) return false
 			event.preventDefault()
-			selectSuggestion(suggestions[highlightedIndex])
+			const entry = suggestionEntries[highlightedIndex]
+			if (!entry) return true
+			selectEntry(entry)
 			return true
 		}
 		return false
@@ -370,9 +385,8 @@
 </script>
 
 {#if open}
-	<LiquidGlass
-		tag="div"
-		class="rounded-container flex min-h-0 flex-col overflow-hidden shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
+	<div
+		class="liquid-glass liquid-glass--clip rounded-container isolate flex min-h-0 flex-col overflow-hidden [--lg-bg:color-mix(in_oklch,var(--background)_18%,transparent)] [--lg-blur:8px] dark:[--lg-bg:color-mix(in_oklch,var(--background)_42%,transparent)]"
 	>
 		<div class="relative z-10 flex min-h-0 flex-col">
 			<div
@@ -380,102 +394,88 @@
 				role="listbox"
 				aria-label="suggestions"
 			>
-				{#if isSearching}
-					<!-- shimmer autocomplete state -->
-					<div class="flex items-center gap-3 px-3 py-2.5">
-						<div
-							class="rounded-pill bg-foreground/8 text-foreground/85 flex h-9 w-9 shrink-0 items-center justify-center"
-						>
-							<Search class="h-5 w-5" strokeWidth="2" />
-						</div>
-						<ShimmerText className="text-sm font-semibold text-foreground/60">
-							searching
-						</ShimmerText>
-					</div>
-				{:else if isSearchError}
-					<!-- error state -->
-					<div class="flex items-center gap-3 px-3 py-2.5">
-						<div
-							class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-red-500/10 text-red-400"
-						>
-							<XMark class="h-5 w-5" />
-						</div>
-						<div class="text-foreground/40 text-sm">search failed - try again</div>
-					</div>
-				{:else if suggestions.length === 0 && !isFullSearching}
-					<!-- no results -->
-					<EmptyState label="no results found" compact>
-						{#snippet icon()}<Search class="h-5 w-5" strokeWidth="2" />{/snippet}
-					</EmptyState>
-				{:else}
-					{#if isFullSearching}
-						<!-- shimmer row while full search runs -->
-						<div class="flex items-center gap-3 px-3 py-2">
-							<div
-								class="rounded-pill bg-foreground/6 text-foreground/50 flex h-8 w-8 shrink-0 items-center justify-center"
-							>
-								<Search class="h-4 w-4" strokeWidth="2" />
-							</div>
-							<ShimmerText className="text-xs font-medium text-foreground/50">
-								searching deeper
-							</ShimmerText>
-						</div>
-					{/if}
-					{#each suggestions as suggestion, index (suggestion.id)}
-						{@const Icon = suggestion.icon}
-						<button
-							type="button"
-							role="option"
-							aria-selected={highlightedIndex >= 0 && index === highlightedIndex}
-							class="rounded-pill flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors {index ===
-								highlightedIndex && highlightedIndex >= 0
-								? 'bg-foreground/10'
-								: 'hover:bg-foreground/7 bg-transparent'}"
-							onmouseenter={() => {
-								highlightedIndex = index
-								isSuggestionNavigationActive = true
-							}}
-							onclick={() => selectSuggestion(suggestion)}
-						>
-							<div
-								class="rounded-pill bg-foreground/8 text-foreground/85 flex h-9 w-9 shrink-0 items-center justify-center"
-							>
-								<Icon class="h-5 w-5" strokeWidth="2" />
-							</div>
-							<div class="min-w-0">
-								<div class="text-foreground/90 truncate text-sm font-semibold">
-									{suggestion.title}
-								</div>
-								{#if suggestion.subtitle}
-									<div class="text-foreground/55 truncate text-sm">
-										{suggestion.subtitle}
-									</div>
-								{/if}
-							</div>
-						</button>
-					{/each}
-					{#if !hasDoneFullSearch && !isFullSearching && suggestions.length > 0}
-						<!-- full search trigger -->
-						<div class="border-foreground/8 mt-1 border-t pt-1">
+				<div
+					class="flex flex-col gap-0 overflow-hidden rounded-[calc(var(--radius-container)-0.5rem)]"
+				>
+					{#each suggestionEntries as entry, index (entry.id)}
+						{#if entry.kind === 'action'}
+							{@const suggestion = entry.suggestion}
+							{@const Icon = suggestion.icon}
 							<button
 								type="button"
-								class="rounded-pill hover:bg-foreground/7 flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors"
-								onclick={triggerFullSearch}
+								role="option"
+								aria-selected={highlightedIndex >= 0 && index === highlightedIndex}
+								class="focus-visible:bg-foreground/10 flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors duration-150 ease-out {index ===
+									highlightedIndex && highlightedIndex >= 0
+									? 'bg-foreground/10'
+									: 'hover:bg-foreground/8 bg-transparent'}"
+								onmouseenter={() => {
+									highlightedIndex = index
+									isSuggestionNavigationActive = true
+								}}
+								onclick={() => selectEntry(entry)}
 							>
 								<div
-									class="rounded-pill bg-foreground/6 text-foreground/50 flex h-8 w-8 shrink-0 items-center justify-center"
+									class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-[rgb(var(--suggestion-accent-rgb)/0.14)] text-(--suggestion-accent) shadow-[inset_0_0_0_1px_rgb(var(--suggestion-accent-rgb)/0.18)]"
+									style={suggestionAccentStyle(suggestion.accent)}
 								>
-									<Search class="h-4 w-4" strokeWidth="2" />
+									{#if suggestion.iconVariant === 'solid'}
+										<Icon variant="solid" class="h-5 w-5" strokeWidth="2" />
+									{:else}
+										<Icon class="h-5 w-5" strokeWidth="2" />
+									{/if}
 								</div>
-								<div class="text-foreground/50 text-xs">search more in-depth</div>
+								<div class="min-w-0">
+									<div class="text-foreground/90 truncate text-sm font-semibold">
+										{suggestion.title}
+									</div>
+									{#if suggestion.subtitle}
+										<div class="text-foreground/55 truncate text-sm">
+											{suggestion.subtitle}
+										</div>
+									{/if}
+								</div>
 							</button>
+						{:else}
+							<div
+								role="option"
+								tabindex="-1"
+								aria-selected={highlightedIndex >= 0 && index === highlightedIndex}
+								class="overflow-hidden transition-colors duration-150 ease-out {index ===
+									highlightedIndex && highlightedIndex >= 0
+									? 'bg-foreground/10'
+									: 'hover:bg-foreground/8 bg-transparent'}"
+								onmouseenter={() => {
+									highlightedIndex = index
+									isSuggestionNavigationActive = true
+								}}
+							>
+								<ResourceWidget
+									resource={entry.resource}
+									layout="bare"
+									onclick={() => selectEntry(entry)}
+									class="transition-none"
+								/>
+							</div>
+						{/if}
+					{/each}
+				</div>
+				<!-- full search trigger -->
+				<div class="border-foreground/8 mt-2 border-t pt-2">
+					<button
+						type="button"
+						class="rounded-pill hover:bg-foreground/8 flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors duration-150 ease-out"
+						onclick={triggerSearchMode}
+					>
+						<div
+							class="rounded-pill bg-foreground/6 text-foreground/50 flex h-8 w-8 shrink-0 items-center justify-center"
+						>
+							<Search class="h-4 w-4" strokeWidth="2" />
 						</div>
-					{/if}
-					{#if isFullSearchError}
-						<div class="px-3 py-1.5 text-xs text-red-400/70">full search failed</div>
-					{/if}
-				{/if}
+						<div class="text-foreground/50 text-xs">search more in-depth</div>
+					</button>
+				</div>
 			</div>
 		</div>
-	</LiquidGlass>
+	</div>
 {/if}
