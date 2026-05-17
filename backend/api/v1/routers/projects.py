@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
@@ -10,10 +12,12 @@ from api.permissions import ResourceType
 from api.schemas.project import Project as ProjectSchema
 from api.schemas.project import (
 	ProjectCreate,
+	ProjectListFilters,
 	ProjectResourceCounts,
 	ProjectSortBy,
 	ProjectUpdate,
 )
+from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
 from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import projects as project_service
@@ -44,6 +48,7 @@ async def create_project(
 
 @router.get("", response_model=list[ProjectSchema])
 async def list_projects(
+	filters: Annotated[ProjectListFilters, Depends()],
 	skip: int = 0,
 	limit: int = 50,
 	sort_by: ProjectSortBy = "updated_at",
@@ -59,6 +64,41 @@ async def list_projects(
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
+		filters=filters,
+	)
+
+
+@router.get("/count", response_model=int)
+async def count_projects(
+	filters: Annotated[ProjectListFilters, Depends()],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> int:
+	"""count projects matching the list filters."""
+	return await project_service.count_projects(
+		db,
+		principal=principal,
+		filters=filters,
+	)
+
+
+@router.get("/search", response_model=CursorPage[SearchResultItem])
+async def search_projects(
+	q: str = Query(min_length=1, max_length=500),
+	limit: int = Query(default=10, ge=1, le=50),
+	cursor: str | None = Query(default=None),
+	mode: SearchMode = Query(default=SearchMode.FULL),
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> CursorPage[SearchResultItem]:
+	"""search projects accessible by the caller."""
+	return await project_service.search_projects(
+		q,
+		db,
+		principal=principal,
+		limit=limit,
+		cursor=cursor,
+		search_params=SearchParams(mode=mode),
 	)
 
 

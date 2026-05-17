@@ -61,6 +61,16 @@ async def list_tasks(
 	)
 
 
+@router.get("/count", response_model=int)
+async def count_tasks(
+	filters: Annotated[TaskListFilters, Depends()],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> int:
+	"""count tasks with optional filters."""
+	return await task_service.count_tasks(db, principal=principal, filters=filters)
+
+
 @router.get("/{task_id}", response_model=TaskSchema)
 async def get_task(
 	task_id: TypeID,

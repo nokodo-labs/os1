@@ -12,6 +12,7 @@ from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from api.database import build_cursor_page, decode_cursor
 from api.models.event import Event, EventScope
@@ -219,15 +220,7 @@ async def list_memories(
 	sort_by: str = "updated_at",
 	sort_dir: SortDir = "desc",
 ) -> list[Memory]:
-	user_id = filters.user_id
-	if not principal.is_admin:
-		user_id = TypeID(principal.user.id)
-
-	base = select(Memory).where(Memory.user_id == user_id)
-	if filters.search:
-		base = base.where(
-			Memory.content.ilike(contains_pattern(filters.search), escape="\\")
-		)
+	base = _apply_memory_filters(select(Memory), filters, principal)
 
 	stmt = (
 		apply_sort(
@@ -249,6 +242,39 @@ async def list_memories(
 	)
 	result = await session.execute(stmt)
 	return list(result.scalars().all())
+
+
+async def count_memories(
+	session: AsyncSession,
+	principal: Principal,
+	filters: MemoryListFilters,
+) -> int:
+	"""count memories matching the list filters."""
+	stmt = _apply_memory_filters(
+		select(func.count()).select_from(Memory),
+		filters,
+		principal,
+	)
+	return await session.scalar(stmt) or 0
+
+
+def _apply_memory_filters(
+	stmt: Select,
+	filters: MemoryListFilters,
+	principal: Principal,
+) -> Select:
+	"""apply memory list filters."""
+	if not principal.is_admin and filters.owner_id != principal.user.id:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
+	stmt = stmt.where(Memory.user_id == filters.owner_id)
+	if filters.search:
+		stmt = stmt.where(
+			Memory.content.ilike(contains_pattern(filters.search), escape="\\")
+		)
+	return stmt
 
 
 async def get_memory(

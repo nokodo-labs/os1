@@ -62,7 +62,7 @@ async def test_list_memories(db_session: AsyncSession, memory_user: Any) -> None
 	memories = await memory_service.list_memories(
 		db_session,
 		principal=principal,
-		filters=MemoryListFilters(user_id=memory_user.id),
+		filters=MemoryListFilters(owner_id=memory_user.id),
 	)
 	assert len(memories) >= 3
 
@@ -164,7 +164,7 @@ async def test_list_memories_sorting(
 		"/v1/memories",
 		headers=headers,
 		params={
-			"user_id": user_id,
+			"owner_id": user_id,
 			"sort_by": "tags",
 			"sort_dir": "asc",
 			"limit": 50,
@@ -205,14 +205,16 @@ async def test_admin_list_memories_for_other_user(db_session: AsyncSession) -> N
 	listed = await memory_service.list_memories(
 		db_session,
 		principal=principal,
-		filters=MemoryListFilters(user_id=TypeID(other.id)),
+		filters=MemoryListFilters(owner_id=TypeID(other.id)),
 	)
 	assert listed and listed[0].id == memory.id
 
 
 @pytest.mark.asyncio
-async def test_non_admin_list_memories_forces_self(db_session: AsyncSession) -> None:
-	"""Non-admin list_memories should ignore requested user_id."""
+async def test_non_admin_list_memories_rejects_other_owner(
+	db_session: AsyncSession,
+) -> None:
+	"""Non-admin list_memories should reject another owner_id."""
 	admin = await user_service.create_user(
 		UserCreate(
 			email="mem_guard_admin@example.com",
@@ -255,9 +257,10 @@ async def test_non_admin_list_memories_forces_self(db_session: AsyncSession) -> 
 		principal=principal,
 	)
 
-	memories = await memory_service.list_memories(
-		db_session,
-		principal=principal,
-		filters=MemoryListFilters(user_id=TypeID(other.id)),
-	)
-	assert memories and all(mem.user_id == owner.id for mem in memories)
+	with pytest.raises(HTTPException) as exc_info:
+		await memory_service.list_memories(
+			db_session,
+			principal=principal,
+			filters=MemoryListFilters(owner_id=TypeID(other.id)),
+		)
+	assert exc_info.value.status_code == 403

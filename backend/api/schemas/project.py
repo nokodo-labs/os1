@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from api.schemas.common import (
 	MISSING,
@@ -19,6 +19,12 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 type ProjectSortBy = CommonSortBy | Literal["name"]
+
+
+class ProjectListFilters(BaseModel):
+	"""filters for listing projects."""
+
+	owner_id: TypeID | None = None
 
 
 class ProjectBase(MetadataModel):

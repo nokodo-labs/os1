@@ -19,6 +19,7 @@ from api.schemas.calendar import (
 	CalendarEventListFilters,
 	CalendarEventSortBy,
 	CalendarEventUpdate,
+	CalendarListFilters,
 	CalendarSortBy,
 	CalendarUpdate,
 )
@@ -49,6 +50,7 @@ router.include_router(
 
 @router.get("", response_model=list[CalendarSchema])
 async def list_calendars(
+	filters: Annotated[CalendarListFilters, Depends()],
 	skip: int = 0,
 	limit: int = Query(default=100, ge=1, le=500),
 	sort_by: CalendarSortBy = "position",
@@ -64,16 +66,18 @@ async def list_calendars(
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
+		filters=filters,
 	)
 
 
 @router.get("/count", response_model=int)
 async def count_calendars(
+	filters: Annotated[CalendarListFilters, Depends()],
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> int:
 	"""count calendars accessible to the current user."""
-	return await calendar_service.count_calendars(db, principal)
+	return await calendar_service.count_calendars(db, principal, filters=filters)
 
 
 @router.post(

@@ -9,8 +9,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from api.database import async_session_local
 from api.models.event import Event, EventScope
@@ -92,19 +93,20 @@ class TaskContext:
 
 
 type TaskRunner = Callable[[TaskContext], Awaitable[JSONObject | None]]
+type TaskRunnerTimeout = int | float | Callable[[], int | float | None]
 
 _task_runners: dict[str, TaskRunner] = {}
-_task_runner_timeouts: dict[str, float] = {}
+_task_runner_timeouts: dict[str, TaskRunnerTimeout] = {}
 
 
 def register_task_runner(
 	name: str,
-	timeout_seconds: float | None = None,
+	timeout_seconds: TaskRunnerTimeout | None = None,
 ) -> Callable[[TaskRunner], TaskRunner]:
 	"""register a Task ORM runner by stable name."""
 	if not name:
 		raise ValueError("task runner name is required")
-	if timeout_seconds is not None and timeout_seconds <= 0:
+	if isinstance(timeout_seconds, (int, float)) and timeout_seconds <= 0:
 		raise ValueError("task runner timeout must be positive")
 
 	def _decorator(runner: TaskRunner) -> TaskRunner:
@@ -116,6 +118,20 @@ def register_task_runner(
 		return runner
 
 	return _decorator
+
+
+def _resolve_task_runner_timeout(runner_name: str) -> float | None:
+	timeout_config = _task_runner_timeouts.get(runner_name)
+	if timeout_config is None:
+		return None
+	if isinstance(timeout_config, (int, float)):
+		timeout: float | None = float(timeout_config)
+	else:
+		resolved = timeout_config()
+		timeout = float(resolved) if resolved is not None else None
+	if timeout is not None and timeout <= 0:
+		raise ValueError("task runner timeout must be positive")
+	return timeout
 
 
 def _is_terminal(status_value: TaskStatus) -> bool:
@@ -366,21 +382,7 @@ async def list_tasks(
 ) -> list[Task]:
 	task_filters = filters or TaskListFilters()
 	stmt = select(Task)
-
-	if principal.is_admin:
-		if task_filters.user_id is not None:
-			stmt = stmt.where(Task.user_id == task_filters.user_id)
-	else:
-		stmt = stmt.where(Task.user_id == principal.user.id)
-
-	if task_filters.spawned_thread_id is not None:
-		stmt = stmt.where(Task.spawned_thread_id == str(task_filters.spawned_thread_id))
-	if task_filters.status_filter is not None:
-		stmt = stmt.where(Task.status == task_filters.status_filter)
-	if task_filters.state_filter == "active":
-		stmt = stmt.where(Task.status.in_((TaskStatus.PENDING, TaskStatus.RUNNING)))
-	elif task_filters.state_filter == "ended":
-		stmt = stmt.where(Task.status.in_(tuple(_TERMINAL_STATUSES)))
+	stmt = _apply_task_filters(stmt, task_filters, principal)
 
 	stmt = apply_sort(
 		stmt,
@@ -399,6 +401,48 @@ async def list_tasks(
 
 	result = await session.execute(stmt.offset(skip).limit(limit))
 	return list(result.scalars().all())
+
+
+async def count_tasks(
+	session: AsyncSession,
+	principal: Principal,
+	filters: TaskListFilters | None = None,
+) -> int:
+	"""count tasks matching the list filters."""
+	task_filters = filters or TaskListFilters()
+	stmt = _apply_task_filters(
+		select(func.count()).select_from(Task),
+		task_filters,
+		principal,
+	)
+	return await session.scalar(stmt) or 0
+
+
+def _apply_task_filters(
+	stmt: Select,
+	filters: TaskListFilters,
+	principal: Principal,
+) -> Select:
+	"""apply task list filters."""
+	if principal.is_admin:
+		if filters.owner_id is not None:
+			stmt = stmt.where(Task.user_id == filters.owner_id)
+	else:
+		if filters.owner_id is not None and filters.owner_id != principal.user.id:
+			raise HTTPException(
+				status_code=status.HTTP_403_FORBIDDEN,
+				detail="forbidden",
+			)
+		stmt = stmt.where(Task.user_id == principal.user.id)
+	if filters.spawned_thread_id is not None:
+		stmt = stmt.where(Task.spawned_thread_id == str(filters.spawned_thread_id))
+	if filters.status_filter is not None:
+		stmt = stmt.where(Task.status == filters.status_filter)
+	if filters.state_filter == "active":
+		stmt = stmt.where(Task.status.in_((TaskStatus.PENDING, TaskStatus.RUNNING)))
+	elif filters.state_filter == "ended":
+		stmt = stmt.where(Task.status.in_(tuple(_TERMINAL_STATUSES)))
+	return stmt
 
 
 async def update_task(
@@ -578,7 +622,7 @@ async def execute_started_task(
 		)
 
 	try:
-		timeout_seconds = _task_runner_timeouts.get(runner_name)
+		timeout_seconds = _resolve_task_runner_timeout(runner_name)
 		if timeout_seconds is None:
 			result = await runner(context)
 		else:

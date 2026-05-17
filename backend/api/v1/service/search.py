@@ -25,6 +25,7 @@ from api.schemas.search import (
 from api.v1.service import calendar as calendar_service
 from api.v1.service import memories as memories_service
 from api.v1.service import notes as notes_service
+from api.v1.service import projects as projects_service
 from api.v1.service import reminders as reminders_service
 from api.v1.service import threads as threads_service
 from api.v1.service.auth import Principal
@@ -52,12 +53,23 @@ async def search_stream(
 			SearchResultType.THREAD,
 			SearchResultType.REMINDER,
 			SearchResultType.CALENDAR_EVENT,
+			SearchResultType.PROJECT,
 		]
 
 	# embed query once instead of per-resource-type to avoid redundant API calls
 	params = search_params or SearchParams()
 	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
-	query_embedding = await embed_text(text=q, session=db) if need_dense else None
+	dense_types = {
+		SearchResultType.NOTE,
+		SearchResultType.THREAD,
+		SearchResultType.REMINDER,
+		SearchResultType.CALENDAR_EVENT,
+	}
+	query_embedding = (
+		await embed_text(text=q, session=db)
+		if need_dense and any(result_type in dense_types for result_type in types)
+		else None
+	)
 
 	per_type = max(3, limit // len(types)) if types else limit
 	coros: list[Coroutine[None, None, CursorPage[SearchResultItem]]] = []
@@ -103,6 +115,16 @@ async def search_stream(
 				limit=per_type,
 				search_params=search_params,
 				query_embedding=query_embedding,
+			)
+		)
+	if SearchResultType.PROJECT in types:
+		coros.append(
+			projects_service.search_projects(
+				q,
+				db,
+				principal=principal,
+				limit=per_type,
+				search_params=search_params,
 			)
 		)
 

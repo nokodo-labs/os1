@@ -18,6 +18,7 @@ class SearchResultType(StrEnum):
 	CALENDAR_EVENT = "calendar_event"
 	NOTE = "note"
 	MEMORY = "memory"
+	PROJECT = "project"
 
 
 class SearchMode(StrEnum):

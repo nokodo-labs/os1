@@ -110,6 +110,7 @@ class EventType(StrEnum):
 	FRIEND_REQUEST_SENT = "friend.request_sent"
 	FRIEND_REQUEST_ACCEPTED = "friend.request_accepted"
 	FRIEND_REQUEST_DECLINED = "friend.request_declined"
+	FRIEND_REQUEST_CANCELLED = "friend.request_cancelled"
 	FRIEND_REMOVED = "friend.removed"
 
 	# settings events
@@ -117,6 +118,7 @@ class EventType(StrEnum):
 
 	# user events
 	USER_PREFERENCES_UPDATED = "user.preferences_updated"
+	USER_CLIENT_PREFERENCES_UPDATED = "user_client.preferences_updated"
 
 	# role events
 	ROLE_UPDATED = "role.updated"
@@ -169,6 +171,7 @@ SETTINGS_EVENTS = {
 
 USER_EVENTS = {
 	EventType.USER_PREFERENCES_UPDATED,
+	EventType.USER_CLIENT_PREFERENCES_UPDATED,
 }
 
 NOTIFICATION_EVENTS = {
@@ -228,6 +231,7 @@ FRIEND_EVENTS = {
 	EventType.FRIEND_REQUEST_SENT,
 	EventType.FRIEND_REQUEST_ACCEPTED,
 	EventType.FRIEND_REQUEST_DECLINED,
+	EventType.FRIEND_REQUEST_CANCELLED,
 	EventType.FRIEND_REMOVED,
 }
 

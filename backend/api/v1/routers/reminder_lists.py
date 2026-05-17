@@ -16,6 +16,7 @@ from api.schemas.reminder import (
 from api.schemas.reminder import (
 	ReminderCreate,
 	ReminderListCreate,
+	ReminderListFilters,
 	ReminderListItemFilters,
 	ReminderListSortBy,
 	ReminderListUpdate,
@@ -51,6 +52,7 @@ reminders_router = APIRouter(prefix="/reminders", tags=["reminders"])
 
 @router.get("", response_model=list[ReminderListWithCounts])
 async def list_reminder_lists(
+	filters: Annotated[ReminderListFilters, Depends()],
 	include_counts: bool = False,
 	skip: int = 0,
 	limit: int = Query(default=50, ge=1, le=500),
@@ -68,16 +70,20 @@ async def list_reminder_lists(
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
+		filters=filters,
 	)
 
 
 @router.get("/count", response_model=int)
 async def count_reminder_lists(
+	filters: Annotated[ReminderListFilters, Depends()],
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> int:
 	"""count reminder lists accessible to the current user."""
-	return await reminder_service.count_reminder_lists(db, principal=principal)
+	return await reminder_service.count_reminder_lists(
+		db, principal=principal, filters=filters
+	)
 
 
 @router.post("", response_model=ReminderListSchema, status_code=status.HTTP_201_CREATED)

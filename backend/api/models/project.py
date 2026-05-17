@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base
@@ -39,6 +39,20 @@ class Project(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 
 	__tablename__ = "projects"
 	__typeid_prefix__ = "proj"
+	__table_args__ = (
+		Index(
+			"idx_projects_name_trgm",
+			"name",
+			postgresql_using="gin",
+			postgresql_ops={"name": "gin_trgm_ops"},
+		),
+		Index(
+			"idx_projects_description_trgm",
+			"description",
+			postgresql_using="gin",
+			postgresql_ops={"description": "gin_trgm_ops"},
+		),
+	)
 
 	name: Mapped[str] = mapped_column(String(100))
 	description: Mapped[str | None] = mapped_column(String(500))

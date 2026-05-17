@@ -29,6 +29,7 @@ _GLOBAL_TYPES = [
 	SearchResultType.THREAD,
 	SearchResultType.REMINDER,
 	SearchResultType.CALENDAR_EVENT,
+	SearchResultType.PROJECT,
 ]
 
 

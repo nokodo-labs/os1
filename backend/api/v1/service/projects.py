@@ -5,10 +5,12 @@ from __future__ import annotations
 from typing import TypedDict
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import Select
 
+from api.database import build_cursor_page, decode_cursor
 from api.models.access_rule import AccessLevel
 from api.models.calendar import Calendar
 from api.models.event import Event, EventScope
@@ -26,7 +28,18 @@ from api.models.project import Project
 from api.models.thread import Thread
 from api.permissions import ResourceType
 from api.schemas.project import Project as ProjectSchema
-from api.schemas.project import ProjectCreate, ProjectResourceCounts, ProjectUpdate
+from api.schemas.project import (
+	ProjectCreate,
+	ProjectListFilters,
+	ProjectResourceCounts,
+	ProjectUpdate,
+)
+from api.schemas.search import (
+	CursorPage,
+	SearchParams,
+	SearchResultItem,
+	SearchResultType,
+)
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
@@ -40,6 +53,8 @@ from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
 	invalidate_resource_payload_cache,
 )
+from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -163,6 +178,13 @@ def _project_payload(project: Project) -> ProjectSchema:
 
 def _project_payloads(projects: list[Project]) -> list[ProjectSchema]:
 	return [ProjectSchema.model_validate(project) for project in projects]
+
+
+def _project_search_metadata(project: Project) -> JSONObject:
+	return {
+		"resource_type": "project",
+		"owner_id": str(project.owner_id),
+	}
 
 
 async def _get_project(project_id: TypeID, session: AsyncSession) -> Project:
@@ -337,6 +359,7 @@ async def create_project(
 async def list_projects(
 	session: AsyncSession,
 	principal: Principal,
+	filters: ProjectListFilters | None = None,
 	skip: int = 0,
 	limit: int = 50,
 	sort_by: str = "updated_at",
@@ -348,8 +371,12 @@ async def list_projects(
 		ResourceType.PROJECT,
 		required_level=AccessLevel.READER,
 	)
+	project_filters = filters or ProjectListFilters()
+	base_stmt = _apply_project_filters(
+		select(Project).where(predicate), project_filters
+	)
 	stmt = apply_sort(
-		select(Project).where(predicate).options(selectinload(Project.threads)),
+		base_stmt.options(selectinload(Project.threads)),
 		sort_by=sort_by,
 		sort_dir=sort_dir,
 		columns={
@@ -362,6 +389,94 @@ async def list_projects(
 	result = await session.execute(stmt.offset(skip).limit(limit))
 	projects = list(result.scalars().unique().all())
 	return _project_payloads(projects)
+
+
+async def count_projects(
+	session: AsyncSession,
+	principal: Principal,
+	filters: ProjectListFilters | None = None,
+) -> int:
+	"""count projects accessible by the principal."""
+	project_filters = filters or ProjectListFilters()
+	stmt = (
+		select(func.count())
+		.select_from(Project)
+		.where(
+			resource_access_predicate(
+				principal,
+				ResourceType.PROJECT,
+				required_level=AccessLevel.READER,
+			)
+		)
+	)
+	stmt = _apply_project_filters(stmt, project_filters)
+	return await session.scalar(stmt) or 0
+
+
+def _apply_project_filters(stmt: Select, filters: ProjectListFilters) -> Select:
+	"""apply project list/count filters."""
+	if filters.owner_id is not None:
+		stmt = stmt.where(Project.owner_id == filters.owner_id)
+	return stmt
+
+
+async def search_projects(
+	query_text: str,
+	session: AsyncSession,
+	principal: Principal,
+	limit: int = 10,
+	cursor: str | None = None,
+	search_params: SearchParams | None = None,
+) -> CursorPage[SearchResultItem]:
+	"""search accessible projects by name and description with pg_trgm."""
+	pattern = contains_pattern(query_text)
+	description_text = func.coalesce(Project.description, "")
+	search_score = func.greatest(
+		func.similarity(Project.name, query_text),
+		func.similarity(description_text, query_text),
+	)
+	predicate = resource_access_predicate(
+		principal,
+		ResourceType.PROJECT,
+		required_level=AccessLevel.READER,
+	)
+	stmt = (
+		select(Project, search_score.label("search_score"))
+		.where(
+			predicate,
+			or_(
+				search_score > 0.1,
+				Project.name.ilike(pattern, escape="\\"),
+				Project.description.ilike(pattern, escape="\\"),
+			),
+		)
+		.order_by(search_score.desc(), Project.updated_at.desc(), Project.id.desc())
+		.limit(limit + 1)
+	)
+	result = await session.execute(stmt)
+	items: list[SearchResultItem] = []
+	for project, score in result.all():
+		items.append(
+			SearchResultItem(
+				type=SearchResultType.PROJECT,
+				id=TypeID(project.id),
+				title=project.name,
+				preview=project.description[:100] if project.description else None,
+				score=float(score) if score is not None else None,
+				metadata=_project_search_metadata(project),
+				created_at=project.created_at,
+				updated_at=project.updated_at,
+			)
+		)
+	if cursor:
+		timestamp, cursor_id = decode_cursor(cursor)
+		items = [
+			item
+			for item in items
+			if (item.updated_at, str(item.id)) < (timestamp, cursor_id)
+		]
+	items.sort(key=lambda item: (item.updated_at, str(item.id)), reverse=True)
+	return build_cursor_page(items, limit, sort_key="updated_at")
 
 
 async def get_project(

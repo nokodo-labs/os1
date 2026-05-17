@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import Select
 
 from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
@@ -15,6 +16,7 @@ from api.permissions import ResourceType
 from api.schemas.reminder import ReminderList as ReminderListOut
 from api.schemas.reminder import (
 	ReminderListCreate,
+	ReminderListFilters,
 	ReminderListUpdate,
 	ReminderListWithCounts,
 )
@@ -145,6 +147,7 @@ async def create_reminder_list(
 async def list_reminder_lists(
 	session: AsyncSession,
 	principal: Principal,
+	filters: ReminderListFilters | None = None,
 	include_counts: bool = False,
 	skip: int = 0,
 	limit: int = 50,
@@ -153,10 +156,12 @@ async def list_reminder_lists(
 ) -> list[ReminderListWithCounts]:
 	"""list reminder lists, optionally with counts."""
 	await get_or_create_default_reminder_list(session, principal)
+	list_filters = filters or ReminderListFilters()
 	if not include_counts:
 		stmt = select(ReminderList).where(
 			resource_access_predicate(principal, ResourceType.REMINDER_LIST),
 		)
+		stmt = _apply_reminder_list_filters(stmt, list_filters)
 		stmt = apply_sort(
 			stmt,
 			sort_by=sort_by,
@@ -202,6 +207,7 @@ async def list_reminder_lists(
 			resource_access_predicate(principal, ResourceType.REMINDER_LIST),
 		)
 	)
+	counts_stmt = _apply_reminder_list_filters(counts_stmt, list_filters)
 	counts_stmt = apply_sort(
 		counts_stmt,
 		sort_by=sort_by,
@@ -233,9 +239,11 @@ async def list_reminder_lists(
 async def count_reminder_lists(
 	session: AsyncSession,
 	principal: Principal,
+	filters: ReminderListFilters | None = None,
 ) -> int:
 	"""count reminder lists accessible to the principal."""
 	await get_or_create_default_reminder_list(session, principal)
+	list_filters = filters or ReminderListFilters()
 	stmt = (
 		select(func.count())
 		.select_from(ReminderList)
@@ -243,7 +251,18 @@ async def count_reminder_lists(
 			resource_access_predicate(principal, ResourceType.REMINDER_LIST),
 		)
 	)
+	stmt = _apply_reminder_list_filters(stmt, list_filters)
 	return await session.scalar(stmt) or 0
+
+
+def _apply_reminder_list_filters(
+	stmt: Select,
+	filters: ReminderListFilters,
+) -> Select:
+	"""apply reminder-list list/count filters."""
+	if filters.owner_id is not None:
+		stmt = stmt.where(ReminderList.owner_id == filters.owner_id)
+	return stmt
 
 
 async def get_list_counts(

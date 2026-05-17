@@ -6,12 +6,13 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import Select
 
 from api.models.access_rule import AccessLevel
 from api.models.calendar import Calendar, CalendarEvent
 from api.models.event_types import EventType
 from api.permissions import ResourceType
-from api.schemas.calendar import CalendarCreate, CalendarUpdate
+from api.schemas.calendar import CalendarCreate, CalendarListFilters, CalendarUpdate
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission, resource_access_predicate
 from api.v1.service.calendar.cache import invalidate_calendar_scheduled_items
@@ -43,6 +44,7 @@ _CALENDAR_SORT_COLUMNS = {
 async def list_calendars(
 	session: AsyncSession,
 	principal: Principal,
+	filters: CalendarListFilters | None = None,
 	skip: int = 0,
 	limit: int = 100,
 	sort_by: str = "position",
@@ -50,13 +52,13 @@ async def list_calendars(
 ) -> list[Calendar]:
 	"""list calendars accessible to the principal."""
 	await get_or_create_default_calendar(session, principal)
+	calendar_filters = filters or CalendarListFilters()
 	stmt = (
 		select(Calendar)
-		.where(
-			resource_access_predicate(principal, ResourceType.CALENDAR),
-		)
+		.where(resource_access_predicate(principal, ResourceType.CALENDAR))
 		.options(selectinload(Calendar.projects))
 	)
+	stmt = _apply_calendar_filters(stmt, calendar_filters)
 	stmt = apply_sort(
 		stmt,
 		sort_by=sort_by,
@@ -71,9 +73,11 @@ async def list_calendars(
 async def count_calendars(
 	session: AsyncSession,
 	principal: Principal,
+	filters: CalendarListFilters | None = None,
 ) -> int:
 	"""count calendars accessible to the principal."""
 	await get_or_create_default_calendar(session, principal)
+	calendar_filters = filters or CalendarListFilters()
 	stmt = (
 		select(func.count())
 		.select_from(Calendar)
@@ -81,7 +85,15 @@ async def count_calendars(
 			resource_access_predicate(principal, ResourceType.CALENDAR),
 		)
 	)
+	stmt = _apply_calendar_filters(stmt, calendar_filters)
 	return await session.scalar(stmt) or 0
+
+
+def _apply_calendar_filters(stmt: Select, filters: CalendarListFilters) -> Select:
+	"""apply calendar list/count filters."""
+	if filters.owner_id is not None:
+		stmt = stmt.where(Calendar.owner_id == filters.owner_id)
+	return stmt
 
 
 async def create_calendar(

@@ -94,6 +94,20 @@ async def list_memories(
 	return [MemorySchema.model_validate(m) for m in items]
 
 
+@router.get("/count", response_model=int)
+async def count_memories(
+	filters: Annotated[MemoryListFilters, Depends()],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> int:
+	"""count memories matching the list filters."""
+	return await memory_service.count_memories(
+		db,
+		principal=principal,
+		filters=filters,
+	)
+
+
 @router.get("/{memory_id}", response_model=MemorySchema)
 async def get_memory(
 	memory_id: TypeID,

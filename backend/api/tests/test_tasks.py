@@ -20,6 +20,7 @@ from api.schemas.agent import AgentConfig, AgentCreate
 from api.schemas.runs import RunInput
 from api.schemas.task import TaskCreate, TaskListFilters, TaskUpdate
 from api.schemas.user import UserCreate
+from api.settings import settings
 from api.taskiq import broker
 from api.v1.service import agents as agent_service
 from api.v1.service import tasks as task_service
@@ -31,10 +32,8 @@ from api.v1.service.threads import summaries as summary_service
 from api.v1.tasks import threads as thread_tasks
 from api.v1.tasks.threads import (
 	THREAD_INACTIVITY_DISPATCH_TASK,
-	THREAD_INACTIVITY_HOURS,
 	THREAD_MAINTENANCE_BACKFILL_SCHEDULE_ID,
 	THREAD_MAINTENANCE_BACKFILL_TASK,
-	THREAD_MAINTENANCE_STALE_AFTER,
 	THREAD_MAINTENANCE_TASK,
 	clear_disabled_thread_maintenance_backfill_schedule,
 	fail_stale_thread_related_tasks,
@@ -296,10 +295,10 @@ async def test_list_tasks_filter(
 	data = response.json()
 	assert all(t["status"] == "running" for t in data)
 
-	# Filter by user_id
+	# Filter by owner_id
 	response = await client.get(
 		"/v1/tasks",
-		params={"user_id": user_id},
+		params={"owner_id": user_id},
 		headers=headers,
 	)
 	assert response.status_code == 200
@@ -505,8 +504,8 @@ async def test_start_thread_maintenance_task_supersedes_stale_active_task(
 	thread = Thread(id=thread_id, owner_id=user.id, tags=[])
 	db_session.add(thread)
 	await db_session.flush()
-	stale_at = (
-		datetime.now(tz=UTC) - THREAD_MAINTENANCE_STALE_AFTER - timedelta(minutes=1)
+	stale_at = datetime.now(tz=UTC) - timedelta(
+		minutes=settings.tasks.thread_maintenance.active_supersede_after_minutes + 1
 	)
 	stale_task = Task(
 		user_id=user.id,
@@ -590,7 +589,9 @@ async def test_thread_inactivity_schedule_resets_future_timer(
 	scheduled = await schedule_thread_inactivity_maintenance(
 		TypeID(thread.id), db_session
 	)
-	expected_due_at = last_activity_at + timedelta(hours=THREAD_INACTIVITY_HOURS)
+	expected_due_at = last_activity_at + timedelta(
+		hours=settings.tasks.thread_maintenance.inactivity_hours
+	)
 	if expected_due_at.second != 0 or expected_due_at.microsecond != 0:
 		expected_due_at = expected_due_at.replace(second=0, microsecond=0) + timedelta(
 			minutes=1
@@ -709,6 +710,91 @@ async def test_thread_inactivity_schedule_starts_mandatory_metadata_now(
 	assert task is not None
 	assert task.stage == "queued mandatory metadata"
 	assert enqueued == [(str(task.id), {})]
+
+
+@pytest.mark.asyncio
+async def test_thread_inactivity_schedule_supersedes_stale_queued_mandatory_task(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""queued mandatory metadata work cannot block a thread forever."""
+	monkeypatch.setattr(boot_settings, "TESTING", False)
+	fake_source = _FakeThreadScheduleSource()
+	fake_task = _FakeThreadMaintenanceTask()
+	monkeypatch.setattr(thread_tasks, "redis_schedule_source", fake_source)
+	monkeypatch.setattr(
+		thread_tasks, "dispatch_thread_inactivity_maintenance", fake_task
+	)
+	user = await user_service.create_user(
+		UserCreate(
+			email="thread_schedule_stale_queued@example.com",
+			username="sched_stale_queued",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	thread = await _create_thread_with_current_message(
+		db_session,
+		TypeID(user.id),
+		datetime.now(tz=UTC),
+	)
+	old_event_at = datetime.now(tz=UTC) - timedelta(
+		minutes=settings.tasks.thread_maintenance.queued_supersede_after_minutes + 1
+	)
+	active_task = Task(
+		user_id=user.id,
+		task_type=TaskType.CUSTOM,
+		status=TaskStatus.RUNNING,
+		progress=0,
+		stage="queued mandatory metadata",
+		started_at=old_event_at,
+		last_event_at=old_event_at,
+		created_at=old_event_at,
+		updated_at=old_event_at,
+		spawned_thread_id=thread.id,
+		metadata_={
+			task_service.TASK_NAME_METADATA_KEY: THREAD_MAINTENANCE_TASK,
+			"thread_id": str(thread.id),
+			"replace_metadata": False,
+			"maintenance_reason": "mandatory_metadata",
+			"maintenance_source": "post_run",
+		},
+	)
+	db_session.add(active_task)
+	await db_session.commit()
+	await db_session.refresh(active_task)
+	enqueued: list[tuple[str, JSONObject]] = []
+
+	async def _enqueue(task_id: TypeID, runtime_payload: JSONObject) -> None:
+		enqueued.append((str(task_id), runtime_payload))
+
+	monkeypatch.setattr(task_service, "enqueue_started_task", _enqueue)
+
+	scheduled = await schedule_thread_inactivity_maintenance(
+		TypeID(thread.id), db_session
+	)
+	new_task = await task_service.find_active_task(
+		db_session,
+		THREAD_MAINTENANCE_TASK,
+		{"thread_id": str(thread.id)},
+	)
+	await db_session.refresh(active_task)
+
+	assert scheduled is True
+	assert fake_source.deleted == [f"thread:inactivity-maintenance:{thread.id}"]
+	assert fake_task.kicker_instance.scheduled == []
+	assert active_task.status == TaskStatus.FAILED
+	assert active_task.stage == "queued task superseded"
+	assert active_task.result == {
+		"error": "stale_queued_task",
+		"message": "superseded after queued inactivity",
+		"thread_id": str(thread.id),
+	}
+	assert new_task is not None
+	assert new_task.id != active_task.id
+	assert new_task.stage == "queued mandatory metadata"
+	assert enqueued == [(str(new_task.id), {})]
 
 
 @pytest.mark.asyncio
@@ -1044,7 +1130,8 @@ async def test_thread_inactivity_schedule_does_not_retroactively_enqueue(
 	thread = await _create_thread_with_current_message(
 		db_session,
 		TypeID(user.id),
-		datetime.now(tz=UTC) - timedelta(hours=THREAD_INACTIVITY_HOURS + 1),
+		datetime.now(tz=UTC)
+		- timedelta(hours=settings.tasks.thread_maintenance.inactivity_hours + 1),
 		"ready thread",
 		["ready"],
 	)
@@ -1142,7 +1229,7 @@ async def test_task_runner_timeout_marks_task_failed(
 	await db_session.commit()
 	await db_session.refresh(task)
 
-	@task_service.register_task_runner(runner_name, timeout_seconds=0.01)
+	@task_service.register_task_runner(runner_name, timeout_seconds=lambda: 0.01)
 	async def _runner(ctx: task_service.TaskContext) -> JSONObject:
 		_ = ctx
 		await asyncio.sleep(1)
@@ -1435,7 +1522,7 @@ async def test_service_list_tasks(db_session: AsyncSession) -> None:
 	tasks = await task_service.list_tasks(
 		db_session,
 		principal=principal,
-		filters=TaskListFilters(user_id=user.id),
+		filters=TaskListFilters(owner_id=user.id),
 	)
 	assert len(tasks) >= 3
 
@@ -1443,7 +1530,7 @@ async def test_service_list_tasks(db_session: AsyncSession) -> None:
 	tasks_pending = await task_service.list_tasks(
 		db_session,
 		principal=principal,
-		filters=TaskListFilters(user_id=user.id, status_filter=TaskStatus.RUNNING),
+		filters=TaskListFilters(owner_id=user.id, status_filter=TaskStatus.RUNNING),
 	)
 	assert len(tasks_pending) >= 3
 
@@ -1613,7 +1700,8 @@ async def test_backfill_sweep_dispatches_eligible_threads(
 	stale_thread = await _create_thread_with_current_message(
 		db_session,
 		TypeID(user.id),
-		datetime.now(tz=UTC) - timedelta(hours=THREAD_INACTIVITY_HOURS + 1),
+		datetime.now(tz=UTC)
+		- timedelta(hours=settings.tasks.thread_maintenance.inactivity_hours + 1),
 	)
 	await db_session.commit()
 
@@ -1638,7 +1726,7 @@ async def test_backfill_sweep_dispatches_eligible_threads(
 	result = await run_thread_maintenance_backfill_sweep(
 		batch_size=5,
 		max_lookback_days=30,
-		min_inactivity_hours=THREAD_INACTIVITY_HOURS,
+		min_inactivity_hours=settings.tasks.thread_maintenance.inactivity_hours,
 		respect_enabled=False,
 	)
 
@@ -1669,7 +1757,9 @@ async def test_backfill_sweep_limits_candidate_inspection(
 			db_session,
 			TypeID(user.id),
 			datetime.now(tz=UTC)
-			- timedelta(hours=THREAD_INACTIVITY_HOURS + 4 - offset),
+			- timedelta(
+				hours=settings.tasks.thread_maintenance.inactivity_hours + 4 - offset
+			),
 		)
 	await db_session.commit()
 
@@ -1697,7 +1787,7 @@ async def test_backfill_sweep_limits_candidate_inspection(
 	result = await run_thread_maintenance_backfill_sweep(
 		batch_size=2,
 		max_lookback_days=30,
-		min_inactivity_hours=THREAD_INACTIVITY_HOURS,
+		min_inactivity_hours=settings.tasks.thread_maintenance.inactivity_hours,
 		respect_enabled=False,
 	)
 
@@ -1750,7 +1840,7 @@ async def test_backfill_sweep_respects_max_lookback_days(
 	result = await run_thread_maintenance_backfill_sweep(
 		batch_size=10,
 		max_lookback_days=30,
-		min_inactivity_hours=THREAD_INACTIVITY_HOURS,
+		min_inactivity_hours=settings.tasks.thread_maintenance.inactivity_hours,
 		respect_enabled=False,
 	)
 
@@ -1776,7 +1866,8 @@ async def test_backfill_sweep_skips_threads_with_active_maintenance_task(
 	thread = await _create_thread_with_current_message(
 		db_session,
 		TypeID(user.id),
-		datetime.now(tz=UTC) - timedelta(hours=THREAD_INACTIVITY_HOURS + 1),
+		datetime.now(tz=UTC)
+		- timedelta(hours=settings.tasks.thread_maintenance.inactivity_hours + 1),
 	)
 
 	# pre-existing active maintenance task for this thread.
@@ -1818,7 +1909,7 @@ async def test_backfill_sweep_skips_threads_with_active_maintenance_task(
 	result = await run_thread_maintenance_backfill_sweep(
 		batch_size=5,
 		max_lookback_days=30,
-		min_inactivity_hours=THREAD_INACTIVITY_HOURS,
+		min_inactivity_hours=settings.tasks.thread_maintenance.inactivity_hours,
 		respect_enabled=False,
 	)
 

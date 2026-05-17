@@ -41,6 +41,12 @@ class ScheduledReminderListFilters(BaseModel):
 	status_filter: ReminderStatus | None = ReminderStatus.PENDING
 
 
+class ReminderListFilters(BaseModel):
+	"""filters for listing reminder lists."""
+
+	owner_id: TypeID | None = None
+
+
 # ReminderList schemas
 
 

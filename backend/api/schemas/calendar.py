@@ -24,6 +24,12 @@ type CalendarEventSortBy = CommonSortBy | Literal["start_at", "end_at", "title"]
 type CalendarNotificationOffset = Annotated[int, Field(ge=0, le=525600)]
 
 
+class CalendarListFilters(BaseModel):
+	"""filters for listing calendars."""
+
+	owner_id: TypeID | None = None
+
+
 class CalendarEventListFilters(BaseModel):
 	"""filters for listing calendar events."""
 
