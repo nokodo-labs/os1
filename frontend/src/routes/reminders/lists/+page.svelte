@@ -107,5 +107,11 @@
 
 <!-- only show on mobile (layout handles desktop sidebar) -->
 {#if device.isMobile}
-	<ReminderListsSidebar selectedListId={undefined} isLoading={isLoadingLists} isMobile={true} />
+	<div class="flex h-full min-h-0 flex-1 flex-col">
+		<ReminderListsSidebar
+			selectedListId={undefined}
+			isLoading={isLoadingLists}
+			isMobile={true}
+		/>
+	</div>
 {/if}

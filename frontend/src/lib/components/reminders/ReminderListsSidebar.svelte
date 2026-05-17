@@ -35,6 +35,7 @@
 	import { tick } from 'svelte'
 	import InfoCircle from '../icons/InfoCircle.svelte'
 	import Share from '../icons/Share.svelte'
+	import ReminderListCreateModal from './ReminderListCreateModal.svelte'
 	import ReminderListPropertiesModal from './ReminderListPropertiesModal.svelte'
 
 	interface Props {
@@ -107,10 +108,7 @@
 		return rows
 	})
 
-	let isAddingList = $state(false)
-	let newListName = $state('')
-	let isSubmittingList = $state(false)
-	let addListInputEl: HTMLInputElement | null = $state(null)
+	let isCreateListOpen = $state(false)
 	let listShellEl = $state<HTMLDivElement | null>(null)
 	let listViewportEl = $state<HTMLElement | null>(null)
 
@@ -152,33 +150,16 @@
 		void reminders.loadReminders(listId, { force: false })
 	}
 
-	async function startInlineAddList() {
-		isAddingList = true
-		newListName = ''
-		await tick()
-		addListInputEl?.focus()
+	function openCreateListModal() {
+		isCreateListOpen = true
 	}
 
-	async function submitInlineAddList() {
-		if (isSubmittingList) return // guard against double submit
-		const name = newListName.trim()
-		if (name === '') {
-			isAddingList = false
-			newListName = ''
-			return
-		}
-
-		isSubmittingList = true
-		newListName = '' // clear immediately to prevent onblur re-trigger
-		isAddingList = false
-
-		const created = await reminders.createList({ name })
-		isSubmittingList = false
-		if (created) selectList(created.id)
+	function closeCreateListModal() {
+		isCreateListOpen = false
 	}
 
 	function handleCreateList() {
-		void startInlineAddList()
+		openCreateListModal()
 	}
 
 	function toggleListMenu(listId: string, buttonEl?: HTMLButtonElement | null) {
@@ -249,7 +230,7 @@
 	$effect(() => {
 		if (!browser) return
 		const handler = () => {
-			void startInlineAddList()
+			openCreateListModal()
 		}
 		window.addEventListener('reminders:list-add', handler)
 		return () => window.removeEventListener('reminders:list-add', handler)
@@ -372,7 +353,7 @@
 {#snippet sectionHeader(label: string, count: number, open: boolean, onToggle: () => void)}
 	<button
 		type="button"
-		class="text-foreground/70 hover:text-foreground/90 flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-1 py-2 text-xs font-semibold tracking-wide uppercase transition-colors duration-150"
+		class="text-foreground/70 hover:text-foreground/90 flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-2 py-2 text-xs font-semibold tracking-wide uppercase transition-colors duration-150"
 		onclick={onToggle}
 		aria-expanded={open}
 	>
@@ -382,11 +363,11 @@
 	</button>
 {/snippet}
 
-<div class="flex h-full min-h-0 flex-col">
+<div class="flex h-full min-h-0 flex-1 flex-col">
 	<header
 		class="{isMobile
-			? 'mt-0'
-			: 'mt-7'} relative z-10 flex max-h-22 items-center justify-between gap-3 px-2 pt-5 pb-2"
+			? 'pt-5 pb-4'
+			: 'mt-(--master-detail-header-top) mb-(--spacing-island-content) h-(--master-detail-header-height) py-0'} relative z-10 flex shrink-0 items-center justify-between gap-3 px-2"
 	>
 		<PageTitle icon={ListBullet} label="lists" iconColor="text-foreground/70" tag="h2" />
 		{#if !isMobile}
@@ -492,41 +473,6 @@
 						<FloatingScrollTopButton target={listViewportEl} />
 					</div>
 				{/if}
-
-				{#if isAddingList}
-					<div
-						class="rounded-pill border-foreground/14 bg-foreground/6 mx-3 border px-3 py-2.5"
-					>
-						<input
-							bind:this={addListInputEl}
-							type="text"
-							class="text-foreground/90 placeholder:text-foreground/40 w-full bg-transparent text-[0.95rem] font-medium outline-none"
-							placeholder="new list"
-							autocomplete="off"
-							bind:value={newListName}
-							onkeydown={(event) => {
-								if (event.key === 'Enter') {
-									event.preventDefault()
-									void submitInlineAddList()
-									return
-								}
-								if (event.key === 'Escape') {
-									event.preventDefault()
-									isAddingList = false
-									newListName = ''
-								}
-							}}
-							onblur={() => {
-								if (newListName.trim() !== '') {
-									void submitInlineAddList()
-								} else {
-									isAddingList = false
-									newListName = ''
-								}
-							}}
-						/>
-					</div>
-				{/if}
 			</div>
 		</nav>
 	{/if}
@@ -538,4 +484,10 @@
 	onClose={() => {
 		editListId = null
 	}}
+/>
+
+<ReminderListCreateModal
+	open={isCreateListOpen}
+	onClose={closeCreateListModal}
+	onCreated={(list) => selectList(list.id)}
 />

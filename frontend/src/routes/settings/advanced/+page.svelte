@@ -1,18 +1,18 @@
 <script lang="ts">
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
-	import Calendar from '$lib/components/icons/Calendar.svelte'
-	import ChatBubbles from '$lib/components/icons/ChatBubbles.svelte'
-	import CheckBox from '$lib/components/icons/CheckBox.svelte'
-	import Document from '$lib/components/icons/Document.svelte'
 	import Download from '$lib/components/icons/Download.svelte'
-	import FinderFolder from '$lib/components/icons/FinderFolder.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
-	import Users from '$lib/components/icons/Users.svelte'
 	import Wrench from '$lib/components/icons/Wrench.svelte'
 	import { Switch } from '$lib/components/primitives'
+	import PreferenceScopeToggle from '$lib/components/settings/PreferenceScopeToggle.svelte'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { accentColors, type AccentColorKey } from '$lib/contexts/themeContext.svelte'
-	import { preferences } from '$lib/stores/preferences.svelte'
+	import {
+		appVisuals,
+		type AppVisualId,
+		type ResourceIconComponent,
+	} from '$lib/resources/resourceVisuals'
+	import { preferences, type ClientPreferenceScope } from '$lib/stores/preferences.svelte'
 
 	interface DataAction {
 		label: string
@@ -20,6 +20,16 @@
 		icon: typeof Download
 		variant: 'default' | 'danger'
 		action: () => void
+	}
+
+	type HomepageSuggestionKey = keyof typeof preferences.data.homepage
+
+	interface SuggestionApp {
+		key: HomepageSuggestionKey
+		label: string
+		description: string
+		icon: ResourceIconComponent
+		accent: AccentColorKey
 	}
 
 	const exportActions: DataAction[] = [
@@ -63,50 +73,29 @@
 		},
 	]
 
-	// homepage suggestion apps (icons + accents match AppsGrid)
-	const suggestionApps = [
-		{
-			key: 'chats' as const,
-			label: 'chats',
-			description: 'recent conversations',
-			icon: ChatBubbles,
-			accent: 'green' as AccentColorKey,
-		},
-		{
-			key: 'reminders' as const,
-			label: 'reminders',
-			description: 'upcoming reminders',
-			icon: CheckBox,
-			accent: 'reminders' as AccentColorKey,
-		},
-		{
-			key: 'notes' as const,
-			label: 'notes',
-			description: 'your notes',
-			icon: Document,
-			accent: 'notes' as AccentColorKey,
-		},
-		{
-			key: 'friends' as const,
-			label: 'friends',
-			description: 'contacts and people',
-			icon: Users,
-			accent: 'purple' as AccentColorKey,
-		},
-		{
-			key: 'library' as const,
-			label: 'library',
-			description: 'saved content',
-			icon: FinderFolder,
-			accent: 'yellow' as AccentColorKey,
-		},
-		{
-			key: 'calendar' as const,
-			label: 'calendar',
-			description: 'events and schedule',
-			icon: Calendar,
-			accent: 'blue' as AccentColorKey,
-		},
+	function appVisual(id: AppVisualId) {
+		return appVisuals.find((app) => app.id === id)
+	}
+
+	function suggestionApp(id: AppVisualId, key: HomepageSuggestionKey): SuggestionApp {
+		const visual = appVisual(id)
+		return {
+			key,
+			label: visual?.title ?? id,
+			description: visual?.description ?? '',
+			icon: visual?.icon ?? Download,
+			accent: visual?.accent ?? 'gray',
+		}
+	}
+
+	const suggestionApps: SuggestionApp[] = [
+		suggestionApp('messages', 'chats'),
+		suggestionApp('reminders', 'reminders'),
+		suggestionApp('notes', 'notes'),
+		suggestionApp('projects', 'projects'),
+		suggestionApp('calendar', 'calendar'),
+		suggestionApp('library', 'library'),
+		suggestionApp('social', 'friends'),
 	]
 
 	function toggleSuggestionApp(key: keyof typeof preferences.data.homepage): void {
@@ -119,17 +108,22 @@
 		preferences.data.advanced.svgLiquidGlassIsland ?? false
 	)
 	const svgLiquidMetalEnabled = $derived(preferences.data.advanced.svgLiquidMetal ?? false)
+	const experimentalUiScope = $derived(preferences.experimentalUiScope)
 
 	function setSvgLiquidGlass(enabled: boolean): void {
-		void preferences.update('advanced', { svgLiquidGlass: enabled })
+		void preferences.updateExperimentalUi({ svgLiquidGlass: enabled })
 	}
 
 	function setSvgLiquidGlassIsland(enabled: boolean): void {
-		void preferences.update('advanced', { svgLiquidGlassIsland: enabled })
+		void preferences.updateExperimentalUi({ svgLiquidGlassIsland: enabled })
 	}
 
 	function setSvgLiquidMetal(enabled: boolean): void {
-		void preferences.update('advanced', { svgLiquidMetal: enabled })
+		void preferences.updateExperimentalUi({ svgLiquidMetal: enabled })
+	}
+
+	function setExperimentalUiScope(scope: ClientPreferenceScope): void {
+		void preferences.setExperimentalUiScope(scope)
 	}
 </script>
 
@@ -141,9 +135,19 @@
 	<div class="space-y-4">
 		<!-- experimental features -->
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-foreground/85 text-sm font-semibold">experimental features</div>
-			<div class="text-foreground/55 mt-1 text-sm">
-				these features are experimental and may cause performance issues or bugs.
+			<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+				<div>
+					<div class="text-foreground/85 text-sm font-semibold">
+						experimental features
+					</div>
+					<div class="text-foreground/55 mt-1 text-sm">
+						these features are experimental and may cause performance issues or bugs.
+					</div>
+				</div>
+				<PreferenceScopeToggle
+					scope={experimentalUiScope}
+					onchange={setExperimentalUiScope}
+				/>
 			</div>
 
 			<div class="mt-6 flex items-center justify-between">

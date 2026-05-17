@@ -5,6 +5,14 @@
 	import Share from '$lib/components/icons/Share.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 	import { Switch } from '$lib/components/primitives'
+	import {
+		maxLengthError,
+		REMINDER_LIST_COLOR_MAX_LENGTH,
+		REMINDER_LIST_DESCRIPTION_MAX_LENGTH,
+		REMINDER_LIST_ICON_MAX_LENGTH,
+		REMINDER_LIST_NAME_MAX_LENGTH,
+		requiredNameError,
+	} from '$lib/reminders/validation'
 	import { resourceAccentStyle, resourceVisual } from '$lib/resources/resourceVisuals'
 	import { modals } from '$lib/stores/modals.svelte'
 	import {
@@ -96,11 +104,26 @@
 		icon = value
 	}
 
+	function validateDraft(trimmedName: string): string | null {
+		return (
+			requiredNameError(trimmedName) ??
+			maxLengthError('name', trimmedName, REMINDER_LIST_NAME_MAX_LENGTH) ??
+			maxLengthError(
+				'description',
+				description.trim(),
+				REMINDER_LIST_DESCRIPTION_MAX_LENGTH
+			) ??
+			maxLengthError('icon', icon.trim(), REMINDER_LIST_ICON_MAX_LENGTH) ??
+			maxLengthError('color', color.trim(), REMINDER_LIST_COLOR_MAX_LENGTH)
+		)
+	}
+
 	async function save(): Promise<void> {
 		if (!list || !canEditList || isSaving) return
 		const trimmedName = name.trim()
-		if (!trimmedName) {
-			error = 'name is required'
+		const validationError = validateDraft(trimmedName)
+		if (validationError) {
+			error = validationError
 			return
 		}
 
@@ -195,12 +218,13 @@
 					type="text"
 					class="{inputClass} col-span-full"
 					bind:value={name}
+					maxlength={REMINDER_LIST_NAME_MAX_LENGTH}
 					placeholder="list name"
 					disabled={isSaving || !canEditList}
 				/>
 			</div>
 
-			<div class="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+			<div class="grid gap-3">
 				<div class={fieldClass}>
 					<ReminderIcon variant="solid" class="h-4 w-4 text-(--accent-primary)" />
 					<span class="text-foreground/60 text-[0.78rem] font-semibold">icon</span>
@@ -249,6 +273,7 @@
 							type="text"
 							bind:value={color}
 							class={inputClass}
+							maxlength={REMINDER_LIST_COLOR_MAX_LENGTH}
 							disabled={isSaving || !canEditList}
 							aria-label="color value"
 						/>
@@ -268,6 +293,7 @@
 					id="list-description"
 					class="{inputClass} col-span-full min-h-24 resize-y text-sm"
 					bind:value={description}
+					maxlength={REMINDER_LIST_DESCRIPTION_MAX_LENGTH}
 					placeholder="what belongs here"
 					disabled={isSaving || !canEditList}
 				></textarea>

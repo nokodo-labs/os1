@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Eye from '$lib/components/icons/Eye.svelte'
 	import { RadioGroup, Switch } from '$lib/components/primitives'
+	import PreferenceScopeToggle from '$lib/components/settings/PreferenceScopeToggle.svelte'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { accentColors, selectableAccentColors } from '$lib/contexts/themeContext.svelte'
 	import { background } from '$lib/stores/background.svelte'
@@ -9,6 +10,7 @@
 		type AccentColor,
 		type BackgroundType,
 		type BubbleTailStyle,
+		type ClientPreferenceScope,
 		type ThemeMode,
 	} from '$lib/stores/preferences.svelte'
 	import { slide } from 'svelte/transition'
@@ -54,9 +56,12 @@
 	const autoBackground = $derived(preferences.data.appearance.autoBackground ?? true)
 	const staticColor = $derived(preferences.data.appearance.staticColor ?? '#171717')
 	const selectedBubbleTailStyle = $derived(preferences.data.appearance.bubbleTailStyle ?? 'none')
+	const themeScope = $derived(preferences.themeScope)
+	const wallpaperScope = $derived(preferences.wallpaperScope)
+	const bubbleTailScope = $derived(preferences.bubbleTailScope)
 
 	function setThemeMode(next: string): void {
-		void preferences.update('appearance', { themeMode: next as ThemeMode })
+		void preferences.updateThemeMode(next as ThemeMode)
 	}
 
 	function setAccent(next: AccentColor): void {
@@ -68,7 +73,7 @@
 	}
 
 	function setBackground(bg: BackgroundType): void {
-		void preferences.update('appearance', { background: bg })
+		background.setBackground(bg)
 	}
 
 	function setAutoBackground(enabled: boolean): void {
@@ -80,7 +85,19 @@
 	}
 
 	function setBubbleTailStyle(style: string): void {
-		void preferences.update('appearance', { bubbleTailStyle: style as BubbleTailStyle })
+		void preferences.updateBubbleTailStyle(style as BubbleTailStyle)
+	}
+
+	function setThemeScope(scope: ClientPreferenceScope): void {
+		void preferences.setThemeScope(scope)
+	}
+
+	function setWallpaperScope(scope: ClientPreferenceScope): void {
+		void preferences.setWallpaperScope(scope)
+	}
+
+	function setBubbleTailScope(scope: ClientPreferenceScope): void {
+		void preferences.setBubbleTailScope(scope)
 	}
 </script>
 
@@ -91,9 +108,14 @@
 >
 	<div class="space-y-4">
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-foreground text-sm font-semibold">theme</div>
-			<div class="text-foreground/50 mt-1 text-sm">
-				choose between light, dark, or automatic theme based on system settings
+			<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+				<div>
+					<div class="text-foreground text-sm font-semibold">theme</div>
+					<div class="text-foreground/50 mt-1 text-sm">
+						choose between light, dark, or automatic theme based on system settings
+					</div>
+				</div>
+				<PreferenceScopeToggle scope={themeScope} onchange={setThemeScope} />
 			</div>
 			<RadioGroup
 				options={themeModeOptions}
@@ -161,10 +183,20 @@
 		</div>
 
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="flex items-center justify-between">
+			<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 				<div>
-					<div class="text-foreground text-sm font-semibold">auto wallpaper</div>
+					<div class="text-foreground text-sm font-semibold">wallpaper</div>
 					<div class="text-foreground/50 mt-1 text-sm">
+						choose the app background for all devices or only this one
+					</div>
+				</div>
+				<PreferenceScopeToggle scope={wallpaperScope} onchange={setWallpaperScope} />
+			</div>
+
+			<div class="mt-5 flex items-center justify-between gap-4">
+				<div>
+					<div class="text-foreground/75 text-sm font-medium">auto wallpaper</div>
+					<div class="text-foreground/45 mt-1 text-xs">
 						wallpaper changes automatically based on context
 					</div>
 				</div>
@@ -176,7 +208,7 @@
 					class="border-foreground/15 mt-5 border-t pt-5"
 					transition:slide={{ duration: 200 }}
 				>
-					<div class="text-foreground text-sm font-semibold">wallpaper</div>
+					<div class="text-foreground text-sm font-semibold">choose wallpaper</div>
 					<div class="text-foreground/50 mt-1 text-sm">
 						select a dynamic background for the app
 					</div>
@@ -197,7 +229,7 @@
 										{isSelected ? 'border-foreground' : 'border-foreground/40'}"
 								>
 									{#if isSelected}
-										<span class="bg-background h-2 w-2 rounded-full"></span>
+										<span class="bg-foreground h-2 w-2 rounded-full"></span>
 									{/if}
 								</span>
 								<span
@@ -233,9 +265,15 @@
 		</div>
 
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-foreground text-sm font-semibold">chat bubble tails</div>
-			<div class="text-foreground/50 mt-1 text-sm">
-				add decorative tails to chat message bubbles, similar to popular messaging apps
+			<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+				<div>
+					<div class="text-foreground text-sm font-semibold">chat bubble tails</div>
+					<div class="text-foreground/50 mt-1 text-sm">
+						add decorative tails to chat message bubbles, similar to popular messaging
+						apps
+					</div>
+				</div>
+				<PreferenceScopeToggle scope={bubbleTailScope} onchange={setBubbleTailScope} />
 			</div>
 			<RadioGroup
 				options={bubbleTailOptions}

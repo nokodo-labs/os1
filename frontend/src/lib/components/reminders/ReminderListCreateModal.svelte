@@ -1,0 +1,273 @@
+<script lang="ts">
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
+	import Check from '$lib/components/icons/Check.svelte'
+	import Info from '$lib/components/icons/Info.svelte'
+	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import { Switch } from '$lib/components/primitives'
+	import {
+		maxLengthError,
+		REMINDER_LIST_COLOR_MAX_LENGTH,
+		REMINDER_LIST_DESCRIPTION_MAX_LENGTH,
+		REMINDER_LIST_ICON_MAX_LENGTH,
+		REMINDER_LIST_NAME_MAX_LENGTH,
+		requiredNameError,
+	} from '$lib/reminders/validation'
+	import { resourceAccentStyle, resourceVisual } from '$lib/resources/resourceVisuals'
+	import { reminders, type ReminderListWithCounts } from '$lib/stores/reminders.svelte'
+
+	interface Props {
+		open: boolean
+		onClose: () => void
+		onCreated?: (list: ReminderListWithCounts) => void | Promise<void>
+	}
+
+	let { open, onClose, onCreated }: Props = $props()
+
+	let name = $state('')
+	let description = $state('')
+	let icon = $state('')
+	let color = $state('#d45446')
+	let isDefault = $state(false)
+	let isSaving = $state(false)
+	let error = $state<string | null>(null)
+
+	const iconOptions = ['📌', '✅', '💼', '🏠', '🛒', '💊', '✈️', '🎁', '📚', '⚡', '🔥', '🧠']
+	const reminderVisual = resourceVisual('reminder_list')
+	const ReminderIcon = reminderVisual.icon
+	const reminderAccentStyle = resourceAccentStyle('reminder_list')
+
+	$effect(() => {
+		if (!open) return
+		name = ''
+		description = ''
+		icon = ''
+		color = '#d45446'
+		isDefault = false
+		isSaving = false
+		error = null
+	})
+
+	function displayName(value: string): string {
+		const trimmed = value.trim()
+		return trimmed || 'untitled list'
+	}
+
+	function selectIcon(value: string): void {
+		if (isSaving) return
+		icon = value
+	}
+
+	function validateDraft(trimmedName: string): string | null {
+		return (
+			requiredNameError(trimmedName) ??
+			maxLengthError('name', trimmedName, REMINDER_LIST_NAME_MAX_LENGTH) ??
+			maxLengthError(
+				'description',
+				description.trim(),
+				REMINDER_LIST_DESCRIPTION_MAX_LENGTH
+			) ??
+			maxLengthError('icon', icon.trim(), REMINDER_LIST_ICON_MAX_LENGTH) ??
+			maxLengthError('color', color.trim(), REMINDER_LIST_COLOR_MAX_LENGTH)
+		)
+	}
+
+	async function save(): Promise<void> {
+		if (isSaving) return
+		const trimmedName = name.trim()
+		const validationError = validateDraft(trimmedName)
+		if (validationError) {
+			error = validationError
+			return
+		}
+
+		isSaving = true
+		error = null
+		try {
+			const created = await reminders.createList({
+				name: trimmedName,
+				description: description.trim() || null,
+				icon: icon.trim() || null,
+				color: color.trim() || null,
+				isDefault,
+			})
+			if (!created) {
+				error = 'could not create list'
+				return
+			}
+			await onCreated?.(created)
+			onClose()
+		} finally {
+			isSaving = false
+		}
+	}
+
+	function handleSubmit(event: SubmitEvent): void {
+		event.preventDefault()
+		void save()
+	}
+
+	const panelClass =
+		'border-foreground/13 bg-background/70 shadow-[inset_0_1px_0_rgb(255_255_255/0.08)] backdrop-blur-[16px] backdrop-saturate-[1.08]'
+	const fieldClass = `${panelClass} grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 rounded-[16px] border p-3`
+	const inputClass =
+		'border-foreground/12 bg-foreground/4 text-foreground/90 placeholder:text-foreground/35 min-h-10 w-full min-w-0 rounded-xl border px-3 py-2 outline-none transition-colors duration-150 focus:border-[color-mix(in_oklch,var(--accent-primary)_48%,transparent)] focus:bg-foreground/6 disabled:cursor-not-allowed disabled:opacity-55'
+	const actionButtonClass =
+		'rounded-pill inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55'
+</script>
+
+<BaseModal
+	{open}
+	title="new list"
+	description="name and appearance"
+	onClose={() => !isSaving && onClose()}
+	widthClassName="max-w-lg"
+>
+	<form class="grid gap-3" style={reminderAccentStyle} onsubmit={handleSubmit}>
+		<section class="{panelClass} flex min-w-0 items-center gap-4 rounded-[18px] border p-4">
+			<div
+				class="flex h-11 w-11 shrink-0 items-center justify-center rounded-[15px] text-white"
+				style={`background-color: ${color}`}
+			>
+				{#if icon.trim()}
+					<span class="text-lg leading-none">{icon.trim()}</span>
+				{:else}
+					<ReminderIcon variant="solid" class="h-5 w-5" />
+				{/if}
+			</div>
+			<div class="min-w-0 flex-1">
+				<p class="text-foreground/50 text-xs font-medium tracking-[0.12em] uppercase">
+					reminder list
+				</p>
+				<h3 class="text-foreground min-w-0 truncate text-lg font-semibold">
+					{displayName(name)}
+				</h3>
+			</div>
+			<div
+				class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/75 ml-auto inline-flex items-center gap-2 border px-3 py-2 text-[0.8rem] font-semibold whitespace-nowrap max-[520px]:ml-0"
+			>
+				<span>default</span>
+				<Switch
+					size="sm"
+					bind:checked={isDefault}
+					disabled={isSaving}
+					ariaLabel="default list"
+				/>
+			</div>
+		</section>
+
+		<div class={fieldClass}>
+			<ReminderIcon variant="solid" class="h-4 w-4 text-(--accent-primary)" />
+			<label class="text-foreground/60 text-[0.78rem] font-semibold" for="new-list-name">
+				name
+			</label>
+			<input
+				id="new-list-name"
+				type="text"
+				class="{inputClass} col-span-full"
+				bind:value={name}
+				maxlength={REMINDER_LIST_NAME_MAX_LENGTH}
+				placeholder="list name"
+				disabled={isSaving}
+			/>
+		</div>
+
+		<div class="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+			<div class={fieldClass}>
+				<ReminderIcon variant="solid" class="h-4 w-4 text-(--accent-primary)" />
+				<span class="text-foreground/60 text-[0.78rem] font-semibold">icon</span>
+				<input
+					type="text"
+					class="{inputClass} col-span-full"
+					bind:value={icon}
+					maxlength={REMINDER_LIST_ICON_MAX_LENGTH}
+					placeholder="emoji or short label"
+					disabled={isSaving}
+				/>
+				<div class="col-span-full grid grid-cols-6 gap-1.5">
+					<button
+						type="button"
+						class="border-foreground/10 bg-foreground/5 text-foreground/60 hover:bg-foreground/8 rounded-xl border px-2 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-55 {icon.trim() ===
+						''
+							? 'text-foreground border-[color-mix(in_oklch,var(--accent-primary)_44%,transparent)] bg-[color-mix(in_oklch,var(--accent-primary)_16%,transparent)]'
+							: ''}"
+						disabled={isSaving}
+						onclick={() => selectIcon('')}
+					>
+						-
+					</button>
+					{#each iconOptions as option (option)}
+						<button
+							type="button"
+							class="border-foreground/10 bg-foreground/5 hover:bg-foreground/8 rounded-xl border px-2 py-2 text-lg leading-none transition-colors disabled:cursor-not-allowed disabled:opacity-55 {icon.trim() ===
+							option
+								? 'border-[color-mix(in_oklch,var(--accent-primary)_44%,transparent)] bg-[color-mix(in_oklch,var(--accent-primary)_16%,transparent)]'
+								: ''}"
+							disabled={isSaving}
+							onclick={() => selectIcon(option)}
+							aria-label={`use ${option} icon`}
+						>
+							{option}
+						</button>
+					{/each}
+				</div>
+			</div>
+			<div class={fieldClass}>
+				<ReminderIcon variant="solid" class="h-4 w-4 text-(--accent-primary)" />
+				<label class="text-foreground/60 text-[0.78rem] font-semibold" for="new-list-color">
+					color
+				</label>
+				<div class="col-span-full grid min-w-0 grid-cols-[3rem_minmax(0,1fr)] gap-2">
+					<input
+						id="new-list-color"
+						type="color"
+						bind:value={color}
+						class="border-foreground/12 h-10 w-12 cursor-pointer rounded-xl border bg-transparent disabled:cursor-not-allowed disabled:opacity-55"
+						disabled={isSaving}
+					/>
+					<input
+						type="text"
+						bind:value={color}
+						class={inputClass}
+						maxlength={REMINDER_LIST_COLOR_MAX_LENGTH}
+						disabled={isSaving}
+						aria-label="color value"
+					/>
+				</div>
+			</div>
+		</div>
+
+		<div class={fieldClass}>
+			<Info class="h-4 w-4 text-(--accent-primary)" />
+			<label
+				class="text-foreground/60 text-[0.78rem] font-semibold"
+				for="new-list-description"
+			>
+				description
+			</label>
+			<textarea
+				id="new-list-description"
+				class="{inputClass} col-span-full min-h-24 resize-y text-sm"
+				bind:value={description}
+				maxlength={REMINDER_LIST_DESCRIPTION_MAX_LENGTH}
+				placeholder="what belongs here"
+				disabled={isSaving}
+			></textarea>
+		</div>
+
+		{#if error}
+			<p class="text-destructive text-sm">{error}</p>
+		{/if}
+
+		<div class="flex justify-end gap-2 pt-1">
+			<button
+				type="submit"
+				class="{actionButtonClass} bg-(--accent-primary) text-white hover:brightness-[1.06]"
+				disabled={isSaving || !name.trim()}
+			>
+				<Check class="h-4 w-4" />
+				{#if isSaving}<ShimmerText className="inline-block">creating</ShimmerText
+					>{:else}<span>create</span>{/if}
+			</button>
+		</div>
+	</form>
+</BaseModal>

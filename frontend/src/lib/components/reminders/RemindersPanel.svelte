@@ -119,19 +119,21 @@
 		isAddingReminder = false
 	}
 
-	async function submitInlineAdd(draft: { title: string; description: string | null }) {
-		if (!canEditActiveList) return
+	async function submitInlineAdd(draft: {
+		title: string
+		description: string | null
+	}): Promise<boolean> {
+		if (!canEditActiveList) return false
 		const created = await reminders.createReminder({
 			title: draft.title,
 			listId,
 			description: draft.description,
 		})
+		if (!created) return false
+
 		isAddingReminder = false
 		isAddingExpanded = false
-		if (created) {
-			incoming.set(created.id, { delayMs: 0, iconMorph: 'plus-to-circle' })
-			window.setTimeout(() => incoming.delete(created.id), 280)
-		}
+		return true
 	}
 
 	async function loadReminders(targetListId: string | null) {
@@ -178,9 +180,13 @@
 		return ok
 	}
 
-	async function updateReminder(reminder: ReminderWithSubtasks, updates: ReminderUpdate) {
-		if (!canEditActiveList) return
-		await reminders.updateReminder(reminder, updates)
+	async function updateReminder(
+		reminder: ReminderWithSubtasks,
+		updates: ReminderUpdate
+	): Promise<boolean> {
+		if (!canEditActiveList) return false
+		const saved = await reminders.updateReminder(reminder, updates)
+		return Boolean(saved)
 	}
 
 	// effects
@@ -245,7 +251,7 @@
 	})
 </script>
 
-<div class="flex h-full min-h-0 flex-col" style="gap: var(--spacing-header-content);">
+<div class="flex w-full flex-1 flex-col" style="gap: var(--spacing-header-content);">
 	{#if showListTitle}
 		<header class="flex max-h-22 items-center justify-between gap-3 px-2 py-5 pb-6">
 			<div class="flex min-w-0 items-center gap-3">
@@ -275,7 +281,7 @@
 			<NokodoLoader className="opacity-70" expanded={false} />
 		</div>
 	{:else}
-		<div class="min-h-0 flex-1 overflow-y-auto px-1 pb-2 {showListTitle ? '' : 'pt-4'}">
+		<div class="flex-1 px-1 pb-6 {showListTitle ? '' : 'pt-4'}">
 			<div class="flex flex-col gap-1">
 				{#each pendingReminders as reminder (reminder.id)}
 					{@const motion = getReminderMotion(reminder.id)}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import Bell from '$lib/components/icons/Bell.svelte'
 	import Calendar from '$lib/components/icons/Calendar.svelte'
@@ -12,6 +13,7 @@
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import { MenuItem, PopupMenu } from '$lib/components/primitives'
 	import RecurrenceEditor from '$lib/components/scheduling/RecurrenceEditor.svelte'
+	import { maxLengthError, REMINDER_TITLE_MAX_LENGTH } from '$lib/reminders/validation'
 	import { device } from '$lib/stores/device.svelte'
 	import type {
 		ReminderListWithCounts,
@@ -34,7 +36,7 @@
 		onToggleComplete: () => void | Promise<void>
 		onMove: (targetListId: string | null) => void | Promise<void>
 		onDelete: () => void | boolean | Promise<void | boolean>
-		onUpdate: (updates: ReminderUpdate) => void | Promise<void>
+		onUpdate: (updates: ReminderUpdate) => boolean | void | Promise<boolean | void>
 		availableLists: ReminderListWithCounts[]
 		motion?: Motion
 		motionDelayMs?: number
@@ -45,7 +47,10 @@
 		kind: 'create'
 		listId: string | null
 		expanded: boolean
-		onCreate: (draft: { title: string; description: string | null }) => void | Promise<void>
+		onCreate: (draft: {
+			title: string
+			description: string | null
+		}) => boolean | Promise<boolean>
 		onCancel: () => void
 		autoFocus?: boolean
 		motion?: Motion
@@ -65,6 +70,8 @@
 	let isMenuOpen = $state(false)
 	let isDatePickerOpen = $state(false)
 	let isRepeatMenuOpen = $state(false)
+	let isSaving = $state(false)
+	let draftError = $state<string | null>(null)
 
 	const DESCRIPTION_PREVIEW_MAX = 140
 
@@ -239,13 +246,32 @@
 		}
 	}
 
-	function handleTitleBlur() {
+	function clearDraftError() {
+		draftError = null
+	}
+
+	async function handleTitleBlur() {
 		const trimmed = editedTitle.trim()
 
 		if (props.kind === 'edit') {
 			if (!isEditable) return
+			const error = maxLengthError('title', trimmed, REMINDER_TITLE_MAX_LENGTH)
+			if (error) {
+				draftError = error
+				return
+			}
 			if (trimmed !== props.reminder.title && trimmed !== '') {
-				props.onUpdate({ title: trimmed })
+				isSaving = true
+				try {
+					const saved = await props.onUpdate({ title: trimmed })
+					if (saved === false) {
+						draftError = 'could not save reminder'
+						return
+					}
+					draftError = null
+				} finally {
+					isSaving = false
+				}
 			} else {
 				editedTitle = props.reminder.title
 			}
@@ -255,14 +281,24 @@
 		editedTitle = trimmed
 	}
 
-	function handleDescriptionBlur() {
+	async function handleDescriptionBlur() {
 		const trimmed = editedDescription.trim()
 
 		if (props.kind === 'edit') {
 			if (!isEditable) return
 			const original = props.reminder.description ?? ''
 			if (trimmed !== original) {
-				props.onUpdate({ description: trimmed || null })
+				isSaving = true
+				try {
+					const saved = await props.onUpdate({ description: trimmed || null })
+					if (saved === false) {
+						draftError = 'could not save reminder'
+						return
+					}
+					draftError = null
+				} finally {
+					isSaving = false
+				}
 			}
 			return
 		}
@@ -342,11 +378,23 @@
 			props.onCancel()
 			return
 		}
+		const error = maxLengthError('title', title, REMINDER_TITLE_MAX_LENGTH)
+		if (error) {
+			draftError = error
+			return
+		}
 
-		await props.onCreate({
-			title,
-			description: editedDescription.trim() || null,
-		})
+		isSaving = true
+		draftError = null
+		try {
+			const created = await props.onCreate({
+				title,
+				description: editedDescription.trim() || null,
+			})
+			if (!created) draftError = 'could not save reminder'
+		} finally {
+			isSaving = false
+		}
 	}
 
 	async function handleToggleComplete() {
@@ -358,6 +406,7 @@
 		if (props.kind !== 'edit') return
 		editedTitle = props.reminder.title
 		editedDescription = props.reminder.description ?? ''
+		draftError = null
 	})
 
 	$effect(() => {
@@ -435,12 +484,15 @@
 					<input
 						bind:this={titleInputEl}
 						type="text"
+						maxlength={REMINDER_TITLE_MAX_LENGTH}
 						class="title-input text-foreground/90 placeholder:text-foreground/40 m-0 w-full appearance-none border-0 bg-transparent p-0 text-[0.95rem] leading-6 outline-none {isCompleted
 							? 'line-through'
 							: ''}"
 						placeholder={props.kind === 'create' ? 'new reminder' : 'reminder title'}
 						autocomplete="off"
 						bind:value={editedTitle}
+						disabled={!isEditable || isSaving}
+						oninput={clearDraftError}
 						onblur={handleTitleBlur}
 						onkeydown={handleTitleKeyDown}
 					/>
@@ -449,7 +501,7 @@
 			{:else}
 				<div class="text-foreground/90 min-w-0 text-[0.95rem] leading-6">
 					<span class="title-text">
-						{props.kind === 'edit' ? props.reminder.title : editedTitle}
+						{props.kind === 'edit' ? props.reminder.title : 'new reminder'}
 					</span>
 				</div>
 			{/if}
@@ -484,9 +536,15 @@
 					placeholder="add details"
 					rows="2"
 					bind:value={editedDescription}
+					disabled={!isEditable || isSaving}
+					oninput={clearDraftError}
 					onblur={handleDescriptionBlur}
 					onkeydown={handleDescriptionKeyDown}
 				></textarea>
+
+				{#if draftError}
+					<p class="text-destructive pl-9 text-xs font-medium">{draftError}</p>
+				{/if}
 
 				<div class="flex flex-wrap items-center gap-2 pl-9">
 					{#if props.kind === 'edit'}
@@ -544,14 +602,16 @@
 					{#if props.kind === 'create'}
 						<button
 							type="button"
-							class="rounded-pill border-foreground/14 bg-foreground/8 text-foreground/85 hover:bg-foreground/12 ml-auto cursor-pointer border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+							class="rounded-pill ml-auto inline-flex cursor-pointer items-center gap-1.5 border border-transparent bg-(--accent-primary) px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:brightness-[1.06] disabled:cursor-not-allowed disabled:opacity-45"
 							onclick={(event) => {
 								event.stopPropagation()
 								void submitCreate()
 							}}
-							disabled={editedTitle.trim() === ''}
+							disabled={editedTitle.trim() === '' || isSaving}
 						>
-							save
+							<Check class="h-3.5 w-3.5" />
+							{#if isSaving}<ShimmerText className="inline-block">saving</ShimmerText
+								>{:else}<span>save</span>{/if}
 						</button>
 					{/if}
 				</div>

@@ -1,7 +1,8 @@
 <script lang="ts">
 	import Brain from '$lib/components/icons/Brain.svelte'
+	import Knobs from '$lib/components/icons/Knobs.svelte'
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
-	import { Switch } from '$lib/components/primitives'
+	import { ActionButton, Switch } from '$lib/components/primitives'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
@@ -127,19 +128,14 @@
 						class="border-foreground/15 mt-3 border-t pt-3"
 						transition:slide={{ duration: 200 }}
 					>
-						<div class="flex items-center justify-between">
-							<div class="text-foreground/70 text-sm font-medium">
-								manage memories
-							</div>
-							<button
-								type="button"
-								class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/60 hover:border-foreground/20 hover:bg-foreground/10 hover:text-foreground/80 flex items-center gap-1.5 border px-3 py-1.5 text-xs transition-all"
-								onclick={() => modals.open('memories')}
-							>
-								<Brain class="h-3.5 w-3.5" />
-								manage
-							</button>
-						</div>
+						<ActionButton
+							variant="secondary"
+							class="w-full"
+							onclick={() => modals.open('memories')}
+						>
+							<Knobs class="h-4 w-4" />
+							manage memories
+						</ActionButton>
 					</div>
 				{/if}
 			</div>

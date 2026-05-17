@@ -12,6 +12,7 @@
 	import SoundHigh from '$lib/components/icons/SoundHigh.svelte'
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import Wrench from '$lib/components/icons/Wrench.svelte'
+	import PageTitle from '$lib/components/PageTitle.svelte'
 	import ScrollTopShadow from '$lib/components/ScrollTopShadow.svelte'
 	import SidebarListItem from '$lib/components/SidebarListItem.svelte'
 	import { session } from '$lib/stores/session.svelte'
@@ -166,15 +167,10 @@
 <div class="flex h-full min-h-0 flex-col">
 	<header
 		class="{isMobile
-			? 'mt-0'
-			: 'mt-7'} relative z-10 flex max-h-22 items-center justify-between gap-3 px-2 pt-5 pb-2"
+			? 'pt-5 pb-4'
+			: 'mt-(--master-detail-header-top) mb-(--spacing-island-content) h-(--master-detail-header-height) py-0'} relative z-10 flex shrink-0 items-center justify-between gap-3 px-2"
 	>
-		<div class="flex min-w-0 items-center gap-2">
-			<Cog6 variant="solid" class="text-foreground/60 h-5 w-5" />
-			<h2 class="text-foreground/85 min-w-0 truncate text-lg font-semibold tracking-wide">
-				settings
-			</h2>
-		</div>
+		<PageTitle icon={Cog6} label="settings" iconColor="text-foreground/70" tag="h2" />
 	</header>
 
 	<div class="relative min-h-0 flex-1 overflow-hidden" style={sidebarListEdgeStyle}>

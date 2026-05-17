@@ -61,7 +61,7 @@
 						onchange={(e) => {
 							const checked = (e.currentTarget as HTMLInputElement).checked
 							void preferences.update('appearance', {
-								background: checked ? 'none' : null,
+								background: checked ? 'none' : undefined,
 							})
 						}}
 					/>
