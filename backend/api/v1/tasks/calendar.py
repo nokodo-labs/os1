@@ -18,7 +18,7 @@ from api.permissions import ResourceType
 from api.settings import settings
 from api.taskiq import broker, redis_schedule_source
 from api.v1.service.authorization import list_accessible_user_ids
-from api.v1.service.events import fanout_event
+from api.v1.service.notifications import deliver_notification
 from api.v1.service.scheduling.recurrence import expand_occurrence_starts
 from nokodo_ai.types import JSONValue
 from nokodo_ai.utils.typeid import TypeID, new_typeid
@@ -441,14 +441,16 @@ async def dispatch_due_calendar_notifications() -> int:
 							"description",
 							calendar_event.description,
 						)
+						notification_title = f"calendar: {title}"
+						notification_body = description or title
 						event = Event(
 							id=new_typeid("event"),
 							scope=EventScope.USER,
 							scope_id=user_id,
 							type=EventType.NOTIFICATION_CALENDAR_EVENT_ALERT,
 							data={
-								"title": f"calendar: {title}",
-								"body": description or title,
+								"title": notification_title,
+								"body": notification_body,
 								"calendar_event_id": str(calendar_event.id),
 								"calendar_id": str(calendar_event.calendar_id),
 								"original_occurrence_at": (
@@ -466,6 +468,8 @@ async def dispatch_due_calendar_notifications() -> int:
 						notification = Notification(
 							user_id=user_id,
 							event_id=event.id,
+							title=notification_title,
+							body=notification_body,
 							delivery_key=delivery_key,
 							notify_at=notify_at,
 						)
@@ -475,7 +479,7 @@ async def dispatch_due_calendar_notifications() -> int:
 		await session.commit()
 		for notification in notifications:
 			await session.refresh(notification, attribute_names=["event"])
-			await fanout_event(notification.event)
+			await deliver_notification(notification)
 		for event_id in event_ids:
 			await schedule_calendar_event_notifications(event_id, session=session)
 	return len(notifications)
@@ -543,14 +547,16 @@ async def dispatch_calendar_event_notification(calendar_event_id: TypeID) -> int
 						"description",
 						calendar_event.description,
 					)
+					notification_title = f"calendar: {title}"
+					notification_body = description or title
 					event = Event(
 						id=new_typeid("event"),
 						scope=EventScope.USER,
 						scope_id=user_id,
 						type=EventType.NOTIFICATION_CALENDAR_EVENT_ALERT,
 						data={
-							"title": f"calendar: {title}",
-							"body": description or title,
+							"title": notification_title,
+							"body": notification_body,
 							"calendar_event_id": str(calendar_event.id),
 							"calendar_id": str(calendar_event.calendar_id),
 							"original_occurrence_at": (
@@ -568,6 +574,8 @@ async def dispatch_calendar_event_notification(calendar_event_id: TypeID) -> int
 					notification = Notification(
 						user_id=user_id,
 						event_id=event.id,
+						title=notification_title,
+						body=notification_body,
 						delivery_key=delivery_key,
 						notify_at=notify_at,
 					)
@@ -577,7 +585,7 @@ async def dispatch_calendar_event_notification(calendar_event_id: TypeID) -> int
 		await session.commit()
 		for notification in notifications:
 			await session.refresh(notification, attribute_names=["event"])
-			await fanout_event(notification.event)
+			await deliver_notification(notification)
 		await schedule_calendar_event_notifications(
 			calendar_event_id,
 			session=session,

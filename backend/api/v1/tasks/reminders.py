@@ -15,7 +15,7 @@ from api.models.notification import Notification
 from api.models.reminder import Reminder, ReminderOverride, ReminderStatus
 from api.settings import settings
 from api.taskiq import broker, redis_schedule_source
-from api.v1.service.events import fanout_event
+from api.v1.service.notifications import deliver_notification
 from api.v1.service.scheduling.recurrence import expand_occurrence_starts
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
@@ -307,14 +307,16 @@ async def dispatch_due_reminder_notifications() -> int:
 					reminder,
 					occurrence_remind_at,
 				)
+				title = f"reminder: {reminder.title}"
+				body = reminder.description or reminder.title
 				event = Event(
 					id=new_typeid("event"),
 					scope=EventScope.USER,
 					scope_id=reminder.owner_id,
 					type=EventType.NOTIFICATION_REMINDER_ALERT,
 					data={
-						"title": f"reminder: {reminder.title}",
-						"body": reminder.description or reminder.title,
+						"title": title,
+						"body": body,
 						"reminder_id": str(reminder.id),
 						"original_occurrence_at": occurrence_remind_at.isoformat(),
 						"due_at": occurrence_due_at.isoformat()
@@ -330,6 +332,8 @@ async def dispatch_due_reminder_notifications() -> int:
 				notification = Notification(
 					user_id=reminder.owner_id,
 					event_id=event.id,
+					title=title,
+					body=body,
 					delivery_key=delivery_key,
 					notify_at=occurrence_remind_at,
 				)
@@ -339,7 +343,7 @@ async def dispatch_due_reminder_notifications() -> int:
 		await session.commit()
 		for notification in notifications:
 			await session.refresh(notification, attribute_names=["event"])
-			await fanout_event(notification.event)
+			await deliver_notification(notification)
 		for reminder_id in reminder_ids:
 			await schedule_reminder_notifications(reminder_id, session=session)
 	return len(notifications)
@@ -381,14 +385,16 @@ async def dispatch_reminder_notification(reminder_id: TypeID) -> int:
 				reminder,
 				occurrence_remind_at,
 			)
+			title = f"reminder: {reminder.title}"
+			body = reminder.description or reminder.title
 			event = Event(
 				id=new_typeid("event"),
 				scope=EventScope.USER,
 				scope_id=reminder.owner_id,
 				type=EventType.NOTIFICATION_REMINDER_ALERT,
 				data={
-					"title": f"reminder: {reminder.title}",
-					"body": reminder.description or reminder.title,
+					"title": title,
+					"body": body,
 					"reminder_id": str(reminder.id),
 					"original_occurrence_at": occurrence_remind_at.isoformat(),
 					"due_at": occurrence_due_at.isoformat()
@@ -404,6 +410,8 @@ async def dispatch_reminder_notification(reminder_id: TypeID) -> int:
 			notification = Notification(
 				user_id=reminder.owner_id,
 				event_id=event.id,
+				title=title,
+				body=body,
 				delivery_key=delivery_key,
 				notify_at=occurrence_remind_at,
 			)
@@ -413,6 +421,6 @@ async def dispatch_reminder_notification(reminder_id: TypeID) -> int:
 		await session.commit()
 		for notification in notifications:
 			await session.refresh(notification, attribute_names=["event"])
-			await fanout_event(notification.event)
+			await deliver_notification(notification)
 		await schedule_reminder_notifications(reminder_id, session=session)
 	return len(notifications)

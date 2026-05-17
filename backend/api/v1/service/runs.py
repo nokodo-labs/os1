@@ -27,6 +27,7 @@ from api.v1.service.authorization import require_thread_access
 from api.v1.service.chat import run_bus
 from api.v1.service.chat.agents import run_agent
 from api.v1.service.chat.run_status import run_status_store
+from api.v1.service.chat.user_message import validate_run_input
 from nokodo_ai.utils.sse import sse_encode
 from nokodo_ai.utils.typeid import TypeID, is_typeid, new_typeid
 
@@ -46,6 +47,11 @@ class UnknownRunError(LookupError):
 # in practice this completes in microseconds (one event-loop tick); the only
 # reason for any wait at all is to absorb scheduler jitter on busy workers.
 _RUN_READY_TIMEOUT_S = 2.0
+
+
+async def _stream_delivery_checkpoint() -> None:
+	"""allow disconnect cancellation to interrupt large catchup bursts."""
+	await asyncio.sleep(0)
 
 
 async def _run_producer(
@@ -124,12 +130,14 @@ async def subscribe_run_stream(run_id: TypeID) -> AsyncGenerator[bytes]:
 		try:
 			for frame in catchup:
 				yield frame
+				await _stream_delivery_checkpoint()
 			while True:
 				live_frame = await live_queue.get()
 				if live_frame is None:
 					yield sse_encode(event="done", data={})
 					return
 				yield live_frame
+				await _stream_delivery_checkpoint()
 		finally:
 			await run_status_store.unsubscribe(run_id, live_queue)
 		return
@@ -137,6 +145,7 @@ async def subscribe_run_stream(run_id: TypeID) -> AsyncGenerator[bytes]:
 	if await run_bus.remote_run_known(run_id):
 		async for frame in run_bus.subscribe_remote_run(run_id):
 			yield frame
+			await _stream_delivery_checkpoint()
 		# remote path ends naturally; synthesize the done event so the wire
 		# contract matches the local path.
 		yield sse_encode(event="done", data={})
@@ -220,6 +229,7 @@ async def start_thread_run(
 
 	the caller is responsible for wrapping the iterator in ``sse_response()``.
 	"""
+	validate_run_input(input)
 	await require_thread_access(
 		thread_id,
 		session,
@@ -259,6 +269,7 @@ async def start_ephemeral_run(
 
 	the caller is responsible for wrapping the iterator in ``sse_response()``.
 	"""
+	validate_run_input(input)
 	run_id = await _start_run(
 		thread_id=None,
 		agent_id=agent_id,
@@ -298,6 +309,7 @@ async def create_thread_and_run_stream(
 
 	the caller is responsible for wrapping the iterator in ``sse_response()``.
 	"""
+	validate_run_input(input)
 	owner_id = TypeID(principal.user.id)
 
 	# validate client-provided ID shape

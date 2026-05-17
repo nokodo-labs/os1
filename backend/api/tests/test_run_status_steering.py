@@ -3,10 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.v1.service.chat.run_status import RunStatusStore
+from api.models.user import User
+from api.schemas.runs import RunInput
+from api.v1.service.auth import Principal
+from api.v1.service.chat import steering as steering_service
+from api.v1.service.chat.message_metadata import CLIENT_STEERING_ID_KEY
+from api.v1.service.chat.run_status import RunStatusStore, run_status_store
+from nokodo_ai.messages import TextContent
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -28,6 +38,100 @@ async def test_enqueue_steering_when_running_accepts_message() -> None:
 	assert rs is not None
 	assert rs.pending_steering == ["msg_s1"]
 	assert rs.steering_inbox.qsize() == 1
+
+
+@pytest.mark.asyncio
+async def test_enqueue_run_steering_accepts_before_subscriber_starts(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""a locally registered run accepts steering before redis subscriber startup."""
+	run_id = TypeID("run_direct_steer")
+	thread_id = TypeID("thread_direct_steer")
+	agent_id = TypeID("agent_direct_steer")
+	user_id = TypeID("user_direct_steer")
+	message_id = TypeID("msg_direct_steer")
+	publish_called = False
+
+	async def fake_enabled(_agent_id: TypeID, _db: object) -> bool:
+		return True
+
+	async def fake_require_access(*_args: object, **_kwargs: object) -> None:
+		return None
+
+	async def fake_resolve_input(
+		_run_input: RunInput, _db: object
+	) -> list[TextContent]:
+		return [TextContent(text="early steer")]
+
+	async def fake_create_user_message(
+		_thread_id: TypeID,
+		_db: object,
+		principal: Principal,
+		resolved_input: list[TextContent],
+		parent_id: TypeID | None,
+		run_id: TypeID,
+		origin_session_id: str | None = None,
+		attachment_actions: object | None = None,
+		extra_metadata: dict[str, object] | None = None,
+	) -> object:
+		assert principal.user.id == user_id
+		assert resolved_input == [TextContent(text="early steer")]
+		assert parent_id is None
+		assert str(run_id) == "run_direct_steer"
+		assert origin_session_id is None
+		assert attachment_actions is None
+		assert extra_metadata is not None
+		assert extra_metadata[CLIENT_STEERING_ID_KEY] == "local-steering-1"
+		return SimpleNamespace(
+			id=message_id,
+			created_at=datetime(2026, 5, 16, 12, 0, tzinfo=UTC),
+			metadata_=extra_metadata,
+		)
+
+	async def fake_publish_steer(*_args: object, **_kwargs: object) -> int:
+		nonlocal publish_called
+		publish_called = True
+		return 0
+
+	monkeypatch.setattr(steering_service, "_is_steering_enabled", fake_enabled)
+	monkeypatch.setattr(steering_service, "require_thread_access", fake_require_access)
+	monkeypatch.setattr(steering_service, "resolve_run_input", fake_resolve_input)
+	monkeypatch.setattr(
+		steering_service, "create_run_user_message", fake_create_user_message
+	)
+	monkeypatch.setattr(steering_service, "publish_steer", fake_publish_steer)
+
+	await run_status_store.start_run(run_id, agent_id, user_id, thread_id)
+	try:
+		db = AsyncMock(spec=AsyncSession)
+		db.get.return_value = SimpleNamespace(current_message_id=None)
+		principal = Principal(
+			user=User(
+				id=user_id,
+				email="early-steer@example.com",
+				username="early-steer",
+				hashed_password="x",
+			),
+			group_ids=(),
+			permissions=frozenset(),
+		)
+		result = await steering_service.enqueue_run_steering(
+			run_id,
+			RunInput(text="early steer"),
+			None,
+			"local-steering-1",
+			principal,
+			db,
+		)
+
+		assert result.state == "queued"
+		assert result.message_id == message_id
+		assert publish_called is False
+		drained = await run_status_store.claim_pending_steering(run_id)
+		assert len(drained) == 1
+		assert drained[0].metadata[CLIENT_STEERING_ID_KEY] == "local-steering-1"
+	finally:
+		await run_status_store.complete_run(run_id)
 
 
 @pytest.mark.asyncio

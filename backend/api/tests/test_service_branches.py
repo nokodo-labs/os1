@@ -151,6 +151,7 @@ async def test_notifications_guards(db_session: AsyncSession) -> None:
 		id=TypeID(new_typeid("notif")),
 		user_id=user_a.id,
 		event_id=event.id,
+		title="guard notification",
 	)
 	db_session.add(note)
 	await db_session.commit()
@@ -213,7 +214,7 @@ async def test_memories_admin_user_filter(db_session: AsyncSession) -> None:
 	listed = await memories.list_memories(
 		db_session,
 		principal=principal,
-		filters=MemoryListFilters(user_id=other_user.id),
+		filters=MemoryListFilters(owner_id=other_user.id),
 	)
 	assert listed and listed[0].user_id == other_user.id
 

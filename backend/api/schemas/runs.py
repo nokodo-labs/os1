@@ -303,6 +303,12 @@ class SteerRunRequest(BaseModel):
 		description="parent message id for the persisted user message. "
 		"defaults to the current branch tip if omitted.",
 	)
+	client_steering_id: str | None = Field(
+		default=None,
+		min_length=1,
+		max_length=128,
+		description="client-generated id used to reconcile optimistic queued messages.",
+	)
 
 
 class SteerRunResponse(BaseModel):

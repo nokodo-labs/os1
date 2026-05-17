@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from datetime import UTC, date, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
@@ -22,11 +22,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.prompt import Prompt
 from api.models.user import User
+from api.schemas.common import MISSING, MissingType
+from api.schemas.preferences import AccountPreferences, AIPreferences
 from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
 	from api.schemas.runs import ClientContext
+
+
+def _preference_value[T](value: T | MissingType, default: T) -> T:
+	if value is MISSING:
+		return default
+	return cast(T, value)
 
 
 # sentinel markers for filter injection points.
@@ -457,26 +465,33 @@ def build_prompt_variables(
 		return variables
 
 	prefs = user.prefs
-	ai = prefs.ai
-	account = prefs.account
+	ai_section = prefs.ai
+	account_section = prefs.account
+	ai = ai_section if isinstance(ai_section, AIPreferences) else None
+	account = (
+		account_section if isinstance(account_section, AccountPreferences) else None
+	)
 
 	# gate memories sentinel on user preference (default: enabled).
 	# when disabled, the sentinel is replaced with an empty string so the
 	# MemoryContextFilter sees nothing to inject into.
-	if ai and ai.memories_enabled is False:
+	if ai and _preference_value(ai.memories_enabled, True) is False:
 		variables["user_memories"] = ""
 	else:
 		variables["user_memories"] = SENTINEL_USER_MEMORIES
 
 	# gate chat context sentinel on user preference (default: enabled).
 	# chat_recall=False disables cross-chat context injection.
-	if ai and ai.chat_recall is False:
+	if ai and _preference_value(ai.chat_recall, True) is False:
 		variables["chat_context"] = ""
 	else:
 		variables["chat_context"] = SENTINEL_CHAT_CONTEXT
 
-	birth_date = account.birth_date if account else None
+	birth_date = _preference_value(account.birth_date, None) if account else None
 	age = _compute_age(birth_date, now)
+	ai_bio = _preference_value(ai.bio, None) if ai else None
+	account_bio = _preference_value(account.bio, None) if account else None
+	use_account_bio = _preference_value(ai.use_account_bio, False) if ai else False
 
 	variables.update(
 		{
@@ -485,15 +500,17 @@ def build_prompt_variables(
 			"user_username": user.username,
 			"user_email": user.email,
 			"user_bio": _resolve_bio(
-				ai.bio if ai else None,
-				account.bio if account else None,
-				use_account_bio=bool(ai and ai.use_account_bio),
+				ai_bio,
+				account_bio,
+				use_account_bio=use_account_bio,
 			),
-			"user_gender": account.gender if account else None,
+			"user_gender": _preference_value(account.gender, None) if account else None,
 			"user_birth_date": birth_date,
 			"user_age": age,
-			"user_custom_instructions": ai.custom_instructions if ai else None,
-			"ai_personality": ai.personality if ai else None,
+			"user_custom_instructions": _preference_value(ai.custom_instructions, None)
+			if ai
+			else None,
+			"ai_personality": _preference_value(ai.personality, None) if ai else None,
 		}
 	)
 

@@ -246,6 +246,7 @@ async def steer_run(
 		run_id,
 		req.input,
 		req.parent_id,
+		req.client_steering_id,
 		principal,
 		db,
 	)

@@ -18,6 +18,7 @@ from api.v1.service.chat.tools.memories import (
 	MemoryRecallTool,
 )
 from api.v1.service.chat.tools.notes import NoteGetTool, NoteWriteTool
+from api.v1.service.chat.tools.projects import ProjectGetTool
 from api.v1.service.chat.tools.reminders import (
 	ReminderGetTool,
 	ReminderWriteTool,
@@ -41,6 +42,7 @@ _TOOLS: list[Tool[AppContext]] = [
 	MemoryCreateTool(),
 	NoteGetTool(),
 	NoteWriteTool(),
+	ProjectGetTool(),
 	ReminderGetTool(),
 	ReminderWriteTool(),
 	CalendarEventGetTool(),

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,12 +19,24 @@ from api.models.message import Message as MessageORM
 from api.schemas.content import ContentPart, ContentPartAdapter
 from api.schemas.message import MessageCreate
 from api.schemas.runs import RunInput
+from api.settings import settings
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
 from api.v1.service.events import persist_and_fanout_event
 from nokodo_ai.messages import FileContent, ImageContent, TextContent, UserContentPart
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
+
+
+def validate_run_input(run_input: RunInput | None) -> None:
+	text = run_input.text if run_input else None
+	max_chars = settings.limits.max_chat_input_chars
+	if text is None or max_chars is None or len(text) <= max_chars:
+		return
+	raise HTTPException(
+		status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+		detail=f"input text exceeds max_chat_input_chars ({max_chars})",
+	)
 
 
 async def resolve_run_input(

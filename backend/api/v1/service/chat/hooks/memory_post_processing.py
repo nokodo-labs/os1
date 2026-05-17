@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from pydantic import Field
 
 from api.database import async_session_local
+from api.schemas.preferences import AIPreferences
 from api.settings import settings as app_settings
 from api.v1.service.chat.hooks.base import Hook
 from api.v1.service.chat.run_status import run_status_store
@@ -70,7 +71,7 @@ class MemoryPostProcessingHook(Hook):
 
 		# gate on user preference - skip when memories disabled.
 		ai = app_context.principal.user.prefs.ai
-		if ai is not None and ai.memories_enabled is False:
+		if isinstance(ai, AIPreferences) and ai.memories_enabled is False:
 			logger.debug("memory post-processing skipped: disabled by user")
 			return
 

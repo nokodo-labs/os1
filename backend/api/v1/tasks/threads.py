@@ -9,8 +9,8 @@ this module owns three orthogonal concerns:
 2. dynamic, per-thread post-run maintenance. when a run completes, the chat
 	service calls `schedule_thread_inactivity_maintenance`. missing mandatory
 	metadata starts maintenance immediately; summary-only work writes a one-shot
-	redis schedule for `last_activity_at + THREAD_INACTIVITY_HOURS`. API startup
-	does not scan threads to recreate these timers.
+	redis schedule using `settings.tasks.thread_maintenance.inactivity_hours`.
+	API startup does not scan threads to recreate these timers.
 3. an explicit, off-by-default retroactive backfill sweep. administrators can
    enable a periodic sweep via `settings.tasks.maintenance_backfill` or run
    one manually through the admin endpoint. each sweep is bounded by an
@@ -55,10 +55,6 @@ THREAD_INACTIVITY_DISPATCH_TASK = "thread.inactivity.dispatch"
 THREAD_MAINTENANCE_BACKFILL_TASK = "thread.maintenance.backfill_sweep"
 THREAD_MAINTENANCE_BACKFILL_SCHEDULE_ID = "thread:maintenance-backfill"
 THREAD_MAINTENANCE_BACKFILL_INVALIDATION_SIGNAL = "thread_maintenance_backfill"
-THREAD_INACTIVITY_HOURS = 8
-THREAD_MAINTENANCE_STALE_AFTER = timedelta(minutes=30)
-THREAD_TASK_RUNNER_TIMEOUT_SECONDS = 30 * 60
-THREAD_STALE_TASK_CLEANUP_AFTER = timedelta(minutes=45)
 
 _STALE_THREAD_RELATED_TASKS = (
 	CHAT_SUMMARIZE_MESSAGES_TASK,
@@ -66,6 +62,32 @@ _STALE_THREAD_RELATED_TASKS = (
 	MEMORY_POST_PROCESSING_TASK,
 	THREAD_MAINTENANCE_TASK,
 )
+
+
+def _thread_maintenance_inactivity_hours() -> int:
+	return settings.tasks.thread_maintenance.inactivity_hours
+
+
+def _thread_maintenance_queued_supersede_after() -> timedelta:
+	return timedelta(
+		minutes=settings.tasks.thread_maintenance.queued_supersede_after_minutes
+	)
+
+
+def _thread_maintenance_active_supersede_after() -> timedelta:
+	return timedelta(
+		minutes=settings.tasks.thread_maintenance.active_supersede_after_minutes
+	)
+
+
+def _thread_task_runner_timeout_seconds() -> float:
+	return float(settings.tasks.thread_maintenance.runner_timeout_seconds)
+
+
+def _thread_stale_task_cleanup_after() -> timedelta:
+	return timedelta(
+		minutes=settings.tasks.thread_maintenance.stale_task_cleanup_after_minutes
+	)
 
 
 def _thread_inactivity_schedule_id(thread_id: TypeID) -> str:
@@ -107,11 +129,27 @@ def _active_task_is_stale(task: Task, stale_after: timedelta) -> bool:
 	used by `start_thread_maintenance_task` to supersede a hung active task
 	instead of returning it to the caller forever.
 	"""
-	last_event_at = task.last_event_at or task.updated_at or task.created_at
+	last_event_at = _task_last_event_at(task)
 	if last_event_at is None:
 		return False
-	if last_event_at.tzinfo is None:
-		last_event_at = last_event_at.replace(tzinfo=UTC)
+	return datetime.now(tz=UTC) - last_event_at > stale_after
+
+
+def _task_last_event_at(task: Task) -> datetime | None:
+	last_event_at = task.last_event_at or task.updated_at or task.created_at
+	if last_event_at is None:
+		return None
+	return _ensure_aware_utc(last_event_at)
+
+
+def _active_queued_task_is_stale(task: Task, stale_after: timedelta) -> bool:
+	if (task.progress or 0) != 0:
+		return False
+	if not (task.stage or "").lower().startswith("queued"):
+		return False
+	last_event_at = _task_last_event_at(task)
+	if last_event_at is None:
+		return False
 	return datetime.now(tz=UTC) - last_event_at > stale_after
 
 
@@ -212,14 +250,20 @@ async def start_thread_maintenance_task(
 	}
 	if observed_last_activity_at is not None:
 		metadata["observed_last_activity_at"] = observed_last_activity_at.isoformat()
-		metadata["inactivity_hours"] = THREAD_INACTIVITY_HOURS
+		if reason != "mandatory_metadata":
+			metadata["inactivity_hours"] = _thread_maintenance_inactivity_hours()
 	if origin_session_id is not None:
 		metadata["origin_session_id"] = origin_session_id
 	existing = await task_service.find_active_task(
 		session, THREAD_MAINTENANCE_TASK, {"thread_id": str(thread_id)}
 	)
 	if existing is not None:
-		if not _active_task_is_stale(existing, THREAD_MAINTENANCE_STALE_AFTER):
+		queued_stale = _active_queued_task_is_stale(
+			existing, _thread_maintenance_queued_supersede_after()
+		)
+		if not queued_stale and not _active_task_is_stale(
+			existing, _thread_maintenance_active_supersede_after()
+		):
 			logger.info(
 				"thread maintenance enqueue skipped; active task exists "
 				"thread_id=%s existing_task_id=%s user_id=%s source=%s reason=%s",
@@ -230,24 +274,44 @@ async def start_thread_maintenance_task(
 				reason,
 			)
 			return existing
-		logger.warning(
-			"thread maintenance active task is stale; superseding "
-			"thread_id=%s stale_task_id=%s user_id=%s source=%s reason=%s",
-			thread_id,
-			existing.id,
-			principal.user.id,
-			source,
-			reason,
-		)
-		await task_service.update_task_execution(
-			TypeID(existing.id),
-			status_value=TaskStatus.FAILED,
-			stage="stale task superseded",
-			result={
+		failure_result: JSONObject
+		if queued_stale:
+			logger.warning(
+				"thread maintenance queued task is stale; superseding "
+				"thread_id=%s queued_task_id=%s user_id=%s source=%s reason=%s",
+				thread_id,
+				existing.id,
+				principal.user.id,
+				source,
+				reason,
+			)
+			failure_stage = "queued task superseded"
+			failure_result = {
+				"error": "stale_queued_task",
+				"message": "superseded after queued inactivity",
+				"thread_id": str(thread_id),
+			}
+		else:
+			logger.warning(
+				"thread maintenance active task is stale; superseding "
+				"thread_id=%s stale_task_id=%s user_id=%s source=%s reason=%s",
+				thread_id,
+				existing.id,
+				principal.user.id,
+				source,
+				reason,
+			)
+			failure_stage = "stale task superseded"
+			failure_result = {
 				"error": "stale_active_task",
 				"message": "superseded by a new thread maintenance task",
 				"thread_id": str(thread_id),
-			},
+			}
+		await task_service.update_task_execution(
+			TypeID(existing.id),
+			status_value=TaskStatus.FAILED,
+			stage=failure_stage,
+			result=failure_result,
 		)
 	logger.info(
 		"thread maintenance enqueue requested thread_id=%s user_id=%s "
@@ -318,6 +382,7 @@ async def schedule_thread_inactivity_maintenance(
 				active_session,
 				principal,
 				TypeID(thread.id),
+				observed_last_activity_at=thread.last_activity_at,
 				stage="queued mandatory metadata",
 				source=source,
 				reason="mandatory_metadata",
@@ -329,7 +394,9 @@ async def schedule_thread_inactivity_maintenance(
 		):
 			return False
 		last_activity_at = _ensure_aware_utc(thread.last_activity_at)
-		due_at = last_activity_at + timedelta(hours=THREAD_INACTIVITY_HOURS)
+		due_at = last_activity_at + timedelta(
+			hours=_thread_maintenance_inactivity_hours()
+		)
 		if due_at <= datetime.now(tz=UTC):
 			return False
 		await (
@@ -372,14 +439,14 @@ async def fail_stale_thread_related_tasks() -> int:
 	"""fail old active model-backed tasks before they block new attempts."""
 	return await task_service.fail_stale_active_tasks(
 		_STALE_THREAD_RELATED_TASKS,
-		THREAD_STALE_TASK_CLEANUP_AFTER,
+		_thread_stale_task_cleanup_after(),
 		"thread-related task stopped reporting progress",
 	)
 
 
 @task_service.register_task_runner(
 	CHAT_SUMMARIZE_MESSAGES_TASK,
-	timeout_seconds=THREAD_TASK_RUNNER_TIMEOUT_SECONDS,
+	timeout_seconds=_thread_task_runner_timeout_seconds,
 )
 async def run_summarize_messages_task(context: task_service.TaskContext) -> JSONObject:
 	"""run persisted message-range summarization."""
@@ -409,7 +476,7 @@ async def run_summarize_messages_task(context: task_service.TaskContext) -> JSON
 
 @task_service.register_task_runner(
 	CHAT_CONDENSE_SUMMARIES_TASK,
-	timeout_seconds=THREAD_TASK_RUNNER_TIMEOUT_SECONDS,
+	timeout_seconds=_thread_task_runner_timeout_seconds,
 )
 async def run_condense_summaries_task(context: task_service.TaskContext) -> JSONObject:
 	"""run summary condensation for one thread."""
@@ -431,7 +498,7 @@ async def run_condense_summaries_task(context: task_service.TaskContext) -> JSON
 
 @task_service.register_task_runner(
 	MEMORY_POST_PROCESSING_TASK,
-	timeout_seconds=THREAD_TASK_RUNNER_TIMEOUT_SECONDS,
+	timeout_seconds=_thread_task_runner_timeout_seconds,
 )
 async def run_memory_post_processing_task(
 	context: task_service.TaskContext,
@@ -464,7 +531,7 @@ async def run_memory_post_processing_task(
 
 @task_service.register_task_runner(
 	THREAD_MAINTENANCE_TASK,
-	timeout_seconds=THREAD_TASK_RUNNER_TIMEOUT_SECONDS,
+	timeout_seconds=_thread_task_runner_timeout_seconds,
 )
 async def run_thread_maintenance_task(context: task_service.TaskContext) -> JSONObject:
 	"""run thread metadata and branch-summary maintenance."""
@@ -524,7 +591,9 @@ async def dispatch_thread_inactivity_maintenance(
 	except ValueError:
 		return 0
 	observed_at = _ensure_aware_utc(observed_at)
-	if datetime.now(tz=UTC) < observed_at + timedelta(hours=THREAD_INACTIVITY_HOURS):
+	if datetime.now(tz=UTC) < observed_at + timedelta(
+		hours=_thread_maintenance_inactivity_hours()
+	):
 		return 0
 	async with async_session_local() as session:
 		thread = await session.get(Thread, TypeID(thread_id))

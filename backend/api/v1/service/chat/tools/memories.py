@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from api.database import async_session_local
 from api.local_tasks import create_background_task
 from api.schemas.memory import MemoryCreate
+from api.schemas.preferences import AIPreferences
 from api.v1.service import memories as memory_service
 from api.v1.service.auth import Principal
 from api.v1.service.chat.context import AppContext
@@ -84,7 +85,7 @@ class MemoryRecallTool(Tool[AppContext]):
 		if __app_context__ is None:
 			return self.error("app context is required", __agent_context__)
 		ai = __app_context__.principal.user.prefs.ai
-		if ai is not None and ai.memories_enabled is False:
+		if isinstance(ai, AIPreferences) and ai.memories_enabled is False:
 			out: JSONObject = {
 				"status": "success",
 				"message": "memory features are disabled by user preferences",
@@ -147,7 +148,7 @@ class MemoryCreateTool(Tool[AppContext]):
 		if __app_context__ is None:
 			return self.error("app context is required", __agent_context__)
 		ai = __app_context__.principal.user.prefs.ai
-		if ai is not None and ai.memories_enabled is False:
+		if isinstance(ai, AIPreferences) and ai.memories_enabled is False:
 			disabled_out = {
 				"status": "success",
 				"message": "memory features are disabled by user preferences",

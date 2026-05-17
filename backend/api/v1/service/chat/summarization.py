@@ -179,6 +179,7 @@ async def summarize_thread_message_range(
 							**persisted_message_metadata(
 								message.id,
 								message.created_at,
+								message.sender_user_id,
 							),
 						}
 					}

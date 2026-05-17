@@ -134,7 +134,7 @@ async def load_sdk_thread(
 		sdk = m.to_sdk()
 		enriched = {
 			**(sdk.metadata or {}),
-			**persisted_message_metadata(m.id, m.created_at),
+			**persisted_message_metadata(m.id, m.created_at, m.sender_user_id),
 		}
 		# inject citations column into assistant message metadata so
 		# downstream filters can rebuild the citation index without a

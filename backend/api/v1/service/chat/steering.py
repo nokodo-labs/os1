@@ -16,6 +16,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Final, Literal
 
 from fastapi import HTTPException, status
@@ -39,11 +40,21 @@ from api.v1.service.authorization import (
 	require_thread_access,
 )
 from api.v1.service.chat.filters.steering import SteeringFilter
-from api.v1.service.chat.message_metadata import MESSAGE_ID_KEY, get_message_id
+from api.v1.service.chat.message_metadata import (
+	CLIENT_STEERING_ID_KEY,
+	CREATED_AT_KEY,
+	MESSAGE_ID_KEY,
+	SENDER_USER_ID_KEY,
+	STEERING_DROPPED_AT_KEY,
+	STEERING_ENQUEUED_AT_KEY,
+	STEERING_INJECTED_AT_KEY,
+	get_message_id,
+)
 from api.v1.service.chat.run_status import run_status_store
 from api.v1.service.chat.user_message import (
 	create_run_user_message,
 	resolve_run_input,
+	validate_run_input,
 )
 from api.v1.service.events import fanout_live_payload
 from nokodo_ai import Agent as SDKAgent
@@ -73,6 +84,7 @@ async def enqueue_run_steering(
 	run_id: TypeID,
 	run_input: RunInput,
 	parent_id: TypeID | None,
+	client_steering_id: str | None,
 	principal: Principal,
 	db: AsyncSession,
 ) -> SteeringResult:
@@ -117,9 +129,17 @@ async def enqueue_run_steering(
 			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="input is required to steer a run",
 		)
+	validate_run_input(run_input)
 
 	resolved = await resolve_run_input(run_input, db)
-	extra_meta: JSONObject = {"steering_state": "queued", "run_id": str(run_id)}
+	enqueued_at = datetime.now(UTC)
+	extra_meta: JSONObject = {
+		"steering_state": "queued",
+		"run_id": str(run_id),
+		STEERING_ENQUEUED_AT_KEY: enqueued_at.isoformat(),
+	}
+	if client_steering_id is not None:
+		extra_meta[CLIENT_STEERING_ID_KEY] = client_steering_id
 
 	user_msg = await create_run_user_message(
 		thread_id,
@@ -139,27 +159,38 @@ async def enqueue_run_steering(
 		thread.current_message_id = previous_current_message_id
 		await db.commit()
 
+	sdk_metadata: JSONObject = {
+		MESSAGE_ID_KEY: str(user_msg.id),
+		SENDER_USER_ID_KEY: str(principal.user.id),
+		STEERING_ENQUEUED_AT_KEY: enqueued_at.isoformat(),
+	}
+	if client_steering_id is not None:
+		sdk_metadata[CLIENT_STEERING_ID_KEY] = client_steering_id
+
 	sdk_msg = SDKUserMessage(
 		content=resolved,
-		metadata={
-			MESSAGE_ID_KEY: str(user_msg.id),
-		},
+		metadata=sdk_metadata,
 	)
 
-	# always go through the bus so the worker that owns the run picks it
-	# up regardless of which worker served this http request.
-	delivered = await publish_steer(
-		run_id=run_id,
-		message_id=user_msg_id,
-		sdk_message=sdk_msg,
-		thread_id=thread_id,
-		agent_id=rs.agent_id,
-	)
+	accepted = await run_status_store.enqueue_steering(run_id, user_msg_id, sdk_msg)
+	if not accepted:
+		# fall back to the bus for future cross-worker ownership paths. today
+		# get_run is local, but keeping this branch preserves the transport
+		# contract for callers that may eventually resolve remote active runs.
+		delivered = await publish_steer(
+			run_id=run_id,
+			message_id=user_msg_id,
+			sdk_message=sdk_msg,
+			thread_id=thread_id,
+			agent_id=rs.agent_id,
+		)
+	else:
+		delivered = 1
 
-	if delivered == 0:
-		# no worker is subscribed - the run terminated between the get_run
-		# check above and the publish. flip the freshly-persisted message
-		# to dropped so it doesn't sit "queued" forever, and emit a
+	if not accepted and delivered == 0:
+		# no worker accepted the message - the run terminated between the
+		# get_run check above and enqueue/publish. flip the freshly-persisted
+		# message to dropped so it doesn't sit "queued" forever, and emit a
 		# dropped event instead of queued.
 		create_background_task(
 			persist_steering_state([user_msg_id], "dropped", only_if_current="queued"),
@@ -172,6 +203,7 @@ async def enqueue_run_steering(
 				agent_id=rs.agent_id,
 				run_id=run_id,
 				message_ids=[user_msg_id],
+				event_at=datetime.now(UTC),
 			),
 			name="broadcast_steering_no_subscriber",
 		)
@@ -184,6 +216,7 @@ async def enqueue_run_steering(
 			agent_id=rs.agent_id,
 			run_id=run_id,
 			message_ids=[user_msg_id],
+			event_at=enqueued_at,
 		),
 		name="broadcast_steering_queued",
 	)
@@ -225,6 +258,26 @@ async def drop_run_steering(
 		# atomically based on whether the message was actually pending.
 		return
 
+	if rs is not None and await run_status_store.drop_pending_steering(
+		run_id, message_id
+	):
+		create_background_task(
+			persist_steering_state([message_id], "dropped", only_if_current="queued"),
+			name="persist_steering_drop_owner",
+		)
+		if thread_id is not None and agent_id is not None:
+			create_background_task(
+				broadcast_steering_event(
+					event_type=EventType.RUN_STEERING_DROPPED,
+					thread_id=thread_id,
+					agent_id=agent_id,
+					run_id=run_id,
+					message_ids=[message_id],
+				),
+				name="broadcast_steering_drop_owner",
+			)
+		return
+
 	# no live subscriber - either the run already terminated or it was
 	# never registered. flip the row defensively (only if still queued)
 	# and broadcast so listening clients reconcile.
@@ -255,6 +308,7 @@ async def broadcast_steering_event(
 	run_id: TypeID,
 	message_ids: list[TypeID],
 	parent_id: TypeID | None = None,
+	event_at: datetime | None = None,
 ) -> None:
 	"""broadcast a run.steering.{queued,injected,dropped} event.
 
@@ -268,15 +322,26 @@ async def broadcast_steering_event(
 		EventType.RUN_STEERING_DROPPED,
 	}:
 		raise ValueError(f"not a steering event type: {event_type}")
+	timestamp = event_at or datetime.now(UTC)
 	data: dict[str, object] = {
 		"thread_id": thread_id,
 		"agent_id": agent_id,
 		"run_id": run_id,
 		"message_ids": [str(m) for m in message_ids],
 	}
+	if event_type == EventType.RUN_STEERING_QUEUED:
+		data[STEERING_ENQUEUED_AT_KEY] = timestamp.isoformat()
+	elif event_type == EventType.RUN_STEERING_INJECTED:
+		data[STEERING_INJECTED_AT_KEY] = timestamp.isoformat()
+	elif event_type == EventType.RUN_STEERING_DROPPED:
+		data[STEERING_DROPPED_AT_KEY] = timestamp.isoformat()
 	if parent_id is not None:
 		data["parent_id"] = parent_id
-	payload: dict[str, object] = {"type": event_type, "data": data}
+	payload: dict[str, object] = {
+		"type": event_type,
+		"data": data,
+		"created_at": timestamp.isoformat(),
+	}
 
 	async with async_session_local() as db_session:
 		recipient_ids = await list_accessible_user_ids(
@@ -307,6 +372,7 @@ async def persist_steering_state(
 	"""
 	if not message_ids:
 		return
+	state_changed_at = datetime.now(UTC)
 	async with async_session_local() as session:
 		stmt = select(MessageORM).where(
 			MessageORM.id.in_([str(m) for m in message_ids])
@@ -320,6 +386,8 @@ async def persist_steering_state(
 			):
 				continue
 			meta["steering_state"] = state
+			if state == "dropped":
+				meta[STEERING_DROPPED_AT_KEY] = state_changed_at.isoformat()
 			msg.metadata_ = meta
 		await session.commit()
 
@@ -327,6 +395,7 @@ async def persist_steering_state(
 async def persist_injected_steering(
 	message_ids: list[TypeID],
 	parent_id: TypeID | None,
+	consumed_at: datetime | None = None,
 ) -> TypeID | None:
 	"""mark steering messages injected and move them to the injection point.
 
@@ -337,6 +406,7 @@ async def persist_injected_steering(
 	"""
 	if not message_ids:
 		return None
+	injected_at = consumed_at or datetime.now(UTC)
 	async with async_session_local() as session:
 		stmt = select(MessageORM).where(
 			MessageORM.id.in_([str(m) for m in message_ids])
@@ -354,7 +424,10 @@ async def persist_injected_steering(
 			if meta.get("steering_state") != "queued":
 				continue
 			msg.parent_id = next_parent_id
+			msg.created_at = injected_at
+			msg.updated_at = injected_at
 			meta["steering_state"] = "injected"
+			meta[STEERING_INJECTED_AT_KEY] = injected_at.isoformat()
 			msg.metadata_ = meta
 			thread_id = msg.thread_id
 			next_parent_id = message_id
@@ -407,11 +480,17 @@ async def prepare_steering[AppContextT](
 
 	async def _on_steering_injected(messages: list[SDKUserMessage]) -> None:
 		"""persist and broadcast steering messages injected into the run."""
+		injected_at = datetime.now(UTC)
 		injected_ids: list[TypeID] = []
 		for msg in messages:
 			mid = get_message_id(msg)
 			if mid is None:
 				continue
+			msg.metadata = {
+				**(msg.metadata or {}),
+				CREATED_AT_KEY: injected_at.isoformat(),
+				STEERING_INJECTED_AT_KEY: injected_at.isoformat(),
+			}
 			injected_ids.append(TypeID(mid))
 		if not injected_ids:
 			return
@@ -421,7 +500,11 @@ async def prepare_steering[AppContextT](
 		# clear from claimed_steering so terminal handlers don't see these
 		# as in-flight (and thus mistakenly report them as dropped).
 		await run_status_store.mark_steering_injected(run_id, injected_ids)
-		last_injected_id = await persist_injected_steering(injected_ids, parent_id)
+		last_injected_id = await persist_injected_steering(
+			injected_ids,
+			parent_id,
+			consumed_at=injected_at,
+		)
 		if last_injected_id is not None and on_parent_advanced is not None:
 			on_parent_advanced(last_injected_id)
 		if thread_id is not None:
@@ -433,6 +516,7 @@ async def prepare_steering[AppContextT](
 					run_id=run_id,
 					message_ids=injected_ids,
 					parent_id=parent_id,
+					event_at=injected_at,
 				),
 				name="broadcast_steering_injected",
 			)

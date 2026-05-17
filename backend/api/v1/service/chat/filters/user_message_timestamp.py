@@ -8,7 +8,7 @@ from pydantic import Field
 
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters.base import Filter
-from api.v1.service.chat.message_metadata import CREATED_AT_KEY
+from api.v1.service.chat.message_metadata import CREATED_AT_KEY, SENDER_USER_ID_KEY
 from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import Message, TextContent, UserContentPart
@@ -35,17 +35,31 @@ class UserMessageTimestampFilter(Filter):
 		_ = (agent_context, app_context)
 		thread = state.thread
 		new_messages: list[Message] = []
+		last_user_author: str | None = None
+		last_user_timestamp: str | None = None
 		for msg in thread.messages:
 			if not isinstance(msg, SDKUserMessage):
 				new_messages.append(msg)
-				continue
-
-			if (msg.metadata or {}).get(self._APPLIED_KEY):
-				new_messages.append(msg)
+				last_user_author = None
+				last_user_timestamp = None
 				continue
 
 			timestamp = self._resolve_timestamp(msg)
+			author = self._resolve_author(msg)
+
+			if (msg.metadata or {}).get(self._APPLIED_KEY):
+				new_messages.append(msg)
+				last_user_author = author
+				last_user_timestamp = timestamp
+				continue
+
 			if timestamp is None:
+				new_messages.append(msg)
+				last_user_author = author
+				last_user_timestamp = None
+				continue
+
+			if author == last_user_author and timestamp == last_user_timestamp:
 				new_messages.append(msg)
 				continue
 
@@ -67,6 +81,8 @@ class UserMessageTimestampFilter(Filter):
 			new_messages.append(
 				msg.model_copy(update={"content": new_content, "metadata": new_meta})
 			)
+			last_user_author = author
+			last_user_timestamp = timestamp
 
 		thread.messages = new_messages
 		return state
@@ -80,3 +96,12 @@ class UserMessageTimestampFilter(Filter):
 			return None
 		dt = datetime.fromisoformat(iso)
 		return dt.strftime("%Y-%m-%d %H:%M UTC")
+
+	@staticmethod
+	def _resolve_author(msg: SDKUserMessage) -> str:
+		"""extract private sender id metadata for duplicate timestamp grouping."""
+		metadata = msg.metadata or {}
+		sender = metadata.get(SENDER_USER_ID_KEY)
+		if isinstance(sender, str) and sender:
+			return sender
+		return "user"
