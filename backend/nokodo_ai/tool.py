@@ -156,8 +156,9 @@ def tool[AppContextT = None](
 		# pre-generate schema from original func to avoid generic resolution issues.
 		schema = schema_from_callable(func, skip_self=False, skip_dunder=True)
 
-		# Ty 0.0.34 does not preserve closure-scoped PEP 695 type params
-		# for nested generic classes; mypy and basedpyright accept this shape.
+		# ty <= 0.0.35 mis-scopes closure PEP 695 type params for nested
+		# generic classes; mypy and basedpyright accept this shape.
+		# TODO: remove ignores once the VS Code ty extension bundles >= 0.0.37.
 		class FuncTool(Tool[AppContextT]):
 			async def call(  # ty: ignore[invalid-method-override]
 				self,
