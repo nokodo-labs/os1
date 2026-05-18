@@ -21,6 +21,12 @@ export default defineConfig({
 				target: 'http://localhost:1383',
 				changeOrigin: true,
 			},
+			// proxy manifest so it is same-origin in dev, enabling
+			// reliable PWA installability checks in Chrome.
+			'/system/manifest.json': {
+				target: 'http://localhost:1383',
+				changeOrigin: true,
+			},
 		},
 	},
 })

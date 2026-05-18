@@ -29,8 +29,8 @@ def test_manifest_defaults_use_nokodo_assets_and_frontend_shortcuts(
 		manifest = json.loads(body)
 
 		assert manifest["id"] == "/"
-		assert manifest["start_url"] == "https://nokodo.dev/"
-		assert manifest["scope"] == "https://nokodo.dev/"
+		assert manifest["start_url"] == "/"
+		assert manifest["scope"] == "/"
 		assert manifest["display_override"] == [
 			"window-controls-overlay",
 			"standalone",
@@ -38,7 +38,7 @@ def test_manifest_defaults_use_nokodo_assets_and_frontend_shortcuts(
 		assert manifest["protocol_handlers"] == [
 			{
 				"protocol": "web+nokodo",
-				"url": "https://nokodo.dev/?protocol=%s",
+				"url": "/?protocol=%s",
 			},
 		]
 		assert manifest["icons"] == [
@@ -62,18 +62,18 @@ def test_manifest_defaults_use_nokodo_assets_and_frontend_shortcuts(
 			"https://nokodo.net/static/os1/screenshots/wide-8-3840x2160.png"
 		)
 		assert [shortcut["url"] for shortcut in manifest["shortcuts"]] == [
-			"https://nokodo.dev/notes",
-			"https://nokodo.dev/reminders",
-			"https://nokodo.dev/calendar",
-			"https://nokodo.dev/messages",
-			"https://nokodo.dev/projects",
-			"https://nokodo.dev/library",
-			"https://nokodo.dev/social",
-			"https://nokodo.dev/settings",
+			"/notes",
+			"/reminders",
+			"/calendar",
+			"/messages",
+			"/projects",
+			"/library",
+			"/social",
+			"/settings",
 		]
 		assert manifest["shortcuts"][0]["icons"] == [
 			{
-				"src": "https://nokodo.dev/shortcuts/notes.png",
+				"src": "/shortcuts/notes.png",
 				"sizes": "192x192",
 				"type": "image/png",
 			}
@@ -82,7 +82,7 @@ def test_manifest_defaults_use_nokodo_assets_and_frontend_shortcuts(
 		pwa_manifest.invalidate_cache()
 
 
-def test_manifest_falls_back_to_request_host_default_frontend_port(
+def test_manifest_uses_relative_urls_regardless_of_request_origin(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	branding = BrandingSettings.model_validate(
@@ -98,11 +98,11 @@ def test_manifest_falls_back_to_request_host_default_frontend_port(
 		body, _etag = pwa_manifest.get_manifest_response("http://localhost:1383")
 		manifest = json.loads(body)
 
-		assert manifest["start_url"] == "http://localhost:888/"
-		assert manifest["scope"] == "http://localhost:888/"
-		assert manifest["shortcuts"][0]["url"] == "http://localhost:888/notes"
+		assert manifest["start_url"] == "/"
+		assert manifest["scope"] == "/"
+		assert manifest["shortcuts"][0]["url"] == "/notes"
 		assert manifest["shortcuts"][0]["icons"][0]["src"] == (
-			"http://localhost:888/shortcuts/notes.png"
+			"/shortcuts/notes.png"
 		)
 	finally:
 		pwa_manifest.invalidate_cache()
@@ -159,7 +159,7 @@ def test_manifest_asset_sources_can_use_cdn_custom_and_disabled(
 				"type": "image/png",
 			}
 		]
-		assert manifest["shortcuts"][2]["url"] == "https://app.example.com/calendar"
+		assert manifest["shortcuts"][2]["url"] == "/calendar"
 		assert "icons" not in manifest["shortcuts"][2]
 
 		screenshot_sources = [shot["src"] for shot in manifest["screenshots"]]
