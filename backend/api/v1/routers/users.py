@@ -153,6 +153,9 @@ async def read_user_permissions(
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 
 	user = await user_service.get_user(user_id, db, principal=principal)
+	# eager-load roles so get_current_principal can iterate without
+	# triggering a sync lazy load inside the async session
+	await db.refresh(user, ["roles"])
 	as_principal = await get_current_principal(user=user, session=db)
 
 	return UserPermissions(
