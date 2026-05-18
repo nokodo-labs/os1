@@ -44,6 +44,7 @@ const NETWORK_ONLY_PATTERNS = [
 	/\/health$/,
 	/\/v1\/openapi\.json$/,
 	/\/runs\/[^/]+\/stream$/, // SSE streaming endpoints must never be cached
+	/\/system\/manifest\.json$/, // manifest must always be fresh for PWA installability
 ]
 
 // static asset extensions eligible for cache-first
