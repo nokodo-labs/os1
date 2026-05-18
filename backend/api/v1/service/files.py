@@ -12,6 +12,7 @@ programmatic flow that doesn't originate from an HTTP request.
 from __future__ import annotations
 
 import base64
+import hashlib
 import logging
 import os
 import time
@@ -44,6 +45,7 @@ from api.storage.base import MimeType
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	invalidate_accessible_users_for_resource,
 	list_accessible_user_ids,
 	require_permission,
 	require_project_access,
@@ -203,9 +205,13 @@ async def store_file(
 
 	await backend.put(key, data, content_type)
 
-	info = await backend.stat(key)
-	size_bytes = info.size if info else None
-	checksum = await backend.checksum_sha256(key)
+	if isinstance(data, (bytes, bytearray, memoryview)):
+		size_bytes: int | None = len(data)
+		checksum: str | None = hashlib.sha256(data).hexdigest()
+	else:
+		info = await backend.stat(key)
+		size_bytes = info.size if info else None
+		checksum = await backend.checksum_sha256(key)
 
 	projects: list[Project] = []
 	if project_ids:
@@ -711,6 +717,10 @@ async def update_file(
 		origin_session_id=origin_session_id,
 	)
 	await invalidate_resource_payload_cache(ResourceType.FILE, file_id)
+	if changed_project_ids:
+		await invalidate_accessible_users_for_resource(
+			ResourceType.FILE, file_id, session
+		)
 	await invalidate_project_payload_caches(changed_project_ids)
 	return file
 
@@ -757,4 +767,5 @@ async def delete_file(
 		recipient_ids=delete_recipients,
 	)
 	await invalidate_resource_payload_cache(ResourceType.FILE, file_id)
+	await invalidate_accessible_users_for_resource(ResourceType.FILE, file_id, session)
 	await invalidate_project_payload_caches(project_ids)
