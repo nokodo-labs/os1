@@ -37,39 +37,9 @@ on:
         default: true
 
 jobs:
-  format:
-    name: check formatting
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version-file: backend/.python-version
-
-      - name: set up uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-
-      - name: install dependencies
-        run: uv sync --frozen --extra dev
-
-      - name: check code formatting
-        run: uv run ruff format --check .
-
-      - name: check import sorting
-        run: uv run ruff check . --select I --no-fix --output-format=github
-
   quality:
     name: lint and test on Python ${{ matrix.python }}
     runs-on: ubuntu-latest
-    needs: format
     services:
       postgres:
         image: postgres:17
@@ -132,6 +102,12 @@ jobs:
         run: |
           echo "running on Python ${{ matrix.python }}"
           uv sync --frozen --all-extras
+
+      - name: check code formatting
+        run: uv run ruff format --check .
+
+      - name: check import sorting
+        run: uv run ruff check . --select I --no-fix --output-format=github
 
       - name: lint code
         if: ${{ inputs.run_lint }}
