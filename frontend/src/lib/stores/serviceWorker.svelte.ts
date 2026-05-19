@@ -29,6 +29,7 @@ let lastUpdateCheckAt = 0
 let updateTimer: ReturnType<typeof setInterval> | null = null
 let registrationCleanup: (() => void) | null = null
 let cleanup: (() => void) | null = null
+let reloadOnControllerChange = false
 const watchedWorkers = new WeakSet<ServiceWorker>()
 
 /** check if a SW is already waiting, accounting for race conditions */
@@ -136,6 +137,10 @@ export function initServiceWorker(): void {
 	didInit = true
 
 	const onControllerChange = () => {
+		if (!reloadOnControllerChange) {
+			void refreshRegistration().catch(() => {})
+			return
+		}
 		if (reloading) return
 		reloading = true
 		window.location.reload()
@@ -211,6 +216,7 @@ export async function applyUpdate(): Promise<void> {
 			await checkForUpdate(true)
 			return
 		}
+		reloadOnControllerChange = true
 		reg.waiting.postMessage({ type: 'SKIP_WAITING' })
 	} catch (error) {
 		swUpdate.updateError = updateErrorMessage(error)
@@ -225,6 +231,7 @@ export function destroyServiceWorker(): void {
 	cleanup = null
 	didInit = false
 	reloading = false
+	reloadOnControllerChange = false
 	registration = null
 	trackedRegistration = null
 	updateInFlight = null
