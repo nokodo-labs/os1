@@ -15,6 +15,59 @@ export async function deleteThread(threadId: string): Promise<number | null> {
 	return response.status
 }
 
+/** archive a thread via API with optimistic sidebar removal. */
+export async function archiveThread(threadId: string): Promise<boolean> {
+	const previousThread = chat.recentThreads.find((thread) => thread.id === threadId) ?? null
+	if (previousThread) chat.removeRecentThread(threadId)
+
+	try {
+		const { error } = await api.PATCH('/v1/threads/{thread_id}', {
+			params: { path: { thread_id: threadId } },
+			body: { is_archived: true },
+		})
+
+		if (error) {
+			if (previousThread) chat.recentThreads = [previousThread, ...chat.recentThreads]
+			showError('could not archive chat')
+			return false
+		}
+
+		if (chat.activeThread?.id === threadId) {
+			chat.activeThread = { ...chat.activeThread, is_archived: true }
+		}
+		void chat.refreshThreads()
+		return true
+	} catch {
+		if (previousThread) chat.recentThreads = [previousThread, ...chat.recentThreads]
+		showError('could not archive chat')
+		return false
+	}
+}
+
+/** unarchive a thread via API and refresh the visible sidebar list. */
+export async function unarchiveThread(threadId: string): Promise<boolean> {
+	try {
+		const { error } = await api.PATCH('/v1/threads/{thread_id}', {
+			params: { path: { thread_id: threadId } },
+			body: { is_archived: false },
+		})
+
+		if (error) {
+			showError('could not unarchive chat')
+			return false
+		}
+
+		if (chat.activeThread?.id === threadId) {
+			chat.activeThread = { ...chat.activeThread, is_archived: false }
+		}
+		void chat.refreshThreads()
+		return true
+	} catch {
+		showError('could not unarchive chat')
+		return false
+	}
+}
+
 /**
  * update a thread's title and tags with optimistic update + rollback.
  * returns true on success, false on error (also calls showError).

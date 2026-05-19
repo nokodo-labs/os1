@@ -30,6 +30,7 @@ export default [
 	{
 		ignores: [
 			'build/',
+			'coverage/',
 			'.svelte-kit/',
 			'dist/',
 			'node_modules/',

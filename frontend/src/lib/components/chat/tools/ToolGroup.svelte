@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ToolExecution } from '$lib/tools'
 	import MemoryCreateGroup from './MemoryCreateGroup.svelte'
+	import NotificationStep from './NotificationStep.svelte'
 	import ToolStep from './ToolStep.svelte'
 
 	interface Props {
@@ -41,6 +42,8 @@
 				{:else}
 					<MemoryCreateGroup executions={segment.executions} />
 				{/if}
+			{:else if segment.execution.toolCall.name === 'send_notification'}
+				<NotificationStep execution={segment.execution} />
 			{:else}
 				<ToolStep execution={segment.execution} />
 			{/if}

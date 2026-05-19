@@ -394,7 +394,7 @@
 						oncompositionstart={handleCompositionStart}
 						oncompositionend={handleCompositionEnd}
 						rows="1"
-						class="scrollbar-thin scrollbar-track-transparent scrollbar-thumb-foreground/20 hover:scrollbar-thumb-foreground/30 text-foreground/96 placeholder:text-foreground/40 m-0 max-h-96 min-h-6 w-full resize-none overflow-y-auto border-0 bg-transparent px-1 py-0 font-[inherit] text-[0.9375rem] leading-6 outline-none"
+						class="scrollbar-thumb-foreground/20 hover:scrollbar-thumb-foreground/30 text-foreground/96 placeholder:text-foreground/40 m-0 max-h-96 min-h-6 w-full resize-none scrollbar-thin scrollbar-track-transparent overflow-y-auto border-0 bg-transparent px-1 py-0 font-[inherit] text-[0.9375rem] leading-6 outline-none"
 					></textarea>
 				</div>
 

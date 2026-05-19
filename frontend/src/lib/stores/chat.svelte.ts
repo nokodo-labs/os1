@@ -512,11 +512,23 @@ class ChatStore {
 				void this.threadCache.getThread(threadId)
 			}
 
-			this.updateRecentThread(threadId, (t) => {
-				const updated = { ...t, ...patch }
-				this.#clearMetadataGeneratingIfReady(updated)
-				return updated
-			})
+			// only reorder to front if last_activity_at actually advanced
+			const activityChanged =
+				typeof data.last_activity_at === 'string' &&
+				(() => {
+					const existing = this.recentThreads.find((t) => t.id === threadId)
+					return !existing || data.last_activity_at! > (existing.last_activity_at ?? '')
+				})()
+
+			this.updateRecentThread(
+				threadId,
+				(t) => {
+					const updated = { ...t, ...patch }
+					this.#clearMetadataGeneratingIfReady(updated)
+					return updated
+				},
+				activityChanged
+			)
 
 			if (this.activeThread?.id === threadId) {
 				this.activeThread = { ...this.activeThread, ...patch }
@@ -694,7 +706,11 @@ class ChatStore {
 		this.recentThreads = this.recentThreads.filter((t) => t.id !== threadId)
 	}
 
-	updateRecentThread = (threadId: string, update: (thread: Thread) => Thread) => {
+	updateRecentThread = (
+		threadId: string,
+		update: (thread: Thread) => Thread,
+		reorder: boolean = true
+	) => {
 		if (!threadId) return
 
 		const threads = this.recentThreads
@@ -702,7 +718,11 @@ class ChatStore {
 		if (idx === -1) return
 
 		const updated = update(threads[idx])
-		this.recentThreads = [updated, ...threads.slice(0, idx), ...threads.slice(idx + 1)]
+		if (reorder) {
+			this.recentThreads = [updated, ...threads.slice(0, idx), ...threads.slice(idx + 1)]
+		} else {
+			this.recentThreads = [...threads.slice(0, idx), updated, ...threads.slice(idx + 1)]
+		}
 	}
 
 	fetchUnreadCounts = async (): Promise<void> => {

@@ -1,11 +1,10 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import { getApiOrigin } from '$lib/api/origin'
 	import MimeIcon from '$lib/components/icons/MimeIcon.svelte'
 	import User from '$lib/components/icons/User.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { resourceAccentStyle, resourceVisual } from '$lib/resources/resourceVisuals'
-	import { fetchAuthenticatedBlob, files } from '$lib/stores/files.svelte'
+	import { files } from '$lib/stores/files.svelte'
 	import { describeFileType, formatFileSize } from '$lib/utils/fileTypes'
 	import ResourcePreview from './ResourcePreview.svelte'
 	import type { ResourceItem } from './types'
@@ -20,7 +19,6 @@
 	let { resource, layout = 'grid', class: className = '', onclick }: Props = $props()
 	let rootEl = $state<HTMLElement | null>(null)
 	let shouldLoadPreview = $state(false)
-	let pdfPreviewUrl = $state<string | null>(null)
 
 	const mimeType = $derived((resource.meta?.mime_type as string) ?? '')
 	const fileType = $derived(
@@ -29,7 +27,6 @@
 	const fileSize = $derived((resource.meta?.file_size as number) ?? 0)
 	const fileSizeLabel = $derived(formatFileSize(fileSize))
 	const category = $derived((resource.meta?.category as string) ?? 'file')
-	const isPdf = $derived(mimeType === 'application/pdf' || resource.title.toLowerCase().endsWith('.pdf'))
 	const source = $derived((resource.meta?.source as string) ?? '')
 	const isShared = $derived(Boolean(resource.meta?.shared))
 	const authorLabel = $derived((resource.meta?.author_label as string | null) ?? null)
@@ -38,12 +35,10 @@
 	const fileVisual = resourceVisual('file')
 	const fileAccentStyle = resourceAccentStyle('file')
 
-	const hasRenderedPreview = $derived(
-		Boolean((thumbnailUrl && category === 'image') || (pdfPreviewUrl && isPdf))
-	)
+	const hasRenderedPreview = $derived(Boolean(thumbnailUrl && category === 'image'))
 
 	$effect(() => {
-		if (!browser || (!isPdf && category !== 'image') || !rootEl) return
+		if (!browser || category !== 'image' || !rootEl) return
 		const observer = new IntersectionObserver(
 			(entries) => {
 				if (!entries[0]?.isIntersecting) return
@@ -58,30 +53,6 @@
 
 	$effect(() => {
 		if (shouldLoadPreview && category === 'image') void files.loadThumbnail(resource.id)
-	})
-
-	$effect(() => {
-		if (!shouldLoadPreview || !isPdf) return
-		let cancelled = false
-		let currentUrl: string | null = null
-		const url = `${getApiOrigin()}/v1/files/${resource.id}/content`
-		void fetchAuthenticatedBlob(url)
-			.then((blobUrl) => {
-				if (cancelled) {
-					URL.revokeObjectURL(blobUrl)
-					return
-				}
-				currentUrl = blobUrl
-				pdfPreviewUrl = blobUrl
-			})
-			.catch((error) => {
-				if (!cancelled) console.warn('pdf preview failed:', error)
-			})
-		return () => {
-			cancelled = true
-			if (currentUrl) URL.revokeObjectURL(currentUrl)
-			if (pdfPreviewUrl === currentUrl) pdfPreviewUrl = null
-		}
 	})
 </script>
 
@@ -111,12 +82,6 @@
 				class="h-full w-full object-cover"
 				draggable="false"
 			/>
-		{:else if pdfPreviewUrl && isPdf}
-			<iframe
-				src={`${pdfPreviewUrl}#toolbar=0&navpanes=0`}
-				title={`${resource.title} preview`}
-				class="pointer-events-none h-full w-full border-0 bg-white"
-			></iframe>
 		{/if}
 	</ResourcePreview>
 {/snippet}
@@ -167,14 +132,6 @@
 				class="size-10 shrink-0 rounded-xl object-cover"
 				draggable="false"
 			/>
-		{:else if pdfPreviewUrl && isPdf}
-			<div class="size-10 shrink-0 overflow-hidden rounded-xl bg-white">
-				<iframe
-					src={`${pdfPreviewUrl}#toolbar=0&navpanes=0`}
-					title={`${resource.title} preview`}
-					class="pointer-events-none h-full w-full border-0 bg-white"
-				></iframe>
-			</div>
 		{:else}
 			<div
 				class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_oklch,var(--resource-accent)_15%,transparent)] text-(--accent-primary)"

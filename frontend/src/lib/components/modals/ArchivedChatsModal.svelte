@@ -3,10 +3,13 @@
 	import { resolve } from '$app/paths'
 	import { api } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
+	import { deleteThread, unarchiveThread as restoreThread } from '$lib/chat/threadActions'
+	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 	import ModalListLayout from '$lib/components/modals/ModalListLayout.svelte'
 	import { chat } from '$lib/stores/chat.svelte'
+	import { showError } from '$lib/stores/notifications.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { debounce } from '$lib/utils'
 	import { metadataLine } from '$lib/utils/resourceAuthors'
@@ -50,6 +53,7 @@
 	let sortIndex = $state(0)
 	let hasMore = $state(true)
 	let unarchivingId = $state<string | null>(null)
+	let deletingId = $state<string | null>(null)
 
 	const currentSort = $derived(sortParsed[sortIndex])
 
@@ -125,6 +129,7 @@
 			search = ''
 			sortIndex = 0
 			unarchivingId = null
+			deletingId = null
 			reload()
 		}
 	})
@@ -132,19 +137,29 @@
 	async function unarchiveThread(threadId: string): Promise<void> {
 		unarchivingId = threadId
 		try {
-			const { error } = await api.PATCH('/v1/threads/{thread_id}', {
-				params: { path: { thread_id: threadId } },
-				body: { is_archived: false },
-			})
-			if (error) {
-				console.error('failed to unarchive thread', error)
-				return
-			}
-			threads = threads.filter((t) => t.id !== threadId)
-			// refresh sidebar so unarchived thread appears
-			void chat.refreshThreads()
+			const ok = await restoreThread(threadId)
+			if (ok) threads = threads.filter((t) => t.id !== threadId)
 		} finally {
 			unarchivingId = null
+		}
+	}
+
+	async function deleteArchivedThread(threadId: string): Promise<boolean> {
+		deletingId = threadId
+		try {
+			const status = await deleteThread(threadId)
+			if (status !== null && status >= 200 && status < 300) {
+				threads = threads.filter((t) => t.id !== threadId)
+				void chat.refreshThreads()
+				return true
+			}
+			showError('could not delete chat')
+			return false
+		} catch {
+			showError('could not delete chat')
+			return false
+		} finally {
+			deletingId = null
 		}
 	}
 
@@ -238,6 +253,17 @@
 							<ArrowUpTray class="h-4 w-4" />
 						{/if}
 					</button>
+					<DeleteButton
+						variant="icon"
+						label="delete thread"
+						stopPropagation={true}
+						disabled={deletingId === thread.id}
+						modalText={{
+							title: 'delete chat?',
+							description: thread.title ?? 'this archived chat will be deleted.',
+						}}
+						onDelete={() => deleteArchivedThread(thread.id)}
+					/>
 				</div>
 			{/each}
 		{/snippet}

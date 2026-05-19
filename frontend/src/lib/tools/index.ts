@@ -597,11 +597,11 @@ export function getToolSummary(execution: ToolExecution): ToolSummary {
 			if (noteId) {
 				const cached = notes.get(noteId)
 				const label = cached?.title
-				if (isActive) return { title: label ? `reading "${label}"` : 'reading note' }
+				if (isActive) return { title: label ? `reading ${label}` : 'reading note' }
 				const output = parseToolOutput(execution)
 				const title = (output?.title as string) ?? label
 				return {
-					title: title ? `read "${title}"` : 'read note',
+					title: title ? `read ${title}` : 'read note',
 					resourceId: noteId,
 					resourceType: 'note',
 				}
@@ -628,11 +628,11 @@ export function getToolSummary(execution: ToolExecution): ToolSummary {
 			const doneVerb = isUpdate ? 'updated' : 'created'
 			const label =
 				noteTitle ?? (isUpdate ? (notes.get(args.note_id as string)?.title ?? null) : null)
-			if (isActive) return { title: label ? `${verb} "${label}"` : `${verb} note` }
+			if (isActive) return { title: label ? `${verb} ${label}` : `${verb} note` }
 			const output = parseToolOutput(execution)
 			const resultId = output?.id as string | undefined
 			return {
-				title: label ? `${doneVerb} "${label}"` : `${doneVerb} note`,
+				title: label ? `${doneVerb} ${label}` : `${doneVerb} note`,
 				resourceId:
 					resultId ?? (typeof args.note_id === 'string' ? args.note_id : undefined),
 				resourceType: 'note',
@@ -645,11 +645,11 @@ export function getToolSummary(execution: ToolExecution): ToolSummary {
 			if (projectId) {
 				const cached = projects.getById(projectId)
 				const label = cached?.name
-				if (isActive) return { title: label ? `checking "${label}"` : 'checking project' }
+				if (isActive) return { title: label ? `checking ${label}` : 'checking project' }
 				const output = parseToolOutput(execution)
 				const name = (output?.name as string) ?? label
 				return {
-					title: name ? `checked "${name}"` : 'checked project',
+					title: name ? `checked ${name}` : 'checked project',
 					resourceId: projectId,
 					resourceType: 'project',
 				}
@@ -676,7 +676,7 @@ export function getToolSummary(execution: ToolExecution): ToolSummary {
 				const output = parseToolOutput(execution)
 				const title = output?.title as string | undefined
 				return {
-					title: title ? `checked "${title}"` : 'checked reminder',
+					title: title ? `checked ${title}` : 'checked reminder',
 					resourceId: remId,
 					resourceType: 'reminder',
 				}
@@ -702,11 +702,11 @@ export function getToolSummary(execution: ToolExecution): ToolSummary {
 			const isUpdate = typeof args.reminder_id === 'string'
 			const verb = isUpdate ? 'updating' : 'creating'
 			const doneVerb = isUpdate ? 'updated' : 'created'
-			if (isActive) return { title: remTitle ? `${verb} "${remTitle}"` : `${verb} reminder` }
+			if (isActive) return { title: remTitle ? `${verb} ${remTitle}` : `${verb} reminder` }
 			const output = parseToolOutput(execution)
 			const resultId = output?.id as string | undefined
 			return {
-				title: remTitle ? `${doneVerb} "${remTitle}"` : `${doneVerb} reminder`,
+				title: remTitle ? `${doneVerb} ${remTitle}` : `${doneVerb} reminder`,
 				resourceId:
 					resultId ??
 					(typeof args.reminder_id === 'string' ? args.reminder_id : undefined),
@@ -720,11 +720,11 @@ export function getToolSummary(execution: ToolExecution): ToolSummary {
 			if (fileId) {
 				const cached = files.get(fileId)
 				const label = cached?.filename
-				if (isActive) return { title: label ? `reading "${label}"` : 'reading file' }
+				if (isActive) return { title: label ? `reading ${label}` : 'reading file' }
 				const output = parseToolOutput(execution)
 				const filename = (output?.filename as string) ?? label
 				return {
-					title: filename ? `read "${filename}"` : 'read file',
+					title: filename ? `read ${filename}` : 'read file',
 					resourceId: fileId,
 					resourceType: 'file',
 				}
@@ -745,10 +745,10 @@ export function getToolSummary(execution: ToolExecution): ToolSummary {
 			const cached = fileId ? files.get(fileId) : null
 			const label = fileName ?? cached?.filename
 			if (isFailed)
-				return { title: label ? `could not edit "${label}"` : 'could not edit file' }
-			if (isActive) return { title: label ? `editing "${label}"` : 'editing file' }
+				return { title: label ? `could not edit ${label}` : 'could not edit file' }
+			if (isActive) return { title: label ? `editing ${label}` : 'editing file' }
 			return {
-				title: label ? `edited "${label}"` : 'edited file',
+				title: label ? `edited ${label}` : 'edited file',
 				resourceId: fileId ?? undefined,
 				resourceType: 'file',
 			}
@@ -800,7 +800,7 @@ export function getToolSummary(execution: ToolExecution): ToolSummary {
 			const title = typeof args.title === 'string' ? args.title : null
 			if (isFailed) return { title: 'could not send notification' }
 			if (isActive) return { title: 'sending notification' }
-			return { title: title ? `sent "${title}"` : 'sent notification' }
+			return { title: title ? `sent ${title}` : 'sent notification' }
 		}
 
 		case 'reveal_attachment': {

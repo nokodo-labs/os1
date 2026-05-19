@@ -99,6 +99,23 @@
 			isExpanded = !isExpanded
 		}
 	}
+
+	function subtitleText(value: string): string {
+		const trimmed = value.trim()
+		const leftDoubleQuote = String.fromCharCode(0x201c)
+		const rightDoubleQuote = String.fromCharCode(0x201d)
+		const quotePairs: [string, string][] = [
+			['"', '"'],
+			["'", "'"],
+			[leftDoubleQuote, rightDoubleQuote],
+		]
+		for (const [open, close] of quotePairs) {
+			if (trimmed.startsWith(open) && trimmed.endsWith(close) && trimmed.length > 1) {
+				return trimmed.slice(open.length, -close.length)
+			}
+		}
+		return value
+	}
 </script>
 
 <div class="flex items-start gap-2.5 py-1" in:fade={{ duration: 120 }}>
@@ -132,8 +149,6 @@
 			<CommandLine
 				class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}"
 			/>
-		{:else if name === 'send_notification'}
-			<Bell class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{:else if name === 'reveal_attachment'}
 			<Eye class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
 		{:else}
@@ -156,7 +171,9 @@
 					<span class="text-foreground/70">{summary.title}</span>
 				{/if}
 				{#if summary.subtitle}
-					<span class="text-foreground/40 max-w-48 truncate text-xs">{summary.subtitle}</span>
+					<span class="text-foreground/40 max-w-48 truncate text-xs"
+						>{subtitleText(summary.subtitle)}</span
+					>
 				{/if}
 				{#if name === 'think' && thinkDisplay && summary.title !== `thought for ${thinkDisplay}s`}
 					<span class="text-foreground/50 text-xs tabular-nums">{thinkDisplay}s</span>
@@ -175,7 +192,9 @@
 					<span class="text-foreground/70">{summary.title}</span>
 				{/if}
 				{#if summary.subtitle}
-					<span class="text-foreground/40 max-w-48 truncate text-xs">{summary.subtitle}</span>
+					<span class="text-foreground/40 max-w-48 truncate text-xs"
+						>{subtitleText(summary.subtitle)}</span
+					>
 				{/if}
 				{#if name === 'think' && thinkDisplay && summary.title !== `thought for ${thinkDisplay}s`}
 					<span class="text-foreground/50 text-xs tabular-nums">{thinkDisplay}s</span>

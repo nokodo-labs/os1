@@ -40,7 +40,8 @@
 	{#snippet body()}
 		{#if recallQuery}
 			<div class="text-foreground/60 mb-3 text-sm">
-				<span class="text-foreground/50">searching for:</span> {recallQuery}
+				<span class="text-foreground/50">searching for:</span>
+				{recallQuery}
 			</div>
 		{/if}
 

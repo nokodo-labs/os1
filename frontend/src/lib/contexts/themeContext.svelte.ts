@@ -98,6 +98,13 @@ export const accentColors: Record<
 		border: 'rgba(196, 181, 253, 0.2)',
 		shadow: 'rgba(196, 181, 253, 0.25)',
 	},
+	petrol: {
+		primary: '#0f766e',
+		rgb: '15 118 110',
+		bg: 'rgba(15, 118, 110, 0.03)',
+		border: 'rgba(15, 118, 110, 0.24)',
+		shadow: 'rgba(15, 118, 110, 0.28)',
+	},
 }
 
 // selectable accent colors (user-choosable in settings, matches API schema)

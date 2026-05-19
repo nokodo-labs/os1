@@ -317,11 +317,13 @@ describe('ChatStore thread event handling', () => {
 			const t1 = makeThread({ id: 't1', title: 'first' })
 			const t2 = makeThread({ id: 't2', title: 'second' })
 			chat.recentThreads = [t1, t2]
+			const nextActivity = new Date(Date.parse(t2.last_activity_at) + 1000).toISOString()
 
 			dispatch(
 				makeStreamMessage('thread.updated', {
 					id: 't2',
 					title: 'now first',
+					last_activity_at: nextActivity,
 				})
 			)
 

@@ -70,7 +70,7 @@
 			<div class="relative z-10 flex max-h-[calc(100dvh-2rem)] min-h-0 flex-col">
 				<header class="flex shrink-0 items-start justify-between gap-3 px-4 pt-4 pb-2">
 					<div class="flex min-h-9 min-w-0 items-center">
-						<div class="text-card-foreground text-lg font-semibold">
+						<div class="text-card-foreground pl-3 text-lg font-semibold">
 							{title}
 						</div>
 					</div>

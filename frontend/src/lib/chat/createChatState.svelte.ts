@@ -7,8 +7,8 @@
  * this eliminates the double-proxy pattern that existed before.
  */
 
-import { agents } from '$lib/stores/agents.svelte'
 import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
+import { agents } from '$lib/stores/agents.svelte'
 import { chat as chatStore, type Thread } from '$lib/stores/chat.svelte'
 import { session } from '$lib/stores/session.svelte'
 import { ToolExecutionTracker } from '$lib/tools'
@@ -93,6 +93,7 @@ export function createChatState(): ChatState {
 	let lastThreadId = $state<string | null>(null)
 	let inputOverlayHeight = $state(0)
 	let scrollQueued = false
+	let scrollRequestedWhileQueued = false
 
 	// tool tracking
 	const toolTracker = new ToolExecutionTracker()
@@ -412,13 +413,23 @@ export function createChatState(): ChatState {
 
 	async function queueScrollToBottom(behavior: 'auto' | 'smooth' = 'auto') {
 		if (!scrollContainer) return
+		scrollRequestedWhileQueued = true
 		if (scrollQueued) return
 		scrollQueued = true
 		await tick()
 		requestAnimationFrame(() => {
-			scrollQueued = false
-			if (!autoScroll) return
+			if (!autoScroll) {
+				scrollQueued = false
+				scrollRequestedWhileQueued = false
+				return
+			}
+			scrollRequestedWhileQueued = false
 			scrollToBottom(behavior)
+			requestAnimationFrame(() => {
+				if (autoScroll) scrollToBottom('auto')
+				scrollQueued = false
+				if (scrollRequestedWhileQueued) void queueScrollToBottom('auto')
+			})
 		})
 	}
 

@@ -31,8 +31,8 @@ export {
 	getBlockFirstAssistant,
 	getBlockResponseItems,
 	getMessageCreatedAt,
-	getUserRunItemTimestamp,
 	getRunId,
+	getUserRunItemTimestamp,
 	groupResponseItems,
 	hasAttachmentParts,
 	pendingAttachmentsToFileParts,
@@ -87,4 +87,4 @@ export {
 export { sendTypingEvent, subscribeToChatEvents } from './eventSubscriptions.svelte'
 
 // thread actions
-export { deleteThread, updateThread } from './threadActions'
+export { deleteThread, unarchiveThread, updateThread } from './threadActions'

@@ -20,6 +20,7 @@
 		pendingAttachmentsToFileParts,
 		pendingAttachmentsToMediaParts,
 		ThreadNotFoundError,
+		unarchiveThread,
 		type ApiMessage,
 	} from '$lib/chat'
 	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
@@ -41,6 +42,7 @@
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
+	import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte'
 	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import GarbageBin from '$lib/components/icons/GarbageBin.svelte'
@@ -73,6 +75,7 @@
 	let isReadOnly = $state(false)
 	let threadNotFound = $state(false)
 	let messageListEl = $state<HTMLDivElement | null>(null)
+	let isUnarchivingThread = $state(false)
 
 	// citation sources modal state
 	type Citation = components['schemas']['Citation']
@@ -458,9 +461,32 @@
 		window.dispatchEvent(new CustomEvent('focus:chat-input'))
 		void goto(resolve('/?chat=new' as unknown as '/'), { keepFocus: true, noScroll: true })
 	}
+
+	async function handleUnarchiveThread(): Promise<void> {
+		const id = chat.thread?.id
+		if (!id || isUnarchivingThread) return
+		isUnarchivingThread = true
+		try {
+			await unarchiveThread(id)
+		} finally {
+			isUnarchivingThread = false
+		}
+	}
 </script>
 
 {#snippet islandContextActions()}
+	{#if chat.thread?.is_archived}
+		<button
+			type="button"
+			class="group rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
+			disabled={isUnarchivingThread}
+			onclick={() => void handleUnarchiveThread()}
+			aria-label="unarchive chat"
+			title="unarchive chat"
+		>
+			<ArrowUpTray class="h-5 w-5" />
+		</button>
+	{/if}
 	<AgentSelector
 		selectedAgent={selectedAgent.id}
 		onAgentChange={(agentId) => selectedAgent.set(agentId)}

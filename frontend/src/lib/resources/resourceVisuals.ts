@@ -5,6 +5,7 @@ import Clip from '$lib/components/icons/Clip.svelte'
 import Cog6 from '$lib/components/icons/Cog6.svelte'
 import Document from '$lib/components/icons/Document.svelte'
 import FinderFolder from '$lib/components/icons/FinderFolder.svelte'
+import Telescope from '$lib/components/icons/Telescope.svelte'
 import UserGroup from '$lib/components/icons/UserGroup.svelte'
 import Users from '$lib/components/icons/Users.svelte'
 import { accentColors, type AccentColorKey } from '$lib/contexts/themeContext.svelte'
@@ -143,6 +144,13 @@ export const appVisuals = [
 		title: 'messages',
 		description: 'conversations and inbox',
 		...pickAppVisual('messages'),
+	},
+	{
+		id: 'research',
+		title: 'research',
+		description: 'search and source work',
+		icon: Telescope,
+		accent: 'petrol',
 	},
 	{
 		id: 'projects',

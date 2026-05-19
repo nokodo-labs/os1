@@ -16,6 +16,8 @@
 		stopPropagation?: boolean
 		showTrigger?: boolean
 		open?: boolean
+		variant?: 'menu' | 'icon'
+		disabled?: boolean
 	}
 
 	let {
@@ -27,6 +29,8 @@
 		stopPropagation = false,
 		showTrigger = true,
 		open = $bindable(false),
+		variant = 'menu',
+		disabled = false,
 	}: Props = $props()
 
 	// when open is set externally (e.g. showTrigger=false), open the confirm modal
@@ -54,12 +58,21 @@
 {#if showTrigger}
 	<button
 		type="button"
-		class="group rounded-pill text-foreground/80 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
+		class={variant === 'icon'
+			? 'rounded-circle text-foreground/40 flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center border-none bg-transparent transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40'
+			: 'group rounded-pill text-foreground/80 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300'}
+		{disabled}
 		onclick={handleTriggerClick}
+		aria-label={variant === 'icon' ? label : undefined}
+		title={variant === 'icon' ? label : undefined}
 	>
 		<Trash
-			class="h-4 w-4 text-red-400 transition-colors duration-150 group-hover:text-red-300"
+			class="h-4 w-4 text-red-400 transition-colors duration-150 {variant === 'menu'
+				? 'group-hover:text-red-300'
+				: ''}"
 		/>
-		<span class="ml-2">{label}</span>
+		{#if variant === 'menu'}
+			<span class="ml-2">{label}</span>
+		{/if}
 	</button>
 {/if}

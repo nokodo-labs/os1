@@ -19,6 +19,7 @@ export type AccentColorKey =
 	| 'reminders'
 	| 'calendar'
 	| 'lilac'
+	| 'petrol'
 
 // reactive state for current accent
 let currentAccent = $state<AccentColorKey>('lilac')

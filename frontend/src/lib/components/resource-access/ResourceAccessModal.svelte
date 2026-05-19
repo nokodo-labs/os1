@@ -43,7 +43,10 @@
 
 	type ApiFile = components['schemas']['File']
 	type ApiMessage = components['schemas']['Message']
+	type ApiReminder = components['schemas']['Reminder']
+	type ApiReminderWithSubtasks = components['schemas']['ReminderWithSubtasks']
 	type ApiThread = components['schemas']['Thread']
+	type ReminderSnapshotItem = ApiReminder | ApiReminderWithSubtasks
 
 	interface Props {
 		open: boolean
@@ -408,6 +411,48 @@
 			.trim()
 	}
 
+	function formatSnapshotDate(value: string | null | undefined): string | null {
+		if (!value) return null
+		return new Date(value).toLocaleString().toLowerCase()
+	}
+
+	function reminderSubtasks(reminder: ReminderSnapshotItem): ReminderSnapshotItem[] {
+		if (!('subtasks' in reminder)) return []
+		return reminder.subtasks ?? []
+	}
+
+	function appendReminderSnapshot(
+		lines: string[],
+		reminder: ReminderSnapshotItem,
+		depth = 0
+	): void {
+		const indent = '  '.repeat(depth)
+		const checked = reminder.status === 'completed' ? 'x' : ' '
+		lines.push(`${indent}- [${checked}] ${reminder.title}`)
+		const dueAt = formatSnapshotDate(reminder.due_at)
+		const remindAt = formatSnapshotDate(reminder.remind_at)
+
+		const meta = [
+			dueAt ? `due: ${dueAt}` : null,
+			remindAt ? `remind: ${remindAt}` : null,
+			reminder.recurrence ? 'repeats' : null,
+		]
+			.filter(Boolean)
+			.join(' | ')
+		if (meta) lines.push(`${indent}  ${meta}`)
+
+		const description = reminder.description?.trim()
+		if (description) {
+			for (const line of description.split('\n')) {
+				lines.push(`${indent}  ${line}`)
+			}
+		}
+
+		for (const subtask of reminderSubtasks(reminder)) {
+			appendReminderSnapshot(lines, subtask, depth + 1)
+		}
+	}
+
 	function exportExtension(format: ExportFormat): string {
 		return format === 'json' ? 'json' : format
 	}
@@ -508,16 +553,22 @@
 			case 'reminder_list': {
 				await reminders.loadLists()
 				const list = reminders.getListById(payload.resourceId)
-				return [
+				const listReminders = await reminders.loadReminders(payload.resourceId, {
+					force: true,
+				})
+				const lines = [
 					`# ${list?.name || title}`,
 					'',
 					list ? `total: ${list.total_count}` : '',
 					list ? `pending: ${list.pending_count}` : '',
 					list ? `completed: ${list.completed_count}` : '',
 					`link: ${shareUrl}`,
-				]
-					.filter(Boolean)
-					.join('\n')
+				].filter(Boolean)
+				if (listReminders.length > 0) {
+					lines.push('', '## reminders', '')
+					for (const reminder of listReminders) appendReminderSnapshot(lines, reminder)
+				}
+				return lines.join('\n')
 			}
 			case 'calendar': {
 				await calendars.load()

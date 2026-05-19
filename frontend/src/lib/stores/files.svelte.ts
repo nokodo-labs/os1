@@ -73,7 +73,7 @@ export function categorizeMediaType(mediaType: string): AttachmentMediaCategory 
  * fetch a URL with authentication and return a blob object URL.
  * used for rendering media from authenticated API endpoints in <img>/<video>/<audio> tags.
  */
-export async function fetchAuthenticatedBlob(url: string): Promise<string> {
+async function fetchAuthenticatedMediaBlob(url: string, mediaType?: string): Promise<Blob> {
 	const { getAccessToken } = await import('$lib/auth/session.svelte')
 	const token = getAccessToken()
 	const response = await fetch(url, {
@@ -81,7 +81,12 @@ export async function fetchAuthenticatedBlob(url: string): Promise<string> {
 		headers: token ? { Authorization: `Bearer ${token}` } : {},
 	})
 	if (!response.ok) throw new Error(`failed to fetch media: ${response.status}`)
-	const blob = await response.blob()
+	const responseBlob = await response.blob()
+	return mediaType ? new Blob([responseBlob], { type: mediaType }) : responseBlob
+}
+
+export async function fetchAuthenticatedBlob(url: string, mediaType?: string): Promise<string> {
+	const blob = await fetchAuthenticatedMediaBlob(url, mediaType)
 	return URL.createObjectURL(blob)
 }
 
@@ -225,7 +230,7 @@ export function apiFileToResource(file: ApiFile): FileResource {
 			category,
 			source: file.source,
 			owner_id: file.owner_id,
-			project_ids: file.project_ids,
+			project_ids: file.project_ids ?? [],
 		},
 	}
 }

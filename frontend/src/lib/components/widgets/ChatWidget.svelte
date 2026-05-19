@@ -78,13 +78,6 @@
 					<span class="text-foreground/40 text-[11px]">{messageCount} messages</span>
 				{/if}
 			</div>
-			{#if isArchived}
-				<span
-					class="bg-foreground/8 text-foreground/50 ml-auto rounded-full px-2.5 py-0.5 text-[11px] font-medium"
-				>
-					archived
-				</span>
-			{/if}
 		</div>
 		<h3 class="text-foreground mb-1.5 truncate text-xl font-semibold">
 			{resource.title || 'untitled chat'}
@@ -106,6 +99,13 @@
 			</p>
 		{/if}
 		<div class="mt-auto flex items-center gap-2">
+			{#if isArchived}
+				<span
+					class="bg-foreground/8 text-foreground/50 rounded-full px-2.5 py-0.5 text-[11px] font-medium"
+				>
+					archived
+				</span>
+			{/if}
 			{#if authorMeta}
 				<span class="text-foreground/50 flex min-w-0 items-center gap-1 text-xs">
 					<User class="size-3.5 shrink-0" />

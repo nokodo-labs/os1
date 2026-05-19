@@ -8,8 +8,8 @@
 	import Circle from '$lib/components/icons/Circle.svelte'
 	import ClockRotateRight from '$lib/components/icons/ClockRotateRight.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
+	import GripVertical from '$lib/components/icons/GripVertical.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
-	import MenuLines from '$lib/components/icons/MenuLines.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import { MenuItem, PopupMenu } from '$lib/components/primitives'
@@ -49,6 +49,7 @@
 		onDragOver?: (event: DragEvent) => void
 		onDrop?: (event: DragEvent) => void
 		onDragEnd?: (event: DragEvent) => void
+		onPointerDragStart?: (event: PointerEvent) => void
 	}
 
 	type CreateProps = {
@@ -72,6 +73,7 @@
 	let rootEl: HTMLDivElement | null = $state(null)
 	let menuButtonEl: HTMLButtonElement | null = $state(null)
 	let titleInputEl: HTMLInputElement | null = $state(null)
+	let descriptionTextareaEl: HTMLTextAreaElement | null = $state(null)
 	let dateButtonEl: HTMLButtonElement | null = $state(null)
 	let repeatButtonEl: HTMLButtonElement | null = $state(null)
 
@@ -256,6 +258,20 @@
 		draftError = null
 	}
 
+	function resizeDescriptionTextarea(): void {
+		if (!descriptionTextareaEl) return
+		descriptionTextareaEl.style.height = '0px'
+		const nextHeight = Math.min(descriptionTextareaEl.scrollHeight, 240)
+		descriptionTextareaEl.style.height = `${nextHeight}px`
+		descriptionTextareaEl.style.overflowY =
+			descriptionTextareaEl.scrollHeight > 240 ? 'auto' : 'hidden'
+	}
+
+	function handleDescriptionInput(): void {
+		clearDraftError()
+		resizeDescriptionTextarea()
+	}
+
 	async function handleTitleBlur() {
 		const trimmed = editedTitle.trim()
 
@@ -414,6 +430,12 @@
 		if (!props.expanded) return
 		void focusTitle()
 	})
+
+	$effect(() => {
+		void editedDescription
+		if (!props.expanded) return
+		void tick().then(resizeDescriptionTextarea)
+	})
 </script>
 
 <div
@@ -432,36 +454,30 @@
 		? 'is-out is-out-complete'
 		: ''} {isMotionOutUncomplete ? 'is-out is-out-uncomplete' : ''} {isMorphPlus
 		? 'morph-plus'
-		: ''} {props.kind === 'edit' && props.isDragging ? 'opacity-45' : ''} {props.kind ===
-		'edit' && props.dropTarget === 'child'
-		? 'ring-1 ring-(--accent-primary)/45'
-		: ''}"
+		: ''} {props.kind === 'edit' && props.isDragging ? 'opacity-45' : ''}"
 	onclick={handleRowClick}
 	onkeydown={handleRowKeyDown}
 	ondragover={props.kind === 'edit' ? props.onDragOver : undefined}
 	ondrop={props.kind === 'edit' ? props.onDrop : undefined}
 >
-	{#if props.kind === 'edit' && props.dropTarget === 'before'}
-		<span
-			class="pointer-events-none absolute top-0 right-3 left-8 z-10 h-0.5 rounded-full bg-(--accent-primary)"
-		></span>
-	{:else if props.kind === 'edit' && props.dropTarget === 'after'}
-		<span
-			class="pointer-events-none absolute right-3 bottom-0 left-8 z-10 h-0.5 rounded-full bg-(--accent-primary)"
-		></span>
-	{/if}
 	<div class="flex items-center gap-3 px-3 py-2.5">
 		{#if props.kind === 'edit' && isEditable && props.onDragStart}
 			<button
 				type="button"
 				draggable="true"
-				class="rounded-pill text-foreground/35 hover:bg-foreground/8 hover:text-foreground/65 flex h-6 w-5 shrink-0 cursor-grab items-center justify-center transition-colors active:cursor-grabbing"
+				class="rounded-pill text-foreground/45 hover:text-foreground/75 flex h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center opacity-75 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97] active:cursor-grabbing"
 				onclick={(event) => event.stopPropagation()}
+				onpointerdown={(event) => {
+					if (event.pointerType === 'mouse') return
+					event.stopPropagation()
+					props.onPointerDragStart?.(event)
+				}}
 				ondragstart={props.onDragStart}
 				ondragend={props.onDragEnd}
 				aria-label="reorder reminder"
+				title="drag to reorder or nest"
 			>
-				<MenuLines class="h-4 w-4" strokeWidth="2" />
+				<GripVertical class="h-4.5 w-4.5" />
 			</button>
 		{/if}
 		<button
@@ -556,12 +572,13 @@
 		<div class="details-inner">
 			<div class="space-y-3 px-3 pt-1 pb-3">
 				<textarea
-					class="text-foreground/70 placeholder:text-foreground/35 w-full resize-none bg-transparent pl-9 text-sm leading-5 outline-none"
+					bind:this={descriptionTextareaEl}
+					class="text-foreground/70 placeholder:text-foreground/35 max-h-60 w-full resize-none overflow-hidden bg-transparent pl-9 text-sm leading-5 outline-none"
 					placeholder="add details"
-					rows="2"
+					rows="1"
 					bind:value={editedDescription}
 					disabled={!isEditable || isSaving}
-					oninput={clearDraftError}
+					oninput={handleDescriptionInput}
 					onblur={handleDescriptionBlur}
 					onkeydown={handleDescriptionKeyDown}
 				></textarea>
@@ -646,7 +663,9 @@
 	{#if props.kind === 'edit' && (descriptionPreview || hasDueDate || hasRemindAt || recurrenceLabel) && !props.expanded}
 		<div class="min-w-0 px-3 pb-2 pl-12">
 			{#if descriptionPreview}
-				<p class="text-foreground/60 line-clamp-1 min-w-0 text-xs leading-5 wrap-break-word">
+				<p
+					class="text-foreground/60 line-clamp-1 min-w-0 text-xs leading-5 wrap-break-word"
+				>
 					{descriptionPreview}
 				</p>
 			{/if}

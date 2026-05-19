@@ -370,7 +370,7 @@
 									disabled={isSaving}
 									class="text-foreground/70 hover:bg-foreground/10 hover:text-foreground inline-flex cursor-pointer items-center gap-1.5 rounded-3xl px-3.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-50"
 								>
-										<XMark class="h-4 w-4" />
+									<XMark class="h-4 w-4" />
 									<span>cancel</span>
 								</button>
 								{#if onEditSaveAsCopy}

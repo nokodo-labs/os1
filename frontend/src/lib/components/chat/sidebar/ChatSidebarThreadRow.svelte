@@ -34,6 +34,7 @@
 		onToggleMenu: (threadId: string) => void
 		onCloseMenu: () => void
 		onRequestEdit: (thread: Thread) => void
+		onArchiveThread: (thread: Thread) => void | boolean | Promise<void | boolean>
 		onDeleteThread: (thread: Thread) => void | boolean | Promise<void | boolean>
 		projectOptions?: ResourceProjectOption[]
 	}
@@ -47,6 +48,7 @@
 		onToggleMenu,
 		onCloseMenu,
 		onRequestEdit,
+		onArchiveThread,
 		onDeleteThread,
 		projectOptions = [],
 	}: Props = $props()
@@ -253,7 +255,7 @@
 				onclick={(e) => {
 					e.stopPropagation()
 					onCloseMenu()
-					console.log('thread action', 'archive', thread.id)
+					void onArchiveThread(thread)
 				}}
 			>
 				{#snippet icon()}<ArchiveBox variant="solid" class="size-full" />{/snippet}

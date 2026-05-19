@@ -90,18 +90,18 @@
 	component="island"
 	tag="header"
 	class="overflow-visible rounded-full px-3 py-3 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
-	style="view-transition-name: island;"
+	style="view-transition-name: island; --island-control-icon-size: 2.3rem;"
 	blurRadius={4}
 >
 	<div
-		class="relative z-10 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
+		class="relative z-10 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center"
 		style="height: var(--chrome-island-height);"
 	>
 		<!-- left: context actions (page-injected via chrome.setContextActions) -->
-		<div class="flex h-full items-center">
+		<div class="flex h-full min-w-0 items-center">
 			{#if chrome.island.contextActions}
 				<div
-					class="island-context-actions flex h-full items-center"
+					class="island-context-actions flex h-full min-w-0 items-center"
 					style="color: var(--accent-primary, white);"
 				>
 					{@render chrome.island.contextActions()}
@@ -203,6 +203,7 @@
 	:global(.island-context-actions > button),
 	:global(.island-right-controls > button) {
 		display: inline-flex;
+		flex: 0 0 auto;
 		height: 100%;
 		min-width: 0;
 		align-items: center;
@@ -223,13 +224,13 @@
 
 	:global(.island-context-actions > button > svg),
 	:global(.island-right-controls > button > svg) {
-		height: 60%;
-		width: auto;
+		height: var(--island-control-icon-size, 2.3rem);
+		width: var(--island-control-icon-size, 2.3rem);
 	}
 
 	:global(.island-pwa-icon) {
-		height: 60%;
-		width: auto;
+		height: var(--island-control-icon-size, 2.3rem);
+		width: var(--island-control-icon-size, 2.3rem);
 		flex: 0 0 auto;
 	}
 

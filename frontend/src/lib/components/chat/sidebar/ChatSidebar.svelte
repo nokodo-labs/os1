@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import { deleteThread, updateThread } from '$lib/chat/threadActions'
+	import { archiveThread, deleteThread, updateThread } from '$lib/chat/threadActions'
 	import ChatSidebarChatsSection from '$lib/components/chat/sidebar/ChatSidebarChatsSection.svelte'
 	import ChatSidebarHeader from '$lib/components/chat/sidebar/ChatSidebarHeader.svelte'
 	import ChatSidebarTopActions from '$lib/components/chat/sidebar/ChatSidebarTopActions.svelte'
@@ -206,6 +206,21 @@
 		}
 	}
 
+	async function handleArchiveThread(thread: Thread): Promise<boolean> {
+		const ok = await archiveThread(thread.id)
+		if (!ok) return false
+
+		if (page.url.pathname === `/c/${thread.id}`) {
+			sidebar.selectChat(null)
+			await goto(resolve('/'), {
+				keepFocus: true,
+				noScroll: true,
+			})
+		}
+
+		return true
+	}
+
 	$effect(() => {
 		if (!editThread) return
 		editTitle = editThread.title ?? ''
@@ -364,6 +379,7 @@
 				onToggleMenu={toggleThreadMenu}
 				onCloseMenu={closeThreadMenu}
 				onRequestEdit={requestEditThread}
+				onArchiveThread={handleArchiveThread}
 				onDeleteThread={handleDeleteThread}
 			/>
 		{/if}

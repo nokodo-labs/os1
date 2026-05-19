@@ -1,16 +1,19 @@
 <script lang="ts">
 	import { portal } from '$lib/actions/portal'
+	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
+	import { modals } from '$lib/stores/modals.svelte'
 	import { SvelteMap } from 'svelte/reactivity'
 
 	interface Props {
 		open: boolean
 		src: string
 		alt?: string
+		fileId?: string | null
 		onClose: () => void
 	}
 
-	let { open, src, alt = 'image preview', onClose }: Props = $props()
+	let { open, src, alt = 'image preview', fileId = null, onClose }: Props = $props()
 
 	// zoom/pan state
 	let scale = $state(1)
@@ -237,6 +240,13 @@
 		}
 	}
 
+	function openFileDetails(e: MouseEvent): void {
+		e.stopPropagation()
+		if (!fileId) return
+		onClose()
+		queueMicrotask(() => modals.open('file-details', { fileId }))
+	}
+
 	// reset transform when lightbox opens/closes
 	$effect(() => {
 		if (open) resetTransform()
@@ -255,14 +265,30 @@
 			onclick={handleBackdropClick}
 			onkeydown={handleKeyDown}
 		>
-			<button
-				type="button"
-				class="absolute top-4 right-4 z-10 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-white/10 text-white/80 backdrop-blur-sm transition-colors hover:bg-white/20 hover:text-white"
-				aria-label="close preview"
-				onclick={onClose}
-			>
-				<XMark class="h-5 w-5" />
-			</button>
+			<div class="absolute top-4 right-4 z-10 flex items-center gap-2">
+				{#if fileId}
+					<button
+						type="button"
+						class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-white/80 transition-all duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+						aria-label="open file details"
+						title="file details"
+						onclick={openFileDetails}
+					>
+						<InfoCircle class="h-5 w-5" />
+					</button>
+				{/if}
+				<button
+					type="button"
+					class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-white/80 transition-all duration-150 hover:scale-[1.05] hover:text-white active:scale-[0.97]"
+					aria-label="close preview"
+					onclick={(e) => {
+						e.stopPropagation()
+						onClose()
+					}}
+				>
+					<XMark class="h-5 w-5" />
+				</button>
+			</div>
 
 			<!-- zoom/pan container — fills the backdrop so the image is truly fullscreen-centered -->
 			<div

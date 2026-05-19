@@ -67,7 +67,18 @@
 	let eventModalStart = $state<Date | null>(null)
 	let selectedCalendarFilter = $state<CalendarFilter>('all')
 	let mobileSidebarOpen = $state(false)
+	let mobileSidebarEl = $state<HTMLElement | null>(null)
 	let syncingFromStore = false
+
+	function closeMobileSidebar(): void {
+		if (browser && mobileSidebarEl) {
+			const active = document.activeElement
+			if (active instanceof HTMLElement && mobileSidebarEl.contains(active)) {
+				active.blur()
+			}
+		}
+		mobileSidebarOpen = false
+	}
 
 	const fallbackDayflowCalendars: CalendarType[] = [
 		{
@@ -228,21 +239,21 @@
 		if (!browser) return
 
 		const handleAdd = () => {
-			mobileSidebarOpen = false
+			closeMobileSidebar()
 			openCreateModal()
 		}
 		const handleFocus = (event: Event) => {
 			if (!(event instanceof CustomEvent)) return
 			const detail = event.detail
 			if (!isCalendarFocusDetail(detail)) return
-			mobileSidebarOpen = false
+			closeMobileSidebar()
 			void focusCalendarEvent(detail.eventId, detail.startAt)
 		}
 		const handleFilter = (event: Event) => {
 			if (!(event instanceof CustomEvent)) return
 			const detail = event.detail
 			if (!isCalendarFilterDetail(detail)) return
-			mobileSidebarOpen = false
+			closeMobileSidebar()
 			selectedCalendarFilter = detail.calendarId ?? 'all'
 			calendar.app.dismissUI()
 		}
@@ -789,13 +800,13 @@
 	{#if device.isMobile}
 		<div use:portal>
 			<aside
-				class="border-foreground/14 bg-background/90 fixed inset-y-0 left-0 z-50 h-dvh w-full max-w-[min(100vw,28rem)] overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] backdrop-blur-[22px] transition-transform duration-300 ease-in-out sm:border-r {mobileSidebarOpen
+				bind:this={mobileSidebarEl}
+				class="bg-background/90 fixed inset-y-0 left-0 z-50 h-dvh w-full max-w-[min(100vw,28rem)] overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] backdrop-blur-[22px] transition-transform duration-300 ease-in-out {mobileSidebarOpen
 					? 'translate-x-0'
 					: 'pointer-events-none -translate-x-full'}"
 				inert={!mobileSidebarOpen}
-				aria-hidden={!mobileSidebarOpen}
 			>
-				<CalendarSidebar isMobile={true} onClose={() => (mobileSidebarOpen = false)} />
+				<CalendarSidebar isMobile={true} onClose={closeMobileSidebar} />
 			</aside>
 		</div>
 	{/if}

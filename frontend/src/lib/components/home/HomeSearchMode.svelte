@@ -139,8 +139,8 @@
 		showLayoutToggle
 		showPagination={false}
 		showOwnershipSections={false}
+		showScrollTopButton={false}
 		onItemClick={openResult}
-		scrollTopButtonBottom="calc(6.5rem + env(safe-area-inset-bottom, 0px))"
 		emptyMessage="no results found"
 		class="w-full"
 	/>

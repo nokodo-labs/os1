@@ -24,6 +24,8 @@
 		masterWidthClass?: string
 		/** accessibility label for the master sidebar */
 		ariaLabel?: string
+		/** remove page padding for mobile master/sidebar pages */
+		mobileFullBleed?: boolean
 	}
 
 	let {
@@ -31,6 +33,7 @@
 		children,
 		masterWidthClass = 'w-[clamp(280px,30vw,520px)]',
 		ariaLabel = 'sidebar',
+		mobileFullBleed = false,
 	}: Props = $props()
 
 	const chrome = useSystemChrome()
@@ -76,12 +79,19 @@
 
 <!-- content area: scrollbar at edge, padding inside content -->
 <div
-	class="absolute inset-0 box-border flex min-h-0 flex-col overflow-y-auto"
+	class="absolute inset-0 box-border flex h-full min-h-0 flex-col {device.isMobile &&
+	mobileFullBleed
+		? 'overflow-hidden'
+		: 'overflow-y-auto'}"
 	style="padding-top: calc(var(--chrome-island-offset, 0px) + var(--spacing-island-content)); view-transition-name: master-detail-content;"
 >
 	<div
-		class="flex min-h-0 min-w-0 flex-1 flex-col pb-10"
-		style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
+		class="flex min-w-0 flex-1 flex-col {device.isMobile && mobileFullBleed
+			? 'h-full min-h-0'
+			: 'min-h-full pb-10'}"
+		style={device.isMobile && mobileFullBleed
+			? 'padding-left: 0; padding-right: 0;'
+			: 'padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);'}
 	>
 		{@render children()}
 	</div>

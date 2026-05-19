@@ -408,7 +408,7 @@
 			onclick={handleOpenSearchMode}
 			aria-label="search"
 		>
-			<Search class="h-[60%] w-auto" strokeWidth="2" />
+			<Search strokeWidth="2" />
 		</button>
 	{/if}
 {/snippet}

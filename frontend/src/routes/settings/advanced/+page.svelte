@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
-	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
+	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import Download from '$lib/components/icons/Download.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
 	import Wrench from '$lib/components/icons/Wrench.svelte'
-	import { Switch } from '$lib/components/primitives'
+	import { ActionButton, Switch } from '$lib/components/primitives'
 	import PreferenceScopeToggle from '$lib/components/settings/PreferenceScopeToggle.svelte'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { accentColors, type AccentColorKey } from '$lib/contexts/themeContext.svelte'
@@ -17,8 +17,8 @@
 	} from '$lib/resources/resourceVisuals'
 	import { apiCacheStores } from '$lib/stores/apiCacheRegistry'
 	import { clearApiCacheStores } from '$lib/stores/cacheLifecycle'
-	import { preferences, type ClientPreferenceScope } from '$lib/stores/preferences.svelte'
 	import { showError } from '$lib/stores/notifications.svelte'
+	import { preferences, type ClientPreferenceScope } from '$lib/stores/preferences.svelte'
 
 	interface DataAction {
 		label: string
@@ -276,25 +276,21 @@
 		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
 			<div class="text-foreground text-sm font-semibold">app cache</div>
 			<div class="text-foreground/50 mt-1 text-sm">
-				clear local app caches and fetch a fresh copy. auth stays signed in.
+				clears all caches and restarts the app.
 			</div>
-			<button
-				type="button"
-				class="rounded-pill border-foreground/10 bg-foreground/3 hover:border-foreground/15 hover:bg-foreground/5 mt-4 flex w-full cursor-pointer items-center gap-3 border px-4 py-3 text-left text-sm transition-all disabled:cursor-not-allowed disabled:opacity-50"
+			<ActionButton
+				variant="secondary"
+				class="mt-4 w-full"
 				disabled={isReloadingApp}
 				onclick={() => void reloadApp()}
 			>
-				<ArrowPath class="text-foreground/50 h-4.5 w-4.5 shrink-0" />
-				<div class="min-w-0 flex-1">
-					<div class="text-foreground/80 font-medium">reload app</div>
-					<div class="text-foreground/50 text-xs">
-						clears API and service worker caches, then reloads without clearing auth.
-					</div>
-				</div>
+				<ArrowPath class="h-4 w-4" />
 				{#if isReloadingApp}
-					<ShimmerText className="shrink-0 text-xs">reloading</ShimmerText>
+					<ShimmerText className="inline-block">restarting</ShimmerText>
+				{:else}
+					clear caches and restart app
 				{/if}
-			</button>
+			</ActionButton>
 		</div>
 
 		<!-- data export -->

@@ -225,7 +225,7 @@
 		}
 
 		for (const file of files.all) {
-			if (file.project_ids.includes(projectId)) {
+			if ((file.project_ids ?? []).includes(projectId)) {
 				items.push(apiFileToResource(file))
 			}
 		}

@@ -29,10 +29,12 @@
 	let lightboxOpen = $state(false)
 	let lightboxSrc = $state('')
 	let lightboxAlt = $state('')
+	let lightboxFileId = $state<string | null>(null)
 
-	function openLightbox(src: string, alt: string) {
+	function openLightbox(src: string, alt: string, fileId?: string) {
 		lightboxSrc = src
 		lightboxAlt = alt
+		lightboxFileId = fileId ?? null
 		lightboxOpen = true
 	}
 
@@ -73,7 +75,8 @@
 					type="button"
 					class="media-image-link block cursor-pointer overflow-hidden"
 					class:col-span-2={images.length === 3 && idx === 0}
-					onclick={() => openLightbox(resolvedUrl, img.filename ?? 'image attachment')}
+					onclick={() =>
+						openLightbox(resolvedUrl, img.filename ?? 'image attachment', img.fileId)}
 					aria-label="view {img.filename ?? 'image'} fullscreen"
 				>
 					<img
@@ -181,5 +184,6 @@
 	open={lightboxOpen}
 	src={lightboxSrc}
 	alt={lightboxAlt}
+	fileId={lightboxFileId}
 	onClose={() => (lightboxOpen = false)}
 />

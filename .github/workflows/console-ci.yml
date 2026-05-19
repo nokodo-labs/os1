@@ -72,7 +72,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: check formatting
-        run: pnpm run format
+        run: pnpm exec prettier --check .
 
       - name: lint
         if: ${{ inputs.run_lint }}

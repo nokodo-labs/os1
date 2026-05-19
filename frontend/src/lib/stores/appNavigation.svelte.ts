@@ -16,6 +16,7 @@ type ReminderListRouteId = `/reminders/lists/${string}`
 export type RemindersRouteId = '/reminders' | ReminderListRouteId
 export type CalendarRouteId = '/calendar'
 export type MessagesRouteId = '/messages'
+export type ResearchRouteId = '/research'
 
 export type SocialRouteId = '/social/friends' | '/social/groups'
 
@@ -27,6 +28,7 @@ export type AppId =
 	| 'reminders'
 	| 'calendar'
 	| 'messages'
+	| 'research'
 	| 'social'
 	| 'projects'
 
@@ -35,6 +37,7 @@ export const DEFAULT_NOTES_ROUTE: NotesRouteId = '/notes'
 export const DEFAULT_REMINDERS_ROUTE: RemindersRouteId = '/reminders'
 export const DEFAULT_CALENDAR_ROUTE: CalendarRouteId = '/calendar'
 export const DEFAULT_MESSAGES_ROUTE: MessagesRouteId = '/messages'
+export const DEFAULT_RESEARCH_ROUTE: ResearchRouteId = '/research'
 export const DEFAULT_SOCIAL_ROUTE: SocialRouteId = '/social/friends'
 export const DEFAULT_PROJECTS_ROUTE: ProjectsRouteId = '/projects'
 
@@ -76,6 +79,10 @@ function isCalendarRoute(pathname: string): pathname is CalendarRouteId {
 
 function isMessagesRoute(pathname: string): pathname is MessagesRouteId {
 	return pathname === '/messages'
+}
+
+function isResearchRoute(pathname: string): pathname is ResearchRouteId {
+	return pathname === '/research'
 }
 
 function isSocialRoute(pathname: string): pathname is SocialRouteId {
@@ -142,6 +149,17 @@ function readStoredMessages(): MessagesRouteId | '' {
 	}
 }
 
+function readStoredResearch(): ResearchRouteId | '' {
+	if (!browser) return ''
+	try {
+		const raw = window.localStorage.getItem(`${STORAGE_PREFIX}research`) ?? ''
+		const normalized = normalizePath(raw)
+		return isResearchRoute(normalized) ? normalized : ''
+	} catch {
+		return ''
+	}
+}
+
 function readStoredSocial(): SocialRouteId | '' {
 	if (!browser) return ''
 	try {
@@ -170,6 +188,7 @@ class AppNavigationStore {
 	lastRemindersRoute = $state<RemindersRouteId | ''>(readStoredReminders())
 	lastCalendarRoute = $state<CalendarRouteId | ''>(readStoredCalendar())
 	lastMessagesRoute = $state<MessagesRouteId | ''>(readStoredMessages())
+	lastResearchRoute = $state<ResearchRouteId | ''>(readStoredResearch())
 	lastSocialRoute = $state<SocialRouteId | ''>(readStoredSocial())
 	lastProjectsRoute = $state<ProjectsRouteId | ''>(readStoredProjects())
 
@@ -178,6 +197,7 @@ class AppNavigationStore {
 	getEntryRoute(appId: 'reminders'): RemindersRouteId
 	getEntryRoute(appId: 'calendar'): CalendarRouteId
 	getEntryRoute(appId: 'messages'): MessagesRouteId
+	getEntryRoute(appId: 'research'): ResearchRouteId
 	getEntryRoute(appId: 'social'): SocialRouteId
 	getEntryRoute(appId: 'projects'): ProjectsRouteId
 	getEntryRoute(
@@ -188,6 +208,7 @@ class AppNavigationStore {
 		| RemindersRouteId
 		| CalendarRouteId
 		| MessagesRouteId
+		| ResearchRouteId
 		| SocialRouteId
 		| ProjectsRouteId
 	getEntryRoute(
@@ -198,6 +219,7 @@ class AppNavigationStore {
 		| RemindersRouteId
 		| CalendarRouteId
 		| MessagesRouteId
+		| ResearchRouteId
 		| SocialRouteId
 		| ProjectsRouteId {
 		switch (appId) {
@@ -211,6 +233,8 @@ class AppNavigationStore {
 				return this.lastCalendarRoute || DEFAULT_CALENDAR_ROUTE
 			case 'messages':
 				return this.lastMessagesRoute || DEFAULT_MESSAGES_ROUTE
+			case 'research':
+				return this.lastResearchRoute || DEFAULT_RESEARCH_ROUTE
 			case 'social':
 				return this.lastSocialRoute || DEFAULT_SOCIAL_ROUTE
 			case 'projects':
@@ -223,6 +247,7 @@ class AppNavigationStore {
 	setLastVisited(appId: 'reminders', pathname: string): void
 	setLastVisited(appId: 'calendar', pathname: string): void
 	setLastVisited(appId: 'messages', pathname: string): void
+	setLastVisited(appId: 'research', pathname: string): void
 	setLastVisited(appId: 'social', pathname: string): void
 	setLastVisited(appId: 'projects', pathname: string): void
 	setLastVisited(appId: AppId, pathname: string): void
@@ -260,6 +285,12 @@ class AppNavigationStore {
 				this.persist('messages', normalized)
 				return
 			}
+			case 'research': {
+				if (!isResearchRoute(normalized)) return
+				this.lastResearchRoute = normalized
+				this.persist('research', normalized)
+				return
+			}
 			case 'social': {
 				if (!isSocialRoute(normalized)) return
 				this.lastSocialRoute = normalized
@@ -283,6 +314,7 @@ class AppNavigationStore {
 			| RemindersRouteId
 			| CalendarRouteId
 			| MessagesRouteId
+			| ResearchRouteId
 			| SocialRouteId
 			| ProjectsRouteId
 	) {

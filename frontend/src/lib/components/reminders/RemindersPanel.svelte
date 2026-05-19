@@ -10,7 +10,7 @@
 		type ReminderWithSubtasks,
 	} from '$lib/stores/reminders.svelte'
 	import { canEditAccessLevel, resourceAccess } from '$lib/stores/resourceAccess.svelte'
-	import { tick, untrack } from 'svelte'
+	import { onDestroy, tick, untrack } from 'svelte'
 	import { SvelteMap } from 'svelte/reactivity'
 	import ReminderRow from './ReminderRow.svelte'
 
@@ -55,6 +55,7 @@
 	let draggingReminderId = $state<string | null>(null)
 	let dropReminderId = $state<string | null>(null)
 	let dropPosition = $state<DropPosition | null>(null)
+	let pointerDragCleanup: (() => void) | null = null
 
 	// derived
 
@@ -141,18 +142,118 @@
 			.map((item) => item.reminder)
 	}
 
-	function computeDropPosition(event: DragEvent, target: ReminderTreeItem): DropPosition {
-		const element = event.currentTarget as HTMLElement
+	function cloneReminderTree(items: ReminderWithSubtasks[]): ReminderWithSubtasks[] {
+		return items.map((item) => ({
+			...item,
+			subtasks: cloneReminderTree(item.subtasks ?? []),
+		}))
+	}
+
+	function removeReminderFromTree(
+		items: ReminderWithSubtasks[],
+		sourceId: string
+	): { items: ReminderWithSubtasks[]; removed: ReminderWithSubtasks | null } {
+		const next: ReminderWithSubtasks[] = []
+		let removed: ReminderWithSubtasks | null = null
+
+		for (const item of items) {
+			if (item.id === sourceId) {
+				removed = item
+				continue
+			}
+
+			const childResult = removeReminderFromTree(item.subtasks ?? [], sourceId)
+			if (childResult.removed) removed = childResult.removed
+			next.push({ ...item, subtasks: childResult.items })
+		}
+
+		return { items: next, removed }
+	}
+
+	function findOptimisticSiblings(
+		items: ReminderWithSubtasks[],
+		parentId: string | null
+	): ReminderWithSubtasks[] | null {
+		if (parentId === null) return items
+		for (const item of items) {
+			if (item.id === parentId) {
+				item.subtasks = item.subtasks ?? []
+				return item.subtasks
+			}
+			const childSiblings = findOptimisticSiblings(item.subtasks ?? [], parentId)
+			if (childSiblings) return childSiblings
+		}
+		return null
+	}
+
+	function buildOptimisticReorder(
+		sourceId: string,
+		nextParentId: string | null,
+		insertIndex: number
+	): ReminderWithSubtasks[] | null {
+		const snapshot = cloneReminderTree(reminders.getReminders(listId))
+		const { items, removed } = removeReminderFromTree(snapshot, sourceId)
+		if (!removed) return null
+
+		const siblings = findOptimisticSiblings(items, nextParentId)
+		if (!siblings) return null
+
+		siblings.splice(insertIndex, 0, { ...removed, parent_id: nextParentId })
+		for (let index = 0; index < siblings.length; index++) {
+			siblings[index] = {
+				...siblings[index],
+				parent_id: nextParentId,
+				position: index,
+			}
+		}
+
+		return items
+	}
+
+	function computeDropPositionFromPoint(
+		clientX: number,
+		clientY: number,
+		element: HTMLElement,
+		target: ReminderTreeItem
+	): DropPosition {
 		const rect = element.getBoundingClientRect()
-		const y = (event.clientY - rect.top) / Math.max(rect.height, 1)
+		const y = (clientY - rect.top) / Math.max(rect.height, 1)
 		if (y < 0.24) return 'before'
 		if (y > 0.76) return 'after'
-		const x = event.clientX - rect.left
+		const x = clientX - rect.left
 		const childThreshold = 64 + target.depth * 20
 		return x > childThreshold ? 'child' : 'after'
 	}
 
+	function computeDropPosition(event: DragEvent, target: ReminderTreeItem): DropPosition {
+		return computeDropPositionFromPoint(
+			event.clientX,
+			event.clientY,
+			event.currentTarget as HTMLElement,
+			target
+		)
+	}
+
+	function setDropTarget(target: ReminderTreeItem, position: DropPosition): boolean {
+		if (
+			!draggingReminderId ||
+			draggingReminderId === target.reminder.id ||
+			isDescendantOf(target.reminder.id, draggingReminderId) ||
+			isNoopDrop(draggingReminderId, target, position)
+		) {
+			dropReminderId = null
+			dropPosition = null
+			return false
+		}
+
+		dropReminderId = target.reminder.id
+		dropPosition = position
+		return true
+	}
+
 	function clearDragState(): void {
+		pointerDragCleanup?.()
+		pointerDragCleanup = null
 		draggingReminderId = null
 		dropReminderId = null
 		dropPosition = null
@@ -162,11 +263,55 @@
 		return dropReminderId === reminderId ? dropPosition : null
 	}
 
+	function isNoopDrop(
+		sourceId: string,
+		target: ReminderTreeItem,
+		position: DropPosition
+	): boolean {
+		const source = findTreeItem(sourceId)
+		if (!source) return true
+
+		if (position === 'child') {
+			const childSiblings = siblingsForParent(target.reminder.id)
+			return (
+				itemParentId(source) === target.reminder.id && childSiblings.at(-1)?.id === sourceId
+			)
+		}
+
+		const nextParentId = itemParentId(target)
+		if (itemParentId(source) !== nextParentId) return false
+
+		const siblings = siblingsForParent(nextParentId)
+		const sourceIndex = siblings.findIndex((item) => item.id === sourceId)
+		const targetIndex = siblings.findIndex((item) => item.id === target.reminder.id)
+		if (sourceIndex === -1 || targetIndex === -1) return false
+
+		if (position === 'before') return sourceIndex === targetIndex - 1
+		return sourceIndex === targetIndex + 1
+	}
+
+	function placeholderStyle(depth: number): string {
+		return `margin-left: min(${Math.min(depth, 5) * 1.25}rem, 5rem);`
+	}
+
 	function handleDragStart(event: DragEvent, reminder: ReminderWithSubtasks): void {
 		if (!canEditActiveList) return
 		draggingReminderId = reminder.id
 		event.dataTransfer?.setData('text/plain', reminder.id)
-		if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+		if (event.dataTransfer) {
+			event.dataTransfer.effectAllowed = 'move'
+			const row = (event.currentTarget as HTMLElement | null)?.closest(
+				'[data-reminder-row]'
+			) as HTMLElement | null
+			if (row) {
+				const rect = row.getBoundingClientRect()
+				event.dataTransfer.setDragImage(
+					row,
+					event.clientX - rect.left,
+					event.clientY - rect.top
+				)
+			}
+		}
 	}
 
 	function handleDragOver(event: DragEvent, target: ReminderTreeItem): void {
@@ -181,8 +326,18 @@
 		}
 		event.preventDefault()
 		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
-		dropReminderId = target.reminder.id
-		dropPosition = computeDropPosition(event, target)
+		setDropTarget(target, computeDropPosition(event, target))
+	}
+
+	function handlePlaceholderDragOver(
+		event: DragEvent,
+		target: ReminderTreeItem,
+		position: DropPosition
+	): void {
+		if (!draggingReminderId) return
+		event.preventDefault()
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+		setDropTarget(target, position)
 	}
 
 	async function handleDrop(event: DragEvent, target: ReminderTreeItem): Promise<void> {
@@ -192,6 +347,93 @@
 		clearDragState()
 		if (!sourceId || !position) return
 		await repositionReminder(sourceId, target, position)
+	}
+
+	async function handlePlaceholderDrop(
+		event: DragEvent,
+		target: ReminderTreeItem,
+		position: DropPosition
+	): Promise<void> {
+		event.preventDefault()
+		const sourceId = draggingReminderId ?? event.dataTransfer?.getData('text/plain') ?? null
+		clearDragState()
+		if (!sourceId || isNoopDrop(sourceId, target, position)) return
+		await repositionReminder(sourceId, target, position)
+	}
+
+	function dropTargetAtPoint(
+		clientX: number,
+		clientY: number
+	): { target: ReminderTreeItem; position: DropPosition | null } | null {
+		const element = document.elementFromPoint(clientX, clientY)
+		const placeholder = element?.closest('[data-reminder-drop-id]') as HTMLElement | null
+		if (placeholder) {
+			const target = findTreeItem(placeholder.dataset.reminderDropId ?? null)
+			const position = placeholder.dataset.reminderDropPosition
+			if (target && (position === 'before' || position === 'after' || position === 'child')) {
+				return { target, position }
+			}
+		}
+		const row = element?.closest('[data-reminder-id]') as HTMLElement | null
+		const target = findTreeItem(row?.dataset.reminderId ?? null)
+		return target ? { target, position: null } : null
+	}
+
+	function updatePointerDrop(clientX: number, clientY: number): void {
+		const hit = dropTargetAtPoint(clientX, clientY)
+		const target = hit?.target ?? null
+		if (
+			!target ||
+			!draggingReminderId ||
+			draggingReminderId === target.reminder.id ||
+			isDescendantOf(target.reminder.id, draggingReminderId)
+		) {
+			dropReminderId = null
+			dropPosition = null
+			return
+		}
+		if (hit?.position) {
+			setDropTarget(target, hit.position)
+			return
+		}
+
+		const row = document.querySelector(
+			`[data-reminder-id="${target.reminder.id}"]`
+		) as HTMLElement | null
+		if (!row) return
+		setDropTarget(target, computeDropPositionFromPoint(clientX, clientY, row, target))
+	}
+
+	function handlePointerDragStart(event: PointerEvent, reminder: ReminderWithSubtasks): void {
+		if (!canEditActiveList || !browser) return
+		if (event.pointerType === 'mouse') return
+		event.preventDefault()
+		pointerDragCleanup?.()
+		draggingReminderId = reminder.id
+
+		const handleMove = (moveEvent: PointerEvent) => {
+			moveEvent.preventDefault()
+			updatePointerDrop(moveEvent.clientX, moveEvent.clientY)
+		}
+		const handleUp = (upEvent: PointerEvent) => {
+			upEvent.preventDefault()
+			const target = findTreeItem(dropReminderId)
+			const position = dropPosition
+			clearDragState()
+			if (!target || !position) return
+			void repositionReminder(reminder.id, target, position)
+		}
+		const handleCancel = () => clearDragState()
+
+		window.addEventListener('pointermove', handleMove, { passive: false })
+		window.addEventListener('pointerup', handleUp, { once: true, passive: false })
+		window.addEventListener('pointercancel', handleCancel, { once: true })
+		pointerDragCleanup = () => {
+			window.removeEventListener('pointermove', handleMove)
+			window.removeEventListener('pointerup', handleUp)
+			window.removeEventListener('pointercancel', handleCancel)
+		}
+		updatePointerDrop(event.clientX, event.clientY)
 	}
 
 	async function repositionReminder(
@@ -224,14 +466,24 @@
 			.map((reminder, index) => ({ reminder, index }))
 			.filter(
 				({ reminder, index }) =>
-					(reminder.parent_id ?? null) !== nextParentId || (reminder.position ?? 0) !== index
+					(reminder.parent_id ?? null) !== nextParentId ||
+					(reminder.position ?? 0) !== index
 			)
+		if (updates.length === 0) return
+		const snapshot = cloneReminderTree(reminders.getReminders(listId))
+		const optimistic = buildOptimisticReorder(sourceId, nextParentId, insertIndex)
+		if (optimistic) reminders.setReminders(listId, optimistic)
 
-		await Promise.all(
+		const results = await Promise.all(
 			updates.map(({ reminder, index }) =>
 				reminders.updateReminder(reminder, { parent_id: nextParentId, position: index })
 			)
 		)
+		if (results.some((result) => result === null)) {
+			reminders.setReminders(listId, snapshot)
+			void reminders.loadReminders(listId, { force: true })
+			return
+		}
 		await reminders.loadReminders(listId, { force: true })
 		expandedReminderId = null
 	}
@@ -407,7 +659,27 @@
 		window.addEventListener('pointerdown', onPointerDown)
 		return () => window.removeEventListener('pointerdown', onPointerDown)
 	})
+
+	onDestroy(() => {
+		pointerDragCleanup?.()
+	})
 </script>
+
+{#snippet dropPlaceholder(item: ReminderTreeItem, position: DropPosition)}
+	<div
+		role="presentation"
+		class="px-3 py-1 transition-[height,opacity,transform] duration-150"
+		style={placeholderStyle(position === 'child' ? item.depth + 1 : item.depth)}
+		data-reminder-drop-id={item.reminder.id}
+		data-reminder-drop-position={position}
+		ondragover={(event) => handlePlaceholderDragOver(event, item, position)}
+		ondrop={(event) => void handlePlaceholderDrop(event, item, position)}
+	>
+		<div
+			class="h-9 rounded-3xl border border-dashed border-(--accent-primary)/45 bg-(--accent-primary)/10"
+		></div>
+	</div>
+{/snippet}
 
 <div class="flex w-full flex-1 flex-col" style="gap: var(--spacing-header-content);">
 	{#if showListTitle}
@@ -444,6 +716,9 @@
 				{#each pendingReminderItems as item (item.reminder.id)}
 					{@const reminder = item.reminder}
 					{@const motion = getReminderMotion(reminder.id)}
+					{#if getDropTarget(reminder.id) === 'before'}
+						{@render dropPlaceholder(item, 'before')}
+					{/if}
 					<ReminderRow
 						kind="edit"
 						{reminder}
@@ -471,7 +746,13 @@
 						onDragOver={(event) => handleDragOver(event, item)}
 						onDrop={(event) => void handleDrop(event, item)}
 						onDragEnd={clearDragState}
+						onPointerDragStart={(event) => handlePointerDragStart(event, reminder)}
 					/>
+					{#if getDropTarget(reminder.id) === 'after'}
+						{@render dropPlaceholder(item, 'after')}
+					{:else if getDropTarget(reminder.id) === 'child'}
+						{@render dropPlaceholder(item, 'child')}
+					{/if}
 				{/each}
 
 				{#if isAddingReminder && canEditActiveList}
@@ -529,6 +810,9 @@
 							{#each completedReminderItems as item (item.reminder.id)}
 								{@const reminder = item.reminder}
 								{@const motion = getReminderMotion(reminder.id)}
+								{#if getDropTarget(reminder.id) === 'before'}
+									{@render dropPlaceholder(item, 'before')}
+								{/if}
 								<ReminderRow
 									kind="edit"
 									{reminder}
@@ -557,7 +841,14 @@
 									onDragOver={(event) => handleDragOver(event, item)}
 									onDrop={(event) => void handleDrop(event, item)}
 									onDragEnd={clearDragState}
+									onPointerDragStart={(event) =>
+										handlePointerDragStart(event, reminder)}
 								/>
+								{#if getDropTarget(reminder.id) === 'after'}
+									{@render dropPlaceholder(item, 'after')}
+								{:else if getDropTarget(reminder.id) === 'child'}
+									{@render dropPlaceholder(item, 'child')}
+								{/if}
 							{/each}
 						</div>
 					</div>

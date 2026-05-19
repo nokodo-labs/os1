@@ -7,6 +7,7 @@
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import PencilSquare from '$lib/components/icons/PencilSquare.svelte'
 	import UserGroup from '$lib/components/icons/UserGroup.svelte'
+	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
 	import { session } from '$lib/stores/session.svelte'
@@ -22,6 +23,7 @@
 	let editing = $state(false)
 	let profileUser = $state<Record<string, unknown> | null>(null)
 	let friendsCount = $state(0)
+	let isLoading = $state(true)
 
 	// edit fields
 	let editDisplayName = $state('')
@@ -75,6 +77,7 @@
 	})
 
 	async function fetchProfile() {
+		isLoading = true
 		try {
 			if (isOwnProfile) {
 				const { data: friends } = await api.GET('/v1/users/{user_id}/friends', {
@@ -89,6 +92,8 @@
 			}
 		} catch {
 			// silently handle
+		} finally {
+			isLoading = false
 		}
 	}
 
@@ -172,7 +177,15 @@
 		class="pb-10"
 		style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 	>
-		{#if editing && isOwnProfile}
+		{#if isLoading}
+			<div class="flex min-h-[45vh] items-center justify-center">
+				<NokodoLoader className="opacity-70" expanded={false} />
+			</div>
+		{:else if !isOwnProfile && !profileUser}
+			<div class="bg-foreground/5 rounded-2xl p-6 text-center">
+				<p class="text-foreground/50 text-sm">profile not found</p>
+			</div>
+		{:else if editing && isOwnProfile}
 			<!-- edit mode -->
 			<div class="flex flex-col items-center gap-4 py-6">
 				<button

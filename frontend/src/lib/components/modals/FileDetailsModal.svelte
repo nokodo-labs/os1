@@ -7,6 +7,7 @@
 	import ArrowsPointingOut from '$lib/components/icons/ArrowsPointingOut.svelte'
 	import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
 	import Download from '$lib/components/icons/Download.svelte'
+	import Eye from '$lib/components/icons/Eye.svelte'
 	import MimeIcon from '$lib/components/icons/MimeIcon.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
@@ -55,12 +56,15 @@
 	})
 
 	let previewBlobUrl = $state<string | null>(null)
+	let pdfPreviewBlobUrl = $state<string | null>(null)
 	let previewOpen = $state(false)
 	let imageDimensions = $state<{ w: number; h: number } | null>(null)
 	let isDeleting = $state(false)
 	let deleteError = $state<string | null>(null)
 	let downloadError = $state<string | null>(null)
+	let previewError = $state<string | null>(null)
 	let isDownloading = $state(false)
+	let isOpeningPreview = $state(false)
 	const fileAccentStyle = resourceAccentStyle('file')
 
 	const mimeType = $derived(file?.mime_type ?? '')
@@ -76,6 +80,7 @@
 	const isImage = $derived(primaryType === 'image')
 	const isVideo = $derived(primaryType === 'video')
 	const isAudio = $derived(primaryType === 'audio')
+	const isPdf = $derived(mimeType.toLowerCase().split(';')[0]?.trim() === 'application/pdf')
 	const hasPreview = $derived(isImage || isVideo || isAudio)
 
 	const threadId = $derived.by(() => {
@@ -110,9 +115,14 @@
 			return
 		}
 		let cancelled = false
+		let currentUrl: string | null = null
 		const url = `${getApiOrigin()}/v1/files/${file.id}/content`
 		void fetchAuthenticatedBlob(url).then((blobUrl) => {
-			if (cancelled) return
+			if (cancelled) {
+				URL.revokeObjectURL(blobUrl)
+				return
+			}
+			currentUrl = blobUrl
 			previewBlobUrl = blobUrl
 			const img = new Image()
 			img.onload = () => {
@@ -122,9 +132,50 @@
 		})
 		return () => {
 			cancelled = true
-			if (previewBlobUrl) {
+			if (currentUrl) {
+				URL.revokeObjectURL(currentUrl)
+				if (previewBlobUrl === currentUrl) previewBlobUrl = null
+			} else if (previewBlobUrl) {
 				URL.revokeObjectURL(previewBlobUrl)
 				previewBlobUrl = null
+			}
+		}
+	})
+
+	$effect(() => {
+		if (!open || !file || !isPdf) {
+			if (pdfPreviewBlobUrl) {
+				URL.revokeObjectURL(pdfPreviewBlobUrl)
+				pdfPreviewBlobUrl = null
+			}
+			isOpeningPreview = false
+			return
+		}
+		let cancelled = false
+		let currentUrl: string | null = null
+		isOpeningPreview = true
+		previewError = null
+		const url = `${getApiOrigin()}/v1/files/${file.id}/content`
+		void fetchAuthenticatedBlob(url, 'application/pdf')
+			.then((blobUrl) => {
+				if (cancelled) {
+					URL.revokeObjectURL(blobUrl)
+					return
+				}
+				currentUrl = blobUrl
+				pdfPreviewBlobUrl = blobUrl
+			})
+			.catch(() => {
+				if (!cancelled) previewError = 'preview failed'
+			})
+			.finally(() => {
+				if (!cancelled) isOpeningPreview = false
+			})
+		return () => {
+			cancelled = true
+			if (currentUrl) {
+				URL.revokeObjectURL(currentUrl)
+				if (pdfPreviewBlobUrl === currentUrl) pdfPreviewBlobUrl = null
 			}
 		}
 	})
@@ -140,6 +191,11 @@
 		} finally {
 			isDownloading = false
 		}
+	}
+
+	function handlePdfPreviewClick(): void {
+		if (!pdfPreviewBlobUrl) return
+		window.open(pdfPreviewBlobUrl, '_blank', 'noopener,noreferrer')
 	}
 
 	async function handleDelete(): Promise<void> {
@@ -169,6 +225,7 @@
 		if (isDeleting) return
 		deleteError = null
 		downloadError = null
+		previewError = null
 		onClose()
 	}
 
@@ -177,18 +234,20 @@
 			isDeleting = false
 			deleteError = null
 			downloadError = null
+			previewError = null
+			isOpeningPreview = false
 			previewOpen = false
 		}
 	})
 </script>
 
-{#if file}
-	<BaseModal
-		{open}
-		title={file.filename ?? 'file details'}
-		onClose={handleClose}
-		widthClassName="max-w-2xl"
-	>
+<BaseModal
+	{open}
+	title={file?.filename ?? 'file details'}
+	onClose={handleClose}
+	widthClassName="max-w-2xl"
+>
+	{#if file}
 		<div class="flex flex-col gap-5 overflow-hidden" style={fileAccentStyle}>
 			<!-- preview area -->
 			{#if isImage && previewBlobUrl}
@@ -250,6 +309,28 @@
 
 			<!-- action buttons -->
 			<div class="flex flex-wrap items-center gap-2">
+				{#if isPdf}
+					{#if pdfPreviewBlobUrl}
+						<button
+							type="button"
+							class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
+							onclick={handlePdfPreviewClick}
+						>
+							<Eye class="size-4" />
+							preview
+						</button>
+					{:else}
+						<button
+							class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
+							disabled
+						>
+							<Eye class="size-4" />
+							{#if isOpeningPreview}<ShimmerText className="inline-block"
+									>preparing</ShimmerText
+								>{:else}preview{/if}
+						</button>
+					{/if}
+				{/if}
 				{#if hasPreview && isImage}
 					<button
 						class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
@@ -308,6 +389,9 @@
 			{/if}
 			{#if downloadError}
 				<p class="text-sm text-red-400">{downloadError}</p>
+			{/if}
+			{#if previewError}
+				<p class="text-sm text-red-400">{previewError}</p>
 			{/if}
 
 			<!-- metadata grid -->
@@ -414,14 +498,18 @@
 				</dl>
 			</div>
 		</div>
-	</BaseModal>
-
-	{#if isImage && previewBlobUrl}
-		<ImageLightbox
-			open={previewOpen}
-			src={previewBlobUrl}
-			alt={file.filename ?? 'preview'}
-			onClose={() => (previewOpen = false)}
-		/>
+	{:else if open}
+		<div class="text-foreground/55 flex min-h-40 items-center justify-center text-sm">
+			<ShimmerText>loading file</ShimmerText>
+		</div>
 	{/if}
+</BaseModal>
+
+{#if file && isImage && previewBlobUrl}
+	<ImageLightbox
+		open={previewOpen}
+		src={previewBlobUrl}
+		alt={file.filename ?? 'preview'}
+		onClose={() => (previewOpen = false)}
+	/>
 {/if}
