@@ -827,7 +827,7 @@ class VectorSettings(BaseModel):
 	"""vector database collection and search tuning."""
 
 	collection_template: str = settings_field(
-		default="{model}_bm25",
+		default="nokodo-ai__{model}_bm25",
 		description="collection name template. '{model}' is replaced with "
 		"the slugified embedding model name at runtime",
 	)
