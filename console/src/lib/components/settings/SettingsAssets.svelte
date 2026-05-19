@@ -312,7 +312,7 @@
 				<Input
 					id="assets_collection_template"
 					bind:value={vectorCollectionTemplate}
-					placeholder="{'{model}'}_bm25"
+					placeholder="nokodo-ai__{'{model}'}_bm25"
 					class="rounded-xl"
 				/>
 				<p class="text-xs text-zinc-500">

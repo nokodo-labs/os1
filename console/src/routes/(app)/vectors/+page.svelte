@@ -7,7 +7,19 @@
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { Database, RefreshCw, Search, Trash2, X } from '@lucide/svelte'
+	import {
+		CircleCheck,
+		Database,
+		FingerprintPattern,
+		HardDrive,
+		Hash,
+		Package,
+		RefreshCw,
+		Search,
+		Server,
+		Trash2,
+		X,
+	} from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
 
@@ -18,6 +30,12 @@
 		points_count: number
 		vectors_count: number
 		status: string
+	}
+
+	interface CollectionDetail extends CollectionInfo {
+		indexed_vectors_count?: number
+		config?: Record<string, unknown>
+		error?: string
 	}
 
 	interface SearchResult {
@@ -50,13 +68,14 @@
 	let revectorizeResult = $state<RevectorizeResult | null>(null)
 
 	// per-resource revectorize state
-	type ResourceKey = 'notes' | 'threads' | 'memories' | 'reminders' | 'calendar_events'
+	type ResourceKey = 'notes' | 'threads' | 'memories' | 'reminders' | 'calendar_events' | 'files'
 	const RESOURCE_KEYS: ResourceKey[] = [
 		'notes',
 		'threads',
 		'memories',
 		'reminders',
 		'calendar_events',
+		'files',
 	]
 	const RESOURCE_ENDPOINTS = {
 		notes: '/v1/notes/revectorize',
@@ -64,6 +83,7 @@
 		memories: '/v1/memories/revectorize',
 		reminders: '/v1/reminders/revectorize',
 		calendar_events: '/v1/calendars/events/revectorize',
+		files: '/v1/files/revectorize',
 	} as const
 	let isRevectorizingResource = $state<Record<ResourceKey, boolean>>({
 		notes: false,
@@ -71,6 +91,7 @@
 		memories: false,
 		reminders: false,
 		calendar_events: false,
+		files: false,
 	})
 	let revectorizeResourceResult = $state<Record<ResourceKey, RevectorizeResult | null>>({
 		notes: null,
@@ -78,6 +99,7 @@
 		memories: null,
 		reminders: null,
 		calendar_events: null,
+		files: null,
 	})
 	let revectorizeResourceError = $state<Record<ResourceKey, string | null>>({
 		notes: null,
@@ -85,6 +107,7 @@
 		memories: null,
 		reminders: null,
 		calendar_events: null,
+		files: null,
 	})
 
 	// delete state
@@ -96,11 +119,15 @@
 
 	// collection detail
 	let showDetailModal = $state(false)
-	let detailCollection = $state<Record<string, unknown> | null>(null)
+	let detailCollection = $state<CollectionDetail | null>(null)
 	let isFetchingDetail = $state(false)
 
-	let totalPoints = $derived(collections.reduce((sum, c) => sum + c.points_count, 0))
-	let totalVectors = $derived(collections.reduce((sum, c) => sum + c.vectors_count, 0))
+	let totalPoints = $derived(
+		collections.reduce((sum, collection) => sum + collection.points_count, 0)
+	)
+	let totalVectors = $derived(
+		collections.reduce((sum, collection) => sum + collection.vectors_count, 0)
+	)
 
 	// -- data fetching --
 
@@ -127,13 +154,47 @@
 					params: { path: { name } },
 				})
 			)
-			detailCollection = data as Record<string, unknown>
+			detailCollection = data as unknown as CollectionDetail
 		} catch (e) {
 			console.error('failed to fetch collection detail', e)
-			detailCollection = { error: e instanceof Error ? e.message : 'failed to load' }
+			detailCollection = {
+				name,
+				points_count: 0,
+				vectors_count: 0,
+				status: 'error',
+				error: e instanceof Error ? e.message : 'failed to load',
+			}
 		} finally {
 			isFetchingDetail = false
 		}
+	}
+
+	function formatCount(value: number | null | undefined): string {
+		return (value ?? 0).toLocaleString()
+	}
+
+	function formatDetailValue(value: unknown): string {
+		if (value == null) return 'none'
+		if (typeof value === 'string') return value
+		if (typeof value === 'number') return value.toLocaleString()
+		if (typeof value === 'boolean') return value ? 'true' : 'false'
+		return JSON.stringify(value, null, 2)
+	}
+
+	function formatJson(value: unknown): string {
+		return JSON.stringify(value, null, 2)
+	}
+
+	function configEntries(config: Record<string, unknown> | undefined): [string, unknown][] {
+		return Object.entries(config ?? {})
+	}
+
+	function statusClass(status: string): string {
+		const normalized = status.toLowerCase()
+		if (normalized.includes('green') || normalized.includes('ok')) return 'text-emerald-400'
+		if (normalized.includes('yellow') || normalized.includes('warn')) return 'text-yellow-400'
+		if (normalized.includes('red') || normalized.includes('error')) return 'text-red-400'
+		return 'text-zinc-300'
 	}
 
 	// -- search --
@@ -518,29 +579,144 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
-			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-xl sm:p-6"
+			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] w-full max-w-3xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-xl"
 		>
-			<div class="mb-4 flex items-center justify-between">
-				<Dialog.Title class="text-lg font-semibold">collection details</Dialog.Title>
-				<Dialog.Close>
-					<X class="h-4 w-4 text-zinc-400 hover:text-zinc-200" />
-				</Dialog.Close>
+			<div
+				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
+			>
+				<div class="flex min-w-0 flex-1 items-center gap-3">
+					<div
+						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-800"
+					>
+						<Database class="h-4 w-4 text-zinc-300" />
+					</div>
+					<div class="min-w-0 flex-1">
+						<Dialog.Title class="truncate text-base font-semibold">
+							{detailCollection?.name ?? 'collection'}
+						</Dialog.Title>
+						<Dialog.Description class="text-xs text-zinc-500">
+							vector collection details
+						</Dialog.Description>
+					</div>
+				</div>
+				<Button
+					variant="ghost"
+					size="icon"
+					class="shrink-0 rounded-xl"
+					onclick={() => (showDetailModal = false)}
+				>
+					<X class="h-4 w-4" />
+				</Button>
 			</div>
 
 			{#if isFetchingDetail}
-				<NokodoLoader />
+				<div class="px-6 py-8">
+					<NokodoLoader />
+				</div>
 			{:else if detailCollection}
-				<div class="space-y-3">
-					{#each Object.entries(detailCollection) as [key, value] (key)}
-						<div>
-							<p class="text-xs font-medium text-zinc-400">{key}</p>
-							<p class="text-sm">
-								{typeof value === 'object'
-									? JSON.stringify(value, null, 2)
-									: String(value)}
+				<div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+					{#if detailCollection.error}
+						<div class="rounded-xl border border-red-900/50 bg-red-900/10 px-4 py-3">
+							<p class="text-sm font-medium text-red-300">detail load failed</p>
+							<p class="mt-1 text-xs text-red-200/80">{detailCollection.error}</p>
+						</div>
+					{/if}
+
+					<div class="grid gap-3 sm:grid-cols-3">
+						<div class="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
+							<div class="flex items-center gap-2 text-xs text-zinc-500">
+								<HardDrive class="h-3.5 w-3.5" />
+								points
+							</div>
+							<p class="mt-2 text-2xl font-semibold">
+								{formatCount(detailCollection.points_count)}
 							</p>
 						</div>
-					{/each}
+						<div class="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
+							<div class="flex items-center gap-2 text-xs text-zinc-500">
+								<FingerprintPattern class="h-3.5 w-3.5" />
+								vectors
+							</div>
+							<p class="mt-2 text-2xl font-semibold">
+								{formatCount(detailCollection.vectors_count)}
+							</p>
+						</div>
+						<div class="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
+							<div class="flex items-center gap-2 text-xs text-zinc-500">
+								<Server class="h-3.5 w-3.5" />
+								indexed
+							</div>
+							<p class="mt-2 text-2xl font-semibold">
+								{formatCount(detailCollection.indexed_vectors_count)}
+							</p>
+						</div>
+					</div>
+
+					<div class="space-y-1.5">
+						<p class="text-xs font-medium tracking-wider text-zinc-500 uppercase">
+							identity
+						</p>
+						<div
+							class="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900"
+						>
+							<div class="flex items-center gap-3 px-4 py-2.5">
+								<Hash class="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+								<span class="w-20 shrink-0 text-xs text-zinc-500">name</span>
+								<span class="min-w-0 truncate font-mono text-xs text-zinc-300">
+									{detailCollection.name}
+								</span>
+							</div>
+							<div class="flex items-center gap-3 px-4 py-2.5">
+								<CircleCheck class="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+								<span class="w-20 shrink-0 text-xs text-zinc-500">status</span>
+								<span
+									class="min-w-0 truncate font-mono text-xs {statusClass(
+										detailCollection.status
+									)}"
+								>
+									{detailCollection.status}
+								</span>
+							</div>
+						</div>
+					</div>
+
+					{#if configEntries(detailCollection.config).length > 0}
+						<div class="space-y-1.5">
+							<p class="text-xs font-medium tracking-wider text-zinc-500 uppercase">
+								config
+							</p>
+							<div
+								class="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900"
+							>
+								{#each configEntries(detailCollection.config) as [key, value] (key)}
+									<div class="flex items-start gap-3 px-4 py-2.5">
+										<Package
+											class="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-500"
+										/>
+										<span class="w-20 shrink-0 text-xs text-zinc-500"
+											>{key}</span
+										>
+										<pre
+											class="min-w-0 flex-1 font-mono text-xs wrap-break-word whitespace-pre-wrap text-zinc-300">{formatDetailValue(
+												value
+											)}</pre>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					<div class="space-y-1.5">
+						<p class="text-xs font-medium tracking-wider text-zinc-500 uppercase">
+							raw payload
+						</p>
+						<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+							<pre
+								class="max-h-64 overflow-auto font-mono text-xs wrap-break-word whitespace-pre-wrap text-zinc-400">{formatJson(
+									detailCollection
+								)}</pre>
+						</div>
+					</div>
 				</div>
 			{/if}
 		</Dialog.Content>
