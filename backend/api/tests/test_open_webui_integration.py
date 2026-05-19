@@ -1129,6 +1129,8 @@ async def test_open_webui_import_downloads_generated_image_files(
 		principal=principal,
 	)
 
+	assert summary.files_imported == 1
+	assert summary.chats_imported == 1
 	file = (await db_session.scalars(select(File))).one()
 	assistant = (
 		await db_session.scalars(
@@ -1136,7 +1138,6 @@ async def test_open_webui_import_downloads_generated_image_files(
 		)
 	).one()
 	file_part = next(part for part in assistant.content if part.get("type") == "image")
-	assert summary.files_imported == 1
 	assert file.filename == "generated-image.png"
 	assert file.mime_type == "image/png"
 	assert file.message_id == assistant.id

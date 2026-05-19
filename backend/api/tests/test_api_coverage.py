@@ -37,8 +37,9 @@ from api.v1.routers import openai as openai_router
 from api.v1.routers import prompts as prompts_router
 from api.v1.routers import runs as runs_router
 from api.v1.routers import threads as threads_router
-from api.v1.service import authorization, prompt_runtime
+from api.v1.service import prompt_runtime
 from api.v1.service import prompts as prompt_service
+from api.v1.service.authorization import require_thread_access
 from api.v1.service.chat import agents as chat_runner
 from api.v1.service.chat import models as chat_service
 from api.v1.service.threads.core import _ensure_admin_for_hidden
@@ -430,7 +431,7 @@ async def test_authorization_require_thread_access() -> None:  # type: ignore[ar
 	principal = _FakePrincipal(is_admin=True)  # type: ignore[arg-type]
 	fake_session = _FakeSession("ok")
 
-	await authorization.require_thread_access(
+	await require_thread_access(
 		"thread",  # type: ignore[arg-type]
 		fake_session,  # type: ignore[arg-type]
 		principal,  # type: ignore[arg-type]
@@ -442,7 +443,7 @@ async def test_authorization_require_thread_access() -> None:  # type: ignore[ar
 	fake_session_none = _FakeSession(None)  # type: ignore[arg-type]
 
 	with pytest.raises(HTTPException) as exc:
-		await authorization.require_thread_access(
+		await require_thread_access(
 			TypeID("thread"),
 			fake_session_none,  # type: ignore[arg-type]
 			principal,  # type: ignore[arg-type]

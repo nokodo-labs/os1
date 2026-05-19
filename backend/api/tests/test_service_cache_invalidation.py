@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.event import Event
 from api.models.event_types import EventType
 from api.models.file import File, FileSource, FileStatus
+from api.models.thread import Thread
 from api.models.user import User
 from api.permissions import (
 	AccessLevel,
@@ -134,17 +135,35 @@ async def test_thread_owner_transfer_invalidates_accessible_users_resource(
 	principal = await _admin_principal(db_session, "owner-cache-admin")
 	new_owner = await _regular_user(db_session, "owner-cache-user")
 	calls: list[tuple[ResourceType, TypeID]] = []
+	vectorized: list[TypeID] = []
 
 	async def record_resource(
 		resource_type: ResourceType,
 		resource_id: TypeID,
+		_session: AsyncSession | None = None,
 	) -> None:
 		calls.append((resource_type, resource_id))
+
+	async def record_vectorize_resource(
+		spec: object,
+		resource: Thread,
+		session: AsyncSession,
+		extra_metadata: object | None = None,
+	) -> None:
+		_ = extra_metadata
+		assert spec is thread_service.THREAD_SPEC
+		assert session is db_session
+		vectorized.append(resource.id)
 
 	monkeypatch.setattr(
 		thread_service,
 		"invalidate_accessible_users_for_resource",
 		record_resource,
+	)
+	monkeypatch.setattr(
+		thread_service,
+		"vectorize_resource",
+		record_vectorize_resource,
 	)
 
 	thread = await thread_service.create_thread(
@@ -162,6 +181,7 @@ async def test_thread_owner_transfer_invalidates_accessible_users_resource(
 	)
 
 	assert calls == [(ResourceType.THREAD, thread.id)]
+	assert vectorized == [thread.id]
 
 
 @pytest.mark.asyncio

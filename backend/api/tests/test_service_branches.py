@@ -21,7 +21,6 @@ from api.schemas.task import TaskListFilters, TaskUpdate
 from api.schemas.user import UserCreate
 from api.v1.service import (
 	agents,
-	authorization,
 	memories,
 	notifications,
 	tasks,
@@ -29,6 +28,10 @@ from api.v1.service import (
 	users,
 )
 from api.v1.service.auth import Principal, authenticate_user, get_current_active_user
+from api.v1.service.authorization import (
+	require_project_access,
+	require_thread_access,
+)
 from nokodo_ai.utils.security import hash_password
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
@@ -93,11 +96,11 @@ async def test_authorization_require_access(db_session: AsyncSession) -> None:
 	await db_session.commit()
 	principal = await _principal(user, session=db_session)
 	with pytest.raises(HTTPException):
-		await authorization.require_thread_access(
+		await require_thread_access(
 			new_typeid("thread"), db_session, principal=principal
 		)
 	with pytest.raises(HTTPException):
-		await authorization.require_project_access(
+		await require_project_access(
 			new_typeid("proj"), db_session, principal=principal
 		)
 

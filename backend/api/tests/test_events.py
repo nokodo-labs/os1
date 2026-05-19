@@ -16,12 +16,12 @@ from api.models.notification import Notification
 from api.models.task import Task, TaskType
 from api.models.thread import Thread
 from api.models.user import User
-from api.permissions import AccessLevel
+from api.permissions import AccessLevel, ResourceType
 from api.schemas.event import EventCreate, EventListFilters
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.chat import run_helpers
-from nokodo_ai.utils.typeid import new_typeid
+from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 def _admin_principal() -> Principal:
@@ -541,6 +541,80 @@ async def test_persist_and_fanout_event_includes_owner_for_new_resource(
 	assert isinstance(recipient_ids, list)
 	recipient_id_values = {str(value) for value in recipient_ids}
 	assert str(owner.id) in recipient_id_values
+
+
+@pytest.mark.asyncio
+async def test_resolve_event_recipients_includes_affected_project_viewers(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	resource_viewer = User(
+		email="resource_viewer@example.com",
+		username="resource_viewer",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	project_viewer = User(
+		email="project_viewer@example.com",
+		username="project_viewer",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add_all([resource_viewer, project_viewer])
+	await db_session.flush()
+
+	thread_id = new_typeid("thread")
+	project_id = new_typeid("proj")
+	calls: list[tuple[ResourceType, str]] = []
+
+	async def fake_list_accessible_user_ids(
+		resource_type: ResourceType,
+		resource_id: TypeID,
+		session: AsyncSession,
+	) -> list[TypeID]:
+		_ = session
+		calls.append((resource_type, str(resource_id)))
+		if resource_type == ResourceType.THREAD:
+			return [resource_viewer.id]
+		if resource_type == ResourceType.PROJECT:
+			return [project_viewer.id, resource_viewer.id]
+		return []
+
+	monkeypatch.setattr(
+		event_service,
+		"list_accessible_user_ids",
+		fake_list_accessible_user_ids,
+	)
+
+	recipients = await event_service._resolve_event_recipient_ids(
+		Event(
+			scope=EventScope.THREAD,
+			scope_id=thread_id,
+			type=EventType.THREAD_UPDATED,
+			data={
+				"id": str(thread_id),
+				"affected_project_ids": [str(project_id)],
+			},
+			thread_id=thread_id,
+		)
+	)
+
+	assert {str(recipient_id) for recipient_id in recipients or []} == {
+		str(resource_viewer.id),
+		str(project_viewer.id),
+	}
+	assert calls == [
+		(ResourceType.THREAD, str(thread_id)),
+		(ResourceType.PROJECT, str(project_id)),
+	]
 
 
 @pytest.mark.asyncio

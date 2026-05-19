@@ -100,6 +100,10 @@ async def test_enqueue_run_steering_accepts_before_subscriber_starts(
 		steering_service, "create_run_user_message", fake_create_user_message
 	)
 	monkeypatch.setattr(steering_service, "publish_steer", fake_publish_steer)
+	# prevent fire-and-forget broadcast tasks from outliving the test
+	monkeypatch.setattr(
+		steering_service, "create_background_task", lambda coro, name: coro.close()
+	)
 
 	await run_status_store.start_run(run_id, agent_id, user_id, thread_id)
 	try:
