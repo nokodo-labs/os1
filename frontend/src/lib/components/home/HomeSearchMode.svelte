@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { goto } from '$app/navigation'
+	import { resolve } from '$app/paths'
 	import {
 		SEARCH_RESOURCE_TYPES,
 		searchStream,
@@ -10,6 +12,7 @@
 	import ResourcesView from '$lib/components/ResourcesView.svelte'
 	import type { ResourceItem, ResourceLayoutMode } from '$lib/components/widgets/types'
 	import { searchResultToResource } from '$lib/resources/searchResults'
+	import { modals } from '$lib/stores/modals.svelte'
 	import { SvelteSet } from 'svelte/reactivity'
 	import { fade } from 'svelte/transition'
 
@@ -89,6 +92,29 @@
 	$effect(() => {
 		scheduleSearch(trimmedQuery, effectiveTypes)
 	})
+
+	function openResult(resource: ResourceItem): void {
+		switch (resource.type) {
+			case 'file':
+				modals.open('file-details', { fileId: resource.id })
+				return
+			case 'thread':
+				void goto(resolve(`/c/${resource.id}`))
+				return
+			case 'note':
+				void goto(resolve(`/notes/${resource.id}`))
+				return
+			case 'reminder_list':
+				void goto(resolve(`/reminders/lists/${resource.id}`))
+				return
+			case 'calendar':
+				void goto(resolve('/calendar'))
+				return
+			case 'project':
+				void goto(resolve(`/projects/${resource.id}`))
+				return
+		}
+	}
 </script>
 
 {#if error}
@@ -113,6 +139,7 @@
 		showLayoutToggle
 		showPagination={false}
 		showOwnershipSections={false}
+		onItemClick={openResult}
 		scrollTopButtonBottom="calc(6.5rem + env(safe-area-inset-bottom, 0px))"
 		emptyMessage="no results found"
 		class="w-full"

@@ -37,11 +37,7 @@
 	import { modals } from '$lib/stores/modals.svelte'
 	import { notes } from '$lib/stores/notes.svelte'
 	import { projects } from '$lib/stores/projects.svelte'
-	import {
-		canEditAccessLevel,
-		canShareAccessLevel,
-		resourceAccess,
-	} from '$lib/stores/resourceAccess.svelte'
+	import { canEditAccessLevel, resourceAccess } from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { getUserInitials } from '$lib/utils'
 	import { userDisplayName } from '$lib/utils/resourceAuthors'
@@ -68,8 +64,7 @@
 		note ? resourceAccess.level('note', note.id, note.userId) : null
 	)
 	const canEditNote = $derived(canEditAccessLevel(noteAccessLevel))
-	const canShareNote = $derived(canShareAccessLevel(noteAccessLevel))
-	const hasNoteActions = $derived(canEditNote || canShareNote)
+	const hasNoteActions = $derived(Boolean(note || canEditNote))
 	const manageableProjectOptions = $derived.by((): ResourceProjectOption[] =>
 		projects.list
 			.filter((project) =>
@@ -83,7 +78,8 @@
 	)
 
 	$effect(() => {
-		if (note) void resourceAccess.ensure('note', note.id, note.userId)
+		const accessKey = note ? `${note.id}:${resourceAccess.version}` : ''
+		if (note && accessKey) void resourceAccess.ensure('note', note.id, note.userId)
 	})
 
 	$effect(() => {
@@ -91,6 +87,8 @@
 	})
 
 	$effect(() => {
+		const projectsAccessKey = `${resourceAccess.version}:${projects.list.map((project) => project.id).join('|')}`
+		if (!projectsAccessKey) return
 		for (const project of projects.list) {
 			void resourceAccess.ensure('project', project.id, project.owner_id)
 		}
@@ -253,7 +251,7 @@
 	}
 
 	function handleShare(): void {
-		if (!canShareNote) return
+		if (!note) return
 		menuOpen = false
 		modals.open('resource-access', {
 			resourceType: 'note',
@@ -417,7 +415,7 @@
 			{/if}
 			{#if device.isMobile}
 				<div class="bg-foreground/10 my-1 h-px w-full"></div>
-				{#if canShareNote}
+				{#if note}
 					<MenuItem onclick={handleShare}>
 						{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
 						share
@@ -458,7 +456,7 @@
 			</div>
 
 			<!-- meta row -->
-			<div class="scrollbar-none flex w-full overflow-x-auto" use:wheelToHScroll>
+			<div class="flex w-full scrollbar-none overflow-x-auto" use:wheelToHScroll>
 				<div class="text-foreground/55 flex w-fit items-center gap-1 text-xs font-medium">
 					<div class="flex w-fit min-w-fit items-center gap-1 px-0.5 py-1">
 						<Calendar class="h-3.5 w-3.5" strokeWidth="2" />
@@ -491,7 +489,7 @@
 			<!-- viewers row (sessions editing this document) -->
 			{#if peers.length > 0}
 				<div
-					class="scrollbar-none mt-3 flex items-center gap-3 overflow-x-auto pt-2"
+					class="mt-3 flex scrollbar-none items-center gap-3 overflow-x-auto pt-2"
 					use:wheelToHScroll
 				>
 					{#each peers as peer, idx (peer.sessionId + ':' + idx)}
@@ -530,7 +528,7 @@
 					: 'max-h-20 opacity-100'}"
 			>
 				<div
-					class="scrollbar-none border-foreground/10 mt-3 flex items-center justify-between overflow-x-auto border-t pt-3"
+					class="border-foreground/10 mt-3 flex scrollbar-none items-center justify-between overflow-x-auto border-t pt-3"
 					use:wheelToHScroll
 				>
 					<div class="flex min-w-fit items-center gap-0.5">

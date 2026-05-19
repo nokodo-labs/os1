@@ -42,6 +42,7 @@
 	export type SuggestionAction =
 		| { type: 'navigate'; path: SuggestionRoute }
 		| { type: 'modal'; id: 'archived-chats' }
+		| { type: 'file-details'; fileId: string }
 		| { type: 'search'; query: string }
 		| { type: 'toggle-dock' }
 		| { type: 'pulse'; message: string }
@@ -279,7 +280,7 @@
 				onAction({ type: 'navigate', path: `/projects/${resource.id}` })
 				return
 			case 'file':
-				onAction({ type: 'pulse', message: "can't open this result yet" })
+				onAction({ type: 'file-details', fileId: resource.id })
 				return
 		}
 	}

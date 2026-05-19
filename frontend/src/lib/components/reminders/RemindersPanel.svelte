@@ -35,6 +35,13 @@
 		direction: 'to-completed' | 'to-pending'
 		reminder: ReminderWithSubtasks
 	}
+	type ReminderSection = 'pending' | 'completed'
+	type DropPosition = 'before' | 'after' | 'child'
+	interface ReminderTreeItem {
+		reminder: ReminderWithSubtasks
+		depth: number
+		parentId: string | null
+	}
 	const transitions = new SvelteMap<string, TransitionEntry>()
 
 	/** animation state for reminders entering the list */
@@ -45,33 +52,27 @@
 	const incoming = new SvelteMap<string, IncomingEntry>()
 
 	const MOTION_MS = 420
+	let draggingReminderId = $state<string | null>(null)
+	let dropReminderId = $state<string | null>(null)
+	let dropPosition = $state<DropPosition | null>(null)
 
 	// derived
 
 	const remindersList = $derived(reminders.getReminders(listId))
-	const completedCount = $derived(remindersList.filter((r) => r.status === 'completed').length)
+	const reminderTreeItems = $derived(flattenReminderItems(remindersList))
+	const completedCount = $derived(
+		reminderTreeItems.filter((item) => item.reminder.status === 'completed').length
+	)
 
 	/** pending reminders - exclude items currently transitioning out */
-	const pendingReminders = $derived.by(() => {
-		return remindersList.filter((r) => {
-			// show transitioning-to-completed items until animation done
-			const t = transitions.get(r.id)
-			if (t?.direction === 'to-completed') return true
-			// normal pending items (not transitioning to pending from completed)
-			return r.status === 'pending' && !t
-		})
-	})
+	const pendingReminderItems = $derived(
+		reminderTreeItems.filter((item) => belongsToSection(item.reminder, 'pending'))
+	)
 
 	/** completed reminders - exclude items currently transitioning out */
-	const completedReminders = $derived.by(() => {
-		return remindersList.filter((r) => {
-			// show transitioning-to-pending items until animation done
-			const t = transitions.get(r.id)
-			if (t?.direction === 'to-pending') return true
-			// normal completed items (not transitioning to completed from pending)
-			return r.status === 'completed' && !t
-		})
-	})
+	const completedReminderItems = $derived(
+		reminderTreeItems.filter((item) => belongsToSection(item.reminder, 'completed'))
+	)
 
 	const availableLists = $derived(reminders.lists)
 	const activeList = $derived(listId ? reminders.getListById(listId) : reminders.defaultList)
@@ -83,6 +84,157 @@
 	const canEditActiveList = $derived(canEditAccessLevel(activeListAccessLevel))
 
 	// helpers
+
+	function sortByPosition(items: ReminderWithSubtasks[]): ReminderWithSubtasks[] {
+		return [...items].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+	}
+
+	function flattenReminderItems(
+		items: ReminderWithSubtasks[],
+		depth = 0,
+		parentId: string | null = null
+	): ReminderTreeItem[] {
+		const flattened: ReminderTreeItem[] = []
+		for (const reminder of sortByPosition(items)) {
+			flattened.push({ reminder, depth, parentId })
+			const subtasks = reminder.subtasks ?? []
+			if (subtasks.length > 0) {
+				flattened.push(...flattenReminderItems(subtasks, depth + 1, reminder.id))
+			}
+		}
+		return flattened
+	}
+
+	function belongsToSection(reminder: ReminderWithSubtasks, section: ReminderSection): boolean {
+		const transition = transitions.get(reminder.id)
+		if (section === 'pending') {
+			if (transition?.direction === 'to-completed') return true
+			return reminder.status === 'pending' && !transition
+		}
+		if (transition?.direction === 'to-pending') return true
+		return reminder.status === 'completed' && !transition
+	}
+
+	function itemParentId(item: ReminderTreeItem): string | null {
+		return item.reminder.parent_id ?? item.parentId
+	}
+
+	function findTreeItem(reminderId: string | null): ReminderTreeItem | null {
+		if (!reminderId) return null
+		return reminderTreeItems.find((item) => item.reminder.id === reminderId) ?? null
+	}
+
+	function isDescendantOf(reminderId: string, ancestorId: string): boolean {
+		let current = findTreeItem(reminderId)
+		while (current) {
+			const parentId = itemParentId(current)
+			if (!parentId) return false
+			if (parentId === ancestorId) return true
+			current = findTreeItem(parentId)
+		}
+		return false
+	}
+
+	function siblingsForParent(parentId: string | null): ReminderWithSubtasks[] {
+		return reminderTreeItems
+			.filter((item) => itemParentId(item) === parentId)
+			.map((item) => item.reminder)
+	}
+
+	function computeDropPosition(event: DragEvent, target: ReminderTreeItem): DropPosition {
+		const element = event.currentTarget as HTMLElement
+		const rect = element.getBoundingClientRect()
+		const y = (event.clientY - rect.top) / Math.max(rect.height, 1)
+		if (y < 0.24) return 'before'
+		if (y > 0.76) return 'after'
+		const x = event.clientX - rect.left
+		const childThreshold = 64 + target.depth * 20
+		return x > childThreshold ? 'child' : 'after'
+	}
+
+	function clearDragState(): void {
+		draggingReminderId = null
+		dropReminderId = null
+		dropPosition = null
+	}
+
+	function getDropTarget(reminderId: string): DropPosition | null {
+		return dropReminderId === reminderId ? dropPosition : null
+	}
+
+	function handleDragStart(event: DragEvent, reminder: ReminderWithSubtasks): void {
+		if (!canEditActiveList) return
+		draggingReminderId = reminder.id
+		event.dataTransfer?.setData('text/plain', reminder.id)
+		if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+	}
+
+	function handleDragOver(event: DragEvent, target: ReminderTreeItem): void {
+		if (
+			!draggingReminderId ||
+			draggingReminderId === target.reminder.id ||
+			isDescendantOf(target.reminder.id, draggingReminderId)
+		) {
+			dropReminderId = null
+			dropPosition = null
+			return
+		}
+		event.preventDefault()
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+		dropReminderId = target.reminder.id
+		dropPosition = computeDropPosition(event, target)
+	}
+
+	async function handleDrop(event: DragEvent, target: ReminderTreeItem): Promise<void> {
+		event.preventDefault()
+		const sourceId = draggingReminderId ?? event.dataTransfer?.getData('text/plain') ?? null
+		const position = dropReminderId === target.reminder.id ? dropPosition : null
+		clearDragState()
+		if (!sourceId || !position) return
+		await repositionReminder(sourceId, target, position)
+	}
+
+	async function repositionReminder(
+		sourceId: string,
+		target: ReminderTreeItem,
+		position: DropPosition
+	): Promise<void> {
+		if (!canEditActiveList) return
+		if (sourceId === target.reminder.id) return
+		if (isDescendantOf(target.reminder.id, sourceId)) return
+		const source = findTreeItem(sourceId)
+		if (!source) return
+		const nextParentId = position === 'child' ? target.reminder.id : itemParentId(target)
+		if (nextParentId === source.reminder.id) return
+
+		const siblings = siblingsForParent(nextParentId).filter((r) => r.id !== sourceId)
+		let insertIndex = siblings.length
+		if (position !== 'child') {
+			const targetIndex = siblings.findIndex((r) => r.id === target.reminder.id)
+			if (targetIndex === -1) return
+			insertIndex = position === 'before' ? targetIndex : targetIndex + 1
+		}
+
+		const ordered = [
+			...siblings.slice(0, insertIndex),
+			source.reminder,
+			...siblings.slice(insertIndex),
+		]
+		const updates = ordered
+			.map((reminder, index) => ({ reminder, index }))
+			.filter(
+				({ reminder, index }) =>
+					(reminder.parent_id ?? null) !== nextParentId || (reminder.position ?? 0) !== index
+			)
+
+		await Promise.all(
+			updates.map(({ reminder, index }) =>
+				reminders.updateReminder(reminder, { parent_id: nextParentId, position: index })
+			)
+		)
+		await reminders.loadReminders(listId, { force: true })
+		expandedReminderId = null
+	}
 
 	function getReminderMotion(id: string): {
 		motion: 'in' | 'out-complete' | 'out-uncomplete' | null
@@ -163,17 +315,20 @@
 		} else {
 			await reminders.uncompleteReminder(reminder)
 		}
+		if (reminder.parent_id) await reminders.loadReminders(listId, { force: true })
 	}
 
 	async function moveReminder(reminder: ReminderWithSubtasks, targetListId: string | null) {
 		if (!canEditActiveList) return
 		await reminders.moveReminder(reminder, targetListId)
+		if (reminder.parent_id) await reminders.loadReminders(listId, { force: true })
 		expandedReminderId = null
 	}
 
 	async function deleteReminder(reminder: ReminderWithSubtasks): Promise<boolean> {
 		if (!canEditActiveList) return false
 		const ok = await reminders.deleteReminder(reminder)
+		if (ok && reminder.parent_id) await reminders.loadReminders(listId, { force: true })
 		if (ok && expandedReminderId === reminder.id) {
 			expandedReminderId = null
 		}
@@ -186,6 +341,9 @@
 	): Promise<boolean> {
 		if (!canEditActiveList) return false
 		const saved = await reminders.updateReminder(reminder, updates)
+		if (saved && (reminder.parent_id || 'parent_id' in updates || 'position' in updates)) {
+			await reminders.loadReminders(listId, { force: true })
+		}
 		return Boolean(saved)
 	}
 
@@ -283,11 +441,15 @@
 	{:else}
 		<div class="flex-1 px-1 pb-6 {showListTitle ? '' : 'pt-4'}">
 			<div class="flex flex-col gap-1">
-				{#each pendingReminders as reminder (reminder.id)}
+				{#each pendingReminderItems as item (item.reminder.id)}
+					{@const reminder = item.reminder}
 					{@const motion = getReminderMotion(reminder.id)}
 					<ReminderRow
 						kind="edit"
 						{reminder}
+						depth={item.depth}
+						isDragging={draggingReminderId === reminder.id}
+						dropTarget={getDropTarget(reminder.id)}
 						editable={canEditActiveList}
 						expanded={expandedReminderId === reminder.id &&
 							!transitions.has(reminder.id)}
@@ -305,6 +467,10 @@
 							expandedReminderId = null
 						}}
 						onUpdate={(updates: ReminderUpdate) => updateReminder(reminder, updates)}
+						onDragStart={(event) => handleDragStart(event, reminder)}
+						onDragOver={(event) => handleDragOver(event, item)}
+						onDrop={(event) => void handleDrop(event, item)}
+						onDragEnd={clearDragState}
 					/>
 				{/each}
 
@@ -360,11 +526,15 @@
 				>
 					<div class="min-h-0 overflow-hidden">
 						<div class="flex flex-col gap-1 pt-1">
-							{#each completedReminders as reminder (reminder.id)}
+							{#each completedReminderItems as item (item.reminder.id)}
+								{@const reminder = item.reminder}
 								{@const motion = getReminderMotion(reminder.id)}
 								<ReminderRow
 									kind="edit"
 									{reminder}
+									depth={item.depth}
+									isDragging={draggingReminderId === reminder.id}
+									dropTarget={getDropTarget(reminder.id)}
 									editable={canEditActiveList}
 									expanded={expandedReminderId === reminder.id &&
 										!transitions.has(reminder.id)}
@@ -383,6 +553,10 @@
 									}}
 									onUpdate={(updates: ReminderUpdate) =>
 										updateReminder(reminder, updates)}
+									onDragStart={(event) => handleDragStart(event, reminder)}
+									onDragOver={(event) => handleDragOver(event, item)}
+									onDrop={(event) => void handleDrop(event, item)}
+									onDragEnd={clearDragState}
 								/>
 							{/each}
 						</div>

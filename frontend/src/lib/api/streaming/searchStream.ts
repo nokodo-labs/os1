@@ -16,6 +16,7 @@ export type SearchResultType =
 	| 'note'
 	| 'memory'
 	| 'project'
+	| 'file'
 
 export type SearchResourceType = Exclude<SearchResultType, 'memory'>
 
@@ -25,6 +26,7 @@ export const SEARCH_RESOURCE_TYPES: SearchResourceType[] = [
 	'reminder',
 	'calendar_event',
 	'project',
+	'file',
 ]
 
 export interface SearchResult {

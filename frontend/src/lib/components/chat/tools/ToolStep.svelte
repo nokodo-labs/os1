@@ -156,9 +156,7 @@
 					<span class="text-foreground/70">{summary.title}</span>
 				{/if}
 				{#if summary.subtitle}
-					<span class="text-foreground/40 max-w-48 truncate text-xs"
-						>"{summary.subtitle}"</span
-					>
+					<span class="text-foreground/40 max-w-48 truncate text-xs">{summary.subtitle}</span>
 				{/if}
 				{#if name === 'think' && thinkDisplay && summary.title !== `thought for ${thinkDisplay}s`}
 					<span class="text-foreground/50 text-xs tabular-nums">{thinkDisplay}s</span>
@@ -177,9 +175,7 @@
 					<span class="text-foreground/70">{summary.title}</span>
 				{/if}
 				{#if summary.subtitle}
-					<span class="text-foreground/40 max-w-48 truncate text-xs"
-						>"{summary.subtitle}"</span
-					>
+					<span class="text-foreground/40 max-w-48 truncate text-xs">{summary.subtitle}</span>
 				{/if}
 				{#if name === 'think' && thinkDisplay && summary.title !== `thought for ${thinkDisplay}s`}
 					<span class="text-foreground/50 text-xs tabular-nums">{thinkDisplay}s</span>

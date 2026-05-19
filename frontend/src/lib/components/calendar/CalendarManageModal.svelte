@@ -18,7 +18,6 @@
 	import {
 		canDeleteAccessLevel,
 		canEditAccessLevel,
-		canShareAccessLevel,
 		resourceAccess,
 	} from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
@@ -45,7 +44,6 @@
 		calendar?.id ? resourceAccess.level('calendar', calendar.id, calendar.owner_id) : 'admin'
 	)
 	const canEditCalendar = $derived(isCreate || canEditAccessLevel(calendarAccessLevel))
-	const canShareCalendar = $derived(!isCreate && canShareAccessLevel(calendarAccessLevel))
 	const canDeleteCalendar = $derived(!isCreate && canDeleteAccessLevel(calendarAccessLevel))
 	const title = $derived(isCreate ? 'create calendar' : 'calendar properties')
 	const authorLabel = $derived(session.authorLabel(calendar?.owner_id))
@@ -72,10 +70,11 @@
 	})
 
 	$effect(() => {
+		const accessKey = open && calendar?.id ? `${calendar.id}:${resourceAccess.version}` : ''
 		if (open && calendar?.owner_id && calendar.owner_id !== session.currentUserId) {
 			void session.ensureUsers([calendar.owner_id])
 		}
-		if (open && calendar?.id) {
+		if (open && calendar?.id && accessKey) {
 			void resourceAccess.ensure('calendar', calendar.id, calendar.owner_id)
 		}
 	})
@@ -119,7 +118,7 @@
 	}
 
 	function shareCalendar(): void {
-		if (!calendar?.id || !canShareCalendar) return
+		if (!calendar?.id) return
 		onClose()
 		modals.open('resource-access', {
 			resourceType: 'calendar',
@@ -251,7 +250,7 @@
 		{/if}
 
 		<div class="flex items-center gap-2 pt-1 max-[680px]:flex-wrap">
-			{#if calendar?.id && canShareCalendar}
+			{#if calendar?.id}
 				<button
 					type="button"
 					class="{actionButtonClass} border-foreground/12 text-foreground/80 hover:bg-foreground/6 border bg-transparent"

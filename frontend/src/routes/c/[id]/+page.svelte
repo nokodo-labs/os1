@@ -72,6 +72,7 @@
 	let lastChatRefreshVersion = 0
 	let isReadOnly = $state(false)
 	let threadNotFound = $state(false)
+	let messageListEl = $state<HTMLDivElement | null>(null)
 
 	// citation sources modal state
 	type Citation = components['schemas']['Citation']
@@ -398,6 +399,16 @@
 		return () => ro.disconnect()
 	})
 
+	$effect(() => {
+		if (!messageListEl) return
+		const target = messageListEl
+		const observer = new ResizeObserver(() => {
+			if (chat.autoScroll) void chat.queueScrollToBottom('auto')
+		})
+		observer.observe(target)
+		return () => observer.disconnect()
+	})
+
 	// effects: auto-scroll
 	$effect(() => {
 		const threadId = page.params.id
@@ -497,6 +508,7 @@
 		onscroll={chat.handleScroll}
 	>
 		<div
+			bind:this={messageListEl}
 			class="mx-auto flex min-h-full w-full flex-col {device.isMobile ? '' : 'max-w-7xl'}"
 			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: var(--chrome-island-offset); padding-bottom: {chat.inputOverlayHeight}px;"
 		>

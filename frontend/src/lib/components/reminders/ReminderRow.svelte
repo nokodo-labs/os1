@@ -9,6 +9,7 @@
 	import ClockRotateRight from '$lib/components/icons/ClockRotateRight.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
+	import MenuLines from '$lib/components/icons/MenuLines.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import { MenuItem, PopupMenu } from '$lib/components/primitives'
@@ -41,6 +42,13 @@
 		motion?: Motion
 		motionDelayMs?: number
 		editable?: boolean
+		depth?: number
+		isDragging?: boolean
+		dropTarget?: 'before' | 'after' | 'child' | null
+		onDragStart?: (event: DragEvent) => void
+		onDragOver?: (event: DragEvent) => void
+		onDrop?: (event: DragEvent) => void
+		onDragEnd?: (event: DragEvent) => void
 	}
 
 	type CreateProps = {
@@ -73,8 +81,6 @@
 	let isSaving = $state(false)
 	let draftError = $state<string | null>(null)
 
-	const DESCRIPTION_PREVIEW_MAX = 140
-
 	let editedTitle = $state('')
 	let editedDescription = $state('')
 
@@ -98,7 +104,14 @@
 	})
 	const descriptionPreview = $derived.by(() => {
 		if (props.kind !== 'edit') return null
-		return truncateText(props.reminder.description, DESCRIPTION_PREVIEW_MAX)
+		return props.reminder.description?.trim() || null
+	})
+	const depth = $derived(props.kind === 'edit' ? Math.min(props.depth ?? 0, 5) : 0)
+	const rowStyle = $derived.by(() => {
+		const styles: string[] = []
+		if (props.motionDelayMs) styles.push(`--reminder-motion-delay-ms: ${props.motionDelayMs}ms`)
+		if (depth > 0) styles.push(`margin-left: min(${depth * 1.25}rem, 5rem)`)
+		return styles.length > 0 ? `${styles.join('; ')};` : undefined
 	})
 
 	function formatScheduleDateTime(iso: string): string {
@@ -126,13 +139,6 @@
 			})
 			.toLowerCase()
 		return `${dateLabel} ${time}`
-	}
-
-	function truncateText(value: string | null | undefined, maxLength: number): string | null {
-		const trimmed = value?.trim()
-		if (!trimmed) return null
-		if (trimmed.length <= maxLength) return trimmed
-		return `${trimmed.slice(0, maxLength).trimEnd()}...`
 	}
 
 	const isOverdue = $derived.by(() => {
@@ -346,13 +352,6 @@
 		// escape handled by base handler
 		if (event.key === 'Escape') {
 			handleKeyDown(event)
-			return
-		}
-		// shift+enter: allow newline (default textarea behavior)
-		// enter without shift: blur to save
-		if (event.key === 'Enter' && !event.shiftKey) {
-			event.preventDefault()
-			;(event.target as HTMLTextAreaElement | null)?.blur()
 		}
 	}
 
@@ -424,9 +423,7 @@
 	data-reminder-draft={props.kind === 'create' ? 'true' : undefined}
 	role="button"
 	tabindex="0"
-	style={props.motionDelayMs
-		? `--reminder-motion-delay-ms: ${props.motionDelayMs}ms;`
-		: undefined}
+	style={rowStyle}
 	class="reminder-row group relative cursor-pointer overflow-visible rounded-4xl transition-colors duration-150 {props.expanded
 		? 'border-foreground/14 bg-foreground/6 border'
 		: 'hover:bg-foreground/6 border border-transparent'} {isCompleted
@@ -435,11 +432,38 @@
 		? 'is-out is-out-complete'
 		: ''} {isMotionOutUncomplete ? 'is-out is-out-uncomplete' : ''} {isMorphPlus
 		? 'morph-plus'
+		: ''} {props.kind === 'edit' && props.isDragging ? 'opacity-45' : ''} {props.kind ===
+		'edit' && props.dropTarget === 'child'
+		? 'ring-1 ring-(--accent-primary)/45'
 		: ''}"
 	onclick={handleRowClick}
 	onkeydown={handleRowKeyDown}
+	ondragover={props.kind === 'edit' ? props.onDragOver : undefined}
+	ondrop={props.kind === 'edit' ? props.onDrop : undefined}
 >
+	{#if props.kind === 'edit' && props.dropTarget === 'before'}
+		<span
+			class="pointer-events-none absolute top-0 right-3 left-8 z-10 h-0.5 rounded-full bg-(--accent-primary)"
+		></span>
+	{:else if props.kind === 'edit' && props.dropTarget === 'after'}
+		<span
+			class="pointer-events-none absolute right-3 bottom-0 left-8 z-10 h-0.5 rounded-full bg-(--accent-primary)"
+		></span>
+	{/if}
 	<div class="flex items-center gap-3 px-3 py-2.5">
+		{#if props.kind === 'edit' && isEditable && props.onDragStart}
+			<button
+				type="button"
+				draggable="true"
+				class="rounded-pill text-foreground/35 hover:bg-foreground/8 hover:text-foreground/65 flex h-6 w-5 shrink-0 cursor-grab items-center justify-center transition-colors active:cursor-grabbing"
+				onclick={(event) => event.stopPropagation()}
+				ondragstart={props.onDragStart}
+				ondragend={props.onDragEnd}
+				aria-label="reorder reminder"
+			>
+				<MenuLines class="h-4 w-4" strokeWidth="2" />
+			</button>
+		{/if}
 		<button
 			data-circle-button
 			type="button"
@@ -622,7 +646,7 @@
 	{#if props.kind === 'edit' && (descriptionPreview || hasDueDate || hasRemindAt || recurrenceLabel) && !props.expanded}
 		<div class="min-w-0 px-3 pb-2 pl-12">
 			{#if descriptionPreview}
-				<p class="text-foreground/60 min-w-0 text-xs leading-5 wrap-break-word">
+				<p class="text-foreground/60 line-clamp-1 min-w-0 text-xs leading-5 wrap-break-word">
 					{descriptionPreview}
 				</p>
 			{/if}

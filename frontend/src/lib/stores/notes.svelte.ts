@@ -74,6 +74,14 @@ function toNote(apiNote: ApiNote): Note {
 	}
 }
 
+async function fetchNote(noteId: string): Promise<Note | null> {
+	const { data, error } = await api.GET('/v1/notes/{note_id}', {
+		params: { path: { note_id: noteId } },
+	})
+	if (error || !data) return null
+	return toNote(data)
+}
+
 function arraysEqual(left: string[], right: string[]): boolean {
 	if (left.length !== right.length) return false
 	return left.every((value, index) => value === right[index])
@@ -322,10 +330,24 @@ export const notes = {
 // event stream integration
 
 let notesUnsub: (() => void) | null = null
+const NOTE_STREAM_EVENTS = [
+	...STORE_EVENT_TYPES.notes,
+	...STORE_EVENT_TYPES.resourceAccessResource,
+] as const
 
 function handleNoteEvent(message: StreamMessage): void {
 	const data = storeEventData(message)
 	if (!data) return
+
+	if (message.type === 'access.updated' || message.type === 'resource.access.updated') {
+		if (data.resource_type !== 'note' || typeof data.resource_id !== 'string') return
+		const resourceId = data.resource_id
+		void fetchNote(resourceId).then((note) => {
+			if (note) notesMap.set(note.id, note)
+			else notesMap.delete(resourceId)
+		})
+		return
+	}
 
 	if (message.type === 'note.created') {
 		const apiNote = data as unknown as ApiNote
@@ -347,7 +369,13 @@ function handleNoteEvent(message: StreamMessage): void {
 		const id = storeEventString(message, ['id'])
 		if (!id) return
 		const existing = notesMap.get(id)
-		if (!existing) return
+		if (!existing) {
+			void fetchNote(id).then((note) => {
+				if (note) notesMap.set(note.id, note)
+				else notesMap.delete(id)
+			})
+			return
+		}
 		// merge partial update into existing cache entry
 		const merged = { ...existing }
 		if ('title' in data) merged.title = data.title as string
@@ -366,7 +394,7 @@ if (browser) {
 	onAccessTokenChanged((token) => {
 		if (token) {
 			if (!notesUnsub) {
-				notesUnsub = subscribeToStoreEvents(STORE_EVENT_TYPES.notes, handleNoteEvent)
+				notesUnsub = subscribeToStoreEvents(NOTE_STREAM_EVENTS, handleNoteEvent)
 			}
 		} else {
 			notesUnsub?.()
@@ -380,6 +408,6 @@ if (browser) {
 	// subscribe immediately if already authenticated
 	// (module may be imported after auth when navigating to /notes)
 	if (getAccessToken() && !notesUnsub) {
-		notesUnsub = subscribeToStoreEvents(STORE_EVENT_TYPES.notes, handleNoteEvent)
+		notesUnsub = subscribeToStoreEvents(NOTE_STREAM_EVENTS, handleNoteEvent)
 	}
 }

@@ -29,7 +29,6 @@
 	import {
 		canDeleteAccessLevel,
 		canEditAccessLevel,
-		canShareAccessLevel,
 		resourceAccess,
 	} from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
@@ -128,6 +127,8 @@
 	})
 
 	$effect(() => {
+		const calendarsAccessKey = `${resourceAccess.version}:${calendarList.map((calendar) => calendar.id).join('|')}`
+		if (!calendarsAccessKey) return
 		for (const calendar of calendarList) {
 			void resourceAccess.ensure('calendar', calendar.id, calendar.owner_id)
 		}
@@ -138,6 +139,8 @@
 	})
 
 	$effect(() => {
+		const projectsAccessKey = `${resourceAccess.version}:${projects.list.map((project) => project.id).join('|')}`
+		if (!projectsAccessKey) return
 		for (const project of projects.list) {
 			void resourceAccess.ensure('project', project.id, project.owner_id)
 		}
@@ -233,7 +236,6 @@
 	}
 
 	function shareCalendar(calendar: CalendarRecord): void {
-		if (!canShareCalendar(calendar)) return
 		closeCalendarMenu()
 		modals.open('resource-access', {
 			resourceType: 'calendar',
@@ -304,10 +306,6 @@
 		return canEditAccessLevel(calendarAccessLevel(calendar))
 	}
 
-	function canShareCalendar(calendar: CalendarRecord): boolean {
-		return canShareAccessLevel(calendarAccessLevel(calendar))
-	}
-
 	function canDeleteCalendar(calendar: CalendarRecord): boolean {
 		return canDeleteAccessLevel(calendarAccessLevel(calendar))
 	}
@@ -349,7 +347,7 @@
 				{/if}
 			</span>
 			{#snippet actions()}
-				{#if canEditCalendar(calendar) || canShareCalendar(calendar) || canDeleteCalendar(calendar)}
+				{#if calendar}
 					<button
 						type="button"
 						class="text-foreground/65 hover:bg-foreground/8 hover:text-foreground flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent transition-all"
@@ -376,7 +374,7 @@
 					properties
 				</MenuItem>
 			{/if}
-			{#if canShareCalendar(calendar)}
+			{#if calendar}
 				<MenuItem onclick={() => shareCalendar(calendar)}>
 					{#snippet icon()}<Share class="size-full" strokeWidth="2.1" />{/snippet}
 					share

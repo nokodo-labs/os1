@@ -10,6 +10,7 @@
 	import UserGroup from '$lib/components/icons/UserGroup.svelte'
 	import GroupAddMemberModal from '$lib/components/modals/GroupAddMemberModal.svelte'
 	import GroupPropertiesModal from '$lib/components/modals/GroupPropertiesModal.svelte'
+	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import PageTitle from '$lib/components/PageTitle.svelte'
 	import { MenuItem, PopupMenu } from '$lib/components/primitives'
 	import Timestamp from '$lib/components/Timestamp.svelte'
@@ -178,10 +179,8 @@
 	</div>
 
 	{#if isLoading}
-		<div class="flex flex-col gap-3">
-			{#each [0, 1, 2] as i (i)}
-				<div class="bg-foreground/5 h-20 animate-pulse rounded-2xl"></div>
-			{/each}
+		<div class="flex min-h-40 items-center justify-center">
+			<NokodoLoader className="opacity-70" expanded={false} />
 		</div>
 	{:else if groups.list.length === 0}
 		<div class="flex flex-1 flex-col items-center justify-center">

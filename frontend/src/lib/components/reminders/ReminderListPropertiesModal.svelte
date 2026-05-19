@@ -20,11 +20,7 @@
 		type ReminderListUpdate,
 		type ReminderListWithCounts,
 	} from '$lib/stores/reminders.svelte'
-	import {
-		canEditAccessLevel,
-		canShareAccessLevel,
-		resourceAccess,
-	} from '$lib/stores/resourceAccess.svelte'
+	import { canEditAccessLevel, resourceAccess } from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { byAuthor, metadataLine } from '$lib/utils/resourceAuthors'
 
@@ -49,7 +45,6 @@
 		list ? resourceAccess.level('reminder_list', list.id, list.owner_id) : null
 	)
 	const canEditList = $derived(canEditAccessLevel(listAccessLevel))
-	const canShareList = $derived(canShareAccessLevel(listAccessLevel))
 	const iconChoices = $derived(
 		icon.trim() && !iconOptions.includes(icon.trim())
 			? [icon.trim(), ...iconOptions]
@@ -78,10 +73,12 @@
 	})
 
 	$effect(() => {
+		const accessKey = open && list ? `${list.id}:${resourceAccess.version}` : ''
 		if (open && list?.owner_id && list.owner_id !== session.currentUserId) {
 			void session.ensureUsers([list.owner_id])
 		}
-		if (open && list) void resourceAccess.ensure('reminder_list', list.id, list.owner_id)
+		if (open && list && accessKey)
+			void resourceAccess.ensure('reminder_list', list.id, list.owner_id)
 	})
 
 	function displayName(value: string): string {
@@ -90,7 +87,7 @@
 	}
 
 	function shareList(): void {
-		if (!list || !canShareList) return
+		if (!list) return
 		onClose()
 		modals.open('resource-access', {
 			resourceType: 'reminder_list',
@@ -304,7 +301,7 @@
 			{/if}
 
 			<div class="flex items-center gap-2 pt-1 max-[520px]:flex-wrap">
-				{#if canShareList}
+				{#if list}
 					<button
 						type="button"
 						class="{actionButtonClass} border-foreground/12 text-foreground/80 hover:bg-foreground/6 border bg-transparent"

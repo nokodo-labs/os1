@@ -22,6 +22,7 @@ import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 import type { AttachmentMediaCategory } from '$lib/chat/types'
 import {
 	STORE_EVENT_TYPES,
+	storeEventData,
 	storeEventString,
 	subscribeToStoreEvents,
 } from '$lib/stores/storeEvents'
@@ -512,6 +513,10 @@ export const files = {
 // --- event stream integration ---
 
 let filesUnsub: (() => void) | null = null
+const FILE_STREAM_EVENTS = [
+	...STORE_EVENT_TYPES.files,
+	...STORE_EVENT_TYPES.resourceAccessResource,
+] as const
 
 async function fetchSingleFile(fileId: string): Promise<ApiFile | null> {
 	const { data, error } = await api.GET('/v1/files/{file_id}', {
@@ -534,11 +539,22 @@ function refetchSingleFile(fileId: string): void {
 			filesMap.set(file.id, file)
 			fileCountCache.clear()
 			revokeThumbnail(file.id)
+		} else {
+			filesMap.delete(fileId)
+			fileCountCache.clear()
+			revokeThumbnail(fileId)
 		}
 	})
 }
 
 function handleFileEvent(message: StreamMessage): void {
+	const data = storeEventData(message)
+	if (message.type === 'access.updated' || message.type === 'resource.access.updated') {
+		if (data?.resource_type !== 'file' || typeof data.resource_id !== 'string') return
+		refetchSingleFile(data.resource_id)
+		return
+	}
+
 	const fileId = storeEventString(message, ['file_id', 'id'])
 	if (!fileId) return
 
@@ -568,7 +584,7 @@ if (browser) {
 	onAccessTokenChanged((token) => {
 		if (token) {
 			if (!filesUnsub) {
-				filesUnsub = subscribeToStoreEvents(STORE_EVENT_TYPES.files, handleFileEvent)
+				filesUnsub = subscribeToStoreEvents(FILE_STREAM_EVENTS, handleFileEvent)
 			}
 		} else {
 			filesUnsub?.()
@@ -579,6 +595,6 @@ if (browser) {
 
 	// subscribe immediately if already authenticated
 	if (getAccessToken() && !filesUnsub) {
-		filesUnsub = subscribeToStoreEvents(STORE_EVENT_TYPES.files, handleFileEvent)
+		filesUnsub = subscribeToStoreEvents(FILE_STREAM_EVENTS, handleFileEvent)
 	}
 }

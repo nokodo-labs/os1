@@ -28,7 +28,6 @@
 	import {
 		canDeleteAccessLevel,
 		canEditAccessLevel,
-		canShareAccessLevel,
 		resourceAccess,
 	} from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
@@ -163,10 +162,6 @@
 		return canEditAccessLevel(noteAccessLevel(note))
 	}
 
-	function canShareNote(note: (typeof noteList)[0]): boolean {
-		return canShareAccessLevel(noteAccessLevel(note))
-	}
-
 	function canDeleteNote(note: (typeof noteList)[0]): boolean {
 		return canDeleteAccessLevel(noteAccessLevel(note))
 	}
@@ -176,12 +171,16 @@
 	})
 
 	$effect(() => {
+		const projectsAccessKey = `${resourceAccess.version}:${projects.list.map((project) => project.id).join('|')}`
+		if (!projectsAccessKey) return
 		for (const project of projects.list) {
 			void resourceAccess.ensure('project', project.id, project.owner_id)
 		}
 	})
 
 	$effect(() => {
+		const notesAccessKey = `${resourceAccess.version}:${noteList.map((note) => note.id).join('|')}`
+		if (!notesAccessKey) return
 		if (sharedNotes.length > 0) void session.ensureUsers(sharedNotes.map((note) => note.userId))
 		for (const note of noteList) {
 			void resourceAccess.ensure('note', note.id, note.userId)
@@ -220,7 +219,7 @@
 
 	function handleShare(noteId: string, title: string): void {
 		const note = notes.get(noteId)
-		if (!note || !canShareNote(note)) return
+		if (!note) return
 		openMenuId = null
 		modals.open('resource-access', { resourceType: 'note', resourceId: noteId, title })
 	}
@@ -393,7 +392,7 @@
 						</span>
 
 						{#snippet actions()}
-							{#if canEditNote(note) || canShareNote(note) || canDeleteNote(note)}
+							{#if note}
 								<button
 									type="button"
 									data-note-menu
@@ -420,7 +419,7 @@
 						}}
 						data-note-menu
 					>
-						{#if canShareNote(note)}
+						{#if note}
 							<MenuItem onclick={() => handleShare(note.id, note.title ?? 'note')}>
 								{#snippet icon()}<Share
 										class="size-full"

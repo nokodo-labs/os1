@@ -26,7 +26,6 @@
 	import {
 		canDeleteAccessLevel,
 		canEditAccessLevel,
-		canShareAccessLevel,
 		resourceAccess,
 	} from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
@@ -186,10 +185,6 @@
 		return canEditAccessLevel(listAccessLevel(list))
 	}
 
-	function canShareList(list: (typeof lists)[0]): boolean {
-		return canShareAccessLevel(listAccessLevel(list))
-	}
-
 	function canDeleteList(list: (typeof lists)[0]): boolean {
 		return canDeleteAccessLevel(listAccessLevel(list))
 	}
@@ -209,6 +204,8 @@
 	}
 
 	$effect(() => {
+		const listsAccessKey = `${resourceAccess.version}:${lists.map((list) => list.id).join('|')}`
+		if (!listsAccessKey) return
 		if (sharedLists.length > 0) {
 			void session.ensureUsers(sharedLists.map((list) => list.owner_id))
 		}
@@ -222,6 +219,8 @@
 	})
 
 	$effect(() => {
+		const projectsAccessKey = `${resourceAccess.version}:${projects.list.map((project) => project.id).join('|')}`
+		if (!projectsAccessKey) return
 		for (const project of projects.list) {
 			void resourceAccess.ensure('project', project.id, project.owner_id)
 		}
@@ -266,13 +265,11 @@
 			leading={{ type: 'emoji', emoji: list.icon ?? '📋', color: list.color }}
 			onPrefetch={() => prefetchList(list.id)}
 			onSelect={() => selectList(list.id)}
-			onMenu={canEditList(list) || canShareList(list) || canDeleteList(list)
-				? (event) => {
-						const el = event.currentTarget
-						if (el instanceof HTMLButtonElement) toggleListMenu(list.id, el)
-						else toggleListMenu(list.id, null)
-					}
-				: undefined}
+			onMenu={(event) => {
+				const el = event.currentTarget
+				if (el instanceof HTMLButtonElement) toggleListMenu(list.id, el)
+				else toggleListMenu(list.id, null)
+			}}
 		/>
 
 		<PopupMenu
@@ -281,7 +278,7 @@
 			onClose={closeListMenu}
 			data-reminders-list-menu
 		>
-			{#if canShareList(list)}
+			{#if list}
 				<MenuItem
 					onclick={(event) => {
 						event.stopPropagation()

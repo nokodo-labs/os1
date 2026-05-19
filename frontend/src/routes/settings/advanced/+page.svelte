@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { browser } from '$app/environment'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
+	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import Download from '$lib/components/icons/Download.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
@@ -12,12 +15,15 @@
 		type AppVisualId,
 		type ResourceIconComponent,
 	} from '$lib/resources/resourceVisuals'
+	import { apiCacheStores } from '$lib/stores/apiCacheRegistry'
+	import { clearApiCacheStores } from '$lib/stores/cacheLifecycle'
 	import { preferences, type ClientPreferenceScope } from '$lib/stores/preferences.svelte'
+	import { showError } from '$lib/stores/notifications.svelte'
 
 	interface DataAction {
 		label: string
 		description: string
-		icon: typeof Download
+		icon: ResourceIconComponent
 		variant: 'default' | 'danger'
 		action: () => void
 	}
@@ -109,6 +115,7 @@
 	)
 	const svgLiquidMetalEnabled = $derived(preferences.data.advanced.svgLiquidMetal ?? false)
 	const experimentalUiScope = $derived(preferences.experimentalUiScope)
+	let isReloadingApp = $state(false)
 
 	function setSvgLiquidGlass(enabled: boolean): void {
 		void preferences.updateExperimentalUi({ svgLiquidGlass: enabled })
@@ -124,6 +131,22 @@
 
 	function setExperimentalUiScope(scope: ClientPreferenceScope): void {
 		void preferences.setExperimentalUiScope(scope)
+	}
+
+	async function reloadApp(): Promise<void> {
+		if (!browser || isReloadingApp) return
+		isReloadingApp = true
+		try {
+			clearApiCacheStores(apiCacheStores)
+			if ('caches' in window) {
+				const cacheNames = await window.caches.keys()
+				await Promise.all(cacheNames.map((name) => window.caches.delete(name)))
+			}
+			window.location.reload()
+		} catch {
+			isReloadingApp = false
+			showError('could not reload app')
+		}
 	}
 </script>
 
@@ -247,6 +270,31 @@
 					</label>
 				{/each}
 			</div>
+		</div>
+
+		<!-- app cache -->
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
+			<div class="text-foreground text-sm font-semibold">app cache</div>
+			<div class="text-foreground/50 mt-1 text-sm">
+				clear local app caches and fetch a fresh copy. auth stays signed in.
+			</div>
+			<button
+				type="button"
+				class="rounded-pill border-foreground/10 bg-foreground/3 hover:border-foreground/15 hover:bg-foreground/5 mt-4 flex w-full cursor-pointer items-center gap-3 border px-4 py-3 text-left text-sm transition-all disabled:cursor-not-allowed disabled:opacity-50"
+				disabled={isReloadingApp}
+				onclick={() => void reloadApp()}
+			>
+				<ArrowPath class="text-foreground/50 h-4.5 w-4.5 shrink-0" />
+				<div class="min-w-0 flex-1">
+					<div class="text-foreground/80 font-medium">reload app</div>
+					<div class="text-foreground/50 text-xs">
+						clears API and service worker caches, then reloads without clearing auth.
+					</div>
+				</div>
+				{#if isReloadingApp}
+					<ShimmerText className="shrink-0 text-xs">reloading</ShimmerText>
+				{/if}
+			</button>
 		</div>
 
 		<!-- data export -->

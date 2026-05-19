@@ -104,6 +104,13 @@ function extractProjectIds(data: Record<string, unknown>): string[] {
 		}
 	}
 
+	const affectedProjectIds = data.affected_project_ids
+	if (Array.isArray(affectedProjectIds)) {
+		for (const id of affectedProjectIds) {
+			if (typeof id === 'string' && id.length > 0) addId(id)
+		}
+	}
+
 	const projects = data.projects
 	if (Array.isArray(projects)) {
 		for (const project of projects) {
@@ -202,9 +209,13 @@ class ProjectsCache {
 	#handleProjectCountEvent(data: Record<string, unknown>): void {
 		const projectIds = extractProjectIds(data)
 		const loadedProjectIds = projectIds.filter((id) => this.#countCache.has(id))
+		const cachedProjectIds = projectIds.filter((id) => this.#cache?.data.has(id))
 		this.invalidateResourceCounts(projectIds)
 		for (const id of loadedProjectIds) {
 			void this.loadResourceCounts(id, { force: true })
+		}
+		for (const id of cachedProjectIds) {
+			void this.#refreshProject(id)
 		}
 	}
 

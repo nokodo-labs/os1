@@ -260,11 +260,7 @@
 		loading = true
 		abortController = new AbortController()
 
-		if (
-			activeFilter === 'files' ||
-			activeFilter === 'projects' ||
-			activeFilter === 'calendars'
-		) {
+		if (activeFilter === 'projects' || activeFilter === 'calendars') {
 			const fileItems = await buildLocalResultsWithFiles()
 			const lowerQ = query.toLowerCase()
 			searchResults = fileItems.filter((f) => f.title.toLowerCase().includes(lowerQ))
@@ -273,12 +269,13 @@
 		}
 
 		const typeMap: Record<string, SearchResultType[]> = {
-			all: ['thread', 'note', 'reminder'],
+			all: ['thread', 'note', 'reminder', 'file'],
 			threads: ['thread'],
 			notes: ['note'],
 			reminders: ['reminder'],
+			files: ['file'],
 		}
-		const types = typeMap[activeFilter] ?? ['thread', 'note', 'reminder']
+		const types = typeMap[activeFilter] ?? ['thread', 'note', 'reminder', 'file']
 
 		const seen = new SvelteSet<string>()
 		const results: ResourceItem[] = []
@@ -447,7 +444,7 @@
 
 		<!-- filter tabs -->
 		<div class="flex items-center gap-2">
-			<div class="scrollbar-none flex flex-1 gap-1 overflow-x-auto">
+			<div class="flex flex-1 scrollbar-none gap-1 overflow-x-auto">
 				{#each filterOptions as opt (opt.value)}
 					{@const Icon = opt.icon}
 					{@const optionStyle = opt.resourceType

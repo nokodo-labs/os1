@@ -593,7 +593,11 @@
 	}
 
 	$effect(() => {
-		if (!open || !payload) return
+		const accessKey =
+			open && payload
+				? `${payload.resourceType}:${payload.resourceId}:${resourceAccess.version}`
+				: ''
+		if (!accessKey || !payload) return
 		void resourceAccess.ensure(payload.resourceType, payload.resourceId)
 	})
 

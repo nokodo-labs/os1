@@ -320,12 +320,17 @@ class ResourceAccessStore {
 		}
 		this.#version += 1
 		const key = resourceKey(resourceType, resourceId)
+		this.#levels.delete(key)
+		this.#rules.delete(key)
 		this.#freshLevels.delete(key)
 		this.#freshRules.delete(key)
 		this.#levelInFlight.delete(key)
 		this.#rulesInFlight.delete(key)
 
 		const subjectPrefix = `${key}:`
+		for (const cachedKey of [...this.#subjectLevels.keys()]) {
+			if (cachedKey.startsWith(subjectPrefix)) this.#subjectLevels.delete(cachedKey)
+		}
 		for (const cachedKey of [...this.#freshSubjectLevels.keys()]) {
 			if (cachedKey.startsWith(subjectPrefix)) this.#freshSubjectLevels.delete(cachedKey)
 		}

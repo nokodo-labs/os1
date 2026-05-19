@@ -45,7 +45,6 @@
 	import {
 		canDeleteAccessLevel,
 		canEditAccessLevel,
-		canShareAccessLevel,
 		resourceAccess,
 	} from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
@@ -88,7 +87,6 @@
 		project ? resourceAccess.level('project', project.id, project.owner_id) : null
 	)
 	const canEditProject = $derived(canEditAccessLevel(projectAccessLevel))
-	const canShareProject = $derived(canShareAccessLevel(projectAccessLevel))
 	const canDeleteProject = $derived(canDeleteAccessLevel(projectAccessLevel))
 	const currentUserId = $derived(session.currentUserId)
 	const manageableProjectOptions = $derived.by(() =>
@@ -532,13 +530,30 @@
 	}
 
 	function handleItemClick(item: ResourceItem): void {
-		if (item.type === 'file') {
-			modals.open('file-details', { fileId: item.id })
+		switch (item.type) {
+			case 'thread':
+				void goto(resolve(`/c/${item.id}`))
+				return
+			case 'note':
+				void goto(resolve(`/notes/${item.id}`))
+				return
+			case 'reminder_list':
+				void goto(resolve(`/reminders/lists/${item.id}`))
+				return
+			case 'calendar':
+				void goto(resolve('/calendar'))
+				return
+			case 'file':
+				modals.open('file-details', { fileId: item.id })
+				return
+			case 'project':
+				void goto(resolve(`/projects/${item.id}`))
+				return
 		}
 	}
 
 	function shareProject(): void {
-		if (!project || !canShareProject) return
+		if (!project) return
 		moreMenuOpen = false
 		modals.open('resource-access', {
 			resourceType: 'project',
@@ -554,13 +569,29 @@
 	})
 
 	$effect(() => {
-		if (project) void resourceAccess.ensure('project', project.id, project.owner_id)
+		const accessKey = project ? `${project.id}:${resourceAccess.version}` : ''
+		if (project && accessKey)
+			void resourceAccess.ensure('project', project.id, project.owner_id)
 	})
 
 	$effect(() => {
+		const projectsAccessKey = `${resourceAccess.version}:${projects.list.map((candidate) => candidate.id).join('|')}`
+		if (!projectsAccessKey) return
 		for (const candidate of projects.list) {
 			void resourceAccess.ensure('project', candidate.id, candidate.owner_id)
 		}
+	})
+
+	$effect(() => {
+		const targetProjectId = projectId
+		const threadIdsKey = projectThreadIds.join('|')
+		if (!targetProjectId) return
+		void (async () => {
+			const loadedProjectThreads = await loadProjectThreads(targetProjectId)
+			if (targetProjectId === projectId && threadIdsKey === projectThreadIds.join('|')) {
+				projectThreads = loadedProjectThreads
+			}
+		})()
 	})
 
 	$effect(() => {
@@ -743,7 +774,7 @@
 					<p class="text-foreground/60 mt-2 text-sm">{project.description}</p>
 				{/if}
 			</div>
-			{#if canShareProject || canEditProject || canDeleteProject}
+			{#if project}
 				<div class="relative flex shrink-0 gap-1 pt-1">
 					<button
 						type="button"
@@ -761,7 +792,7 @@
 						anchorEl={moreButtonEl}
 						onClose={() => (moreMenuOpen = false)}
 					>
-						{#if canShareProject}
+						{#if project}
 							<MenuItem onclick={shareProject}>
 								{#snippet icon()}<Share class="size-4" />{/snippet}
 								share

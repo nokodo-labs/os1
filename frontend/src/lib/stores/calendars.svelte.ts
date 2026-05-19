@@ -30,6 +30,10 @@ type ScheduledItemsWindow = {
 }
 
 const CACHE_TTL_MS = 10 * 60 * 1000
+const CALENDAR_STREAM_EVENTS = [
+	...STORE_EVENT_TYPES.calendars,
+	...STORE_EVENT_TYPES.resourceAccessResource,
+] as const
 
 function isFresh(fetchedAt: number | null): boolean {
 	return fetchedAt !== null && Date.now() - fetchedAt < CACHE_TTL_MS
@@ -91,7 +95,7 @@ class CalendarsStore {
 	init(): void {
 		if (!this.#unsubscribe) {
 			this.#unsubscribe = subscribeToStoreEvents(
-				STORE_EVENT_TYPES.calendars,
+				CALENDAR_STREAM_EVENTS,
 				this.#handleStreamEvent
 			)
 		}
@@ -220,9 +224,26 @@ class CalendarsStore {
 		this.#calendarsMap.delete(calendarId)
 	}
 
+	async #refreshCalendar(calendarId: string): Promise<void> {
+		const { data, error } = await api.GET('/v1/calendars/{calendar_id}', {
+			params: { path: { calendar_id: calendarId } },
+		})
+		if (error || !data) {
+			this.#remove(calendarId)
+			return
+		}
+		this.#upsert(data)
+	}
+
 	#handleStreamEvent = (message: StreamMessage): void => {
 		const data = message.data as Record<string, unknown> | undefined
 		if (!data) return
+
+		if (message.type === 'access.updated' || message.type === 'resource.access.updated') {
+			if (data.resource_type !== 'calendar' || typeof data.resource_id !== 'string') return
+			void this.#refreshCalendar(data.resource_id)
+			return
+		}
 
 		if (message.type === 'calendar.created' || message.type === 'calendar.updated') {
 			const calendar = data as unknown as Calendar

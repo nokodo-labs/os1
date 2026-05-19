@@ -128,7 +128,7 @@
 	</div>
 	<div class="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
 		{#if !isLoggedIn}
-			<div class="px-3">
+			<div class="flex min-h-0 flex-1 flex-col px-3">
 				<div class="mt-2 mb-1 flex items-center gap-2 px-2">
 					<ChatBubble class="text-foreground/70 h-4 w-4 shrink-0" />
 					<h3 class="text-foreground/60 text-xs font-semibold uppercase">chats</h3>
@@ -136,7 +136,7 @@
 				<EmptyState label="log in to see your recent chats" compact class="flex-1" />
 			</div>
 		{:else if threads.length === 0}
-			<div class="px-3">
+			<div class="flex min-h-0 flex-1 flex-col px-3">
 				<div class="mt-2 mb-1 flex items-center gap-2 px-2">
 					<ChatBubble class="text-foreground/70 h-4 w-4 shrink-0" />
 					<h3 class="text-foreground/60 text-xs font-semibold uppercase">chats</h3>

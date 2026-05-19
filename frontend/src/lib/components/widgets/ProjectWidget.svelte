@@ -19,8 +19,8 @@
 	import {
 		canDeleteAccessLevel,
 		canEditAccessLevel,
-		canShareAccessLevel,
 		readAccessLevel,
+		resourceAccess,
 	} from '$lib/stores/resourceAccess.svelte'
 	import { metadataLine } from '$lib/utils/resourceAuthors'
 	import ResourcePreview from './ResourcePreview.svelte'
@@ -72,20 +72,19 @@
 	)
 	const memberCount = $derived((resource.meta?.member_count as number) ?? 0)
 	const isShared = $derived(Boolean(resource.meta?.shared))
+	const ownerId = $derived(
+		typeof resource.meta?.owner_id === 'string' ? resource.meta.owner_id : null
+	)
 	const authorLabel = $derived((resource.meta?.author_label as string | null) ?? null)
 	const showAuthor = $derived(Boolean(isShared && authorLabel))
 	const accessLevel = $derived(
-		readAccessLevel(resource.meta?.access_level) ?? (isShared ? null : 'admin')
+		resourceAccess.level('project', resource.id, ownerId) ??
+			readAccessLevel(resource.meta?.access_level)
 	)
 	const canEditProject = $derived(canEditAccessLevel(accessLevel))
-	const canShareProject = $derived(canShareAccessLevel(accessLevel))
 	const canDeleteProject = $derived(canDeleteAccessLevel(accessLevel))
 	const hasActions = $derived(
-		Boolean(
-			(onShare && canShareProject) ||
-			(onEdit && canEditProject) ||
-			(onDelete && canDeleteProject)
-		)
+		Boolean(onShare || (onEdit && canEditProject) || (onDelete && canDeleteProject))
 	)
 
 	let menuOpen = $state(false)
@@ -244,7 +243,7 @@
 							project properties
 						</MenuItem>
 					{/if}
-					{#if onShare && canShareProject}
+					{#if onShare}
 						<MenuItem
 							onclick={() => {
 								menuOpen = false
@@ -351,7 +350,7 @@
 						project properties
 					</MenuItem>
 				{/if}
-				{#if onShare && canShareProject}
+				{#if onShare}
 					<MenuItem
 						onclick={() => {
 							menuOpen = false

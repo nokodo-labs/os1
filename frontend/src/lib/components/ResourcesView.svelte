@@ -247,10 +247,16 @@
 
 	$effect(() => {
 		if (!currentUserId) return
+		const accessVersion = resourceAccess.version
 		const resourcesToPrefetch = paginated
-		const prefetchKey = resourcesToPrefetch
-			.map((resource) => `${resource.type}:${resource.id}:${resourceOwnerId(resource) ?? ''}`)
-			.join('|')
+		const prefetchKey =
+			`${accessVersion}:` +
+			resourcesToPrefetch
+				.map(
+					(resource) =>
+						`${resource.type}:${resource.id}:${resourceOwnerId(resource) ?? ''}`
+				)
+				.join('|')
 		if (prefetchKey === lastAccessPrefetchKey) return
 		lastAccessPrefetchKey = prefetchKey
 

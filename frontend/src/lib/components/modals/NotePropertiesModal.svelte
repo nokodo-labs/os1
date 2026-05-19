@@ -8,11 +8,7 @@
 	import { resourceAccentStyle, resourceVisual } from '$lib/resources/resourceVisuals'
 	import { modals, type NotePropertiesPayload } from '$lib/stores/modals.svelte'
 	import { notes } from '$lib/stores/notes.svelte'
-	import {
-		canEditAccessLevel,
-		canShareAccessLevel,
-		resourceAccess,
-	} from '$lib/stores/resourceAccess.svelte'
+	import { canEditAccessLevel, resourceAccess } from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { byAuthor, metadataLine } from '$lib/utils/resourceAuthors'
 
@@ -34,7 +30,6 @@
 		note ? resourceAccess.level('note', note.id, note.userId) : null
 	)
 	const canEditNote = $derived(canEditAccessLevel(noteAccessLevel))
-	const canShareNote = $derived(canShareAccessLevel(noteAccessLevel))
 	const labelPreview = $derived(labels.join(', ') || 'no labels')
 	const authorLabel = $derived(session.authorLabel(note?.userId))
 	const previewSubtitle = $derived(metadataLine(byAuthor(authorLabel), labelPreview))
@@ -56,10 +51,11 @@
 	})
 
 	$effect(() => {
+		const accessKey = open && note ? `${note.id}:${resourceAccess.version}` : ''
 		if (open && note?.userId && note.userId !== session.currentUserId) {
 			void session.ensureUsers([note.userId])
 		}
-		if (open && note) void resourceAccess.ensure('note', note.id, note.userId)
+		if (open && note && accessKey) void resourceAccess.ensure('note', note.id, note.userId)
 	})
 
 	function displayTitle(value: string): string {
@@ -68,7 +64,7 @@
 	}
 
 	function shareNote(): void {
-		if (!note || !canShareNote) return
+		if (!note) return
 		modals.open('resource-access', {
 			resourceType: 'note',
 			resourceId: note.id,
@@ -168,7 +164,7 @@
 			{/if}
 
 			<div class="flex items-center gap-2 pt-1 max-[520px]:flex-wrap">
-				{#if canShareNote}
+				{#if note}
 					<button
 						type="button"
 						class="{actionButtonClass} border-foreground/12 text-foreground/80 hover:bg-foreground/6 border bg-transparent"

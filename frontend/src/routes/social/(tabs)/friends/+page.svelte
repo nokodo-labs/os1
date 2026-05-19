@@ -7,6 +7,7 @@
 	import UserPlus from '$lib/components/icons/UserPlusSolid.svelte'
 	import Users from '$lib/components/icons/Users.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
+	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import PageTitle from '$lib/components/PageTitle.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { device } from '$lib/stores/device.svelte'
@@ -100,10 +101,8 @@
 	</div>
 
 	{#if !friends.isReady}
-		<div class="flex flex-col gap-3">
-			{#each [0, 1, 2] as i (i)}
-				<div class="bg-foreground/5 h-16 animate-pulse rounded-2xl"></div>
-			{/each}
+		<div class="flex min-h-40 items-center justify-center">
+			<NokodoLoader className="opacity-70" expanded={false} />
 		</div>
 	{:else if !friends.hasContent}
 		<div

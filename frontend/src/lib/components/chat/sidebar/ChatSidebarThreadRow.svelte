@@ -21,7 +21,6 @@
 	import {
 		canDeleteAccessLevel,
 		canEditAccessLevel,
-		canShareAccessLevel,
 		resourceAccess,
 	} from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
@@ -63,9 +62,8 @@
 	const displayTitle = $derived(thread.title || 'new chat')
 	const threadAccessLevel = $derived(resourceAccess.level('thread', thread.id, thread.owner_id))
 	const canEditThread = $derived(canEditAccessLevel(threadAccessLevel))
-	const canShareThread = $derived(canShareAccessLevel(threadAccessLevel))
 	const canDeleteThread = $derived(canDeleteAccessLevel(threadAccessLevel))
-	const hasThreadActions = $derived(canEditThread || canShareThread || canDeleteThread)
+	const hasThreadActions = $derived(Boolean(thread || canEditThread || canDeleteThread))
 	const threadProjectIds = $derived(thread.project_ids ?? [])
 	const canManageProjects = $derived(canEditThread)
 	const authorLabel = $derived.by(() => {
@@ -80,8 +78,9 @@
 	let menuButtonEl = $state<HTMLElement | null>(null)
 
 	$effect(() => {
+		const accessKey = `${thread.id}:${resourceAccess.version}`
 		if (thread.owner_id !== session.currentUserId) void session.ensureUsers([thread.owner_id])
-		void resourceAccess.ensure('thread', thread.id, thread.owner_id)
+		if (accessKey) void resourceAccess.ensure('thread', thread.id, thread.owner_id)
 	})
 
 	async function handleThreadProjectToggle(projectId: string, selected: boolean): Promise<void> {
@@ -223,7 +222,7 @@
 		onClose={onCloseMenu}
 		data-thread-menu
 	>
-		{#if canShareThread}
+		{#if thread}
 			<MenuItem
 				onclick={(e) => {
 					e.stopPropagation()

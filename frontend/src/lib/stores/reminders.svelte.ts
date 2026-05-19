@@ -41,6 +41,10 @@ export type ReminderListsSortMode = `${ListSortBy}:${SortDir}`
 
 // cache TTL - generous since websocket keeps cache fresh
 const CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
+const REMINDER_STREAM_EVENTS = [
+	...STORE_EVENT_TYPES.reminders,
+	...STORE_EVENT_TYPES.resourceAccessResource,
+] as const
 
 interface ListsCacheEntry {
 	/** id → list (preserves insertion order) */
@@ -121,7 +125,7 @@ class RemindersCache {
 	init(): void {
 		if (!this.#unsubscribe) {
 			this.#unsubscribe = subscribeToStoreEvents(
-				STORE_EVENT_TYPES.reminders,
+				REMINDER_STREAM_EVENTS,
 				this.#handleStreamEvent
 			)
 		}
@@ -142,6 +146,13 @@ class RemindersCache {
 	#handleStreamEvent = (message: StreamMessage): void => {
 		const data = message.data as Record<string, unknown> | undefined
 		if (!data) return
+
+		if (message.type === 'access.updated' || message.type === 'resource.access.updated') {
+			if (data.resource_type !== 'reminder_list' || typeof data.resource_id !== 'string')
+				return
+			void this.#refreshList(data.resource_id)
+			return
+		}
 
 		switch (message.type) {
 			// reminder events
@@ -286,6 +297,8 @@ class RemindersCache {
 						pending_count: existing.pending_count,
 						completed_count: existing.completed_count,
 					})
+				} else {
+					void this.#refreshList(list.id)
 				}
 				break
 			}
@@ -389,6 +402,17 @@ class RemindersCache {
 
 	setLists(lists: ReminderListWithCounts[]): void {
 		this.#listsCache = buildListsCache(lists, Date.now())
+	}
+
+	async #refreshList(listId: string): Promise<void> {
+		const { data, error } = await api.GET('/v1/reminder-lists/{list_id}', {
+			params: { path: { list_id: listId } },
+		})
+		if (error || !data) {
+			this.#listsCache?.data.delete(listId)
+			return
+		}
+		this.#listsCache?.data.set(data.id, toListWithCounts(data))
 	}
 
 	#parseSortMode(): { sort_by: ListSortBy; sort_dir: SortDir } {

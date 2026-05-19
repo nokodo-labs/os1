@@ -340,6 +340,9 @@
 		} else if (action.type === 'modal') {
 			inputValue = ''
 			modals.open(action.id)
+		} else if (action.type === 'file-details') {
+			inputValue = ''
+			modals.open('file-details', { fileId: action.fileId })
 		} else if (action.type === 'toggle-dock') {
 			inputValue = ''
 			chrome.toggleDock()

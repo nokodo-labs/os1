@@ -21,6 +21,10 @@ type ApiMessage = components['schemas']['Message']
 type ApiTask = components['schemas']['Task']
 
 const THREAD_MAINTENANCE_TASK = 'thread.maintenance'
+const CHAT_STREAM_EVENTS = [
+	...STORE_EVENT_TYPES.chat,
+	...STORE_EVENT_TYPES.resourceAccessResource,
+] as const
 
 // cache TTL in milliseconds
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
@@ -444,6 +448,19 @@ class ChatStore {
 				? (message.data as Record<string, unknown>)
 				: {}
 
+		if (message.type === 'access.updated' || message.type === 'resource.access.updated') {
+			if (data.resource_type !== 'thread' || typeof data.resource_id !== 'string') return
+			const resourceId = data.resource_id
+			void this.threadCache.getThread(resourceId).then((thread) => {
+				if (!thread) {
+					this.threadCache.invalidate(resourceId)
+					this.removeRecentThread(resourceId)
+					if (this.activeThread?.id === resourceId) this.activeThread = null
+				}
+			})
+			return
+		}
+
 		if (message.type === 'thread.created') {
 			const thread = data as unknown as Thread
 			if (!thread?.id || thread.is_temporary) return
@@ -477,6 +494,11 @@ class ChatStore {
 			if (typeof data.current_message_id === 'string')
 				patch.current_message_id = data.current_message_id
 			if (typeof data.owner_id === 'string') patch.owner_id = data.owner_id
+			if (Array.isArray(data.project_ids)) {
+				patch.project_ids = data.project_ids.filter(
+					(projectId): projectId is string => typeof projectId === 'string'
+				)
+			}
 			if (Array.isArray(data.projects)) patch.projects = data.projects as Thread['projects']
 
 			// merge into cache
@@ -487,6 +509,7 @@ class ChatStore {
 				this.#clearMetadataGeneratingIfReady(updated)
 			} else {
 				this.threadCache.invalidate(threadId)
+				void this.threadCache.getThread(threadId)
 			}
 
 			this.updateRecentThread(threadId, (t) => {
@@ -598,10 +621,7 @@ class ChatStore {
 
 	init = (): void => {
 		if (!this.#unsubscribe) {
-			this.#unsubscribe = subscribeToStoreEvents(
-				STORE_EVENT_TYPES.chat,
-				this.#handleStreamEvent
-			)
+			this.#unsubscribe = subscribeToStoreEvents(CHAT_STREAM_EVENTS, this.#handleStreamEvent)
 		}
 	}
 

@@ -15,6 +15,8 @@ function resourceTypeForSearchResult(type: SearchResult['type']): ResourceItem['
 			return 'file'
 		case 'project':
 			return 'project'
+		case 'file':
+			return 'file'
 	}
 }
 
@@ -32,6 +34,8 @@ function hrefForSearchResult(result: SearchResult): string {
 			return '#'
 		case 'project':
 			return `/projects/${result.id}`
+		case 'file':
+			return '#'
 	}
 }
 

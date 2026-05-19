@@ -15,11 +15,7 @@
 	import { downloadFile, fetchAuthenticatedBlob, files } from '$lib/stores/files.svelte'
 	import type { FileDetailsPayload, ResourceAccessPayload } from '$lib/stores/modals.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
-	import {
-		canDeleteAccessLevel,
-		canShareAccessLevel,
-		resourceAccess,
-	} from '$lib/stores/resourceAccess.svelte'
+	import { canDeleteAccessLevel, resourceAccess } from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { describeFileType, formatFileSize } from '$lib/utils/fileTypes'
 	import { byAuthor, metadataLine } from '$lib/utils/resourceAuthors'
@@ -36,7 +32,6 @@
 	const fileAccessLevel = $derived(
 		file ? resourceAccess.level('file', file.id, file.owner_id) : null
 	)
-	const canShareFile = $derived(canShareAccessLevel(fileAccessLevel))
 	const canDeleteFile = $derived(canDeleteAccessLevel(fileAccessLevel))
 
 	// fetch the file into cache if not already present (e.g. after page refresh)
@@ -47,7 +42,8 @@
 	})
 
 	$effect(() => {
-		if (open && file) void resourceAccess.ensure('file', file.id, file.owner_id)
+		const accessKey = open && file ? `${file.id}:${resourceAccess.version}` : ''
+		if (open && file && accessKey) void resourceAccess.ensure('file', file.id, file.owner_id)
 	})
 
 	const fileAuthorLabel = $derived(session.authorLabel(file?.owner_id))
@@ -160,7 +156,7 @@
 	}
 
 	function handleShare(): void {
-		if (!file || !canShareFile) return
+		if (!file) return
 		const accessPayload = {
 			resourceType: 'file' as const,
 			resourceId: file.id,
@@ -273,7 +269,7 @@
 							>downloading</ShimmerText
 						>{:else}download{/if}
 				</button>
-				{#if canShareFile}
+				{#if file}
 					<button
 						class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
 						onclick={handleShare}

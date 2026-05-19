@@ -11,11 +11,7 @@
 	} from '$lib/resources/resourceVisuals'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { projects, type Project } from '$lib/stores/projects.svelte'
-	import {
-		canEditAccessLevel,
-		canShareAccessLevel,
-		resourceAccess,
-	} from '$lib/stores/resourceAccess.svelte'
+	import { canEditAccessLevel, resourceAccess } from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { metadataLine } from '$lib/utils/resourceAuthors'
 
@@ -45,7 +41,6 @@
 		project ? resourceAccess.level('project', project.id, project.owner_id) : null
 	)
 	const canEditProject = $derived(canEditAccessLevel(projectAccessLevel))
-	const canShareProject = $derived(canShareAccessLevel(projectAccessLevel))
 	const authorLabel = $derived(project ? session.authorLabel(project.owner_id) : null)
 	const previewDescription = $derived(metadataLine(authorLabel, description.trim() || 'project'))
 	const resourceCounts = $derived(project ? projects.resourceCounts(project.id) : null)
@@ -86,11 +81,12 @@
 	])
 
 	$effect(() => {
+		const accessKey = open && project ? `${project.id}:${resourceAccess.version}` : ''
 		if (!open || !project) return
 		if (open && project.owner_id !== session.currentUserId) {
 			void session.ensureUsers([project.owner_id])
 		}
-		void resourceAccess.ensure('project', project.id, project.owner_id)
+		if (accessKey) void resourceAccess.ensure('project', project.id, project.owner_id)
 		void projects.loadResourceCounts(project.id)
 	})
 
@@ -121,7 +117,7 @@
 
 	function shareProject(): void {
 		if (!project) return
-		if (saving || !canShareProject) return
+		if (saving) return
 		onClose()
 		modals.open('resource-access', {
 			resourceType: 'project',
@@ -226,7 +222,7 @@
 				</div>
 			</section>
 			<div class="flex items-center gap-2 pt-1 max-[520px]:flex-wrap">
-				{#if canShareProject}
+				{#if project}
 					<button
 						type="button"
 						class="{actionButtonClass} border-foreground/12 text-foreground/80 hover:bg-foreground/6 border bg-transparent"

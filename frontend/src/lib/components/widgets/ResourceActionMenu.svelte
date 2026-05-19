@@ -10,8 +10,8 @@
 	import {
 		canDeleteAccessLevel,
 		canEditAccessLevel,
-		canShareAccessLevel,
 		readAccessLevel,
+		resourceAccess,
 	} from '$lib/stores/resourceAccess.svelte'
 	import type { ResourceProjectOption } from './ResourceProjectsMenu.svelte'
 	import ResourceProjectsMenu from './ResourceProjectsMenu.svelte'
@@ -44,11 +44,14 @@
 	let menuOpen = $state(false)
 	let menuButtonEl = $state<HTMLButtonElement | null>(null)
 
+	const ownerId = $derived(
+		typeof resource.meta?.owner_id === 'string' ? resource.meta.owner_id : null
+	)
 	const accessLevel = $derived(
-		readAccessLevel(resource.meta?.access_level) ?? (resource.meta?.shared ? null : 'admin')
+		resourceAccess.level(resource.type, resource.id, ownerId) ??
+			readAccessLevel(resource.meta?.access_level)
 	)
 	const canEdit = $derived(canEditAccessLevel(accessLevel))
-	const canShare = $derived(canShareAccessLevel(accessLevel))
 	const canDelete = $derived(canDeleteAccessLevel(accessLevel))
 	const canManageProjects = $derived(Boolean(onProjectToggle && canEdit))
 	const projectVisual = resourceVisual('project')
@@ -57,7 +60,7 @@
 	const hasActions = $derived(
 		Boolean(
 			(onProperties && canEdit) ||
-			(onShare && canShare) ||
+			onShare ||
 			(onDelete && canDelete) ||
 			(onRemoveFromProject && canEdit) ||
 			canManageProjects
@@ -110,7 +113,7 @@
 				properties
 			</MenuItem>
 		{/if}
-		{#if onShare && canShare}
+		{#if onShare}
 			<MenuItem onclick={() => runAction(onShare)}>
 				{#snippet icon()}<Share class="size-full" />{/snippet}
 				share

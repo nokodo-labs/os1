@@ -7,11 +7,7 @@
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 	import { resourceAccentStyle, resourceVisual } from '$lib/resources/resourceVisuals'
 	import type { Thread } from '$lib/stores/chat.svelte'
-	import {
-		canEditAccessLevel,
-		canShareAccessLevel,
-		resourceAccess,
-	} from '$lib/stores/resourceAccess.svelte'
+	import { canEditAccessLevel, resourceAccess } from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { byAuthor, metadataLine } from '$lib/utils/resourceAuthors'
 
@@ -44,7 +40,6 @@
 		thread ? resourceAccess.level('thread', thread.id, thread.owner_id) : null
 	)
 	const canEditThread = $derived(canEditAccessLevel(threadAccessLevel))
-	const canShareThread = $derived(canShareAccessLevel(threadAccessLevel))
 	const authorLabel = $derived(session.authorLabel(thread?.owner_id))
 	const previewSubtitle = $derived(metadataLine(byAuthor(authorLabel), tagPreview))
 	const chatVisual = resourceVisual('thread')
@@ -52,10 +47,12 @@
 	const chatAccentStyle = resourceAccentStyle('thread')
 
 	$effect(() => {
+		const accessKey = open && thread ? `${thread.id}:${resourceAccess.version}` : ''
 		if (open && thread?.owner_id && thread.owner_id !== session.currentUserId) {
 			void session.ensureUsers([thread.owner_id])
 		}
-		if (open && thread) void resourceAccess.ensure('thread', thread.id, thread.owner_id)
+		if (open && thread && accessKey)
+			void resourceAccess.ensure('thread', thread.id, thread.owner_id)
 	})
 
 	function displayTitle(value: string): string {
@@ -141,7 +138,7 @@
 			{/if}
 
 			<div class="flex items-center gap-2 pt-1 max-[520px]:flex-wrap">
-				{#if canShareThread}
+				{#if thread}
 					<button
 						type="button"
 						class="{actionButtonClass} border-foreground/12 text-foreground/80 hover:bg-foreground/6 border bg-transparent"

@@ -274,7 +274,7 @@ or `custom`) and `URL` (full custom URL override). `cdn` uses
 
 | Variable                                         | Type            | Default        | Description                                                                               |
 | ------------------------------------------------ | --------------- | -------------- | ----------------------------------------------------------------------------------------- |
-| `NOKODO__ASSETS__VECTOR__COLLECTION_TEMPLATE`    | string          | `{model}_bm25` | Collection name template. `{model}` is replaced with the slugified embedding model name.  |
+| `NOKODO__ASSETS__VECTOR__COLLECTION_TEMPLATE`    | string          | `nokodo-ai__{model}_bm25` | Collection name template. `{model}` is replaced with the slugified embedding model name.  |
 | `NOKODO__ASSETS__VECTOR__SPARSE_VECTORS_ENABLED` | bool            | `true`         | Enable BM25 sparse vectors for hybrid search.                                             |
 | `NOKODO__ASSETS__VECTOR__FUSION_ALGORITHM`       | `rrf` \| `dbsf` | `rrf`          | Score fusion: `rrf` (reciprocal rank fusion) or `dbsf` (distribution-based score fusion). |
 | `NOKODO__ASSETS__VECTOR__NORMALIZE_SCORES`       | bool            | `true`         | Normalize fused scores to 0-1 range.                                                      |

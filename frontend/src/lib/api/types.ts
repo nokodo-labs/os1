@@ -2722,6 +2722,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/files/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Files
+         * @description search files by description and filename autocomplete.
+         */
+        get: operations["search_files_v1_files_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/files/revectorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revectorize Files
+         * @description vectorize all described files into qdrant. admin only.
+         */
+        post: operations["revectorize_files_v1_files_revectorize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/files/{file_id}": {
         parameters: {
             query?: never;
@@ -6091,11 +6131,10 @@ export interface components {
             filename?: string | null;
             /** Mime Type */
             mime_type?: string | null;
-            /**
-             * Project Ids
-             * @default []
-             */
-            project_ids: string[];
+            /** Description */
+            description?: string | null;
+            /** Project Ids */
+            project_ids?: string[];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -6189,11 +6228,10 @@ export interface components {
             filename?: string | null;
             /** Mime Type */
             mime_type?: string | null;
-            /**
-             * Project Ids
-             * @default []
-             */
-            project_ids: string[];
+            /** Description */
+            description?: string | null;
+            /** Project Ids */
+            project_ids?: string[];
             /** @default upload */
             source: components["schemas"]["FileSource"];
             /** Storage Backend */
@@ -6226,6 +6264,8 @@ export interface components {
             metadata_?: components["schemas"]["JSONObject-Input"];
             /** Filename */
             filename?: string | null;
+            /** Description */
+            description?: string | null;
             /** Project Ids */
             project_ids?: string[];
             /** Status */
@@ -9514,7 +9554,7 @@ export interface components {
          * SearchResultType
          * @enum {string}
          */
-        SearchResultType: "thread" | "reminder" | "calendar_event" | "note" | "memory" | "project";
+        SearchResultType: "thread" | "reminder" | "calendar_event" | "note" | "memory" | "project" | "file";
         /**
          * SearxngSettings
          * @description searxng-specific settings for web search.
@@ -11196,7 +11236,7 @@ export interface components {
             /**
              * Collection Template
              * @description collection name template. '{model}' is replaced with the slugified embedding model name at runtime
-             * @default {model}_bm25
+             * @default nokodo-ai__{model}_bm25
              */
             collection_template: string;
             /**
@@ -28822,6 +28862,197 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FileCounts"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    search_files_v1_files_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+                cursor?: string | null;
+                mode?: components["schemas"]["SearchMode"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    revectorize_files_v1_files_revectorize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
                 };
             };
             /** @description bad request */

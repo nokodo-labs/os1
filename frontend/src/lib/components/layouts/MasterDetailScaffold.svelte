@@ -76,11 +76,11 @@
 
 <!-- content area: scrollbar at edge, padding inside content -->
 <div
-	class="absolute inset-0 overflow-y-auto"
+	class="absolute inset-0 box-border flex min-h-0 flex-col overflow-y-auto"
 	style="padding-top: calc(var(--chrome-island-offset, 0px) + var(--spacing-island-content)); view-transition-name: master-detail-content;"
 >
 	<div
-		class="flex h-full min-h-full min-w-0 flex-col pb-10"
+		class="flex min-h-0 min-w-0 flex-1 flex-col pb-10"
 		style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 	>
 		{@render children()}

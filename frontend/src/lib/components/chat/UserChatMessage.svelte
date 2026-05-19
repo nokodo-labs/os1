@@ -13,7 +13,10 @@
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
 	import Clock from '$lib/components/icons/Clock.svelte'
+	import ArrowUpCircle from '$lib/components/icons/ArrowUpCircle.svelte'
+	import FloppyDisk from '$lib/components/icons/FloppyDisk.svelte'
 	import Pencil from '$lib/components/icons/Pencil.svelte'
+	import XMark from '$lib/components/icons/XMark.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import type { BubbleTailStyle } from '$lib/stores/preferences.svelte'
 	import type { Snippet } from 'svelte'
@@ -354,9 +357,10 @@
 									<button
 										onclick={saveEdit}
 										disabled={isSaving || !editContent.trim()}
-										class="border-foreground/20 bg-foreground/10 text-foreground/90 hover:bg-foreground/20 cursor-pointer rounded-3xl border px-3.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-40"
+										class="border-foreground/20 bg-foreground/10 text-foreground/90 hover:bg-foreground/20 inline-flex cursor-pointer items-center gap-1.5 rounded-3xl border px-3.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-40"
 									>
-										save
+										<FloppyDisk class="h-4 w-4" strokeWidth="2" />
+										<span>save</span>
 									</button>
 								{/if}
 							</div>
@@ -364,22 +368,24 @@
 								<button
 									onclick={cancelEditing}
 									disabled={isSaving}
-									class="text-foreground/70 hover:bg-foreground/10 hover:text-foreground cursor-pointer rounded-3xl px-3.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-50"
+									class="text-foreground/70 hover:bg-foreground/10 hover:text-foreground inline-flex cursor-pointer items-center gap-1.5 rounded-3xl px-3.5 py-1.5 transition disabled:cursor-not-allowed disabled:opacity-50"
 								>
-									cancel
+										<XMark class="h-4 w-4" />
+									<span>cancel</span>
 								</button>
 								{#if onEditSaveAsCopy}
 									<button
 										onclick={saveAsCopy}
 										disabled={isSaving || !editContent.trim()}
-										class="bg-foreground text-background hover:bg-foreground/90 cursor-pointer rounded-3xl px-3.5 py-1.5 font-semibold transition disabled:cursor-not-allowed disabled:opacity-40"
+										class="bg-foreground text-background hover:bg-foreground/90 inline-flex cursor-pointer items-center gap-1.5 rounded-3xl px-3.5 py-1.5 font-semibold transition disabled:cursor-not-allowed disabled:opacity-40"
 									>
+										<ArrowUpCircle class="h-4 w-4" strokeWidth="2" />
 										{#if isSaving}
 											<ShimmerText className="inline-block"
 												>saving</ShimmerText
 											>
 										{:else}
-											send
+											<span>send</span>
 										{/if}
 									</button>
 								{/if}

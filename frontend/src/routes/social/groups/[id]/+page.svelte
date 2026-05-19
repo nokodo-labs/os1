@@ -12,6 +12,7 @@
 	import UserGroup from '$lib/components/icons/UserGroup.svelte'
 	import GroupAddMemberModal from '$lib/components/modals/GroupAddMemberModal.svelte'
 	import GroupPropertiesModal from '$lib/components/modals/GroupPropertiesModal.svelte'
+	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { MenuItem, PopupMenu } from '$lib/components/primitives'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
@@ -144,9 +145,8 @@
 		style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 	>
 		{#if isLoading}
-			<div class="flex flex-col gap-4 py-6">
-				<div class="bg-foreground/5 h-8 w-48 animate-pulse rounded-full"></div>
-				<div class="bg-foreground/5 h-4 w-72 animate-pulse rounded-full"></div>
+			<div class="flex min-h-[45vh] items-center justify-center">
+				<NokodoLoader className="opacity-70" expanded={false} />
 			</div>
 		{:else if !group}
 			<div class="bg-foreground/5 rounded-2xl p-6 text-center">
