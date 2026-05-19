@@ -19,6 +19,7 @@ class SearchResultType(StrEnum):
 	NOTE = "note"
 	MEMORY = "memory"
 	PROJECT = "project"
+	FILE = "file"
 
 
 class SearchMode(StrEnum):

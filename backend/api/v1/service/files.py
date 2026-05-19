@@ -11,12 +11,13 @@ programmatic flow that doesn't originate from an HTTP request.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import logging
 import os
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable
 
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import case, func, not_, or_, select
@@ -24,6 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import ColumnElement, Select
 
+from api.database import build_cursor_page, decode_cursor
+from api.database.main import session_scope
 from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
@@ -39,25 +42,45 @@ from api.schemas.file import (
 	FileListFilters,
 	FileUpdate,
 )
+from api.schemas.search import (
+	CursorPage,
+	SearchMode,
+	SearchParams,
+	SearchResultItem,
+	SearchResultType,
+)
 from api.settings import settings
 from api.storage import get_storage_backend
 from api.storage.base import MimeType
 from api.v1.service import events as event_service
+from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	fetch_acl_metadata,
+	fetch_bulk_acl_metadata,
 	invalidate_accessible_users_for_resource,
 	list_accessible_user_ids,
 	require_permission,
 	require_project_access,
 	require_resource_access,
 	resource_access_predicate,
+	vector_acl_filter,
 )
+from api.v1.service.embeddings import embed_text, embed_texts
 from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.projects import invalidate_project_payload_caches, load_projects
 from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
 	invalidate_resource_payload_cache,
 )
+from api.v1.service.vectorize import (
+	VectorSpec,
+	build_chunk,
+	remove_vectorized_resource,
+	vectorize_resource,
+)
+from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -146,13 +169,21 @@ async def _emit_file_event(
 	file_id: TypeID,
 	user_id: TypeID,
 	filename: str | None = None,
+	project_ids: list[TypeID] | None = None,
+	affected_project_ids: set[TypeID] | None = None,
 	origin_session_id: str | None = None,
 	recipient_ids: list[TypeID] | None = None,
 ) -> None:
 	"""persist and fanout a file lifecycle event."""
-	data: dict[str, str | None] = {"id": str(file_id)}
+	data: dict[str, object] = {"id": str(file_id)}
 	if filename is not None:
 		data["filename"] = filename
+	if project_ids is not None:
+		data["project_ids"] = [str(project_id) for project_id in project_ids]
+	if affected_project_ids:
+		data["affected_project_ids"] = [
+			str(project_id) for project_id in affected_project_ids
+		]
 	event = Event(
 		scope=EventScope.USER,
 		scope_id=user_id,
@@ -244,9 +275,11 @@ async def store_file(
 			file_id=file_id,
 			user_id=owner_id,
 			filename=filename,
+			project_ids=project_ids or [],
 			origin_session_id=origin_session_id,
 		)
 	await invalidate_project_payload_caches(set(project_ids or []))
+	await _replace_file_vectors(file, session)
 
 	return file
 
@@ -382,9 +415,11 @@ async def create_file(
 		file_id=file.id,
 		user_id=principal.user_id,
 		filename=file.filename,
+		project_ids=file_in.project_ids,
 		origin_session_id=origin_session_id,
 	)
 	await invalidate_project_payload_caches(set(file_in.project_ids))
+	await _replace_file_vectors(file, session)
 	return file
 
 
@@ -714,6 +749,8 @@ async def update_file(
 		file_id=file_id,
 		user_id=principal.user_id,
 		filename=file.filename,
+		project_ids=[project.id for project in file.projects],
+		affected_project_ids=changed_project_ids,
 		origin_session_id=origin_session_id,
 	)
 	await invalidate_resource_payload_cache(ResourceType.FILE, file_id)
@@ -722,6 +759,8 @@ async def update_file(
 			ResourceType.FILE, file_id, session
 		)
 	await invalidate_project_payload_caches(changed_project_ids)
+	if await FILE_SPEC.should_revectorize(file, file_in, session):
+		await _replace_file_vectors(file, session)
 	return file
 
 
@@ -763,9 +802,280 @@ async def delete_file(
 		event_type=EventType.FILE_DELETED,
 		file_id=file_id,
 		user_id=principal.user_id,
+		project_ids=list(project_ids),
+		affected_project_ids=project_ids,
 		origin_session_id=origin_session_id,
 		recipient_ids=delete_recipients,
 	)
 	await invalidate_resource_payload_cache(ResourceType.FILE, file_id)
 	await invalidate_accessible_users_for_resource(ResourceType.FILE, file_id, session)
 	await invalidate_project_payload_caches(project_ids)
+	await remove_vectorized_resource(
+		FILE_SPEC,
+		resource_id=str(file_id),
+		session=session,
+	)
+
+
+def _file_searchable_text(file: File) -> str:
+	parts = [file.filename or ""]
+	if file.description:
+		parts.append(file.description)
+	return " ".join(part for part in parts if part).strip()
+
+
+def _file_metadata(file: File) -> JSONObject:
+	return {
+		"resource_type": "file",
+		"owner_id": str(file.owner_id),
+		"filename": file.filename or "",
+		"mime_type": file.mime_type or "",
+		"source": file.source.value,
+		"status": file.status.value,
+		"project_ids": [str(project_id) for project_id in file.project_ids],
+		"allowed_user_ids": [],
+		"allowed_group_ids": [],
+		"allowed_role_ids": [],
+	}
+
+
+async def _file_should_revectorize(
+	file: File,
+	file_in: FileUpdate,
+	session: AsyncSession,
+) -> bool:
+	fields = {"filename", "description", "project_ids", "status"}
+	update_data = file_in.model_dump(exclude_unset=True, mode="python")
+	return bool(fields & update_data.keys())
+
+
+FILE_SPEC: VectorSpec[File] = VectorSpec(
+	resource_type="file",
+	resource_id=lambda file: str(file.id),
+	dense_text=_file_searchable_text,
+	bm25_text=_file_searchable_text,
+	metadata=_file_metadata,
+	should_revectorize=_file_should_revectorize,
+	sort_key="updated_at",
+)
+
+
+async def _replace_file_vectors(file: File, session: AsyncSession) -> None:
+	await remove_vectorized_resource(
+		FILE_SPEC,
+		resource_id=str(file.id),
+		session=session,
+	)
+	if not _file_searchable_text(file):
+		return
+	acl_metadata = await fetch_acl_metadata(str(file.id), ResourceType.FILE, session)
+	await vectorize_resource(
+		spec=FILE_SPEC,
+		resource=file,
+		session=session,
+		extra_metadata=acl_metadata,
+	)
+
+
+async def vectorize_all_files(session: AsyncSession) -> int:
+	"""vectorize all searchable files in bulk. returns count."""
+	stmt = (
+		select(File)
+		.where(File.deleted_at.is_(None))
+		.options(selectinload(File.projects))
+	)
+	result = await session.execute(stmt)
+	valid: list[tuple[File, str]] = []
+	for file in result.scalars().all():
+		text = _file_searchable_text(file)
+		if text:
+			valid.append((file, text))
+	if not valid:
+		return 0
+	file_ids = [str(file.id) for file, _text in valid]
+	acl_by_id = await fetch_bulk_acl_metadata(file_ids, ResourceType.FILE, session)
+	embeddings = await embed_texts([text for _file, text in valid], session)
+	chunks = []
+	for (file, _text), embedding in zip(valid, embeddings):
+		await remove_vectorized_resource(
+			FILE_SPEC,
+			resource_id=str(file.id),
+			session=session,
+		)
+		chunks.append(
+			build_chunk(
+				FILE_SPEC,
+				file,
+				embedding,
+				extra_metadata=acl_by_id.get(str(file.id)),
+			)
+		)
+	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
+	return len(valid)
+
+
+async def _autocomplete_files(
+	q: str,
+	db: AsyncSession,
+	principal: Principal,
+	limit: int = 5,
+) -> list[SearchResultItem]:
+	pattern = contains_pattern(q)
+	score = func.greatest(
+		func.similarity(func.coalesce(File.filename, ""), q),
+		func.similarity(func.coalesce(File.description, ""), q),
+	)
+	stmt = (
+		select(File)
+		.where(
+			File.deleted_at.is_(None),
+			resource_access_predicate(principal, ResourceType.FILE),
+			or_(
+				score > 0.1,
+				File.filename.ilike(pattern, escape="\\"),
+				File.description.ilike(pattern, escape="\\"),
+			),
+		)
+		.order_by(score.desc(), File.updated_at.desc())
+		.limit(limit)
+		.options(selectinload(File.projects))
+	)
+	result = await db.execute(stmt)
+	return [
+		SearchResultItem(
+			type=SearchResultType.FILE,
+			id=TypeID(file.id),
+			title=file.filename or "file",
+			preview=file.description[:100] if file.description else None,
+			metadata=_file_metadata(file),
+			created_at=file.created_at,
+			updated_at=file.updated_at,
+		)
+		for file in result.scalars().all()
+	]
+
+
+async def _hybrid_search_files(
+	query_text: str,
+	db: AsyncSession,
+	principal: Principal,
+	limit: int = 10,
+	search_params: SearchParams | None = None,
+	query_embedding: list[float] | None = None,
+) -> list[SearchResultItem]:
+	params = search_params or SearchParams()
+	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
+	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
+	query_emb = (
+		query_embedding
+		if query_embedding is not None
+		else (await embed_text(text=query_text, session=db) if need_dense else None)
+	)
+	text_query = query_text if need_sparse else None
+	results = await vectorstore_service.search(
+		session=db,
+		query=query_emb,
+		text_query=text_query,
+		limit=limit,
+		query_filter=vector_acl_filter(ResourceType.FILE, principal),
+		normalize=params.normalize,
+	)
+	if not results:
+		return []
+	resource_ids = [str(result.metadata["resource_id"]) for result in results]
+	stmt = (
+		select(File)
+		.where(
+			File.id.in_(resource_ids),
+			File.deleted_at.is_(None),
+			resource_access_predicate(principal, ResourceType.FILE),
+		)
+		.options(selectinload(File.projects))
+	)
+	db_result = await db.execute(stmt)
+	by_id = {str(file.id): file for file in db_result.scalars().all()}
+	score_by_id = {
+		str(result.metadata["resource_id"]): result.score for result in results
+	}
+	items: list[SearchResultItem] = []
+	for result in results:
+		resource_id = str(result.metadata["resource_id"])
+		file = by_id.get(resource_id)
+		if file is None:
+			continue
+		items.append(
+			SearchResultItem(
+				type=SearchResultType.FILE,
+				id=TypeID(file.id),
+				title=file.filename or "file",
+				preview=file.description[:100] if file.description else None,
+				score=score_by_id.get(resource_id),
+				metadata=_file_metadata(file),
+				created_at=file.created_at,
+				updated_at=file.updated_at,
+			)
+		)
+	return items
+
+
+async def search_files(
+	query_text: str,
+	db: AsyncSession,
+	principal: Principal,
+	limit: int = 10,
+	cursor: str | None = None,
+	search_params: SearchParams | None = None,
+	query_embedding: list[float] | None = None,
+) -> CursorPage[SearchResultItem]:
+	params = search_params or SearchParams()
+	coros: list[Awaitable[list[SearchResultItem]]] = []
+	should_run_autocomplete = params.mode in (
+		SearchMode.AUTOCOMPLETE,
+		SearchMode.FULL,
+	)
+	should_run_hybrid = params.mode in (
+		SearchMode.HYBRID,
+		SearchMode.DENSE,
+		SearchMode.SPARSE,
+		SearchMode.FULL,
+	)
+
+	async def run_hybrid() -> list[SearchResultItem]:
+		async with session_scope(None) as search_session:
+			return await _hybrid_search_files(
+				query_text,
+				search_session,
+				principal=principal,
+				limit=limit + 1,
+				search_params=params,
+				query_embedding=query_embedding,
+			)
+
+	async def run_autocomplete() -> list[SearchResultItem]:
+		async with session_scope(None) as search_session:
+			return await _autocomplete_files(
+				query_text,
+				search_session,
+				principal=principal,
+				limit=limit + 1,
+			)
+
+	if should_run_hybrid:
+		coros.append(run_hybrid())
+	if should_run_autocomplete:
+		coros.append(run_autocomplete())
+	results = await asyncio.gather(*coros, return_exceptions=True)
+	items = vectorstore_service.merge_deduplicate(
+		results,
+		limit + 1,
+		resource_name="files",
+	)
+	if cursor:
+		timestamp, cursor_id = decode_cursor(cursor)
+		items = [
+			item
+			for item in items
+			if (item.updated_at, str(item.id)) < (timestamp, cursor_id)
+		]
+	items.sort(key=lambda item: (item.updated_at, str(item.id)), reverse=True)
+	return build_cursor_page(items, limit, sort_key=FILE_SPEC.sort_key)

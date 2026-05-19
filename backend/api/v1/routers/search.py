@@ -30,6 +30,7 @@ _GLOBAL_TYPES = [
 	SearchResultType.REMINDER,
 	SearchResultType.CALENDAR_EVENT,
 	SearchResultType.PROJECT,
+	SearchResultType.FILE,
 ]
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, String, Text
+from sqlalchemy import BigInteger, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base, StringEnum
@@ -52,6 +52,20 @@ class File(
 
 	__tablename__ = "files"
 	__typeid_prefix__ = "file"
+	__table_args__ = (
+		Index(
+			"idx_files_filename_trgm",
+			"filename",
+			postgresql_using="gin",
+			postgresql_ops={"filename": "gin_trgm_ops"},
+		),
+		Index(
+			"idx_files_description_trgm",
+			"description",
+			postgresql_using="gin",
+			postgresql_ops={"description": "gin_trgm_ops"},
+		),
+	)
 
 	owner_id: Mapped[str] = mapped_column(
 		String(TYPEID_LENGTH),

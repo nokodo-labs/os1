@@ -48,7 +48,8 @@ class FileBase(MetadataModel):
 
 	filename: str | None = None
 	mime_type: str | None = None
-	project_ids: list[TypeID] = []
+	description: str | None = None
+	project_ids: list[TypeID] = Field(default_factory=list)
 
 
 class FileCreate(FileBase):
@@ -65,6 +66,7 @@ class FileUpdate(MetadataUpdateModel):
 	"""payload to update a file record."""
 
 	filename: str | None | MissingType = MISSING
+	description: str | None | MissingType = MISSING
 	project_ids: list[TypeID] | MissingType = MISSING
 	status: FileStatus | MissingType = MISSING
 

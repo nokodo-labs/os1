@@ -139,6 +139,18 @@ class CalendarEvent(
 			postgresql_using="gin",
 			postgresql_ops={"description": "gin_trgm_ops"},
 		),
+		Index(
+			"idx_calendar_events_location_trgm",
+			"location",
+			postgresql_using="gin",
+			postgresql_ops={"location": "gin_trgm_ops"},
+		),
+		Index(
+			"idx_calendar_events_virtual_url_trgm",
+			"virtual_url",
+			postgresql_using="gin",
+			postgresql_ops={"virtual_url": "gin_trgm_ops"},
+		),
 	)
 
 	owner_id: Mapped[TypeID] = mapped_column(

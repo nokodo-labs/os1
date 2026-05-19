@@ -20,10 +20,12 @@ from api.schemas.file import (
 	FileSortBy,
 	FileUpdate,
 )
+from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
 from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import files as file_service
 from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authorization import require_admin
 from api.v1.service.events import SessionId
 from nokodo_ai.utils.typeid import TypeID
 
@@ -113,6 +115,37 @@ async def count_files(
 ) -> FileCounts:
 	"""count files accessible by the caller."""
 	return await file_service.count_files(db, principal=principal, filters=filters)
+
+
+@router.get("/search", response_model=CursorPage[SearchResultItem])
+async def search_files(
+	q: str = Query(min_length=1, max_length=500),
+	limit: int = Query(default=10, ge=1, le=50),
+	cursor: str | None = Query(default=None),
+	mode: SearchMode = Query(default=SearchMode.FULL),
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> CursorPage[SearchResultItem]:
+	"""search files by description and filename autocomplete."""
+	return await file_service.search_files(
+		q,
+		db,
+		principal=principal,
+		limit=limit,
+		cursor=cursor,
+		search_params=SearchParams(mode=mode),
+	)
+
+
+@router.post("/revectorize")
+async def revectorize_files(
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+	"""vectorize all described files into qdrant. admin only."""
+	require_admin(principal)
+	count = await file_service.vectorize_all_files(db)
+	return {"vectorized": count}
 
 
 @router.get("/{file_id}", response_model=FileSchema)
