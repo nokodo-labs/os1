@@ -29,13 +29,14 @@ from api.schemas.thread import ThreadUpdate
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	fetch_bulk_acl_metadata,
 	thread_access_predicate,
+	vector_acl_filter,
 )
 from api.v1.service.embeddings import embed_text, embed_texts
 from api.v1.service.vectorize import (
 	VectorSpec,
 	build_chunk,
-	fetch_bulk_acl_metadata,
 	remove_vectorized_resource,
 )
 from nokodo_ai.types.json import JSONObject
@@ -90,7 +91,7 @@ async def _thread_should_revectorize(
 	session: AsyncSession,
 ) -> bool:
 	# title/tags are metadata-only; summary change is detected via metadata_ key
-	_fields = {"title", "tags", "metadata_"}
+	_fields = {"title", "tags", "metadata_", "owner_id"}
 	update_data = thread_in.model_dump(exclude_unset=True, mode="python")
 	return bool(_fields & update_data.keys())
 
@@ -195,17 +196,7 @@ async def _hybrid_search_threads(
 		else (await embed_text(text=query_text, session=db) if need_dense else None)
 	)
 	text_query = query_text if need_sparse else None
-	# acl-based qdrant filter: owner or explicit grant - solves broad-surface problem
-	# principals with default access bypass should-conditions (role or global defaults)
-	query_filter = vectorstore_service.acl_filter(
-		"thread",
-		is_admin=(
-			principal.is_admin or principal.has_default_access(ResourceType.THREAD)
-		),
-		user_id=str(principal.user.id),
-		group_ids=principal.group_ids,
-		role_ids=principal.role_ids,
-	)
+	query_filter = vector_acl_filter(ResourceType.THREAD, principal)
 	results = await vectorstore_service.search(
 		session=db,
 		query=query_emb,

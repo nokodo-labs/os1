@@ -14,7 +14,11 @@ from api.models.event_types import EventType
 from api.permissions import ResourceType
 from api.schemas.calendar import CalendarCreate, CalendarListFilters, CalendarUpdate
 from api.v1.service.auth import Principal
-from api.v1.service.authorization import require_permission, resource_access_predicate
+from api.v1.service.authorization import (
+	invalidate_accessible_users_for_resource,
+	require_permission,
+	resource_access_predicate,
+)
 from api.v1.service.calendar.cache import invalidate_calendar_scheduled_items
 from api.v1.service.calendar.common import (
 	CALENDAR_CREATE_PERMISSION,
@@ -187,8 +191,19 @@ async def update_calendar(
 		calendar=calendar,
 		event_type=EventType.CALENDAR_UPDATED,
 		origin_session_id=origin_session_id,
+		extra_data={
+			"affected_project_ids": [
+				str(project_id) for project_id in changed_project_ids
+			]
+		}
+		if changed_project_ids
+		else None,
 	)
 	await invalidate_calendar_scheduled_items(calendar.id)
+	if changed_project_ids:
+		await invalidate_accessible_users_for_resource(
+			ResourceType.CALENDAR, calendar_id, session
+		)
 	await invalidate_project_payload_caches(changed_project_ids)
 	return calendar
 
@@ -238,6 +253,9 @@ async def delete_calendar(
 		origin_session_id=origin_session_id,
 	)
 	await invalidate_calendar_scheduled_items(calendar.id)
+	await invalidate_accessible_users_for_resource(
+		ResourceType.CALENDAR, calendar_id, session
+	)
 	await invalidate_project_payload_caches(project_ids)
 	await session.delete(calendar)
 	await session.flush()

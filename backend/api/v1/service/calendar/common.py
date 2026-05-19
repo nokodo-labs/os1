@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 
 from fastapi import HTTPException, status
@@ -30,11 +31,17 @@ from nokodo_ai.utils.typeid import TypeID
 CALENDAR_CREATE_PERMISSION = ActionPermission.CALENDAR_CREATE.value
 
 
-def _calendar_payload(calendar: Calendar) -> dict[str, object]:
-	return CalendarOut.model_validate(calendar).model_dump(
+def _calendar_payload(
+	calendar: Calendar,
+	extra_data: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+	data = CalendarOut.model_validate(calendar).model_dump(
 		mode="json",
 		by_alias=True,
 	)
+	if extra_data:
+		data.update(extra_data)
+	return data
 
 
 def _event_payload(calendar_event: CalendarEvent) -> dict[str, object]:
@@ -78,12 +85,13 @@ async def publish_calendar(
 	calendar: Calendar,
 	event_type: EventType,
 	origin_session_id: str | None,
+	extra_data: Mapping[str, object] | None = None,
 ) -> None:
 	event = Event(
 		scope=EventScope.USER,
 		scope_id=calendar.owner_id,
 		type=event_type,
-		data=_calendar_payload(calendar),
+		data=_calendar_payload(calendar, extra_data=extra_data),
 		user_id=calendar.owner_id,
 		calendar_id=calendar.id,
 	)

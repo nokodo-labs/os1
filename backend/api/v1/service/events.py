@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Coroutine, Mapping
+from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -232,6 +232,20 @@ def _build_event_data(
 	}
 
 
+def _affected_project_ids(event: Event) -> list[TypeID]:
+	if not event.data:
+		return []
+	value = event.data.get("affected_project_ids")
+	if not isinstance(value, Iterable) or isinstance(value, (str, bytes)):
+		return []
+	project_ids: list[TypeID] = []
+	for raw_project_id in value:
+		if raw_project_id is None:
+			continue
+		project_ids.append(TypeID(str(raw_project_id)))
+	return _unique_recipient_ids(project_ids)
+
+
 async def _resolve_event_recipient_ids(
 	event: Event,
 ) -> list[TypeID] | None:
@@ -240,6 +254,8 @@ async def _resolve_event_recipient_ids(
 	uses a fresh read-only session because the caller's session may already
 	be closed by the time recipients are needed (persist_and_fanout_event commits
 	before resolving so newly-created rows are visible to the lookup).
+	resource events carrying affected_project_ids are also routed to users who
+	can read those projects, so moved resources reach old and new project viewers.
 	returns None when the event has no resource route; scope routing handles
 	direct-user or system broadcast delivery.
 	"""
@@ -248,7 +264,46 @@ async def _resolve_event_recipient_ids(
 		return None
 	resource_type, resource_id = routing
 	async with async_session_local() as session:
-		return await list_accessible_user_ids(resource_type, resource_id, session)
+		recipients = await list_accessible_user_ids(
+			resource_type,
+			resource_id,
+			session,
+		)
+		project_ids = _affected_project_ids(event)
+		if project_ids:
+			recipients.extend(
+				await _resolve_project_recipient_ids(project_ids, session)
+			)
+		return _unique_recipient_ids(recipients)
+
+
+def _unique_recipient_ids(values: Iterable[TypeID]) -> list[TypeID]:
+	result: list[TypeID] = []
+	seen: set[str] = set()
+	for value in values:
+		key = str(value)
+		if key in seen:
+			continue
+		seen.add(key)
+		result.append(TypeID(key))
+	return result
+
+
+async def _resolve_project_recipient_ids(
+	project_ids: Iterable[TypeID],
+	session: AsyncSession,
+) -> list[TypeID]:
+	"""return users who can currently read any of the given projects."""
+	recipients: list[TypeID] = []
+	for project_id in project_ids:
+		recipients.extend(
+			await list_accessible_user_ids(
+				ResourceType.PROJECT,
+				project_id,
+				session,
+			)
+		)
+	return _unique_recipient_ids(recipients)
 
 
 async def _send_live_payload_locally(

@@ -30,10 +30,7 @@ from api.schemas.search import (
 from api.v1.service import events as event_service
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
-from api.v1.service.authorization import (
-	list_accessible_user_ids,
-	require_permission,
-)
+from api.v1.service.authorization import list_accessible_user_ids, require_permission
 from api.v1.service.chat.models import (
 	resolve_task_chat_model,
 	run_chat_model_json_schema,

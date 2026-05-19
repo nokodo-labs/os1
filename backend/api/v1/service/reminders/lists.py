@@ -23,6 +23,7 @@ from api.schemas.reminder import (
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	invalidate_accessible_users_for_resource,
 	require_permission,
 	require_project_access,
 	require_resource_access,
@@ -362,6 +363,10 @@ async def update_reminder_list(
 	event_data = data.model_dump(mode="json", exclude_unset=True)
 	event_data["id"] = str(reminder_list.id)
 	event_data["updated_at"] = reminder_list.updated_at.isoformat()
+	if changed_project_ids:
+		event_data["affected_project_ids"] = [
+			str(project_id) for project_id in changed_project_ids
+		]
 	event = Event(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
@@ -374,6 +379,10 @@ async def update_reminder_list(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	await invalidate_reminder_list_scheduled_items(reminder_list.id)
+	if changed_project_ids:
+		await invalidate_accessible_users_for_resource(
+			ResourceType.REMINDER_LIST, list_id, session
+		)
 	await invalidate_project_payload_caches(changed_project_ids)
 
 	_list_search_fields = {"name", "description"}
@@ -414,7 +423,11 @@ async def delete_reminder_list(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.REMINDER_LIST_DELETED,
-		data={"id": list_id_str},
+		data={
+			"id": list_id_str,
+			"project_ids": [str(project_id) for project_id in project_ids],
+			"affected_project_ids": [str(project_id) for project_id in project_ids],
+		},
 		user_id=principal.user_id,
 		reminder_list_id=reminder_list.id,
 	)
@@ -422,6 +435,9 @@ async def delete_reminder_list(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	await invalidate_reminder_list_scheduled_items(reminder_list.id)
+	await invalidate_accessible_users_for_resource(
+		ResourceType.REMINDER_LIST, list_id, session
+	)
 	await invalidate_project_payload_caches(project_ids)
 	await session.delete(reminder_list)
 	await session.flush()

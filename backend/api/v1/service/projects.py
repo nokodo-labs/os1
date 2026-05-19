@@ -43,6 +43,7 @@ from api.schemas.search import (
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	invalidate_accessible_users_for_resource,
 	list_accessible_user_ids,
 	require_permission,
 	require_resource_access,
@@ -613,6 +614,9 @@ async def delete_project(
 		ResourceType.PROJECT,
 		project_id,
 		session,
+	)
+	await invalidate_accessible_users_for_resource(
+		ResourceType.PROJECT, project_id, session
 	)
 	await session.delete(project)
 	event = Event(

@@ -26,6 +26,7 @@ design rules:
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -140,6 +141,14 @@ def higher_access(
 	if b is None:
 		return a
 	return a if _LEVEL_RANK[a] >= _LEVEL_RANK[b] else b
+
+
+def highest_access(levels: Iterable[AccessLevel | None]) -> AccessLevel | None:
+	"""return the highest access level in an iterable."""
+	result: AccessLevel | None = None
+	for level in levels:
+		result = higher_access(result, level)
+	return result
 
 
 # default resource access - typed model, one field per resource type

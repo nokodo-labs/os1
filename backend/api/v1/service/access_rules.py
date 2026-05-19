@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel, AccessRule
 from api.permissions import ResourceType
-from api.redis import cache
 from api.schemas.access_rule import (
 	AccessLevelResolution,
 	AccessRuleCreate,
@@ -18,12 +17,16 @@ from api.schemas.access_rule import (
 from api.v1.service.auth import Principal, load_principal_for_user
 from api.v1.service.authorization import (
 	RESOURCE_CONFIG,
+	get_effective_access_level,
+	invalidate_accessible_users_for_resource,
 	list_accessible_user_ids,
+	load_descendant_resource_ids,
 	require_resource_access,
-	resolve_effective_level,
 )
 from api.v1.service.events import fanout_live_payload
-from api.v1.service.vectorize import sync_resource_vector_acl
+from api.v1.service.vectorize import (
+	sync_resource_vector_acl,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -143,10 +146,11 @@ async def list_access_rules(
 
 	rules = await _list_rules_for_resource(resource_type, resource_id, session)
 
-	effective = resolve_effective_level(
+	effective = await get_effective_access_level(
+		session,
 		principal,
 		resource_type,
-		rules,
+		resource_id,
 		owner_id=owner_id,
 	)
 	if effective != AccessLevel.ADMIN:
@@ -182,11 +186,11 @@ async def get_access_level(
 	owner_id: TypeID | None = (
 		row[1] if config.owner_fk is not None and len(row) > 1 else None
 	)
-	rules = await _list_rules_for_resource(resource_type, resource_id, session)
-	effective = resolve_effective_level(
+	effective = await get_effective_access_level(
+		session,
 		principal,
 		resource_type,
-		rules,
+		resource_id,
 		owner_id=owner_id,
 	)
 	if effective is None:
@@ -206,11 +210,11 @@ async def resolve_access_levels(
 ) -> list[AccessLevelResolution]:
 	"""resolve explicit effective access levels for one resource."""
 	owner_id = await _get_resource_owner_id(resource_type, resource_id, session)
-	rules = await _list_rules_for_resource(resource_type, resource_id, session)
-	requester_level = resolve_effective_level(
+	requester_level = await get_effective_access_level(
+		session,
 		principal,
 		resource_type,
-		rules,
+		resource_id,
 		owner_id=owner_id,
 	)
 	if requester_level is None:
@@ -246,10 +250,11 @@ async def resolve_access_levels(
 			resource_type=resource_type,
 			resource_id=resource_id,
 			user_id=user_id,
-			level=resolve_effective_level(
+			level=await get_effective_access_level(
+				session,
 				target_principals[user_id],
 				resource_type,
-				rules,
+				resource_id,
 				owner_id=owner_id,
 			),
 		)
@@ -367,6 +372,7 @@ async def create_access_rule(
 	await _commit_rules_mutation(
 		resource_type, resource_id, session, previous_recipient_ids
 	)
+	await session.refresh(access_rule)
 	return access_rule
 
 
@@ -422,6 +428,7 @@ async def update_access_rule(
 	await _commit_rules_mutation(
 		resource_type, resource_id, session, previous_recipient_ids
 	)
+	await session.refresh(access_rule)
 	return access_rule
 
 
@@ -542,8 +549,8 @@ async def _commit_rules_mutation(
 			detail="invalid subject reference - user, group, or role not found",
 		)
 
-	await sync_resource_vector_acl(resource_id, resource_type, session)
-	await cache.invalidate_tag(f"resource:{resource_type.value}:{resource_id}")
+	await sync_resource_vector_acl(str(resource_id), resource_type, session)
+	await invalidate_accessible_users_for_resource(resource_type, resource_id, session)
 	await _publish_access_updated(
 		resource_type, resource_id, session, previous_recipient_ids
 	)
@@ -559,6 +566,34 @@ async def _publish_access_updated(
 		resource_type, resource_id, session
 	)
 	recipient_ids = _unique_typeids([*previous_recipient_ids, *current_recipient_ids])
+	await _fanout_access_updated(resource_type, resource_id, recipient_ids)
+	descendants = await load_descendant_resource_ids(
+		resource_type,
+		resource_id,
+		session,
+	)
+	for descendant_type, descendant_ids in descendants.items():
+		for descendant_id in descendant_ids:
+			descendant_current_recipient_ids = await list_accessible_user_ids(
+				descendant_type,
+				descendant_id,
+				session,
+			)
+			descendant_recipient_ids = _unique_typeids(
+				[*previous_recipient_ids, *descendant_current_recipient_ids]
+			)
+			await _fanout_access_updated(
+				descendant_type,
+				descendant_id,
+				descendant_recipient_ids,
+			)
+
+
+async def _fanout_access_updated(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	recipient_ids: list[TypeID],
+) -> None:
 	if not recipient_ids:
 		return
 	await fanout_live_payload(

@@ -21,10 +21,7 @@ from api.schemas.message import MessageCreate, MessageUpdate
 from api.schemas.sorting import CommonSortBy
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
-from api.v1.service.authorization import (
-	require_thread_access,
-	thread_access_predicate,
-)
+from api.v1.service.authorization import require_thread_access, thread_access_predicate
 from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.resource_payload_cache import invalidate_resource_payload_cache
 from api.v1.service.threads.core import (

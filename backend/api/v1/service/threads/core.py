@@ -25,6 +25,7 @@ from api.v1.service import events as event_service
 from api.v1.service import projects as project_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	fetch_acl_metadata,
 	invalidate_accessible_users_for_resource,
 	list_accessible_user_ids,
 	require_permission,
@@ -39,8 +40,8 @@ from api.v1.service.resource_payload_cache import (
 from api.v1.service.threads.participants import ensure_participant
 from api.v1.service.threads.search import THREAD_SPEC
 from api.v1.service.vectorize import (
-	fetch_acl_metadata,
 	remove_vectorized_resource,
+	sync_resource_vector_acl,
 	vectorize_resource,
 )
 from nokodo_ai.utils.typeid import TypeID
@@ -388,6 +389,7 @@ async def update_thread(
 
 	project_ids = update_data.pop("project_ids", None)
 	old_project_ids = {project.id for project in thread.projects}
+	changed_project_ids: set[TypeID] = set()
 	for field, value in update_data.items():
 		setattr(thread, field, value)
 
@@ -398,6 +400,7 @@ async def update_thread(
 		)
 		thread.projects = projects
 		new_project_ids = {project.id for project in projects}
+		changed_project_ids = old_project_ids | new_project_ids
 
 	await session.flush()
 
@@ -415,6 +418,12 @@ async def update_thread(
 		event_data["updated_at"] = thread.updated_at.isoformat()
 		event_data["last_activity_at"] = thread.last_activity_at.isoformat()
 		if project_ids is not None:
+			event_data["project_ids"] = [
+				str(project_id) for project_id in new_project_ids or set()
+			]
+			event_data["affected_project_ids"] = [
+				str(project_id) for project_id in changed_project_ids
+			]
 			event_data["projects"] = [
 				{"id": str(p.id), "name": p.name} for p in thread.projects
 			]
@@ -432,7 +441,9 @@ async def update_thread(
 	await invalidate_resource_payload_cache(ResourceType.THREAD, thread_id)
 	if owner_changed:
 		# owner recipients changed.
-		await invalidate_accessible_users_for_resource(ResourceType.THREAD, thread_id)
+		await invalidate_accessible_users_for_resource(
+			ResourceType.THREAD, thread_id, session
+		)
 
 	# re-index if searchable fields changed
 	if await THREAD_SPEC.should_revectorize(thread, thread_in, session):
@@ -447,7 +458,11 @@ async def update_thread(
 		)
 
 	if new_project_ids is not None:
-		await _invalidate_project_payload_caches(old_project_ids | new_project_ids)
+		await invalidate_accessible_users_for_resource(
+			ResourceType.THREAD, thread_id, session
+		)
+		await sync_resource_vector_acl(str(thread_id), ResourceType.THREAD, session)
+		await _invalidate_project_payload_caches(changed_project_ids)
 
 	if (
 		owner_changed
@@ -502,6 +517,9 @@ async def delete_thread(
 			ResourceType.THREAD, thread_id, session
 		)
 
+	await invalidate_accessible_users_for_resource(
+		ResourceType.THREAD, thread_id, session
+	)
 	if hard_delete:
 		await session.delete(thread)
 	else:
@@ -513,7 +531,11 @@ async def delete_thread(
 		scope=EventScope.THREAD,
 		scope_id=str(thread_id),
 		type=EventType.THREAD_DELETED,
-		data={"id": str(thread_id)},
+		data={
+			"id": str(thread_id),
+			"project_ids": [str(project_id) for project_id in project_ids],
+			"affected_project_ids": [str(project_id) for project_id in project_ids],
+		},
 		user_id=owner_id,
 		thread_id=str(thread_id),
 	)

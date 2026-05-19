@@ -35,10 +35,7 @@ from api.redis import make_run_channel
 from api.schemas.agent import AgentConfig
 from api.schemas.runs import RunInput
 from api.v1.service.auth import Principal
-from api.v1.service.authorization import (
-	list_accessible_user_ids,
-	require_thread_access,
-)
+from api.v1.service.authorization import list_accessible_user_ids, require_thread_access
 from api.v1.service.chat.filters.steering import SteeringFilter
 from api.v1.service.chat.message_metadata import (
 	CLIENT_STEERING_ID_KEY,

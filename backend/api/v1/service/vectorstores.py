@@ -34,9 +34,6 @@ from nokodo_ai.vectorstores import Vectorstore
 
 logger = logging.getLogger(__name__)
 
-# fallback only; real template comes from settings.assets.vector.collection_template
-_DEFAULT_COLLECTION_TEMPLATE = "{model}_bm25"
-
 DEFAULT_INDEXES: Index = {
 	"resource_type": "keyword",
 	"resource_id": "keyword",
@@ -169,8 +166,9 @@ def _slugify_model(name: str) -> str:
 
 def collection_name(model_name: str) -> str:
 	"""build the default collection name for a given model."""
-	tmpl = settings.assets.vector.collection_template or _DEFAULT_COLLECTION_TEMPLATE
-	return tmpl.format(model=_slugify_model(model_name))
+	return settings.assets.vector.collection_template.format(
+		model=_slugify_model(model_name)
+	)
 
 
 def resource_filter(
@@ -204,9 +202,9 @@ def acl_filter(
 	"""build a principal-scoped filter for qdrant that enforces ACL at the vector layer.
 
 	for admins: returns a resource-type-only filter (sees everything).
-	for regular principals: adds should-conditions for owner + explicit grants:
+	for regular principals: adds should-conditions for owner + stored ACL principals:
 	- owner_id == me
-	- me in allowed_user_ids (direct user grant)
+	- me in allowed_user_ids
 	- any(group_ids) in allowed_group_ids
 	- any(role_ids) in allowed_role_ids
 	"""

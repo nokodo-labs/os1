@@ -169,6 +169,7 @@ async def _autocomplete_calendar_events(
 				CalendarEvent.title.ilike(pattern, escape="\\"),
 				CalendarEvent.description.ilike(pattern, escape="\\"),
 				CalendarEvent.location.ilike(pattern, escape="\\"),
+				CalendarEvent.virtual_url.ilike(pattern, escape="\\"),
 			),
 		)
 		.order_by(func.similarity(CalendarEvent.title, q).desc())

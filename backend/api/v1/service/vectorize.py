@@ -23,16 +23,22 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.access_rule import AccessRule
 from api.permissions import ResourceType
 from api.v1.service import vectorstores as vectorstore_service
-from api.v1.service.authorization import RESOURCE_CONFIG
+from api.v1.service.authorization import (
+	fetch_acl_metadata,
+	fetch_bulk_acl_metadata,
+	load_descendant_resource_ids,
+)
 from api.v1.service.embeddings import embed_text
 from nokodo_ai.adapters.base.vectorstores import Chunk
 from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.typeid import TypeID
+
+
+_VECTOR_ACL_UPDATE_CONCURRENCY = 32
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,63 +134,37 @@ async def vectorize_resource[T](
 
 # -- ACL sync ----------------------------------------------------------------
 # DB -> qdrant metadata sync for resource types that use per-chunk ACL fields.
-# lives here (resource encoding layer) rather than in vectorstores.py because
-# it operates on resource-level semantics (access rules) not storage primitives.
-
-
-def _empty_acl() -> dict[str, Any]:
-	return {
-		"allowed_user_ids": [],
-		"allowed_group_ids": [],
-		"allowed_role_ids": [],
-	}
-
-
-async def fetch_bulk_acl_metadata(
-	resource_ids: list[str],
-	resource_type: ResourceType,
-	session: AsyncSession,
-) -> dict[str, dict[str, Any]]:
-	"""fetch acl metadata for multiple resources in one db query.
-
-	returns resource_id -> {allowed_user_ids, allowed_group_ids, allowed_role_ids}.
-	resources with no rules get empty lists.
-	"""
-	if not resource_ids:
-		return {}
-	config = RESOURCE_CONFIG[resource_type]
-	stmt = select(AccessRule).where(config.rule_fk.in_(resource_ids))
-	result = await session.execute(stmt)
-	rules = result.scalars().all()
-
-	acl_data: dict[str, dict[str, Any]] = {rid: _empty_acl() for rid in resource_ids}
-	fk_attr = config.rule_fk.key
-	for r in rules:
-		rid = str(getattr(r, fk_attr))
-		if rid not in acl_data:
-			continue
-		if r.subject_user_id is not None:
-			acl_data[rid]["allowed_user_ids"].append(str(r.subject_user_id))
-		elif r.subject_group_id is not None:
-			acl_data[rid]["allowed_group_ids"].append(str(r.subject_group_id))
-		elif r.subject_role_id is not None:
-			acl_data[rid]["allowed_role_ids"].append(str(r.subject_role_id))
-		# public rules (no subject) are skipped - use a role with all members
-
-	return acl_data
-
-
-async def fetch_acl_metadata(
-	resource_id: str,
-	resource_type: ResourceType,
-	session: AsyncSession,
-) -> dict[str, Any]:
-	"""fetch acl metadata for a single resource."""
-	bulk = await fetch_bulk_acl_metadata([resource_id], resource_type, session)
-	return bulk.get(resource_id, _empty_acl())
+# ACL principal resolution lives in authorization.metadata; this layer only
+# patches vectorstore payloads.
 
 
 async def sync_resource_vector_acl(
+	resource_id: str,
+	resource_type: ResourceType,
+	session: AsyncSession,
+) -> None:
+	"""patch acl payload fields for a resource and all inheriting resources."""
+	resources_by_type: dict[ResourceType, set[str]] = {
+		resource_type: {resource_id},
+	}
+	descendants = await load_descendant_resource_ids(
+		resource_type,
+		TypeID(resource_id),
+		session,
+	)
+	for descendant_type, descendant_ids in descendants.items():
+		resources_by_type.setdefault(descendant_type, set()).update(
+			str(descendant_id) for descendant_id in descendant_ids
+		)
+	for affected_type, affected_ids in resources_by_type.items():
+		await _sync_resource_vector_acl_payloads(
+			list(affected_ids),
+			affected_type,
+			session,
+		)
+
+
+async def _sync_resource_vector_acl_payload(
 	resource_id: str,
 	resource_type: ResourceType,
 	session: AsyncSession,
@@ -195,16 +175,21 @@ async def sync_resource_vector_acl(
 	the latest acl fields. vectors and other metadata are untouched.
 	silent no-op when the resource has no chunks (never vectorized).
 	"""
-	payload = await fetch_acl_metadata(resource_id, resource_type, session)
+	payload: dict[str, object] = {
+		key: value
+		for key, value in (
+			await fetch_acl_metadata(resource_id, resource_type, session)
+		).items()
+	}
 	target = vectorstore_service.resource_filter(
-		str(resource_type), resource_id=resource_id
+		resource_type.value, resource_id=resource_id
 	)
 	coll = await vectorstore_service.get_collection(session)
 	vs = vectorstore_service.get_vectorstore(collection=coll)
 	await vs.update(target, payload=payload)
 
 
-async def sync_resources_vector_acl_bulk(
+async def _sync_resource_vector_acl_payloads(
 	resource_ids: list[str],
 	resource_type: ResourceType,
 	session: AsyncSession,
@@ -216,14 +201,24 @@ async def sync_resources_vector_acl_bulk(
 	"""
 	if not resource_ids:
 		return
-	acl_by_id = await fetch_bulk_acl_metadata(resource_ids, resource_type, session)
+	unique_resource_ids = list(dict.fromkeys(resource_ids))
+	acl_by_id = await fetch_bulk_acl_metadata(
+		unique_resource_ids,
+		resource_type,
+		session,
+	)
 	coll = await vectorstore_service.get_collection(session)
+	vs = vectorstore_service.get_vectorstore(collection=coll)
 
 	async def _sync_one(rid: str) -> None:
 		target = vectorstore_service.resource_filter(
-			str(resource_type), resource_id=rid
+			resource_type.value, resource_id=rid
 		)
-		vs = vectorstore_service.get_vectorstore(collection=coll)
-		await vs.update(target, payload=acl_by_id[rid])
+		payload: dict[str, object] = {
+			key: value for key, value in acl_by_id[rid].items()
+		}
+		await vs.update(target, payload=payload)
 
-	await asyncio.gather(*(_sync_one(rid) for rid in resource_ids))
+	for offset in range(0, len(unique_resource_ids), _VECTOR_ACL_UPDATE_CONCURRENCY):
+		batch = unique_resource_ids[offset : offset + _VECTOR_ACL_UPDATE_CONCURRENCY]
+		await asyncio.gather(*(_sync_one(rid) for rid in batch))

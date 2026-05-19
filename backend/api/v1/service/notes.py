@@ -33,11 +33,15 @@ from api.v1.service import events as event_service
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	fetch_acl_metadata,
+	fetch_bulk_acl_metadata,
+	invalidate_accessible_users_for_resource,
 	list_accessible_user_ids,
 	require_permission,
 	require_project_access,
 	require_resource_access,
 	resource_access_predicate,
+	vector_acl_filter,
 )
 from api.v1.service.embeddings import embed_text, embed_texts
 from api.v1.service.listing import SortDir, apply_sort
@@ -49,8 +53,6 @@ from api.v1.service.resource_payload_cache import (
 from api.v1.service.vectorize import (
 	VectorSpec,
 	build_chunk,
-	fetch_acl_metadata,
-	fetch_bulk_acl_metadata,
 	remove_vectorized_resource,
 	vectorize_resource,
 )
@@ -284,6 +286,10 @@ async def update_note(
 	event_data = note_in.model_dump(mode="json", exclude_unset=True, by_alias=True)
 	event_data["id"] = str(note.id)
 	event_data["updated_at"] = note.updated_at.isoformat()
+	if changed_project_ids:
+		event_data["affected_project_ids"] = [
+			str(project_id) for project_id in changed_project_ids
+		]
 	event = Event(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
@@ -297,6 +303,10 @@ async def update_note(
 		origin_session_id=origin_session_id,
 	)
 	await invalidate_resource_payload_cache(ResourceType.NOTE, note_id)
+	if changed_project_ids:
+		await invalidate_accessible_users_for_resource(
+			ResourceType.NOTE, note_id, session
+		)
 	await invalidate_project_payload_caches(changed_project_ids)
 
 	if await NOTE_SPEC.should_revectorize(note, note_in, session):
@@ -338,7 +348,11 @@ async def delete_note(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
 		type=EventType.NOTE_DELETED,
-		data={"id": str(note_id)},
+		data={
+			"id": str(note_id),
+			"project_ids": [str(project_id) for project_id in project_ids],
+			"affected_project_ids": [str(project_id) for project_id in project_ids],
+		},
 		user_id=principal.user_id,
 	)
 	await event_service.persist_and_fanout_event(
@@ -348,6 +362,7 @@ async def delete_note(
 		recipient_ids=delete_recipients,
 	)
 	await invalidate_resource_payload_cache(ResourceType.NOTE, note_id)
+	await invalidate_accessible_users_for_resource(ResourceType.NOTE, note_id, session)
 	await invalidate_project_payload_caches(project_ids)
 
 	await remove_vectorized_resource(
@@ -482,16 +497,7 @@ async def _hybrid_search_notes(
 		else (await embed_text(text=query_text, session=db) if need_dense else None)
 	)
 	text_query = query_text if need_sparse else None
-	# acl-based qdrant filter: owner or explicit grant - solves broad-surface problem
-	# principals with default access (role or global) bypass should-conditions:
-	# they pass postgres but have no entries in allowed_* fields
-	query_filter = vectorstore_service.acl_filter(
-		"note",
-		is_admin=principal.is_admin or principal.has_default_access(ResourceType.NOTE),
-		user_id=str(principal.user.id),
-		group_ids=principal.group_ids,
-		role_ids=principal.role_ids,
-	)
+	query_filter = vector_acl_filter(ResourceType.NOTE, principal)
 	results = await vectorstore_service.search(
 		session=db,
 		query=query_emb,

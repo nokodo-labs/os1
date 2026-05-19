@@ -19,9 +19,7 @@ from api.models.thread import Thread
 from api.permissions import ResourceType
 from api.schemas.thread import ThreadUpdate
 from api.v1.service.auth import Principal
-from api.v1.service.authorization import (
-	require_thread_access,
-)
+from api.v1.service.authorization import fetch_acl_metadata, require_thread_access
 from api.v1.service.chat.models import (
 	resolve_task_chat_model,
 	run_chat_model_json_schema,
@@ -29,7 +27,6 @@ from api.v1.service.chat.models import (
 from api.v1.service.threads.core import update_thread
 from api.v1.service.threads.search import THREAD_SPEC
 from api.v1.service.vectorize import (
-	fetch_acl_metadata,
 	vectorize_resource,
 )
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
