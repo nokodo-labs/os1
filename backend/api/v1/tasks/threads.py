@@ -556,6 +556,9 @@ async def run_thread_maintenance_task(context: task_service.TaskContext) -> JSON
 
 	await context.check_cancelled()
 	await context.update(progress=10, stage="checking")
+	# live mandatory maintenance counts as activity; deferred/backfill does not
+	maintenance_source = context.metadata.get("maintenance_source", "")
+	update_activity = maintenance_source == "post_run"
 	async with async_session_local() as session:
 		thread = await session.get(Thread, thread_id)
 		if thread is None:
@@ -573,6 +576,7 @@ async def run_thread_maintenance_task(context: task_service.TaskContext) -> JSON
 			observed_last_activity_at=observed_at,
 			replace_metadata=replace_metadata,
 			origin_session_id=origin_session_id,
+			update_activity=update_activity,
 		)
 		await session.commit()
 	await context.check_cancelled()

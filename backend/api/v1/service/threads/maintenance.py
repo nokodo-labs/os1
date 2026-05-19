@@ -170,6 +170,7 @@ async def maintain_thread_metadata(
 	observed_last_activity_at: datetime | None = None,
 	replace_metadata: bool = False,
 	origin_session_id: str | None = None,
+	update_activity: bool = True,
 ) -> JSONObject:
 	"""generate missing metadata and a fresh active-branch summary if needed."""
 	thread = await session.get(Thread, thread_id)
@@ -285,6 +286,7 @@ async def maintain_thread_metadata(
 				session,
 				principal=principal,
 				origin_session_id=origin_session_id,
+				update_activity=update_activity,
 			)
 			updated_metadata = True
 

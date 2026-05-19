@@ -66,7 +66,6 @@ class Thread(
 	last_activity_at: Mapped[datetime] = mapped_column(
 		DateTime(timezone=True),
 		server_default=func.now(),
-		onupdate=func.now(),
 	)
 
 	owner_id: Mapped[TypeID] = mapped_column(

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from pydantic import Field
 
 from api.models.memory import Memory
+from api.schemas.preferences import AIPreferences
 from api.settings import settings as app_settings
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.memories import query_relevant_memories
@@ -60,6 +61,14 @@ class MemoryContextFilter(Filter):
 
 		system_text = system_msg.text
 		if not system_text or SENTINEL_USER_MEMORIES not in system_text:
+			return state
+
+		ai = app_context.principal.user.prefs.ai
+		if isinstance(ai, AIPreferences) and ai.memories_enabled is False:
+			logger.info(
+				"memory context: user has disabled memories; skipping context injection"
+			)
+			self._replace_sentinel(thread, SENTINEL_USER_MEMORIES, "")
 			return state
 
 		mem_cfg = app_settings.ai.memory

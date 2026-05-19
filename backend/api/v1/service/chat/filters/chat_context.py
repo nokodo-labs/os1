@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from api.models.access_rule import AccessLevel
 from api.models.thread import Thread
+from api.schemas.preferences import AIPreferences
 from api.schemas.search import SearchMode, SearchParams
 from api.settings import settings as app_settings
 from api.settings.settings import AIChatContextSettings
@@ -77,6 +78,17 @@ class ChatContextFilter(Filter):
 
 		system_text = system_msg.text
 		if not system_text or SENTINEL_CHAT_CONTEXT not in system_text:
+			return state
+
+		ai = app_context.principal.user.prefs.ai
+		if isinstance(ai, AIPreferences) and (
+			ai.memories_enabled is False or ai.chat_recall is False
+		):
+			logger.info(
+				"chat context: user has disabled chat recall or memories; "
+				"skipping context injection"
+			)
+			self._replace_sentinel(thread, SENTINEL_CHAT_CONTEXT, "")
 			return state
 
 		current_thread_id = app_context.thread_id

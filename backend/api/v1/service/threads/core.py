@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import overload
 
 from fastapi import HTTPException, status
@@ -349,6 +350,7 @@ async def update_thread(
 	principal: Principal,
 	create_event: bool = True,
 	origin_session_id: str | None = None,
+	update_activity: bool = True,
 ) -> Thread:
 	thread = await _load_thread(
 		thread_id,
@@ -401,6 +403,9 @@ async def update_thread(
 		thread.projects = projects
 		new_project_ids = {project.id for project in projects}
 		changed_project_ids = old_project_ids | new_project_ids
+
+	if update_activity:
+		thread.last_activity_at = datetime.now(tz=UTC)
 
 	await session.flush()
 

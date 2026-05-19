@@ -185,6 +185,7 @@ async def generate_thread_metadata(
 			principal=principal,
 			create_event=create_event,
 			origin_session_id=origin_session_id,
+			update_activity=False,
 		)
 
 		# index thread with new metadata (title/tags + full message text for BM25)
