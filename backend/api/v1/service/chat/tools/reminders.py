@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 import json
-import logging
 from datetime import datetime
-from typing import Literal
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.models.reminder import Reminder as ReminderModel
+from api.models.reminder import ReminderList as ReminderListModel
 from api.models.reminder import ReminderStatus
-from api.schemas.reminder import ReminderCreate, ReminderUpdate
+from api.schemas.reminder import (
+	Reminder,
+	ReminderCreate,
+	ReminderList,
+	ReminderListWithCounts,
+	ReminderUpdate,
+	ReminderWithSubtasks,
+)
 from api.schemas.scheduled_item import Recurrence
+from api.schemas.search import SearchMode, SearchParams
 from api.v1.service import reminders as reminder_service
 from api.v1.service.chat.context import AppContext
 from nokodo_ai.context import AgentContext
@@ -22,49 +30,78 @@ from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
-logger = logging.getLogger(__name__)
+_HYBRID_SEARCH = SearchParams(mode=SearchMode.HYBRID)
+_DEFAULT_LIMIT = 10
+_MAX_LIMIT = 30
+
+type ReminderPayloadSource = ReminderModel | Reminder | ReminderWithSubtasks
+type ReminderListPayloadSource = (
+	ReminderListModel | ReminderList | ReminderListWithCounts
+)
 
 
 class ReminderGetInput(BaseModel):
-	"""input schema for reminder_get tool.
-
-	provide reminder_id to fetch a specific reminder, or query to search.
-	"""
+	"""input schema for reminder_get tool."""
 
 	model_config = ConfigDict(extra="forbid")
 
-	reminder_id: str | None = Field(
+	reminder_id: TypeID | None = Field(
 		default=None,
-		description=(
-			"ID of a specific reminder to fetch. when provided, query is ignored."
-		),
+		description="id of a specific reminder to fetch.",
+	)
+	list_id: TypeID | None = Field(
+		default=None,
+		description="id of a specific reminder list to fetch.",
 	)
 	query: str | None = Field(
 		default=None,
 		description=(
-			"natural language search query. required when reminder_id is not given. "
-			"hybrid BM25 + semantic search is used."
+			"natural language query for hybrid search. "
+			"also matches reminder lists by name and description."
 		),
+		min_length=1,
+		max_length=500,
+	)
+	cursor: str | None = Field(
+		default=None,
+		description="cursor returned by a previous reminder search page.",
+	)
+	skip: int = Field(
+		default=0,
+		description="offset for list pages.",
+		ge=0,
 	)
 	limit: int = Field(
-		default=5,
-		description="max reminders to return when searching (ignored for direct fetch)",
+		default=_DEFAULT_LIMIT,
+		description="maximum items to return per page. use skip or cursor to continue.",
 		ge=1,
-		le=20,
+		le=_MAX_LIMIT,
+	)
+	include_completed: bool = Field(
+		default=False,
+		description="include completed reminders when searching reminders.",
 	)
 
 
 class ReminderWriteInput(BaseModel):
-	"""input schema for reminder_write tool.
-
-	provide reminder_id to update an existing reminder, or omit to create a new one.
-	"""
+	"""input schema for reminder_write tool."""
 
 	model_config = ConfigDict(extra="forbid")
 
-	reminder_id: str | None = Field(
+	reminder_id: TypeID | None = Field(
 		default=None,
-		description="ID of the reminder to edit. omit to create a new reminder.",
+		description="ID of the reminder to edit or delete. omit to create one.",
+	)
+	list_id: TypeID | None = Field(
+		default=None,
+		description=(
+			"target reminder list when creating or moving a reminder. omit on "
+			"create to use the default reminder list."
+		),
+	)
+	delete: bool = Field(
+		default=False,
+		description="delete the reminder identified by reminder_id.",
 	)
 	title: str | None = Field(
 		default=None,
@@ -73,36 +110,46 @@ class ReminderWriteInput(BaseModel):
 	)
 	description: str | None = Field(
 		default=None,
-		description="longer description or notes",
+		description="longer description or notes.",
+	)
+	parent_id: TypeID | None = Field(
+		default=None,
+		description="parent reminder id when creating or moving a subtask.",
+	)
+	position: float | None = Field(
+		default=None,
+		description="position for ordering within the reminder list.",
 	)
 	due_at: datetime | None = Field(
 		default=None,
-		description="due date/time in ISO 8601 format",
+		description="due date/time in ISO 8601 format.",
 	)
 	remind_at: datetime | None = Field(
 		default=None,
-		description="notification time in ISO 8601 format",
+		description="notification time in ISO 8601 format.",
 	)
 	recurrence: Recurrence | None = Field(
 		default=None,
 		description=(
-			"optional structured recurrence with rrule, rdate, exdate, and timezone"
+			"optional structured recurrence with rrule, rdate, exdate, and timezone."
 		),
 	)
-	status: Literal["pending", "completed"] | None = Field(
+	status: ReminderStatus | None = Field(
 		default=None,
-		description="status when editing: 'pending' or 'completed'",
+		description="status when editing.",
 	)
 
 
 class ReminderGetTool(Tool[AppContext]):
-	"""fetch a specific reminder by ID or search reminders by query."""
+	"""fetch, list, or search reminders and reminder lists."""
 
 	name: str = Field(default="reminder_get")
 	description: str = Field(
 		default=(
-			"retrieve reminders. provide reminder_id to get a specific reminder with "
-			"full details, or provide a query to search reminders by meaning."
+			"retrieve reminders and reminder lists. provide reminder_id to get one "
+			"reminder with subtasks, list_id to get one list with counts, query to "
+			"search reminders and lists, or omit all three to list reminder lists. "
+			"reminder search uses hybrid retrieval."
 		)
 	)
 	parameters: JSONObject = Field(
@@ -118,83 +165,175 @@ class ReminderGetTool(Tool[AppContext]):
 		if __app_context__ is None:
 			return self.error("app context is required", __agent_context__)
 		inp = ReminderGetInput.model_validate(kwargs)
-
-		if inp.reminder_id:
-			# direct fetch by ID
-			try:
-				reminder = await reminder_service.get_reminder(
-					TypeID(inp.reminder_id),
-					__app_context__.session,
-					principal=__app_context__.principal,
-				)
-			except HTTPException as exc:
-				return self.error(str(exc.detail), __agent_context__)
-			result: dict[str, object] = {
-				"status": "success",
-				"message": "reminder retrieved",
-				"id": str(reminder.id),
-				"title": reminder.title,
-				"reminder_status": reminder.status.value,
-			}
-			if reminder.description:
-				result["description"] = reminder.description
-			if reminder.due_at:
-				result["due_at"] = reminder.due_at.isoformat()
-			if reminder.remind_at:
-				result["remind_at"] = reminder.remind_at.isoformat()
-			if reminder.completed_at:
-				result["completed_at"] = reminder.completed_at.isoformat()
-			return self.success(json.dumps(result), __agent_context__)
-
-		if not inp.query:
+		provided = sum(
+			value is not None for value in (inp.reminder_id, inp.list_id, inp.query)
+		)
+		if provided > 1:
 			return self.error(
-				"provide reminder_id to fetch a reminder or query to search",
+				"provide reminder_id, list_id, or query, not combinations",
 				__agent_context__,
 			)
+		if inp.reminder_id is not None:
+			return await self._get_reminder(inp, __agent_context__, __app_context__)
+		if inp.list_id is not None:
+			return await self._get_list(inp, __agent_context__, __app_context__)
+		if inp.query is not None:
+			return await self._search(inp, __agent_context__, __app_context__)
+		return await self._list_lists(inp, __agent_context__, __app_context__)
 
-		# search by query
+	async def _get_reminder(
+		self,
+		inp: ReminderGetInput,
+		agent_context: AgentContext,
+		app_context: AppContext,
+	) -> ToolMessage:
+		if inp.reminder_id is None:
+			return self.error("reminder_id is required", agent_context)
 		try:
-			page = await reminder_service.search_reminders(
-				inp.query,
-				__app_context__.session,
-				principal=__app_context__.principal,
-				limit=inp.limit,
+			reminder = await reminder_service.get_reminder(
+				inp.reminder_id,
+				app_context.session,
+				principal=app_context.principal,
+				with_subtasks=True,
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), __agent_context__)
+			return self.error(str(exc.detail), agent_context)
+		out = {
+			"status": "success",
+			"message": "reminder retrieved",
+			"reminder": _reminder_payload(reminder, include_subtasks=True),
+		}
+		return self.success(json.dumps(out), agent_context)
 
-		if not page.items:
-			out = {
-				"status": "success",
-				"message": "no reminders found",
-				"count": 0,
-				"results": [],
-			}
-			return self.success(json.dumps(out), __agent_context__)
+	async def _get_list(
+		self,
+		inp: ReminderGetInput,
+		agent_context: AgentContext,
+		app_context: AppContext,
+	) -> ToolMessage:
+		if inp.list_id is None:
+			return self.error("list_id is required", agent_context)
+		try:
+			reminder_list = await reminder_service.get_reminder_list(
+				inp.list_id,
+				app_context.session,
+				principal=app_context.principal,
+			)
+			payload = await _reminder_list_payload(reminder_list, app_context)
+		except HTTPException as exc:
+			return self.error(str(exc.detail), agent_context)
+		out = {
+			"status": "success",
+			"message": "reminder list retrieved",
+			"list": payload,
+		}
+		return self.success(json.dumps(out), agent_context)
 
+	async def _list_lists(
+		self,
+		inp: ReminderGetInput,
+		agent_context: AgentContext,
+		app_context: AppContext,
+	) -> ToolMessage:
+		try:
+			lists = await reminder_service.list_reminder_lists(
+				app_context.session,
+				principal=app_context.principal,
+				include_counts=True,
+				skip=inp.skip,
+				limit=inp.limit,
+			)
+			total = await reminder_service.count_reminder_lists(
+				app_context.session,
+				principal=app_context.principal,
+			)
+		except HTTPException as exc:
+			return self.error(str(exc.detail), agent_context)
 		results = [
+			await _reminder_list_payload(reminder_list, app_context)
+			for reminder_list in lists
+		]
+		next_skip = inp.skip + len(results) if inp.skip + len(results) < total else None
+		out = {
+			"status": "success",
+			"message": f"found {len(results)} reminder lists",
+			"count": len(results),
+			"total": total,
+			"skip": inp.skip,
+			"limit": inp.limit,
+			"has_more": next_skip is not None,
+			"next_skip": next_skip,
+			"results": results,
+		}
+		return self.success(json.dumps(out), agent_context)
+
+	async def _search(
+		self,
+		inp: ReminderGetInput,
+		agent_context: AgentContext,
+		app_context: AppContext,
+	) -> ToolMessage:
+		if inp.query is None:
+			return self.error("query is required", agent_context)
+		try:
+			lists = await reminder_service.search_reminder_lists(
+				inp.query,
+				app_context.session,
+				principal=app_context.principal,
+				skip=inp.skip,
+				limit=inp.limit,
+			)
+			list_results = [
+				await _reminder_list_payload(reminder_list, app_context)
+				for reminder_list in lists
+			]
+			page = await reminder_service.search_reminders(
+				inp.query,
+				app_context.session,
+				principal=app_context.principal,
+				limit=inp.limit,
+				cursor=inp.cursor,
+				search_params=_HYBRID_SEARCH,
+			)
+		except HTTPException as exc:
+			return self.error(str(exc.detail), agent_context)
+		reminder_items = page.items
+		if not inp.include_completed:
+			reminder_items = [
+				item
+				for item in reminder_items
+				if item.metadata.get("status") != ReminderStatus.COMPLETED.value
+			]
+		reminder_results = [
 			{
-				"id": item.id,
+				"id": str(item.id),
 				"title": item.title,
 				**({"description": item.preview} if item.preview else {}),
 			}
-			for item in page.items
+			for item in reminder_items
 		]
-		n = len(results)
-		msg = f"found {n} {'reminder' if n == 1 else 'reminders'}"
-		out = {"status": "success", "message": msg, "count": n, "results": results}
-		return self.success(json.dumps(out), __agent_context__)
+		out = {
+			"status": "success",
+			"message": "reminder search complete",
+			"reminder_lists": list_results,
+			"reminders": reminder_results,
+			"list_count": len(list_results),
+			"reminder_count": len(reminder_results),
+			"next_cursor": page.next_cursor,
+			"has_more_reminders": page.has_more,
+		}
+		return self.success(json.dumps(out), agent_context)
 
 
 class ReminderWriteTool(Tool[AppContext]):
-	"""create a new reminder or edit an existing one."""
+	"""create, edit, or delete reminders."""
 
 	name: str = Field(default="reminder_write")
 	description: str = Field(
 		default=(
-			"create or edit a reminder. omit reminder_id to create a new reminder "
-			"(title required). provide reminder_id to update an existing reminder's "
-			"title, description, due date, notification time, or status."
+			"create, edit, complete, or delete reminders. omit reminder_id to "
+			"create a reminder. provide list_id to place a new reminder in a "
+			"specific reminder list; otherwise the default list is used."
 		)
 	)
 	parameters: JSONObject = Field(
@@ -211,61 +350,105 @@ class ReminderWriteTool(Tool[AppContext]):
 			return self.error("app context is required", __agent_context__)
 		inp = ReminderWriteInput.model_validate(kwargs)
 
-		if inp.reminder_id:
-			# update existing reminder
-			rid = TypeID(inp.reminder_id)
-			# use the dedicated complete endpoint when only completing
-			if inp.status == "completed" and not any(
-				[inp.title, inp.description, inp.due_at, inp.remind_at, inp.recurrence]
-			):
-				try:
-					reminder = await reminder_service.complete_reminder(
-						rid,
-						__app_context__.session,
-						principal=__app_context__.principal,
-					)
-				except HTTPException as exc:
-					return self.error(str(exc.detail), __agent_context__)
-				out = {
-					"status": "success",
-					"message": "reminder completed",
-					"id": str(reminder.id),
-				}
-				return self.success(json.dumps(out), __agent_context__)
-			# general update - only include fields the agent actually provided
-			update_kwargs: dict = {}
-			if inp.title is not None:
-				update_kwargs["title"] = inp.title
-			if inp.description is not None:
-				update_kwargs["description"] = inp.description
-			if inp.due_at is not None:
-				update_kwargs["due_at"] = inp.due_at
-			if inp.remind_at is not None:
-				update_kwargs["remind_at"] = inp.remind_at
-			if inp.recurrence is not None:
-				update_kwargs["recurrence"] = inp.recurrence
-			if inp.status is not None and inp.status != "completed":
-				update_kwargs["status"] = ReminderStatus(inp.status)
+		if inp.delete:
+			return await self._delete(inp, __agent_context__, __app_context__)
+		if inp.reminder_id is not None:
+			return await self._update(inp, __agent_context__, __app_context__)
+		return await self._create(inp, __agent_context__, __app_context__)
+
+	async def _delete(
+		self,
+		inp: ReminderWriteInput,
+		agent_context: AgentContext,
+		app_context: AppContext,
+	) -> ToolMessage:
+		if inp.reminder_id is None:
+			return self.error("reminder_id is required when deleting", agent_context)
+		try:
+			await reminder_service.delete_reminder(
+				inp.reminder_id,
+				app_context.session,
+				principal=app_context.principal,
+			)
+		except HTTPException as exc:
+			return self.error(str(exc.detail), agent_context)
+		out = {
+			"status": "success",
+			"message": "reminder deleted",
+			"id": str(inp.reminder_id),
+		}
+		return self.success(json.dumps(out), agent_context)
+
+	async def _update(
+		self,
+		inp: ReminderWriteInput,
+		agent_context: AgentContext,
+		app_context: AppContext,
+	) -> ToolMessage:
+		if inp.reminder_id is None:
+			return self.error("reminder_id is required", agent_context)
+		update_kwargs: dict[str, object] = {}
+		if inp.title is not None:
+			update_kwargs["title"] = inp.title
+		if inp.description is not None:
+			update_kwargs["description"] = inp.description
+		if inp.due_at is not None:
+			update_kwargs["due_at"] = inp.due_at
+		if inp.remind_at is not None:
+			update_kwargs["remind_at"] = inp.remind_at
+		if inp.recurrence is not None:
+			update_kwargs["recurrence"] = inp.recurrence
+		if inp.list_id is not None:
+			update_kwargs["list_id"] = inp.list_id
+		if inp.parent_id is not None:
+			update_kwargs["parent_id"] = inp.parent_id
+		if inp.position is not None:
+			update_kwargs["position"] = inp.position
+		if inp.status is not None:
+			update_kwargs["status"] = inp.status
+
+		if update_kwargs == {"status": ReminderStatus.COMPLETED}:
 			try:
-				reminder = await reminder_service.update_reminder(
-					rid,
-					ReminderUpdate(**update_kwargs),
-					__app_context__.session,
-					principal=__app_context__.principal,
+				reminder = await reminder_service.complete_reminder(
+					inp.reminder_id,
+					app_context.session,
+					principal=app_context.principal,
 				)
 			except HTTPException as exc:
-				return self.error(str(exc.detail), __agent_context__)
+				return self.error(str(exc.detail), agent_context)
 			out = {
 				"status": "success",
-				"message": "reminder updated",
+				"message": "reminder completed",
 				"id": str(reminder.id),
 			}
-			return self.success(json.dumps(out), __agent_context__)
+			return self.success(json.dumps(out), agent_context)
 
-		# create new reminder
+		try:
+			reminder = await reminder_service.update_reminder(
+				inp.reminder_id,
+				ReminderUpdate.model_validate(update_kwargs),
+				app_context.session,
+				principal=app_context.principal,
+			)
+		except HTTPException as exc:
+			return self.error(str(exc.detail), agent_context)
+		out = {
+			"status": "success",
+			"message": "reminder updated",
+			"id": str(reminder.id),
+		}
+		return self.success(json.dumps(out), agent_context)
+
+	async def _create(
+		self,
+		inp: ReminderWriteInput,
+		agent_context: AgentContext,
+		app_context: AppContext,
+	) -> ToolMessage:
 		if not inp.title:
 			return self.error(
-				"title is required when creating a reminder", __agent_context__
+				"title is required when creating a reminder",
+				agent_context,
 			)
 		try:
 			reminder = await reminder_service.create_reminder(
@@ -275,15 +458,82 @@ class ReminderWriteTool(Tool[AppContext]):
 					due_at=inp.due_at,
 					remind_at=inp.remind_at,
 					recurrence=inp.recurrence,
+					list_id=inp.list_id,
+					parent_id=inp.parent_id,
+					position=inp.position or 0.0,
 				),
-				__app_context__.session,
-				principal=__app_context__.principal,
+				app_context.session,
+				principal=app_context.principal,
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), __agent_context__)
+			return self.error(str(exc.detail), agent_context)
 		out = {
 			"status": "success",
 			"message": "reminder created",
 			"id": str(reminder.id),
+			"list_id": str(reminder.list_id),
 		}
-		return self.success(json.dumps(out), __agent_context__)
+		return self.success(json.dumps(out), agent_context)
+
+
+def _reminder_payload(
+	reminder: ReminderPayloadSource,
+	include_subtasks: bool,
+) -> dict[str, object]:
+	payload: dict[str, object] = {
+		"id": str(reminder.id),
+		"title": reminder.title,
+		"reminder_status": reminder.status.value,
+		"list_id": str(reminder.list_id),
+		"position": reminder.position,
+	}
+	if reminder.description:
+		payload["description"] = reminder.description
+	if reminder.due_at:
+		payload["due_at"] = reminder.due_at.isoformat()
+	if reminder.remind_at:
+		payload["remind_at"] = reminder.remind_at.isoformat()
+	if reminder.completed_at:
+		payload["completed_at"] = reminder.completed_at.isoformat()
+	if reminder.parent_id:
+		payload["parent_id"] = str(reminder.parent_id)
+	if include_subtasks:
+		subtasks = reminder.subtasks if isinstance(reminder, ReminderModel) else []
+		if isinstance(reminder, ReminderWithSubtasks):
+			subtasks = reminder.subtasks
+		payload["subtasks"] = [
+			_reminder_payload(subtask, include_subtasks=False) for subtask in subtasks
+		]
+	return payload
+
+
+async def _reminder_list_payload(
+	reminder_list: ReminderListPayloadSource,
+	app_context: AppContext,
+) -> dict[str, object]:
+	payload: dict[str, object] = {
+		"id": str(reminder_list.id),
+		"name": reminder_list.name,
+		"description": reminder_list.description,
+		"color": reminder_list.color,
+		"icon": reminder_list.icon,
+		"position": reminder_list.position,
+		"is_default": reminder_list.is_default,
+		"project_ids": [str(project_id) for project_id in reminder_list.project_ids],
+		"created_at": reminder_list.created_at.isoformat(),
+		"updated_at": reminder_list.updated_at.isoformat(),
+	}
+	if isinstance(reminder_list, ReminderListWithCounts):
+		counts = {
+			"total_count": reminder_list.total_count,
+			"pending_count": reminder_list.pending_count,
+			"completed_count": reminder_list.completed_count,
+		}
+	else:
+		counts = await reminder_service.get_list_counts(
+			app_context.session,
+			principal=app_context.principal,
+			list_id=reminder_list.id,
+		)
+	payload.update(counts)
+	return payload

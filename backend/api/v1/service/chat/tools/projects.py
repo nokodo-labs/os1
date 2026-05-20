@@ -8,6 +8,7 @@ import logging
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.schemas.search import SearchMode, SearchParams
 from api.v1.service import projects as project_service
 from api.v1.service.chat.context import AppContext
 from nokodo_ai.context import AgentContext
@@ -18,6 +19,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
+_HYBRID_SEARCH = SearchParams(mode=SearchMode.HYBRID)
 
 
 class ProjectGetInput(BaseModel):
@@ -36,7 +38,9 @@ class ProjectGetInput(BaseModel):
 	)
 	query: str | None = Field(
 		default=None,
-		description="text search query for project names and descriptions.",
+		description="hybrid search query for project names and descriptions.",
+		min_length=1,
+		max_length=500,
 	)
 	limit: int = Field(
 		default=3,
@@ -53,7 +57,7 @@ class ProjectGetTool(Tool[AppContext]):
 	description: str = Field(
 		default=(
 			"retrieve projects. provide project_id to get a specific project, "
-			"or provide a query to search project names and descriptions."
+			"or provide a query to search project names and descriptions by meaning."
 		)
 	)
 	parameters: JSONObject = Field(
@@ -88,9 +92,7 @@ class ProjectGetTool(Tool[AppContext]):
 			if project.description:
 				result["description"] = project.description
 			if project.thread_ids:
-				result["thread_ids"] = [
-					str(thread_id) for thread_id in project.thread_ids
-				]
+				result["chat_ids"] = [str(chat_id) for chat_id in project.thread_ids]
 			return self.success(json.dumps(result), __agent_context__)
 
 		if not inp.query:
@@ -105,6 +107,7 @@ class ProjectGetTool(Tool[AppContext]):
 				__app_context__.session,
 				principal=__app_context__.principal,
 				limit=inp.limit,
+				search_params=_HYBRID_SEARCH,
 			)
 		except HTTPException as exc:
 			return self.error(str(exc.detail), __agent_context__)

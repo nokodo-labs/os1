@@ -39,6 +39,8 @@ class AgenticWebSearchInput(BaseModel):
 			"refer to your context for current date and time, and ALWAYS keep "
 			"your queries UNBIASED and NEUTRAL for best results."
 		),
+		min_length=1,
+		max_length=500,
 	)
 	limit: int | None = Field(
 		default=None,

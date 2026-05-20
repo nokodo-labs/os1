@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
@@ -37,6 +37,7 @@ from api.v1.service.reminders.cache import (
 from api.v1.service.reminders.search import REMINDER_SPEC, vectorize_reminders_for_list
 from api.v1.service.vectorize import remove_vectorized_resource
 from api.v1.tasks.reminders import cancel_reminder_notifications
+from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -254,6 +255,68 @@ async def count_reminder_lists(
 	)
 	stmt = _apply_reminder_list_filters(stmt, list_filters)
 	return await session.scalar(stmt) or 0
+
+
+async def search_reminder_lists(
+	query_text: str,
+	session: AsyncSession,
+	principal: Principal,
+	skip: int = 0,
+	limit: int = 50,
+) -> list[ReminderListWithCounts]:
+	"""search accessible reminder lists by name and description."""
+	await get_or_create_default_reminder_list(session, principal)
+	query = query_text.strip()
+	if not query:
+		return []
+	pattern = contains_pattern(query)
+	counts_subq = (
+		select(
+			Reminder.list_id,
+			func.count(Reminder.id).label("total"),
+			func.sum(
+				case((Reminder.status == ReminderStatus.PENDING, 1), else_=0)
+			).label("pending"),
+			func.sum(
+				case((Reminder.status == ReminderStatus.COMPLETED, 1), else_=0)
+			).label("completed"),
+		)
+		.where(Reminder.parent_id.is_(None))
+		.group_by(Reminder.list_id)
+		.subquery()
+	)
+	stmt = (
+		select(
+			ReminderList,
+			func.coalesce(counts_subq.c.total, 0).label("total_count"),
+			func.coalesce(counts_subq.c.pending, 0).label("pending_count"),
+			func.coalesce(counts_subq.c.completed, 0).label("completed_count"),
+		)
+		.outerjoin(counts_subq, ReminderList.id == counts_subq.c.list_id)
+		.where(
+			resource_access_predicate(principal, ResourceType.REMINDER_LIST),
+			or_(
+				ReminderList.name.ilike(pattern, escape="\\"),
+				ReminderList.description.ilike(pattern, escape="\\"),
+			),
+		)
+		.order_by(ReminderList.position.asc(), ReminderList.name.asc())
+		.offset(skip)
+		.limit(limit)
+		.options(selectinload(ReminderList.projects))
+	)
+	result = await session.execute(stmt)
+	return [
+		ReminderListWithCounts(
+			**ReminderListWithCounts.model_validate(row.ReminderList).model_dump(
+				exclude={"total_count", "pending_count", "completed_count"}
+			),
+			total_count=row.total_count,
+			pending_count=row.pending_count,
+			completed_count=row.completed_count,
+		)
+		for row in result.all()
+	]
 
 
 def _apply_reminder_list_filters(

@@ -12,6 +12,7 @@ from api.database import async_session_local
 from api.local_tasks import create_background_task
 from api.schemas.memory import MemoryCreate
 from api.schemas.preferences import AIPreferences
+from api.schemas.search import SearchMode, SearchParams
 from api.v1.service import memories as memory_service
 from api.v1.service.auth import Principal
 from api.v1.service.chat.context import AppContext
@@ -23,6 +24,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
+_HYBRID_SEARCH = SearchParams(mode=SearchMode.HYBRID)
 
 
 class MemorySearchInput(BaseModel):
@@ -33,6 +35,8 @@ class MemorySearchInput(BaseModel):
 	query: str = Field(
 		...,
 		description=("natural language query describing what memories to recall"),
+		min_length=1,
+		max_length=500,
 	)
 	limit: int = Field(
 		default=5,
@@ -98,6 +102,7 @@ class MemoryRecallTool(Tool[AppContext]):
 				__app_context__.session,
 				principal=__app_context__.principal,
 				limit=inp.limit,
+				search_params=_HYBRID_SEARCH,
 			)
 		except HTTPException as exc:
 			return self.error(str(exc.detail), __agent_context__)

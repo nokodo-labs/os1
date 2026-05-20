@@ -1,7 +1,7 @@
 """code interpreter tool - execute Python code in E2B sandbox.
 
 runs user code in a sandboxed E2B environment with session
-persistence across the conversation thread. the sandbox id
+persistence across the chat. the sandbox id
 is stored in tool message metadata so subsequent calls can
 reconnect to the same environment.
 """
@@ -11,16 +11,17 @@ from __future__ import annotations
 import json
 import logging
 
+from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.e2b import E2BClient, FileEntry
-from api.models.file import File, FileSource
+from api.models.file import FileSource
 from api.settings import settings
+from api.v1.service.auth import Principal
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.message_metadata import E2B_SANDBOX_ID_KEY
-from api.v1.service.files import read_content, store_file
+from api.v1.service.files import get_file, read_content, store_file
 from api.v1.service.projects import resolve_thread_project_id
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import FileContent, ImageContent, ToolMessage
@@ -159,6 +160,7 @@ async def _upload_input_files(
 	client: E2BClient,
 	file_ids: list[TypeID],
 	session: AsyncSession,
+	principal: Principal,
 ) -> list[str]:
 	"""download files from storage and upload them to the sandbox.
 
@@ -166,11 +168,9 @@ async def _upload_input_files(
 	"""
 	uploaded: list[str] = []
 	for file_id in file_ids:
-		result = await session.execute(
-			select(File).where(File.id == file_id, File.deleted_at.is_(None))
-		)
-		file = result.scalars().one_or_none()
-		if file is None:
+		try:
+			file = await get_file(file_id, session, principal)
+		except HTTPException:
 			logger.warning("code_interpreter: input file %s not found", file_id)
 			continue
 		try:
@@ -262,6 +262,7 @@ class CodeInterpreterTool(Tool[AppContext]):
 					client,
 					inp.file_ids,
 					session=__app_context__.session,
+					principal=__app_context__.principal,
 				)
 
 			result = await client.run_code(inp.code)

@@ -50,7 +50,7 @@ class DelegateRequest(BaseModel):
 		description=(
 			"a description of the task to delegate. should be "
 			"specific and actionable, describing a clear objective to accomplish. "
-			"this message will be the first in the target's sub-thread."
+			"this message will be the first in the target's sub-chat."
 		),
 	)
 	run_in_background: bool = Field(

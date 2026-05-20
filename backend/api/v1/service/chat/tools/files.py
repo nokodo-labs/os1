@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.schemas.file import FileUpdate
+from api.schemas.search import SearchMode, SearchParams
 from api.v1.service import files as file_service
 from api.v1.service.chat.context import AppContext
 from nokodo_ai.context import AgentContext
@@ -20,6 +21,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
+_HYBRID_SEARCH = SearchParams(mode=SearchMode.HYBRID)
 
 
 class FileGetInput(BaseModel):
@@ -35,6 +37,18 @@ class FileGetInput(BaseModel):
 		description=(
 			"ID of a specific file to fetch. when omitted, lists recent files instead."
 		),
+	)
+	query: str | None = Field(
+		default=None,
+		description=(
+			"hybrid search query. when provided and file_id is omitted, searches files."
+		),
+		min_length=1,
+		max_length=500,
+	)
+	cursor: str | None = Field(
+		default=None,
+		description="cursor returned by a previous file search page.",
 	)
 	limit: int = Field(
 		default=10,
@@ -114,6 +128,29 @@ class FileGetTool(Tool[AppContext]):
 			if f.size_bytes is not None:
 				result["size_bytes"] = f.size_bytes
 			return self.success(json.dumps(result), __agent_context__)
+
+		if inp.query:
+			try:
+				page = await file_service.search_files(
+					inp.query,
+					__app_context__.session,
+					principal=__app_context__.principal,
+					limit=inp.limit,
+					cursor=inp.cursor,
+					search_params=_HYBRID_SEARCH,
+				)
+			except HTTPException as exc:
+				return self.error(str(exc.detail), __agent_context__)
+			results = [item.model_dump(mode="json") for item in page.items]
+			out = {
+				"status": "success",
+				"message": f"found {len(results)} files",
+				"count": len(results),
+				"results": results,
+				"next_cursor": page.next_cursor,
+				"has_more": page.has_more,
+			}
+			return self.success(json.dumps(out), __agent_context__)
 
 		# list recent files
 		try:

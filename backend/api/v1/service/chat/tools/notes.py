@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.schemas.note import NoteCreate, NoteUpdate
+from api.schemas.search import SearchMode, SearchParams
 from api.v1.service import notes as note_service
 from api.v1.service.chat.context import AppContext
 from nokodo_ai.context import AgentContext
@@ -19,6 +20,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
+_HYBRID_SEARCH = SearchParams(mode=SearchMode.HYBRID)
 
 
 class NoteGetInput(BaseModel):
@@ -36,9 +38,11 @@ class NoteGetInput(BaseModel):
 	query: str | None = Field(
 		default=None,
 		description=(
-			"natural language search query. required when note_id is not given. "
-			"hybrid BM25 + semantic search is used."
+			"natural language search query for hybrid search. "
+			"required when note_id is not given."
 		),
+		min_length=1,
+		max_length=500,
 	)
 	limit: int = Field(
 		default=5,
@@ -147,6 +151,7 @@ class NoteGetTool(Tool[AppContext]):
 				__app_context__.session,
 				principal=__app_context__.principal,
 				limit=inp.limit,
+				search_params=_HYBRID_SEARCH,
 			)
 		except HTTPException as exc:
 			return self.error(str(exc.detail), __agent_context__)

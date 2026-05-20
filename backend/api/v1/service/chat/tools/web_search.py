@@ -35,6 +35,8 @@ class WebSearchInput(BaseModel):
 			"search query to send to the configured web search engine. use this "
 			"to retrieve source resources before synthesizing an answer."
 		),
+		min_length=1,
+		max_length=500,
 	)
 	limit: int | None = Field(
 		default=None,

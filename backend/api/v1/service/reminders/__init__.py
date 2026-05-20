@@ -22,6 +22,7 @@ from api.v1.service.reminders.lists import (
 	get_or_create_default_reminder_list,
 	get_reminder_list,
 	list_reminder_lists,
+	search_reminder_lists,
 	update_reminder_list,
 )
 from api.v1.service.reminders.search import (
@@ -55,6 +56,7 @@ __all__ = [
 	"list_reminders",
 	"list_scheduled_reminders",
 	"move_reminder",
+	"search_reminder_lists",
 	"search_reminders",
 	"update_reminder",
 	"update_reminder_list",

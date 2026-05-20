@@ -42,8 +42,8 @@ class SendNotificationInput(BaseModel):
 	user_id: str | None = Field(
 		default=None,
 		description=(
-			"optional specific user ID. omit to notify all thread participants "
-			"including the thread owner."
+			"optional specific user ID. omit to notify all chat participants "
+			"including the chat owner."
 		),
 	)
 
@@ -59,7 +59,7 @@ class SendNotificationTool(Tool[AppContext]):
 	name: str = Field(default="send_notification")
 	description: str = Field(
 		default=(
-			"send a notification to thread participants. use this to alert "
+			"send a notification to chat participants. use this to alert "
 			"users about important information, reminders, or updates. "
 			"by default notifies all participants (including the owner); "
 			"optionally target a specific user."
@@ -100,7 +100,7 @@ class SendNotificationTool(Tool[AppContext]):
 					)
 				else:
 					return self.error(
-						"no recipients: provide user_id or run inside a thread",
+						"no recipients: provide user_id or run inside a chat",
 						__agent_context__,
 					)
 

@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-import logging
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -12,12 +11,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from api.models.calendar import CalendarEvent
 from api.schemas.calendar import (
 	CalendarEventCreate,
-	CalendarEventListFilters,
 	CalendarEventUpdate,
 )
-from api.schemas.scheduled_item import Recurrence
+from api.schemas.scheduled_item import Recurrence, ScheduledItem
+from api.schemas.search import SearchMode, SearchParams
 from api.v1.service import calendar as calendar_service
+from api.v1.service.calendar.events import list_calendar_scheduled_items
 from api.v1.service.chat.context import AppContext
+from api.v1.service.reminders.core import list_reminder_scheduled_items
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
@@ -25,7 +26,10 @@ from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
-logger = logging.getLogger(__name__)
+_HYBRID_SEARCH = SearchParams(mode=SearchMode.HYBRID)
+_DEFAULT_LIMIT = 10
+_MAX_LIMIT = 30
+_DEFAULT_UPCOMING_DAYS = 14
 
 
 class CalendarEventGetInput(BaseModel):
@@ -35,37 +39,38 @@ class CalendarEventGetInput(BaseModel):
 
 	calendar_event_id: str | None = Field(
 		default=None,
-		description=(
-			"id of a specific calendar event to fetch. when provided, query is ignored."
-		),
+		description="ID of a specific calendar event to fetch.",
 	)
 	query: str | None = Field(
 		default=None,
-		description=(
-			"natural language search query. hybrid BM25 + semantic search is used."
-		),
-	)
-	calendar_id: str | None = Field(
-		default=None,
-		description="optional calendar id to filter listed events",
+		description="natural language query for hybrid search of calendar events.",
+		min_length=1,
+		max_length=500,
 	)
 	start_at: datetime | None = Field(
 		default=None,
-		description="optional inclusive window start in iso 8601 format",
+		description=(
+			"optional inclusive scheduled-items window start in ISO 8601 format"
+		),
 	)
 	end_at: datetime | None = Field(
 		default=None,
-		description="optional inclusive window end in iso 8601 format",
+		description="optional inclusive scheduled-items window end in ISO 8601 format",
 	)
-	include_calendars: bool = Field(
-		default=False,
-		description="include accessible calendar ids in the response",
+	cursor: str | None = Field(
+		default=None,
+		description="cursor returned by a previous calendar event search page.",
+	)
+	skip: int = Field(
+		default=0,
+		description="offset for scheduled-item pages.",
+		ge=0,
 	)
 	limit: int = Field(
-		default=10,
-		description="max events to return when searching or listing",
+		default=_DEFAULT_LIMIT,
+		description="maximum items to return per page. use skip or cursor to continue.",
 		ge=1,
-		le=50,
+		le=_MAX_LIMIT,
 	)
 
 
@@ -76,7 +81,7 @@ class CalendarEventWriteInput(BaseModel):
 
 	calendar_event_id: str | None = Field(
 		default=None,
-		description="id of the event to edit or delete. omit to create a new event.",
+		description="ID of the event to edit or delete. omit to create a new event.",
 	)
 	delete: bool = Field(
 		default=False,
@@ -93,11 +98,11 @@ class CalendarEventWriteInput(BaseModel):
 	)
 	start_at: datetime | None = Field(
 		default=None,
-		description="event start in iso 8601 format. required when creating.",
+		description="event start in ISO 8601 format. required when creating.",
 	)
 	end_at: datetime | None = Field(
 		default=None,
-		description="event end in iso 8601 format. required when creating.",
+		description="event end in ISO 8601 format. required when creating.",
 	)
 	all_day: bool | None = Field(
 		default=None,
@@ -106,7 +111,7 @@ class CalendarEventWriteInput(BaseModel):
 	calendar_id: str | None = Field(
 		default=None,
 		description=(
-			"target calendar id when creating. when editing or deleting, this scopes "
+			"target calendar ID when creating. when editing or deleting, this scopes "
 			"the event lookup to that calendar. omit to use the default calendar "
 			"on create."
 		),
@@ -179,32 +184,26 @@ def _event_payload(calendar_event: CalendarEvent) -> dict[str, object]:
 	}
 
 
-async def _calendar_payloads(app_context: AppContext) -> list[dict[str, object]]:
-	calendars = await calendar_service.list_calendars(
-		app_context.session,
-		app_context.principal,
-		limit=100,
-	)
-	return [
-		{
-			"id": str(calendar.id),
-			"name": calendar.name,
-			"color": calendar.color,
-			"is_default": calendar.is_default,
-			"project_ids": [str(project_id) for project_id in calendar.project_ids],
-		}
-		for calendar in calendars
-	]
+def _scheduled_item_payload(item: ScheduledItem) -> dict[str, object]:
+	payload = item.model_dump(mode="json")
+	if item.kind == "reminder":
+		payload["type"] = "reminder"
+		payload["reminder_id"] = str(item.parent_id)
+	elif item.kind == "event":
+		payload["type"] = "calendar_event"
+		payload["calendar_event_id"] = str(item.parent_id)
+	return payload
 
 
 class CalendarEventGetTool(Tool[AppContext]):
-	"""fetch a specific calendar event, search events, or list events."""
+	"""fetch an event, search events, or list upcoming scheduled items."""
 
 	name: str = Field(default="calendar_event_get")
 	description: str = Field(
 		default=(
-			"retrieve calendar events. provide calendar_event_id to get one event, "
-			"query to search by meaning, or date filters to list accessible events."
+			"retrieve calendar information. provide calendar_event_id to get one "
+			"calendar event, query to search calendar events, or omit both to "
+			"return upcoming scheduled items from calendars and reminder lists."
 		)
 	)
 	parameters: JSONObject = Field(
@@ -220,6 +219,11 @@ class CalendarEventGetTool(Tool[AppContext]):
 		if __app_context__ is None:
 			return self.error("app context is required", __agent_context__)
 		inp = CalendarEventGetInput.model_validate(kwargs)
+		if inp.calendar_event_id and inp.query:
+			return self.error(
+				"provide calendar_event_id or query, not both",
+				__agent_context__,
+			)
 
 		try:
 			if inp.calendar_event_id:
@@ -227,16 +231,13 @@ class CalendarEventGetTool(Tool[AppContext]):
 					TypeID(inp.calendar_event_id),
 					__app_context__.session,
 					principal=__app_context__.principal,
-					calendar_id=TypeID(inp.calendar_id) if inp.calendar_id else None,
 				)
-				event_out: dict[str, object] = {
+				out: dict[str, object] = {
 					"status": "success",
 					"message": "calendar event retrieved",
 					"event": _event_payload(calendar_event),
 				}
-				if inp.include_calendars:
-					event_out["calendars"] = await _calendar_payloads(__app_context__)
-				return self.success(json.dumps(event_out), __agent_context__)
+				return self.success(json.dumps(out), __agent_context__)
 
 			if inp.query:
 				page = await calendar_service.search_calendar_events(
@@ -244,6 +245,8 @@ class CalendarEventGetTool(Tool[AppContext]):
 					__app_context__.session,
 					principal=__app_context__.principal,
 					limit=inp.limit,
+					cursor=inp.cursor,
+					search_params=_HYBRID_SEARCH,
 				)
 				search_results = [
 					{
@@ -257,35 +260,73 @@ class CalendarEventGetTool(Tool[AppContext]):
 					"status": "success",
 					"message": f"found {len(search_results)} calendar events",
 					"count": len(search_results),
+					"next_cursor": page.next_cursor,
+					"has_more": page.has_more,
 					"results": search_results,
 				}
-				if inp.include_calendars:
-					search_out["calendars"] = await _calendar_payloads(__app_context__)
 				return self.success(json.dumps(search_out), __agent_context__)
-
-			events = await calendar_service.list_calendar_events(
-				__app_context__.session,
-				__app_context__.principal,
-				filters=CalendarEventListFilters(
-					start_at=inp.start_at,
-					end_at=inp.end_at,
-				),
-				calendar_id=TypeID(inp.calendar_id) if inp.calendar_id else None,
-				limit=inp.limit,
-			)
 		except HTTPException as exc:
 			return self.error(str(exc.detail), __agent_context__)
 
-		event_results = [_event_payload(calendar_event) for calendar_event in events]
-		list_out: dict[str, object] = {
+		return await self._scheduled_items(inp, __agent_context__, __app_context__)
+
+	async def _scheduled_items(
+		self,
+		inp: CalendarEventGetInput,
+		agent_context: AgentContext,
+		app_context: AppContext,
+	) -> ToolMessage:
+		start_at = inp.start_at or datetime.now(tz=UTC)
+		end_at = inp.end_at or start_at + timedelta(days=_DEFAULT_UPCOMING_DAYS)
+		if end_at <= start_at:
+			return self.error("end_at must be after start_at", agent_context)
+		try:
+			items = [
+				*(
+					await list_calendar_scheduled_items(
+						app_context.session,
+						app_context.principal,
+						start_at,
+						end_at,
+					)
+				),
+				*(
+					await list_reminder_scheduled_items(
+						app_context.session,
+						app_context.principal,
+						start_at,
+						end_at,
+						include_completed=True,
+					)
+				),
+			]
+		except HTTPException as exc:
+			return self.error(str(exc.detail), agent_context)
+		items.sort(
+			key=lambda item: (
+				item.effective_start_at,
+				item.kind,
+				str(item.parent_id),
+			)
+		)
+		page = items[inp.skip : inp.skip + inp.limit]
+		results = [_scheduled_item_payload(item) for item in page]
+		next_skip = (
+			inp.skip + len(results) if inp.skip + len(results) < len(items) else None
+		)
+		out: dict[str, object] = {
 			"status": "success",
-			"message": f"found {len(event_results)} calendar events",
-			"count": len(event_results),
-			"results": event_results,
+			"message": f"found {len(results)} scheduled items",
+			"count": len(results),
+			"window_start_at": start_at.isoformat(),
+			"window_end_at": end_at.isoformat(),
+			"skip": inp.skip,
+			"limit": inp.limit,
+			"has_more": next_skip is not None,
+			"next_skip": next_skip,
+			"results": results,
 		}
-		if inp.include_calendars:
-			list_out["calendars"] = await _calendar_payloads(__app_context__)
-		return self.success(json.dumps(list_out), __agent_context__)
+		return self.success(json.dumps(out), agent_context)
 
 
 class CalendarEventWriteTool(Tool[AppContext]):

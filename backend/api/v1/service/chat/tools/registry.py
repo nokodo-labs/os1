@@ -10,6 +10,7 @@ from api.v1.service.chat.tools.calendar import (
 	CalendarEventGetTool,
 	CalendarEventWriteTool,
 )
+from api.v1.service.chat.tools.chats import ChatGetTool
 from api.v1.service.chat.tools.code_interpreter import CodeInterpreterTool
 from api.v1.service.chat.tools.files import FileEditTool, FileGetTool
 from api.v1.service.chat.tools.image_generation import GenerateImageTool
@@ -23,6 +24,7 @@ from api.v1.service.chat.tools.reminders import (
 	ReminderGetTool,
 	ReminderWriteTool,
 )
+from api.v1.service.chat.tools.resource_search import ResourceSearchTool
 from api.v1.service.chat.tools.reveal_attachment import RevealAttachmentTool
 from api.v1.service.chat.tools.send_notification import SendNotificationTool
 from api.v1.service.chat.tools.think import ThinkingTool
@@ -38,6 +40,8 @@ logger = logging.getLogger(__name__)
 
 
 _TOOLS: list[Tool[AppContext]] = [
+	ResourceSearchTool(),
+	ChatGetTool(),
 	MemoryRecallTool(),
 	MemoryCreateTool(),
 	NoteGetTool(),

@@ -138,6 +138,31 @@ async def list_messages(
 	return [*items[:insert_at], assistant_msg, *items[insert_at:]]
 
 
+async def get_message(
+	message_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+	include_hidden: bool = False,
+) -> Message:
+	"""get a message by id after validating chat access."""
+	_ensure_admin_for_hidden(include_hidden, principal)
+	result = await session.execute(select(Message).where(Message.id == message_id))
+	message = result.scalar_one_or_none()
+	if message is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="message not found",
+		)
+	await require_thread_access(
+		message.thread_id,
+		session,
+		principal,
+		required_level=AccessLevel.READER,
+		include_hidden=include_hidden,
+	)
+	return message
+
+
 async def list_events_for_message_ids(
 	thread_id: TypeID,
 	message_ids: list[TypeID],
