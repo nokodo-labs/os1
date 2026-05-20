@@ -1,4 +1,6 @@
 <script lang="ts">
+	/** renders the expanded notification tool card. */
+
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import Notification from '$lib/components/system/Notification.svelte'
 	import { formatToolEventLine, type ToolExecution } from '$lib/tools'
@@ -18,7 +20,7 @@
 			const body = typeof args.body === 'string' ? args.body : null
 			const iconUrl = typeof args.icon_url === 'string' ? args.icon_url : null
 			if (!title && !body) return null
-			return { title: title ?? 'sending notification…', body: body ?? '', iconUrl }
+			return { title: title ?? 'sending notification', body: body ?? '', iconUrl }
 		})()
 	)
 </script>
@@ -26,7 +28,7 @@
 <BaseToolCard {execution} {compact}>
 	{#snippet icon()}
 		<AppNotification
-			className={`h-4 w-4 text-foreground/80 ${execution.status === 'running' ? 'animate-pulse' : ''}`}
+			class={`text-foreground/80 h-4 w-4 ${execution.status === 'running' ? 'animate-pulse' : ''}`}
 		/>
 	{/snippet}
 

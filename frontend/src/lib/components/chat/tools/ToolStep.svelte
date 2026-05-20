@@ -1,22 +1,11 @@
 <script lang="ts">
+	/** renders one compact tool execution row in the chat timeline. */
+
 	import { getApiBaseUrl } from '$lib/api/client'
 	import { extractFileParts, extractMediaParts, hasAttachmentParts } from '$lib/chat/helpers'
 	import MediaAttachments from '$lib/components/chat/MediaAttachments.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
-	import Bell from '$lib/components/icons/Bell.svelte'
-	import Brain from '$lib/components/icons/Brain.svelte'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
-	import CommandLine from '$lib/components/icons/CommandLine.svelte'
-	import Document from '$lib/components/icons/Document.svelte'
-	import Eye from '$lib/components/icons/Eye.svelte'
-	import Film from '$lib/components/icons/Film.svelte'
-	import FinderFolder from '$lib/components/icons/FinderFolder.svelte'
-	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
-	import Headphone from '$lib/components/icons/Headphone.svelte'
-	import Note from '$lib/components/icons/Note.svelte'
-	import Pencil from '$lib/components/icons/Pencil.svelte'
-	import Photo from '$lib/components/icons/Photo.svelte'
-	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import { getThinkElapsed, getToolSummary, type ToolExecution } from '$lib/tools'
 	import { onDestroy } from 'svelte'
 	import { fade } from 'svelte/transition'
@@ -25,6 +14,7 @@
 	import MemoryRecallBody from './steps/MemoryRecallBody.svelte'
 	import ResourceBody from './steps/ResourceBody.svelte'
 	import WebSearchBody from './steps/WebSearchBody.svelte'
+	import ToolIcon from './ToolIcon.svelte'
 
 	interface Props {
 		execution: ToolExecution
@@ -76,6 +66,7 @@
 		name === 'agentic_web_search' ||
 			name === 'code_interpreter' ||
 			name === 'fetch_url' ||
+			name === 'memory_recall' ||
 			(isDone && summary.resourceId != null)
 	)
 	let isExpanded = $state(false)
@@ -93,6 +84,7 @@
 		resultAttachments != null && hasAttachmentParts(resultAttachments)
 	)
 
+	/** toggles the optional expanded body for tools with rich result content. */
 	function toggleExpand() {
 		if (hasBody) {
 			userToggled = true
@@ -100,6 +92,7 @@
 		}
 	}
 
+	/** removes wrapping quotes from compact subtitles without touching inner text. */
 	function subtitleText(value: string): string {
 		const trimmed = value.trim()
 		const leftDoubleQuote = String.fromCharCode(0x201c)
@@ -121,39 +114,7 @@
 <div class="flex items-start gap-2.5 py-1" in:fade={{ duration: 120 }}>
 	<!-- icon column - vertically centered with title row -->
 	<div class="relative mt-px flex h-5 w-6 shrink-0 items-center justify-center">
-		{#if name === 'think'}
-			<Brain class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
-		{:else if name === 'agentic_web_search' || name === 'fetch_url'}
-			<GlobeAlt class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
-		{:else if name === 'memory_recall' || name === 'memory_create'}
-			<Brain class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
-		{:else if name === 'note_get' || name === 'note_write'}
-			<Note class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
-		{:else if name === 'project_get'}
-			<FinderFolder
-				class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}"
-			/>
-		{:else if name === 'reminder_get' || name === 'reminder_write'}
-			<Bell class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
-		{:else if name === 'file_get'}
-			<Document class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
-		{:else if name === 'file_edit'}
-			<Pencil class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
-		{:else if name === 'generate_image'}
-			<Photo class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
-		{:else if name === 'generate_video'}
-			<Film class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
-		{:else if name === 'generate_audio'}
-			<Headphone class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
-		{:else if name === 'code_interpreter'}
-			<CommandLine
-				class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}"
-			/>
-		{:else if name === 'reveal_attachment'}
-			<Eye class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
-		{:else}
-			<Sparkles class="h-4.5 w-4.5 {isFailed ? 'text-destructive' : 'text-foreground/80'}" />
-		{/if}
+		<ToolIcon toolName={name} {isFailed} />
 	</div>
 
 	<!-- text column -->

@@ -1,4 +1,8 @@
-import type { ToolEvent, ToolExecution } from './index'
+/** parses web search tool progress and results for rich chat rendering. */
+
+import { isRecord, readFiniteNumber, readNonEmptyString, readRecordArray } from '$lib/utils/records'
+import { safeHostname } from '$lib/utils/url'
+import type { ToolEvent, ToolExecution } from './types'
 
 export interface WebSearchSourceView {
 	url: string
@@ -18,6 +22,7 @@ export interface WebSearchProgressItem {
 	engine: string | null
 }
 
+/** returns the unique search queries represented by a web search execution. */
 export function getWebSearchQueries(execution: ToolExecution): string[] {
 	const queries = new Set<string>()
 	const addQuery = (query: string | null) => {
@@ -43,6 +48,7 @@ export function getWebSearchQueries(execution: ToolExecution): string[] {
 	return [...queries]
 }
 
+/** returns source cards extracted from web search events or result output. */
 export function getWebSearchSources(execution: ToolExecution): WebSearchSourceView[] {
 	const sources = new Map<string, WebSearchSourceView>()
 	const addSources = (items: WebSearchSourceView[]) => {
@@ -66,6 +72,7 @@ export function getWebSearchSources(execution: ToolExecution): WebSearchSourceVi
 	return []
 }
 
+/** returns normalized progress items for the web search body component. */
 export function getWebSearchProgressItems(execution: ToolExecution): WebSearchProgressItem[] {
 	return execution.events
 		.map((event) => {
@@ -98,11 +105,11 @@ export function getWebSearchProgressItems(execution: ToolExecution): WebSearchPr
 				stage,
 				message,
 				query: readQueryText(firstSearch?.query) ?? readQueryText(richPayload.query),
-				resultCount: readNumber(firstSearch?.result_count),
+				resultCount: readFiniteNumber(firstSearch?.result_count),
 				sourceCount:
 					resourceSources.length > 0
 						? resourceSources.length
-						: readNumber(resources?.count),
+						: readFiniteNumber(resources?.count),
 				agent: readNamedValue(richPayload.agent),
 				engine: readNamedValue(richPayload.engine),
 			}
@@ -110,12 +117,14 @@ export function getWebSearchProgressItems(execution: ToolExecution): WebSearchPr
 		.filter((item): item is WebSearchProgressItem => item !== null)
 }
 
+/** returns a short progress message from a rich web search event. */
 export function formatWebSearchProgressLine(event: ToolEvent): string | null {
 	const richPayload = readWebSearchPayload(event.data.payload)
 	if (!richPayload) return null
 	return readNonEmptyString(richPayload.message)
 }
 
+/** returns the best available source count for a completed web search execution. */
 export function countWebSearchSources(execution: ToolExecution): number | null {
 	const richSources = getWebSearchSources(execution)
 	if (richSources.length > 0) return richSources.length
@@ -125,42 +134,26 @@ export function countWebSearchSources(execution: ToolExecution): number | null {
 		const richPayload = readWebSearchPayload(event.data.payload)
 		const resources =
 			richPayload && isRecord(richPayload.resources) ? richPayload.resources : null
-		latestCount = readNumber(resources?.count) ?? latestCount
+		latestCount = readFiniteNumber(resources?.count) ?? latestCount
 	}
 	return latestCount
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function readNonEmptyString(value: unknown): string | null {
-	if (typeof value !== 'string') return null
-	const trimmed = value.trim()
-	return trimmed.length > 0 ? trimmed : null
-}
-
-function readNumber(value: unknown): number | null {
-	return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
+/** reads a name field from either a string or nested object. */
 function readNamedValue(value: unknown): string | null {
 	if (typeof value === 'string') return readNonEmptyString(value)
 	if (isRecord(value)) return readNonEmptyString(value.name)
 	return null
 }
 
+/** reads query text from either a string or nested object. */
 function readQueryText(value: unknown): string | null {
 	if (typeof value === 'string') return readNonEmptyString(value)
 	if (isRecord(value)) return readNonEmptyString(value.text)
 	return null
 }
 
-function readRecordArray(value: unknown): Record<string, unknown>[] {
-	if (!Array.isArray(value)) return []
-	return value.filter((item): item is Record<string, unknown> => isRecord(item))
-}
-
+/** unwraps the rich web search payload shape emitted by tool progress events. */
 function readWebSearchPayload(payload: unknown): Record<string, unknown> | null {
 	if (!isRecord(payload)) return null
 	const nested = payload.web_search
@@ -168,6 +161,7 @@ function readWebSearchPayload(payload: unknown): Record<string, unknown> | null 
 	return payload.kind === 'agentic_web_search' ? payload : null
 }
 
+/** extracts source items from the supported web search payload variants. */
 function readWebSearchSources(payload: unknown): WebSearchSourceView[] {
 	const richPayload = readWebSearchPayload(payload)
 	if (richPayload) {
@@ -185,6 +179,7 @@ function readWebSearchSources(payload: unknown): WebSearchSourceView[] {
 	return []
 }
 
+/** extracts source items from json tool output. */
 function readWebSearchOutputSources(output: string): WebSearchSourceView[] {
 	try {
 		const parsed: unknown = JSON.parse(output)
@@ -197,6 +192,7 @@ function readWebSearchOutputSources(output: string): WebSearchSourceView[] {
 	}
 }
 
+/** normalizes raw source objects into deduped source views. */
 function readSourceItems(value: unknown): WebSearchSourceView[] {
 	if (!Array.isArray(value)) return []
 	const sources: WebSearchSourceView[] = []
@@ -216,6 +212,7 @@ function readSourceItems(value: unknown): WebSearchSourceView[] {
 	return sources
 }
 
+/** parses plain-text numbered source lists produced by older web search results. */
 function parseWebSearchSourcesFromText(text: string): WebSearchSourceView[] {
 	const results: WebSearchSourceView[] = []
 	const lines = text.split('\n')
@@ -231,12 +228,4 @@ function parseWebSearchSourcesFromText(text: string): WebSearchSourceView[] {
 		})
 	}
 	return results
-}
-
-function safeHostname(url: string): string | null {
-	try {
-		return new URL(url).hostname.replace(/^www\./, '')
-	} catch {
-		return null
-	}
 }

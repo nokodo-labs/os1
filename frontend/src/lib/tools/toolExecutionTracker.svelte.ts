@@ -12,7 +12,7 @@
  */
 
 import { SvelteDate, SvelteMap } from 'svelte/reactivity'
-import type { ToolCall, ToolEvent, ToolExecution, ToolResult, ToolStatus } from './index'
+import type { ToolCall, ToolEvent, ToolExecution, ToolResult, ToolStatus } from './types'
 
 // ── internal reactive execution state ────────────────────────────────────
 
@@ -51,7 +51,7 @@ class ReactiveToolExecution {
 		this.startedAt = new SvelteDate()
 	}
 
-	/** ToolExecution-compatible toolCall accessor (reads reactive $state fields). */
+	/** ToolExecution-shaped toolCall accessor that reads reactive $state fields. */
 	get toolCall(): { id: string; name: string; arguments: Record<string, unknown> } {
 		return { id: this.id, name: this.name, arguments: this.arguments }
 	}

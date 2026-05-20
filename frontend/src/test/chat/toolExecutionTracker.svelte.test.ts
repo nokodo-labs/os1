@@ -22,6 +22,23 @@ function progressEvent(toolCallId: string): ToolEvent {
 	}
 }
 
+function completedTool(
+	name: string,
+	args: Record<string, unknown>,
+	output: Record<string, unknown>
+): ToolExecution {
+	return {
+		toolCall: { id: `tc_${name}`, name, arguments: args },
+		status: 'completed',
+		events: [],
+		result: {
+			toolCallId: `tc_${name}`,
+			output: JSON.stringify(output),
+			isError: false,
+		},
+	}
+}
+
 describe('ToolExecutionTracker', () => {
 	it('does not move a completed tool back to running when late events arrive', () => {
 		const tracker = new ToolExecutionTracker()
@@ -225,5 +242,81 @@ describe('ToolExecutionTracker', () => {
 		}
 
 		expect(getWebSearchSources(execution)).toEqual([])
+	})
+
+	it('summarizes reminder search results from split list and reminder counts', () => {
+		const execution = completedTool(
+			'reminder_get',
+			{ query: 'draft' },
+			{ list_count: 1, reminder_count: 2, reminder_lists: [], reminders: [] }
+		)
+
+		expect(getToolSummary(execution)).toEqual({
+			title: 'found 3 reminder results',
+			subtitle: 'draft',
+		})
+	})
+
+	it('summarizes direct reminder and list payloads from nested fields', () => {
+		const reminderExecution = completedTool(
+			'reminder_get',
+			{ reminder_id: 'rem_1' },
+			{ reminder: { id: 'rem_1', title: 'send draft', list_id: 'list_1' } }
+		)
+		const listExecution = completedTool(
+			'reminder_get',
+			{ list_id: 'list_1' },
+			{ list: { id: 'list_1', name: 'work', total_count: 3 } }
+		)
+
+		expect(getToolSummary(reminderExecution)).toEqual({
+			title: 'checked send draft',
+			resourceId: 'rem_1',
+			resourceType: 'reminder',
+		})
+		expect(getToolSummary(listExecution)).toEqual({
+			title: 'checked work',
+			resourceId: 'list_1',
+			resourceType: 'reminder_list',
+		})
+	})
+
+	it('summarizes calendar scheduled items and direct events', () => {
+		const upcomingExecution = completedTool('calendar_event_get', {}, { count: 2, results: [] })
+		const eventExecution = completedTool(
+			'calendar_event_get',
+			{ calendar_event_id: 'calev_1' },
+			{ event: { id: 'calev_1', title: 'planning sync' } }
+		)
+
+		expect(getToolSummary(upcomingExecution)).toEqual({ title: 'found 2 scheduled items' })
+		expect(getToolSummary(eventExecution)).toEqual({
+			title: 'read planning sync',
+			resourceId: 'calev_1',
+			resourceType: 'calendar_event',
+		})
+	})
+
+	it('summarizes chat and global resource search outputs', () => {
+		const chatExecution = completedTool(
+			'chat_get',
+			{ chat_id: 'thread_1' },
+			{ chat: { chat_id: 'thread_1', title: 'release notes' }, message_page: {} }
+		)
+		const resourceSearchExecution = completedTool(
+			'resource_search',
+			{ query: 'release' },
+			{ count: 4 }
+		)
+
+		expect(getToolSummary(chatExecution)).toEqual({
+			title: 'read release notes',
+			resourceId: 'thread_1',
+			resourceType: 'chat',
+		})
+		expect(getToolSummary(resourceSearchExecution)).toEqual({
+			title: 'found 4 resources',
+			subtitle: 'release',
+		})
 	})
 })
