@@ -22,7 +22,7 @@
 		"@internationalized/date": "^3.12.1",
 		"@lucide/svelte": "^1.14.0",
 		"@sveltejs/adapter-static": "^3.0.10",
-		"@sveltejs/kit": "^2.59.1",
+		"@sveltejs/kit": "^2.60.1",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@tailwindcss/postcss": "^4.3.0",
 		"@tailwindcss/vite": "^4.3.0",
