@@ -36,6 +36,7 @@ from .base import BaseGoogleAdapter
 from .types import (
 	GoogleBlob,
 	GoogleContent,
+	GoogleContentUnion,
 	GoogleFunctionCall,
 	GoogleFunctionCallingConfig,
 	GoogleFunctionDeclaration,
@@ -218,10 +219,10 @@ def _tool_output_with_attachments(message: ToolMessage) -> str:
 
 def _messages_to_google(
 	messages: list[Message],
-) -> tuple[str | None, list[GoogleContent]]:
+) -> tuple[str | None, list[GoogleContentUnion]]:
 	"""convert SDK messages to google format."""
 	system_parts: list[str] = []
-	contents: list[GoogleContent] = []
+	contents: list[GoogleContentUnion] = []
 
 	for message in messages:
 		match message:
