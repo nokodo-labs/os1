@@ -320,7 +320,7 @@
 			id: 'section-ai',
 			label: 'AI',
 			keywords:
-				'agents default memory retrieval consolidation similarity threshold top-k chat context recent relevant pinned past chats context window mode turns pre-build embed filters task models thread metadata titles tags autocomplete summarization memory post-processing deduplication attachment decay image audio video reveal windowing token-aware truncation model limits max messages trigger ratio token budget summary batch size headroom tool result media generation image model steps video audio',
+				'agents default memory retrieval consolidation similarity threshold top-k chat context recent relevant pinned past chats context window mode turns pre-build embed filters task models thread metadata titles tags autocomplete summarization memory post-processing deduplication attachment decay image audio video reveal context compaction token-aware truncation model limits max messages trigger ratio token budget summary batch size headroom tool result media generation image model steps video audio',
 			icon: Brain,
 			color: 'text-indigo-400',
 			activeBg: 'bg-indigo-500/10',
@@ -536,18 +536,15 @@
 	let aiAttachmentVideoDecayTurns = $state<string>('')
 	let aiAttachmentRevealDecayTurns = $state<string>('')
 
-	// message windowing
-	let aiWindowingEnabled = $state(true)
-	let aiWindowingMaxMessages = $state<string>('')
-	let aiWindowingTriggerRatio = $state<string>('')
-	let aiWindowingHardRatio = $state<string>('')
-	let aiWindowingSummaryBatchSize = $state<string>('')
-	let aiWindowingMaxSummariesBeforeCondense = $state<string>('')
-	let aiWindowingToolResultMaxShare = $state<string>('')
-	let aiWindowingToolResultHardCap = $state<string>('')
-	let aiWindowingToolResultsCombinedMaxShare = $state<string>('')
-	let aiWindowingResponseHeadroom = $state<string>('')
-	let aiWindowingSummarizationMaxCharsPerMessage = $state<string>('')
+	// context compaction
+	let aiContextCompactionEnabled = $state(true)
+	let aiContextCompactionTriggerRatio = $state<string>('')
+	let aiContextCompactionMaxSummariesBeforeCondense = $state<string>('')
+	let aiContextCompactionToolResultMaxShare = $state<string>('')
+	let aiContextCompactionToolResultHardCap = $state<string>('')
+	let aiContextCompactionToolResultsCombinedMaxShare = $state<string>('')
+	let aiContextCompactionResponseHeadroom = $state<string>('')
+	let aiContextCompactionSummarizationMaxCharsPerMessage = $state<string>('')
 
 	let brandingSiteName = $state('')
 	let brandingLogoUrl = $state('')
@@ -745,17 +742,14 @@
 		aiAttachmentAudioDecayTurns: '',
 		aiAttachmentVideoDecayTurns: '',
 		aiAttachmentRevealDecayTurns: '',
-		aiWindowingEnabled: true,
-		aiWindowingMaxMessages: '',
-		aiWindowingTriggerRatio: '',
-		aiWindowingHardRatio: '',
-		aiWindowingSummaryBatchSize: '',
-		aiWindowingMaxSummariesBeforeCondense: '',
-		aiWindowingToolResultMaxShare: '',
-		aiWindowingToolResultHardCap: '',
-		aiWindowingToolResultsCombinedMaxShare: '',
-		aiWindowingResponseHeadroom: '',
-		aiWindowingSummarizationMaxCharsPerMessage: '',
+		aiContextCompactionEnabled: true,
+		aiContextCompactionTriggerRatio: '',
+		aiContextCompactionMaxSummariesBeforeCondense: '',
+		aiContextCompactionToolResultMaxShare: '',
+		aiContextCompactionToolResultHardCap: '',
+		aiContextCompactionToolResultsCombinedMaxShare: '',
+		aiContextCompactionResponseHeadroom: '',
+		aiContextCompactionSummarizationMaxCharsPerMessage: '',
 		brandingSiteName: '',
 		brandingLogoUrl: '',
 		brandingFaviconUrl: '',
@@ -922,20 +916,19 @@
 			aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns ||
 			aiAttachmentVideoDecayTurns !== original.aiAttachmentVideoDecayTurns ||
 			aiAttachmentRevealDecayTurns !== original.aiAttachmentRevealDecayTurns ||
-			aiWindowingEnabled !== original.aiWindowingEnabled ||
-			aiWindowingMaxMessages !== original.aiWindowingMaxMessages ||
-			aiWindowingTriggerRatio !== original.aiWindowingTriggerRatio ||
-			aiWindowingHardRatio !== original.aiWindowingHardRatio ||
-			aiWindowingSummaryBatchSize !== original.aiWindowingSummaryBatchSize ||
-			aiWindowingMaxSummariesBeforeCondense !==
-				original.aiWindowingMaxSummariesBeforeCondense ||
-			aiWindowingToolResultMaxShare !== original.aiWindowingToolResultMaxShare ||
-			aiWindowingToolResultHardCap !== original.aiWindowingToolResultHardCap ||
-			aiWindowingToolResultsCombinedMaxShare !==
-				original.aiWindowingToolResultsCombinedMaxShare ||
-			aiWindowingResponseHeadroom !== original.aiWindowingResponseHeadroom ||
-			aiWindowingSummarizationMaxCharsPerMessage !==
-				original.aiWindowingSummarizationMaxCharsPerMessage ||
+			aiContextCompactionEnabled !== original.aiContextCompactionEnabled ||
+			aiContextCompactionTriggerRatio !== original.aiContextCompactionTriggerRatio ||
+			aiContextCompactionMaxSummariesBeforeCondense !==
+				original.aiContextCompactionMaxSummariesBeforeCondense ||
+			aiContextCompactionToolResultMaxShare !==
+				original.aiContextCompactionToolResultMaxShare ||
+			aiContextCompactionToolResultHardCap !==
+				original.aiContextCompactionToolResultHardCap ||
+			aiContextCompactionToolResultsCombinedMaxShare !==
+				original.aiContextCompactionToolResultsCombinedMaxShare ||
+			aiContextCompactionResponseHeadroom !== original.aiContextCompactionResponseHeadroom ||
+			aiContextCompactionSummarizationMaxCharsPerMessage !==
+				original.aiContextCompactionSummarizationMaxCharsPerMessage ||
 			brandingSiteName !== original.brandingSiteName ||
 			brandingLogoUrl !== original.brandingLogoUrl ||
 			brandingFaviconUrl !== original.brandingFaviconUrl ||
@@ -1184,24 +1177,25 @@
 		aiAttachmentVideoDecayTurns = toStringOrEmpty(attachments?.video_decay_turns)
 		aiAttachmentRevealDecayTurns = toStringOrEmpty(attachments?.reveal_decay_turns)
 
-		const windowing = ai?.windowing
-		aiWindowingEnabled = windowing?.enabled ?? true
-		aiWindowingMaxMessages = toStringOrEmpty(windowing?.max_messages)
-		aiWindowingTriggerRatio = toStringOrEmpty(windowing?.trigger_ratio)
-		aiWindowingHardRatio = toStringOrEmpty(windowing?.hard_ratio)
-		aiWindowingSummaryBatchSize = toStringOrEmpty(windowing?.summary_batch_size)
-		aiWindowingMaxSummariesBeforeCondense = toStringOrEmpty(
-			windowing?.max_summaries_before_condense
+		const contextCompaction = ai?.context_compaction
+		aiContextCompactionEnabled = contextCompaction?.enabled ?? true
+		aiContextCompactionTriggerRatio = toStringOrEmpty(contextCompaction?.trigger_ratio)
+		aiContextCompactionMaxSummariesBeforeCondense = toStringOrEmpty(
+			contextCompaction?.max_summaries_before_condense
 		)
-		aiWindowingToolResultMaxShare = toStringOrEmpty(windowing?.tool_result_max_share)
-		aiWindowingToolResultHardCap = toStringOrEmpty(windowing?.tool_result_hard_cap)
-		aiWindowingToolResultsCombinedMaxShare = toStringOrEmpty(
-			windowing?.tool_results_combined_max_share
+		aiContextCompactionToolResultMaxShare = toStringOrEmpty(
+			contextCompaction?.tool_result_max_share
 		)
-		aiWindowingResponseHeadroom = toStringOrEmpty(windowing?.response_headroom)
+		aiContextCompactionToolResultHardCap = toStringOrEmpty(
+			contextCompaction?.tool_result_hard_cap
+		)
+		aiContextCompactionToolResultsCombinedMaxShare = toStringOrEmpty(
+			contextCompaction?.tool_results_combined_max_share
+		)
+		aiContextCompactionResponseHeadroom = toStringOrEmpty(contextCompaction?.response_headroom)
 
-		aiWindowingSummarizationMaxCharsPerMessage = toStringOrEmpty(
-			windowing?.summarization_max_chars_per_message
+		aiContextCompactionSummarizationMaxCharsPerMessage = toStringOrEmpty(
+			contextCompaction?.summarization_max_chars_per_message
 		)
 
 		const aiMedia = ai?.media
@@ -1465,17 +1459,14 @@
 			aiAttachmentAudioDecayTurns,
 			aiAttachmentVideoDecayTurns,
 			aiAttachmentRevealDecayTurns,
-			aiWindowingEnabled,
-			aiWindowingMaxMessages,
-			aiWindowingTriggerRatio,
-			aiWindowingHardRatio,
-			aiWindowingSummaryBatchSize,
-			aiWindowingMaxSummariesBeforeCondense,
-			aiWindowingToolResultMaxShare,
-			aiWindowingToolResultHardCap,
-			aiWindowingToolResultsCombinedMaxShare,
-			aiWindowingResponseHeadroom,
-			aiWindowingSummarizationMaxCharsPerMessage,
+			aiContextCompactionEnabled,
+			aiContextCompactionTriggerRatio,
+			aiContextCompactionMaxSummariesBeforeCondense,
+			aiContextCompactionToolResultMaxShare,
+			aiContextCompactionToolResultHardCap,
+			aiContextCompactionToolResultsCombinedMaxShare,
+			aiContextCompactionResponseHeadroom,
+			aiContextCompactionSummarizationMaxCharsPerMessage,
 			brandingSiteName,
 			brandingLogoUrl,
 			brandingFaviconUrl,
@@ -1691,18 +1682,17 @@
 		aiAttachmentAudioDecayTurns = original.aiAttachmentAudioDecayTurns
 		aiAttachmentVideoDecayTurns = original.aiAttachmentVideoDecayTurns
 		aiAttachmentRevealDecayTurns = original.aiAttachmentRevealDecayTurns
-		aiWindowingEnabled = original.aiWindowingEnabled
-		aiWindowingMaxMessages = original.aiWindowingMaxMessages
-		aiWindowingTriggerRatio = original.aiWindowingTriggerRatio
-		aiWindowingHardRatio = original.aiWindowingHardRatio
-		aiWindowingSummaryBatchSize = original.aiWindowingSummaryBatchSize
-		aiWindowingMaxSummariesBeforeCondense = original.aiWindowingMaxSummariesBeforeCondense
-		aiWindowingToolResultMaxShare = original.aiWindowingToolResultMaxShare
-		aiWindowingToolResultHardCap = original.aiWindowingToolResultHardCap
-		aiWindowingToolResultsCombinedMaxShare = original.aiWindowingToolResultsCombinedMaxShare
-		aiWindowingResponseHeadroom = original.aiWindowingResponseHeadroom
-		aiWindowingSummarizationMaxCharsPerMessage =
-			original.aiWindowingSummarizationMaxCharsPerMessage
+		aiContextCompactionEnabled = original.aiContextCompactionEnabled
+		aiContextCompactionTriggerRatio = original.aiContextCompactionTriggerRatio
+		aiContextCompactionMaxSummariesBeforeCondense =
+			original.aiContextCompactionMaxSummariesBeforeCondense
+		aiContextCompactionToolResultMaxShare = original.aiContextCompactionToolResultMaxShare
+		aiContextCompactionToolResultHardCap = original.aiContextCompactionToolResultHardCap
+		aiContextCompactionToolResultsCombinedMaxShare =
+			original.aiContextCompactionToolResultsCombinedMaxShare
+		aiContextCompactionResponseHeadroom = original.aiContextCompactionResponseHeadroom
+		aiContextCompactionSummarizationMaxCharsPerMessage =
+			original.aiContextCompactionSummarizationMaxCharsPerMessage
 		aiMediaImagesEnabled = original.aiMediaImagesEnabled
 		aiMediaImagesModel = original.aiMediaImagesModel
 		aiMediaImagesDefaultSize = original.aiMediaImagesDefaultSize
@@ -1901,20 +1891,19 @@
 			aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns ||
 			aiAttachmentVideoDecayTurns !== original.aiAttachmentVideoDecayTurns ||
 			aiAttachmentRevealDecayTurns !== original.aiAttachmentRevealDecayTurns ||
-			aiWindowingEnabled !== original.aiWindowingEnabled ||
-			aiWindowingMaxMessages !== original.aiWindowingMaxMessages ||
-			aiWindowingTriggerRatio !== original.aiWindowingTriggerRatio ||
-			aiWindowingHardRatio !== original.aiWindowingHardRatio ||
-			aiWindowingSummaryBatchSize !== original.aiWindowingSummaryBatchSize ||
-			aiWindowingMaxSummariesBeforeCondense !==
-				original.aiWindowingMaxSummariesBeforeCondense ||
-			aiWindowingToolResultMaxShare !== original.aiWindowingToolResultMaxShare ||
-			aiWindowingToolResultHardCap !== original.aiWindowingToolResultHardCap ||
-			aiWindowingToolResultsCombinedMaxShare !==
-				original.aiWindowingToolResultsCombinedMaxShare ||
-			aiWindowingResponseHeadroom !== original.aiWindowingResponseHeadroom ||
-			aiWindowingSummarizationMaxCharsPerMessage !==
-				original.aiWindowingSummarizationMaxCharsPerMessage ||
+			aiContextCompactionEnabled !== original.aiContextCompactionEnabled ||
+			aiContextCompactionTriggerRatio !== original.aiContextCompactionTriggerRatio ||
+			aiContextCompactionMaxSummariesBeforeCondense !==
+				original.aiContextCompactionMaxSummariesBeforeCondense ||
+			aiContextCompactionToolResultMaxShare !==
+				original.aiContextCompactionToolResultMaxShare ||
+			aiContextCompactionToolResultHardCap !==
+				original.aiContextCompactionToolResultHardCap ||
+			aiContextCompactionToolResultsCombinedMaxShare !==
+				original.aiContextCompactionToolResultsCombinedMaxShare ||
+			aiContextCompactionResponseHeadroom !== original.aiContextCompactionResponseHeadroom ||
+			aiContextCompactionSummarizationMaxCharsPerMessage !==
+				original.aiContextCompactionSummarizationMaxCharsPerMessage ||
 			aiMediaImagesEnabled !== original.aiMediaImagesEnabled ||
 			aiMediaImagesModel !== original.aiMediaImagesModel ||
 			aiMediaImagesDefaultSize !== original.aiMediaImagesDefaultSize ||
@@ -2044,66 +2033,68 @@
 			}
 
 			if (
-				aiWindowingEnabled !== original.aiWindowingEnabled ||
-				aiWindowingMaxMessages !== original.aiWindowingMaxMessages ||
-				aiWindowingTriggerRatio !== original.aiWindowingTriggerRatio ||
-				aiWindowingHardRatio !== original.aiWindowingHardRatio ||
-				aiWindowingSummaryBatchSize !== original.aiWindowingSummaryBatchSize ||
-				aiWindowingMaxSummariesBeforeCondense !==
-					original.aiWindowingMaxSummariesBeforeCondense ||
-				aiWindowingToolResultMaxShare !== original.aiWindowingToolResultMaxShare ||
-				aiWindowingToolResultHardCap !== original.aiWindowingToolResultHardCap ||
-				aiWindowingToolResultsCombinedMaxShare !==
-					original.aiWindowingToolResultsCombinedMaxShare ||
-				aiWindowingResponseHeadroom !== original.aiWindowingResponseHeadroom ||
-				aiWindowingSummarizationMaxCharsPerMessage !==
-					original.aiWindowingSummarizationMaxCharsPerMessage
+				aiContextCompactionEnabled !== original.aiContextCompactionEnabled ||
+				aiContextCompactionTriggerRatio !== original.aiContextCompactionTriggerRatio ||
+				aiContextCompactionMaxSummariesBeforeCondense !==
+					original.aiContextCompactionMaxSummariesBeforeCondense ||
+				aiContextCompactionToolResultMaxShare !==
+					original.aiContextCompactionToolResultMaxShare ||
+				aiContextCompactionToolResultHardCap !==
+					original.aiContextCompactionToolResultHardCap ||
+				aiContextCompactionToolResultsCombinedMaxShare !==
+					original.aiContextCompactionToolResultsCombinedMaxShare ||
+				aiContextCompactionResponseHeadroom !==
+					original.aiContextCompactionResponseHeadroom ||
+				aiContextCompactionSummarizationMaxCharsPerMessage !==
+					original.aiContextCompactionSummarizationMaxCharsPerMessage
 			) {
-				aiPatch.windowing = {}
-				if (aiWindowingEnabled !== original.aiWindowingEnabled)
-					aiPatch.windowing.enabled = aiWindowingEnabled
-				if (aiWindowingMaxMessages !== original.aiWindowingMaxMessages)
-					aiPatch.windowing.max_messages = asNumberOrUndefined(aiWindowingMaxMessages)
-				if (aiWindowingTriggerRatio !== original.aiWindowingTriggerRatio)
-					aiPatch.windowing.trigger_ratio = asNumberOrUndefined(aiWindowingTriggerRatio)
-				if (aiWindowingHardRatio !== original.aiWindowingHardRatio)
-					aiPatch.windowing.hard_ratio = asNumberOrUndefined(aiWindowingHardRatio)
-				if (aiWindowingSummaryBatchSize !== original.aiWindowingSummaryBatchSize)
-					aiPatch.windowing.summary_batch_size = asNumberOrUndefined(
-						aiWindowingSummaryBatchSize
+				aiPatch.context_compaction = {}
+				if (aiContextCompactionEnabled !== original.aiContextCompactionEnabled)
+					aiPatch.context_compaction.enabled = aiContextCompactionEnabled
+				if (aiContextCompactionTriggerRatio !== original.aiContextCompactionTriggerRatio)
+					aiPatch.context_compaction.trigger_ratio = asNumberOrUndefined(
+						aiContextCompactionTriggerRatio
 					)
 				if (
-					aiWindowingMaxSummariesBeforeCondense !==
-					original.aiWindowingMaxSummariesBeforeCondense
+					aiContextCompactionMaxSummariesBeforeCondense !==
+					original.aiContextCompactionMaxSummariesBeforeCondense
 				)
-					aiPatch.windowing.max_summaries_before_condense = asNumberOrUndefined(
-						aiWindowingMaxSummariesBeforeCondense
-					)
-				if (aiWindowingToolResultMaxShare !== original.aiWindowingToolResultMaxShare)
-					aiPatch.windowing.tool_result_max_share = asNumberOrUndefined(
-						aiWindowingToolResultMaxShare
-					)
-				if (aiWindowingToolResultHardCap !== original.aiWindowingToolResultHardCap)
-					aiPatch.windowing.tool_result_hard_cap = asNumberOrUndefined(
-						aiWindowingToolResultHardCap
+					aiPatch.context_compaction.max_summaries_before_condense = asNumberOrUndefined(
+						aiContextCompactionMaxSummariesBeforeCondense
 					)
 				if (
-					aiWindowingToolResultsCombinedMaxShare !==
-					original.aiWindowingToolResultsCombinedMaxShare
+					aiContextCompactionToolResultMaxShare !==
+					original.aiContextCompactionToolResultMaxShare
 				)
-					aiPatch.windowing.tool_results_combined_max_share = asNumberOrUndefined(
-						aiWindowingToolResultsCombinedMaxShare
-					)
-				if (aiWindowingResponseHeadroom !== original.aiWindowingResponseHeadroom)
-					aiPatch.windowing.response_headroom = asNumberOrUndefined(
-						aiWindowingResponseHeadroom
+					aiPatch.context_compaction.tool_result_max_share = asNumberOrUndefined(
+						aiContextCompactionToolResultMaxShare
 					)
 				if (
-					aiWindowingSummarizationMaxCharsPerMessage !==
-					original.aiWindowingSummarizationMaxCharsPerMessage
+					aiContextCompactionToolResultHardCap !==
+					original.aiContextCompactionToolResultHardCap
+				)
+					aiPatch.context_compaction.tool_result_hard_cap = asNumberOrUndefined(
+						aiContextCompactionToolResultHardCap
+					)
+				if (
+					aiContextCompactionToolResultsCombinedMaxShare !==
+					original.aiContextCompactionToolResultsCombinedMaxShare
+				)
+					aiPatch.context_compaction.tool_results_combined_max_share =
+						asNumberOrUndefined(aiContextCompactionToolResultsCombinedMaxShare)
+				if (
+					aiContextCompactionResponseHeadroom !==
+					original.aiContextCompactionResponseHeadroom
+				)
+					aiPatch.context_compaction.response_headroom = asNumberOrUndefined(
+						aiContextCompactionResponseHeadroom
+					)
+				if (
+					aiContextCompactionSummarizationMaxCharsPerMessage !==
+					original.aiContextCompactionSummarizationMaxCharsPerMessage
 				) {
-					aiPatch.windowing.summarization_max_chars_per_message = asNumberOrNull(
-						aiWindowingSummarizationMaxCharsPerMessage
+					aiPatch.context_compaction.summarization_max_chars_per_message = asNumberOrNull(
+						aiContextCompactionSummarizationMaxCharsPerMessage
 					)
 				}
 			}
@@ -3251,26 +3242,27 @@
 										bind:attachmentRevealDecayTurns={
 											aiAttachmentRevealDecayTurns
 										}
-										bind:windowingEnabled={aiWindowingEnabled}
-										bind:windowingMaxMessages={aiWindowingMaxMessages}
-										bind:windowingTriggerRatio={aiWindowingTriggerRatio}
-										bind:windowingHardRatio={aiWindowingHardRatio}
-										bind:windowingSummaryBatchSize={aiWindowingSummaryBatchSize}
-										bind:windowingMaxSummariesBeforeCondense={
-											aiWindowingMaxSummariesBeforeCondense
+										bind:contextCompactionEnabled={aiContextCompactionEnabled}
+										bind:contextCompactionTriggerRatio={
+											aiContextCompactionTriggerRatio
 										}
-										bind:windowingToolResultMaxShare={
-											aiWindowingToolResultMaxShare
+										bind:contextCompactionMaxSummariesBeforeCondense={
+											aiContextCompactionMaxSummariesBeforeCondense
 										}
-										bind:windowingToolResultHardCap={
-											aiWindowingToolResultHardCap
+										bind:contextCompactionToolResultMaxShare={
+											aiContextCompactionToolResultMaxShare
 										}
-										bind:windowingToolResultsCombinedMaxShare={
-											aiWindowingToolResultsCombinedMaxShare
+										bind:contextCompactionToolResultHardCap={
+											aiContextCompactionToolResultHardCap
 										}
-										bind:windowingResponseHeadroom={aiWindowingResponseHeadroom}
-										bind:windowingSummarizationMaxCharsPerMessage={
-											aiWindowingSummarizationMaxCharsPerMessage
+										bind:contextCompactionToolResultsCombinedMaxShare={
+											aiContextCompactionToolResultsCombinedMaxShare
+										}
+										bind:contextCompactionResponseHeadroom={
+											aiContextCompactionResponseHeadroom
+										}
+										bind:contextCompactionSummarizationMaxCharsPerMessage={
+											aiContextCompactionSummarizationMaxCharsPerMessage
 										}
 										{agents}
 										{models}

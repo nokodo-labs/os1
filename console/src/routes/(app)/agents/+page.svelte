@@ -38,7 +38,6 @@
 		ChevronLeft,
 		ChevronRight,
 		CodeXml,
-		Database,
 		Earth,
 		Eye,
 		FileText,
@@ -122,6 +121,31 @@ user: {{ user_name }}.
 	let originalFeatures = $state<Record<string, unknown>>({})
 
 	type Section = 'overview' | 'model' | 'prompt' | 'plugins' | 'config'
+	type PluginIconKind =
+		| 'memory'
+		| 'note'
+		| 'reminder'
+		| 'calendar'
+		| 'file'
+		| 'web'
+		| 'search'
+		| 'image'
+		| 'code'
+		| 'reveal'
+		| 'attachment'
+		| 'notification'
+		| 'think'
+		| 'chat'
+		| 'time'
+		| 'filter'
+		| 'hook'
+		| 'tool'
+	type NativePluginInfo = {
+		label: string
+		description: string
+		icon: PluginIconKind
+	}
+	type PluginMetadataKey = `${PluginInfo['type']}:${string}`
 	let activeSection = $state<Section>('overview')
 	const sections: Array<{ value: Section; label: string }> = [
 		{ value: 'overview', label: 'overview' },
@@ -130,6 +154,247 @@ user: {{ user_name }}.
 		{ value: 'plugins', label: 'plugins' },
 		{ value: 'config', label: 'config' },
 	]
+	const defaultAgentPluginIds = [
+		'chat_context',
+		'file_resolve',
+		'citation_index',
+		'context_compaction',
+	]
+
+	function pluginMetadataKey(
+		pluginType: PluginInfo['type'],
+		pluginId: string
+	): PluginMetadataKey {
+		return `${pluginType}:${pluginId}`
+	}
+
+	const nativePluginInfo = new Map<PluginMetadataKey, NativePluginInfo>([
+		[
+			pluginMetadataKey('filter', 'chat_context'),
+			{
+				label: 'recall chats',
+				description:
+					'fills the chat_context prompt variable with relevant or recent conversation history.',
+				icon: 'chat',
+			},
+		],
+		[
+			pluginMetadataKey('filter', 'file_resolve'),
+			{
+				label: 'resolve files',
+				description:
+					'loads attached file data from file ids so the model can see the actual image or file.',
+				icon: 'file',
+			},
+		],
+		[
+			pluginMetadataKey('filter', 'citation_index'),
+			{
+				label: 'index citations',
+				description:
+					'adds numbered source markers to citeable tool results and exposes the source list to the model.',
+				icon: 'search',
+			},
+		],
+		[
+			pluginMetadataKey('filter', 'context_compaction'),
+			{
+				label: 'compact context',
+				description:
+					'keeps long chats inside the model limit by using summaries, trimming history, and compacting old tool results.',
+				icon: 'filter',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'resource_search'),
+			{
+				label: 'search resources',
+				description:
+					'searches chats, notes, reminders, calendar events, projects, and files.',
+				icon: 'search',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'chat_get'),
+			{
+				label: 'read chats',
+				description: 'searches, lists, and reads chats and chat messages.',
+				icon: 'chat',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'think'),
+			{
+				label: 'think',
+				description: 'lets the agent reason through a task before acting.',
+				icon: 'think',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'agentic_web_search'),
+			{
+				label: 'agentic web search',
+				description:
+					'preferred for web questions. searches, reads, summarizes, and returns concise cited results.',
+				icon: 'web',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'web_search'),
+			{
+				label: 'raw web search',
+				description:
+					'advanced fallback. returns raw results and snippets, which can use many tokens; prefer agentic web search.',
+				icon: 'web',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'fetch_url'),
+			{
+				label: 'open webpages',
+				description: 'reads a specific webpage by URL.',
+				icon: 'web',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'memory_recall'),
+			{
+				label: 'recall memories',
+				description: 'searches long-term memories available to the agent.',
+				icon: 'memory',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'memory_create'),
+			{
+				label: 'save memories',
+				description: 'stores useful long-term memory for future runs.',
+				icon: 'memory',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'note_get'),
+			{
+				label: 'read notes',
+				description: 'searches, lists, and reads notes.',
+				icon: 'note',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'note_write'),
+			{
+				label: 'write notes',
+				description: 'creates, updates, and deletes notes.',
+				icon: 'note',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'project_get'),
+			{
+				label: 'read projects',
+				description: 'searches, lists, and reads projects.',
+				icon: 'file',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'calendar_event_get'),
+			{
+				label: 'read calendar',
+				description:
+					'searches calendar events or returns upcoming scheduled items from calendars and reminder lists.',
+				icon: 'calendar',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'calendar_event_write'),
+			{
+				label: 'write calendar events',
+				description: 'creates, updates, and deletes calendar events.',
+				icon: 'calendar',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'reminder_get'),
+			{
+				label: 'read reminders',
+				description:
+					'searches reminders and reminder lists, or reads a specific reminder/list.',
+				icon: 'reminder',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'reminder_write'),
+			{
+				label: 'write reminders',
+				description: 'creates, updates, completes, and deletes reminders.',
+				icon: 'reminder',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'file_get'),
+			{
+				label: 'read files',
+				description: 'searches, lists, and reads files.',
+				icon: 'file',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'file_edit'),
+			{
+				label: 'edit files',
+				description: 'creates, updates, and deletes files.',
+				icon: 'file',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'generate_image'),
+			{
+				label: 'create images',
+				description: 'generates or edits images.',
+				icon: 'image',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'generate_video'),
+			{
+				label: 'create videos',
+				description: 'generates videos.',
+				icon: 'image',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'generate_audio'),
+			{
+				label: 'create audio',
+				description: 'generates audio clips.',
+				icon: 'attachment',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'code_interpreter'),
+			{
+				label: 'run code',
+				description: 'runs Python code in a sandbox for analysis and generated files.',
+				icon: 'code',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'send_notification'),
+			{
+				label: 'send notifications',
+				description: 'sends notifications to chat participants or a specific user.',
+				icon: 'notification',
+			},
+		],
+		[
+			pluginMetadataKey('tool', 'reveal_attachment'),
+			{
+				label: 'reveal attachments',
+				description: 'shows a generated or hidden attachment in the chat.',
+				icon: 'reveal',
+			},
+		],
+	])
 
 	let selectedModelType = $derived.by(() => {
 		if (!formModelId) return null
@@ -154,7 +419,7 @@ user: {{ user_name }}.
 			{
 				label: 'filters',
 				description: 'context processors that shape messages before the model runs.',
-				plugins: availableFilterPlugins,
+				plugins: orderedPlugins(availableFilterPlugins),
 			},
 			{
 				label: 'hooks',
@@ -212,23 +477,54 @@ user: {{ user_name }}.
 		}
 	}
 
+	function pluginMetadata(plugin: PluginInfo): NativePluginInfo | null {
+		return nativePluginInfo.get(pluginMetadataKey(plugin.type, plugin.id)) ?? null
+	}
+
+	function isDefaultAgentPlugin(pluginId: string): boolean {
+		return defaultAgentPluginIds.includes(pluginId)
+	}
+
+	function defaultAgentPluginOrder(pluginId: string): number {
+		const index = defaultAgentPluginIds.indexOf(pluginId)
+		return index === -1 ? Number.MAX_SAFE_INTEGER : index
+	}
+
+	function orderedPlugins(plugins: PluginInfo[]): PluginInfo[] {
+		return [...plugins].sort((left, right) => {
+			const leftOrder = defaultAgentPluginOrder(left.id)
+			const rightOrder = defaultAgentPluginOrder(right.id)
+			if (leftOrder !== rightOrder) return leftOrder - rightOrder
+			return pluginDisplayName(left).localeCompare(pluginDisplayName(right))
+		})
+	}
+
 	function pluginDisplayName(plugin: PluginInfo): string {
+		const nativeInfo = pluginMetadata(plugin)
+		if (nativeInfo) return nativeInfo.label
 		return (plugin.name || plugin.id).replaceAll('_', ' ')
 	}
 
 	function pluginDescription(plugin: PluginInfo): string {
+		const nativeInfo = pluginMetadata(plugin)
+		if (nativeInfo) return nativeInfo.description
+		if (plugin.type === 'tool') return 'lets the agent call an action during a run.'
 		const description = plugin.description?.trim()
 		if (description) return description
-		if (plugin.type === 'tool') return 'lets the agent call an action during a run.'
 		if (plugin.type === 'filter') return 'shapes conversation context before model calls.'
 		return 'runs additional processing around agent activity.'
 	}
 
-	function pluginIconKind(plugin: PluginInfo): string {
+	function pluginIconKind(plugin: PluginInfo): PluginIconKind {
+		const nativeInfo = pluginMetadata(plugin)
+		if (nativeInfo) return nativeInfo.icon
+		if (plugin.type === 'filter') return 'filter'
+		if (plugin.type === 'hook') return 'hook'
 		const id = plugin.id.toLowerCase()
 		if (id.includes('memory')) return 'memory'
 		if (id.includes('note')) return 'note'
 		if (id.includes('reminder')) return 'reminder'
+		if (id.includes('calendar')) return 'calendar'
 		if (id.includes('file')) return 'file'
 		if (id.includes('search') || id.includes('url')) return 'web'
 		if (id.includes('image')) return 'image'
@@ -237,10 +533,8 @@ user: {{ user_name }}.
 		if (id.includes('attachment')) return 'attachment'
 		if (id.includes('notification')) return 'notification'
 		if (id.includes('think')) return 'think'
-		if (id.includes('chat_context')) return 'chat'
+		if (id.includes('chat')) return 'chat'
 		if (id.includes('timestamp')) return 'time'
-		if (plugin.type === 'filter') return 'filter'
-		if (plugin.type === 'hook') return 'hook'
 		return 'tool'
 	}
 
@@ -328,7 +622,7 @@ user: {{ user_name }}.
 		formDescription = ''
 		formSystemPrompt = ''
 		formModelId = ''
-		formPluginIds = []
+		formPluginIds = [...defaultAgentPluginIds]
 		formProfileImageValue = ''
 		configParams = {}
 		formSteeringEnabled = true
@@ -926,15 +1220,19 @@ user: {{ user_name }}.
 															class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-zinc-300"
 														>
 															{#if iconKind === 'memory'}
-																<Database class="h-4 w-4" />
+																<Brain class="h-4 w-4" />
 															{:else if iconKind === 'note'}
 																<FileText class="h-4 w-4" />
 															{:else if iconKind === 'reminder'}
+																<Bell class="h-4 w-4" />
+															{:else if iconKind === 'calendar'}
 																<CalendarDays class="h-4 w-4" />
 															{:else if iconKind === 'file'}
 																<FolderOpen class="h-4 w-4" />
 															{:else if iconKind === 'web'}
 																<Earth class="h-4 w-4" />
+															{:else if iconKind === 'search'}
+																<Search class="h-4 w-4" />
 															{:else if iconKind === 'image'}
 																<ImageIcon class="h-4 w-4" />
 															{:else if iconKind === 'code'}
@@ -973,6 +1271,13 @@ user: {{ user_name }}.
 																		class="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400"
 																	>
 																		native
+																	</span>
+																{/if}
+																{#if isDefaultAgentPlugin(plugin.id)}
+																	<span
+																		class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300"
+																	>
+																		default
 																	</span>
 																{/if}
 															</div>

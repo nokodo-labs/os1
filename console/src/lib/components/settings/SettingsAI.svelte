@@ -80,18 +80,15 @@
 		attachmentAudioDecayTurns?: string
 		attachmentVideoDecayTurns?: string
 		attachmentRevealDecayTurns?: string
-		// windowing
-		windowingEnabled?: boolean
-		windowingMaxMessages?: string
-		windowingTriggerRatio?: string
-		windowingHardRatio?: string
-		windowingSummaryBatchSize?: string
-		windowingMaxSummariesBeforeCondense?: string
-		windowingToolResultMaxShare?: string
-		windowingToolResultHardCap?: string
-		windowingToolResultsCombinedMaxShare?: string
-		windowingResponseHeadroom?: string
-		windowingSummarizationMaxCharsPerMessage?: string
+		// context compaction
+		contextCompactionEnabled?: boolean
+		contextCompactionTriggerRatio?: string
+		contextCompactionMaxSummariesBeforeCondense?: string
+		contextCompactionToolResultMaxShare?: string
+		contextCompactionToolResultHardCap?: string
+		contextCompactionToolResultsCombinedMaxShare?: string
+		contextCompactionResponseHeadroom?: string
+		contextCompactionSummarizationMaxCharsPerMessage?: string
 		// auxiliary (read-only)
 		agents?: Agent[]
 		models?: Model[]
@@ -134,17 +131,14 @@
 		attachmentAudioDecayTurns = $bindable(''),
 		attachmentVideoDecayTurns = $bindable(''),
 		attachmentRevealDecayTurns = $bindable(''),
-		windowingEnabled = $bindable(true),
-		windowingMaxMessages = $bindable(''),
-		windowingTriggerRatio = $bindable(''),
-		windowingHardRatio = $bindable(''),
-		windowingSummaryBatchSize = $bindable(''),
-		windowingMaxSummariesBeforeCondense = $bindable(''),
-		windowingToolResultMaxShare = $bindable(''),
-		windowingToolResultHardCap = $bindable(''),
-		windowingToolResultsCombinedMaxShare = $bindable(''),
-		windowingResponseHeadroom = $bindable(''),
-		windowingSummarizationMaxCharsPerMessage = $bindable(''),
+		contextCompactionEnabled = $bindable(true),
+		contextCompactionTriggerRatio = $bindable(''),
+		contextCompactionMaxSummariesBeforeCondense = $bindable(''),
+		contextCompactionToolResultMaxShare = $bindable(''),
+		contextCompactionToolResultHardCap = $bindable(''),
+		contextCompactionToolResultsCombinedMaxShare = $bindable(''),
+		contextCompactionResponseHeadroom = $bindable(''),
+		contextCompactionSummarizationMaxCharsPerMessage = $bindable(''),
 		agents = [],
 		models = [],
 		providers = [],
@@ -663,158 +657,123 @@
 			</div>
 		</div>
 
-		<!-- windowing -->
+		<!-- context compaction -->
 		<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
 			<div class="mb-4 flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium">context windowing</p>
+					<p class="text-sm font-medium">context compaction</p>
 					<p class="text-xs text-zinc-500">
-						token-aware summarization and truncation to keep threads within model
+						token-aware summarization and compaction to keep threads within model
 						limits.
 					</p>
 				</div>
 				<Switch
-					id="windowing_enabled"
-					checked={windowingEnabled}
-					onCheckedChange={(v: boolean) => (windowingEnabled = v)}
+					id="context_compaction_enabled"
+					checked={contextCompactionEnabled}
+					onCheckedChange={(v: boolean) => (contextCompactionEnabled = v)}
 				/>
 			</div>
-			{#if windowingEnabled}
+			{#if contextCompactionEnabled}
 				<div class="grid gap-4 md:grid-cols-2">
 					<div class="space-y-2">
-						<Label for="win_max_messages">max messages</Label>
-						<p class="text-xs text-zinc-500">
-							cap unsummarized messages regardless of token budget.
-						</p>
-						<Input
-							id="win_max_messages"
-							type="number"
-							min="1"
-							placeholder="50"
-							bind:value={windowingMaxMessages}
-							class="rounded-xl"
-						/>
-					</div>
-					<div class="space-y-2">
-						<Label for="win_trigger_ratio">trigger ratio</Label>
+						<Label for="context_compaction_trigger_ratio">trigger ratio</Label>
 						<p class="text-xs text-zinc-500">
 							fraction of token budget that triggers background summarization
 							(0.1–0.95).
 						</p>
 						<Input
-							id="win_trigger_ratio"
+							id="context_compaction_trigger_ratio"
 							type="number"
 							step="0.01"
 							min="0.1"
 							max="0.95"
 							placeholder="0.7"
-							bind:value={windowingTriggerRatio}
+							bind:value={contextCompactionTriggerRatio}
 							class="rounded-xl"
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="win_hard_ratio">hard truncation ratio</Label>
-						<p class="text-xs text-zinc-500">
-							fraction that triggers hard truncation as a last resort (0.5–1.0).
-						</p>
-						<Input
-							id="win_hard_ratio"
-							type="number"
-							step="0.01"
-							min="0.5"
-							max="1.0"
-							placeholder="0.9"
-							bind:value={windowingHardRatio}
-							class="rounded-xl"
-						/>
-					</div>
-					<div class="space-y-2">
-						<Label for="win_summary_batch">summary batch size</Label>
-						<p class="text-xs text-zinc-500">oldest messages summarized per batch.</p>
-						<Input
-							id="win_summary_batch"
-							type="number"
-							min="1"
-							placeholder="20"
-							bind:value={windowingSummaryBatchSize}
-							class="rounded-xl"
-						/>
-					</div>
-					<div class="space-y-2">
-						<Label for="win_max_summaries">max summaries before condense</Label>
+						<Label for="context_compaction_max_summaries"
+							>max summaries before condense</Label
+						>
 						<p class="text-xs text-zinc-500">
 							condense accumulated summaries when this count is reached.
 						</p>
 						<Input
-							id="win_max_summaries"
+							id="context_compaction_max_summaries"
 							type="number"
 							min="2"
 							placeholder="4"
-							bind:value={windowingMaxSummariesBeforeCondense}
+							bind:value={contextCompactionMaxSummariesBeforeCondense}
 							class="rounded-xl"
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="win_response_headroom">response headroom (tokens)</Label>
+						<Label for="context_compaction_response_headroom"
+							>response headroom (tokens)</Label
+						>
 						<p class="text-xs text-zinc-500">tokens reserved for the model's reply.</p>
 						<Input
-							id="win_response_headroom"
+							id="context_compaction_response_headroom"
 							type="number"
 							min="256"
 							placeholder="4096"
-							bind:value={windowingResponseHeadroom}
+							bind:value={contextCompactionResponseHeadroom}
 							class="rounded-xl"
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="win_tool_max_share">tool result max share</Label>
+						<Label for="context_compaction_tool_max_share">tool result max share</Label>
 						<p class="text-xs text-zinc-500">
 							max fraction of budget a single tool result may use (0.05–0.75).
 						</p>
 						<Input
-							id="win_tool_max_share"
+							id="context_compaction_tool_max_share"
 							type="number"
 							step="0.01"
 							min="0.05"
 							max="0.75"
 							placeholder="0.25"
-							bind:value={windowingToolResultMaxShare}
+							bind:value={contextCompactionToolResultMaxShare}
 							class="rounded-xl"
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="win_tool_hard_cap">tool result hard cap (chars)</Label>
+						<Label for="context_compaction_tool_hard_cap"
+							>tool result hard cap (chars)</Label
+						>
 						<p class="text-xs text-zinc-500">
 							absolute character ceiling per tool result.
 						</p>
 						<Input
-							id="win_tool_hard_cap"
+							id="context_compaction_tool_hard_cap"
 							type="number"
 							min="1000"
 							placeholder="100000"
-							bind:value={windowingToolResultHardCap}
+							bind:value={contextCompactionToolResultHardCap}
 							class="rounded-xl"
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="win_tools_combined_share">tool results combined max share</Label
+						<Label for="context_compaction_tools_combined_share"
+							>tool results combined max share</Label
 						>
 						<p class="text-xs text-zinc-500">
 							max fraction of budget for all tool results combined (0.10–0.95).
 						</p>
 						<Input
-							id="win_tools_combined_share"
+							id="context_compaction_tools_combined_share"
 							type="number"
 							step="0.01"
 							min="0.10"
 							max="0.95"
 							placeholder="0.5"
-							bind:value={windowingToolResultsCombinedMaxShare}
+							bind:value={contextCompactionToolResultsCombinedMaxShare}
 							class="rounded-xl"
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="win_summarization_max_chars"
+						<Label for="context_compaction_summarization_max_chars"
 							>summarization transcript max chars</Label
 						>
 						<p class="text-xs text-zinc-500">
@@ -822,11 +781,11 @@
 							unlimited.
 						</p>
 						<Input
-							id="win_summarization_max_chars"
+							id="context_compaction_summarization_max_chars"
 							type="number"
 							min="1"
 							placeholder="unlimited"
-							bind:value={windowingSummarizationMaxCharsPerMessage}
+							bind:value={contextCompactionSummarizationMaxCharsPerMessage}
 							class="rounded-xl"
 						/>
 					</div>

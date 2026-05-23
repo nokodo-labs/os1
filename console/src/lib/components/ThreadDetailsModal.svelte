@@ -24,6 +24,8 @@
 		FileText,
 		GitBranch,
 		LoaderCircle,
+		Pencil,
+		Save,
 		Trash2,
 		TriangleAlert,
 		X,
@@ -56,6 +58,11 @@
 	let summaries = $state<ThreadSummaryRecord[]>([])
 	let isLoadingSummaries = $state(false)
 	let summariesError = $state<string | null>(null)
+	let editingSummaryId = $state<string | null>(null)
+	let summaryDraft = $state('')
+	let summaryActionId = $state<string | null>(null)
+	let summaryActionError = $state<string | null>(null)
+	let summaryDeleteConfirmId = $state<string | null>(null)
 	let threadTasks = $state<Task[]>([])
 	let isLoadingTasks = $state(false)
 	let tasksError = $state<string | null>(null)
@@ -220,6 +227,61 @@
 		if (thread?.current_message_id && summary.end_message_id === thread.current_message_id)
 			return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
 		return 'border-sky-500/30 bg-sky-500/10 text-sky-300'
+	}
+
+	function startSummaryEdit(summary: ThreadSummaryRecord) {
+		editingSummaryId = summary.id
+		summaryDraft = summary.content
+		summaryDeleteConfirmId = null
+		summaryActionError = null
+	}
+
+	function cancelSummaryEdit() {
+		editingSummaryId = null
+		summaryDraft = ''
+		summaryActionError = null
+	}
+
+	async function saveSummary(summary: ThreadSummaryRecord) {
+		if (!threadId) return
+		const content = summaryDraft.trim()
+		if (!content) return
+		summaryActionId = summary.id
+		summaryActionError = null
+		try {
+			const updated = unwrap(
+				await api.PATCH('/v1/threads/{thread_id}/summaries/{summary_id}', {
+					params: { path: { thread_id: threadId, summary_id: summary.id } },
+					body: { content },
+				})
+			)
+			summaries = summaries.map((item) => (item.id === updated.id ? updated : item))
+			cancelSummaryEdit()
+		} catch (e: unknown) {
+			summaryActionError = errorMessage(e) || 'failed to save summary'
+		} finally {
+			summaryActionId = null
+		}
+	}
+
+	async function deleteSummary(summary: ThreadSummaryRecord) {
+		if (!threadId) return
+		summaryActionId = summary.id
+		summaryActionError = null
+		try {
+			unwrap(
+				await api.DELETE('/v1/threads/{thread_id}/summaries/{summary_id}', {
+					params: { path: { thread_id: threadId, summary_id: summary.id } },
+				})
+			)
+			summaries = summaries.filter((item) => item.id !== summary.id)
+			if (editingSummaryId === summary.id) cancelSummaryEdit()
+			summaryDeleteConfirmId = null
+		} catch (e: unknown) {
+			summaryActionError = errorMessage(e) || 'failed to delete summary'
+		} finally {
+			summaryActionId = null
+		}
 	}
 
 	function taskStatusClass(task: Task): string {
@@ -428,6 +490,11 @@
 		summariesError = null
 		threadTasks = []
 		tasksError = null
+		editingSummaryId = null
+		summaryDraft = ''
+		summaryActionId = null
+		summaryActionError = null
+		summaryDeleteConfirmId = null
 		activeTab = 'tree'
 		allMessagesLoaded = false
 
@@ -448,6 +515,81 @@
 			})
 	})
 </script>
+
+{#snippet summaryActions(summary: ThreadSummaryRecord)}
+	<div class="flex shrink-0 flex-wrap items-center gap-2">
+		{#if editingSummaryId === summary.id}
+			<button
+				class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700 bg-emerald-900/30 px-2.5 py-1 text-xs text-emerald-200 transition-colors hover:bg-emerald-800/60 disabled:opacity-50"
+				disabled={summaryActionId === summary.id || summaryDraft.trim().length === 0}
+				onclick={() => saveSummary(summary)}
+			>
+				<Save class="h-3.5 w-3.5" />
+				{summaryActionId === summary.id ? 'saving...' : 'save'}
+			</button>
+			<button
+				class="rounded-lg border border-zinc-700 px-2.5 py-1 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-50"
+				disabled={summaryActionId === summary.id}
+				onclick={cancelSummaryEdit}
+			>
+				cancel
+			</button>
+		{:else if summaryDeleteConfirmId === summary.id}
+			<span class="text-xs text-red-300">delete?</span>
+			<button
+				class="inline-flex items-center gap-1.5 rounded-lg border border-red-700 bg-red-900/30 px-2.5 py-1 text-xs text-red-200 transition-colors hover:bg-red-800/60 disabled:opacity-50"
+				disabled={summaryActionId === summary.id}
+				onclick={() => deleteSummary(summary)}
+			>
+				<Trash2 class="h-3.5 w-3.5" />
+				{summaryActionId === summary.id ? 'deleting...' : 'confirm'}
+			</button>
+			<button
+				class="rounded-lg border border-zinc-700 px-2.5 py-1 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-50"
+				disabled={summaryActionId === summary.id}
+				onclick={() => {
+					summaryDeleteConfirmId = null
+					summaryActionError = null
+				}}
+			>
+				cancel
+			</button>
+		{:else}
+			<button
+				class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+				onclick={() => startSummaryEdit(summary)}
+			>
+				<Pencil class="h-3.5 w-3.5" />
+				edit
+			</button>
+			<button
+				class="inline-flex items-center gap-1.5 rounded-lg border border-red-900/60 px-2.5 py-1 text-xs text-red-300 transition-colors hover:bg-red-900/30 hover:text-red-100"
+				onclick={() => {
+					summaryDeleteConfirmId = summary.id
+					summaryActionError = null
+				}}
+			>
+				<Trash2 class="h-3.5 w-3.5" />
+				delete
+			</button>
+		{/if}
+	</div>
+	{#if summaryActionError && (editingSummaryId === summary.id || summaryDeleteConfirmId === summary.id)}
+		<div class="text-xs text-red-300">{summaryActionError}</div>
+	{/if}
+{/snippet}
+
+{#snippet summaryContent(summary: ThreadSummaryRecord, maxHeightClass: string, textClass: string)}
+	{#if editingSummaryId === summary.id}
+		<textarea
+			class="min-h-36 w-full resize-y rounded-xl border border-zinc-700 bg-zinc-900 p-3 font-mono text-xs whitespace-pre-wrap text-zinc-100 transition-colors outline-none focus:border-zinc-500"
+			bind:value={summaryDraft}
+		></textarea>
+	{:else}
+		<pre
+			class="{maxHeightClass} overflow-auto rounded-xl border border-zinc-800 bg-zinc-900 p-3 font-mono text-xs whitespace-pre-wrap {textClass}">{summary.content}</pre>
+	{/if}
+{/snippet}
 
 <Dialog.Root bind:open>
 	<Dialog.Portal>
@@ -822,34 +964,47 @@
 											{#if currentBranchSummary}
 												<div class="space-y-3">
 													<div
-														class="flex flex-wrap items-center gap-2 text-xs text-zinc-500"
+														class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
 													>
-														<span
-															class="rounded-md border px-2 py-0.5 {summaryStateClass(
-																currentBranchSummary
-															)}"
+														<div
+															class="flex flex-wrap items-center gap-2 text-xs text-zinc-500"
 														>
-															{summaryStateLabel(
-																currentBranchSummary
-															)}
-														</span>
-														<span>{currentBranchSummary.type}</span>
-														<span
-															>{currentBranchSummary.message_count} messages</span
-														>
-														<span
-															>{summaryRange(
-																currentBranchSummary
-															)}</span
-														>
-														<span
-															>{formatDate(
-																currentBranchSummary.updated_at
-															)}</span
-														>
+															<span
+																class="rounded-md border px-2 py-0.5 {summaryStateClass(
+																	currentBranchSummary
+																)}"
+															>
+																{summaryStateLabel(
+																	currentBranchSummary
+																)}
+															</span>
+															<span
+																>{currentBranchSummary.purpose}</span
+															>
+															<span
+																>{currentBranchSummary.message_count}
+																messages</span
+															>
+															<span
+																>{summaryRange(
+																	currentBranchSummary
+																)}</span
+															>
+															<span
+																>{formatDate(
+																	currentBranchSummary.updated_at
+																)}</span
+															>
+														</div>
+														{@render summaryActions(
+															currentBranchSummary
+														)}
 													</div>
-													<pre
-														class="max-h-56 overflow-auto rounded-xl border border-zinc-800 bg-zinc-900 p-3 font-mono text-xs whitespace-pre-wrap text-zinc-100">{currentBranchSummary.content}</pre>
+													{@render summaryContent(
+														currentBranchSummary,
+														'max-h-56',
+														'text-zinc-100'
+													)}
 												</div>
 											{:else}
 												<div
@@ -876,24 +1031,36 @@
 													class="rounded-xl border border-zinc-800 bg-zinc-950 p-3"
 												>
 													<div
-														class="mb-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500"
+														class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
 													>
-														<span
-															class="rounded-md border px-2 py-0.5 {summaryStateClass(
-																summary
-															)}"
+														<div
+															class="flex flex-wrap items-center gap-2 text-xs text-zinc-500"
 														>
-															{summaryStateLabel(summary)}
-														</span>
-														<span>{summary.type}</span>
-														<span>{summary.message_count} messages</span
-														>
-														<span>{summaryRange(summary)}</span>
-														<span>{formatDate(summary.created_at)}</span
-														>
+															<span
+																class="rounded-md border px-2 py-0.5 {summaryStateClass(
+																	summary
+																)}"
+															>
+																{summaryStateLabel(summary)}
+															</span>
+															<span>{summary.purpose}</span>
+															<span
+																>{summary.message_count} messages</span
+															>
+															<span>{summaryRange(summary)}</span>
+															<span
+																>{formatDate(
+																	summary.created_at
+																)}</span
+															>
+														</div>
+														{@render summaryActions(summary)}
 													</div>
-													<pre
-														class="max-h-40 overflow-auto font-mono text-xs whitespace-pre-wrap text-zinc-100">{summary.content}</pre>
+													{@render summaryContent(
+														summary,
+														'max-h-40',
+														'text-zinc-100'
+													)}
 												</div>
 											{/each}
 										</div>
@@ -1004,21 +1171,33 @@
 															class="rounded-xl border border-zinc-800 bg-zinc-900 p-3"
 														>
 															<div
-																class="mb-2 flex flex-wrap gap-2 text-xs text-zinc-500"
+																class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
 															>
-																<span>{summary.type}</span>
-																<span
-																	>{summary.message_count} messages</span
+																<div
+																	class="flex flex-wrap gap-2 text-xs text-zinc-500"
 																>
-																<span>{summaryRange(summary)}</span>
-																{#if summary.superseded_by_id}
+																	<span>{summary.purpose}</span>
 																	<span
-																		>replaced by {summary.superseded_by_id}</span
+																		>{summary.message_count} messages</span
 																	>
-																{/if}
+																	<span
+																		>{summaryRange(
+																			summary
+																		)}</span
+																	>
+																	{#if summary.superseded_by_id}
+																		<span
+																			>replaced by {summary.superseded_by_id}</span
+																		>
+																	{/if}
+																</div>
+																{@render summaryActions(summary)}
 															</div>
-															<pre
-																class="max-h-32 overflow-auto font-mono text-xs whitespace-pre-wrap text-zinc-300">{summary.content}</pre>
+															{@render summaryContent(
+																summary,
+																'max-h-32',
+																'text-zinc-300'
+															)}
 														</div>
 													{/each}
 												</div>
