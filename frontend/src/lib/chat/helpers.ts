@@ -14,6 +14,7 @@ import type {
 	OptimisticUserMessage,
 	PendingAttachment,
 	RunBlock,
+	RunActivityState,
 	RunItem,
 	StreamingAssistantState,
 	ThreadAttachment,
@@ -401,6 +402,7 @@ export interface BuildRunBlocksInput {
 	streamingAssistant: StreamingAssistantState | null
 	optimisticUserMessage: OptimisticUserMessage | null
 	viewingStreamingBranch: boolean
+	runActivities?: RunActivityState[]
 }
 
 export interface BuildRunBlocksResult {
@@ -416,8 +418,14 @@ export interface BuildRunBlocksResult {
  * pure function - no reactive state or side effects.
  */
 export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult {
-	const { messages, userId, streamingAssistant, optimisticUserMessage, viewingStreamingBranch } =
-		input
+	const {
+		messages,
+		userId,
+		streamingAssistant,
+		optimisticUserMessage,
+		viewingStreamingBranch,
+		runActivities = [],
+	} = input
 
 	const blocks: RunBlock[] = []
 	const collectedToolCalls: ToolCall[] = []
@@ -429,6 +437,21 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		seenToolCalls: Set<string>
 	}
 	let activeBlock: ActiveBlock | null = null
+	const activitiesByMessage = new Map<string, RunActivityState[]>()
+	for (const activity of runActivities) {
+		const current = activitiesByMessage.get(activity.messageId) ?? []
+		current.push(activity)
+		activitiesByMessage.set(activity.messageId, current)
+	}
+	for (const activities of activitiesByMessage.values()) {
+		activities.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime())
+	}
+	/** place run activities immediately after their timeline anchor message. */
+	const pushRunActivities = (block: RunBlock, messageId: string): void => {
+		for (const activity of activitiesByMessage.get(messageId) ?? []) {
+			block.items.push({ kind: 'run_activity', activity })
+		}
+	}
 
 	const createBlock = (
 		sourceRunId: string,
@@ -458,12 +481,13 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		msg: ApiMessage
 	): ActiveBlock => {
 		if (activeBlock && activeBlock.sourceRunId === sourceRunId) {
-			if (!hasResponseItems(activeBlock.block)) {
+			if (activeBlock.sourceAgentId === sourceAgentId) return activeBlock
+			if (!activeBlock.sourceAgentId && sourceAgentId) {
 				activeBlock.sourceAgentId = sourceAgentId
 				activeBlock.block.agentId = sourceAgentId
 				return activeBlock
 			}
-			if (activeBlock.sourceAgentId === sourceAgentId) return activeBlock
+			if (!hasResponseItems(activeBlock.block)) return activeBlock
 		}
 		activeBlock = createBlock(
 			sourceRunId,
@@ -492,6 +516,7 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 			if (blockState.block.responseRootId === null) {
 				blockState.block.responseRootId = msg.id
 			}
+			pushRunActivities(blockState.block, msg.id)
 			continue
 		}
 
@@ -514,6 +539,7 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 			const align: 'left' | 'right' =
 				userId && msg.sender_user_id && msg.sender_user_id !== userId ? 'left' : 'right'
 			activeBlock.block.items.push({ kind: 'user', message: msg, align })
+			pushRunActivities(activeBlock.block, msg.id)
 			continue
 		}
 
@@ -535,6 +561,7 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 					block.items.push({ kind: 'tool', toolCallId: tc.id })
 				}
 			}
+			pushRunActivities(block, msg.id)
 			continue
 		}
 	}
@@ -545,7 +572,9 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		if (
 			!activeBlock ||
 			activeBlock.sourceRunId !== sourceRunId ||
-			(hasResponseItems(activeBlock.block) && activeBlock.sourceAgentId !== sourceAgentId)
+			(hasResponseItems(activeBlock.block) &&
+				activeBlock.sourceAgentId !== null &&
+				activeBlock.sourceAgentId !== sourceAgentId)
 		) {
 			activeBlock = createBlock(
 				sourceRunId,
@@ -554,6 +583,9 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 				'assistant',
 				streamingAssistant.messageId
 			)
+		} else if (!activeBlock.sourceAgentId && sourceAgentId) {
+			activeBlock.sourceAgentId = sourceAgentId
+			activeBlock.block.agentId = sourceAgentId
 		} else if (!hasResponseItems(activeBlock.block)) {
 			activeBlock.sourceAgentId = sourceAgentId
 			activeBlock.block.agentId = sourceAgentId
@@ -585,6 +617,7 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 			targetBlock.responseRootId = streamingAssistant.messageId
 		}
 
+		targetBlock.items.push({ kind: 'streaming_assistant' })
 		for (const tc of streamingAssistant.toolCalls) {
 			collectedToolCalls.push(tc)
 			if (!targetBlockState.seenToolCalls.has(tc.id)) {
@@ -592,7 +625,6 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 				targetBlock.items.push({ kind: 'streaming_tool', toolCallId: tc.id })
 			}
 		}
-		targetBlock.items.push({ kind: 'streaming_assistant' })
 	} else if (optimisticUserMessage && viewingStreamingBranch) {
 		const runId = `pending-user-${optimisticUserMessage.timestamp.getTime()}`
 		const block = createBlock(
@@ -619,13 +651,17 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 
 // run block queries
 
-export function getBlockResponseItems(
-	block: RunBlock
-): Array<
-	| { kind: 'assistant'; message: ApiMessage }
-	| { kind: 'tool'; toolCallId: string }
-	| { kind: 'streaming_assistant' }
-	| { kind: 'streaming_tool'; toolCallId: string }
+export function getBlockResponseItems(block: RunBlock): Array<
+	Exclude<
+		RunItem,
+		| { kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
+		| {
+				kind: 'optimistic_user'
+				text: string
+				attachments: PendingAttachment[]
+				timestamp: Date
+		  }
+	>
 > {
 	return block.items.filter(
 		(
@@ -692,6 +728,7 @@ type ResponseItem = ReturnType<typeof getBlockResponseItems>[number]
 
 export type ResponseSegment =
 	| { type: 'assistant'; item: { kind: 'assistant'; message: ApiMessage } }
+	| { type: 'run_activity'; activity: RunActivityState }
 	| { type: 'streaming_assistant'; item: { kind: 'streaming_assistant' } }
 	| { type: 'tool_group'; toolCallIds: string[] }
 
@@ -717,6 +754,8 @@ export function groupResponseItems(items: ResponseItem[]): ResponseSegment[] {
 			flushTools()
 			if (item.kind === 'assistant') {
 				segments.push({ type: 'assistant', item })
+			} else if (item.kind === 'run_activity') {
+				segments.push({ type: 'run_activity', activity: item.activity })
 			} else if (item.kind === 'streaming_assistant') {
 				segments.push({ type: 'streaming_assistant', item })
 			}

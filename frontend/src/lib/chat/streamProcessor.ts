@@ -36,6 +36,10 @@ export function processDelta(
 ): 'done' | 'continue' {
 	switch (delta.event) {
 		case 'error':
+			{
+				const runId = delta.data.run_id ?? ctx.streamingAssistant?.runId
+				if (runId) activeRunsStore.forgetRun(runId)
+			}
 			throw new Error(delta.data.message || 'generation failed')
 		case 'done':
 			if (ctx.streamingAssistant?.runId) {
@@ -417,6 +421,9 @@ export async function resumeCreateAndRun(
 ): Promise<{ resolvedThreadId: string } | void> {
 	ctx.runAbortController?.abort()
 	ctx.runAbortController = new AbortController()
+	const runId = ctx.incrementActiveRun()
+	let idConflict = false
+	let resolvedId = expectedThreadId
 
 	// connect the new abort controller to the existing stream so
 	// cancellation (stop generation, page cleanup) actually closes the
@@ -426,41 +433,6 @@ export async function resumeCreateAndRun(
 		void stream.return(undefined)
 	})
 
-	// consume the thread_created event
-	const first = await stream.next()
-	if (first.done || !first.value) {
-		throw new Error('create_and_run stream ended unexpectedly')
-	}
-	if (first.value.event !== 'thread_created') {
-		throw new Error(`expected thread_created, got ${first.value.event}`)
-	}
-
-	// guard: user may have navigated away (clearThread nulls activeThread
-	// and bumps activeRun) while we awaited thread_created. without this,
-	// the synchronous block below would clobber a different active thread
-	// and start streaming the wrong run's deltas into another chat page.
-	if (chatStore.activeThread?.id !== expectedThreadId) {
-		void stream.return(undefined)
-		return
-	}
-
-	const threadData = first.value.data
-	const resolvedId = threadData.id
-
-	// if the backend gave us a different ID (conflict), signal the caller
-	const idConflict = resolvedId !== expectedThreadId
-
-	// replace the optimistic thread stub with real data from the backend
-	const realThread = threadData as unknown as Thread
-	ctx.thread = realThread
-	chatStore.threadCache.set(realThread)
-	chatStore.activeThread = realThread
-
-	if (!realThread.is_temporary && !chatStore.recentThreads.some((t) => t.id === realThread.id)) {
-		chatStore.recentThreads = [realThread, ...chatStore.recentThreads]
-	}
-
-	const runId = ctx.incrementActiveRun()
 	ctx.isGenerating = true
 	ctx.viewingStreamingBranch = true
 	ctx.streamingLeafId = null
@@ -477,6 +449,48 @@ export async function resumeCreateAndRun(
 	ctx.rebuildRunBlocks()
 
 	try {
+		const first = await stream.next()
+		if (first.done || !first.value) {
+			throw new Error('create_and_run stream ended unexpectedly')
+		}
+		if (first.value.event === 'error') {
+			if (first.value.data.run_id) activeRunsStore.forgetRun(first.value.data.run_id)
+			throw new Error(first.value.data.message || 'generation failed')
+		}
+		if (first.value.event !== 'thread_created') {
+			throw new Error(`expected thread_created, got ${first.value.event}`)
+		}
+
+		// guard: user may have navigated away (clearThread nulls activeThread
+		// and bumps activeRun) while we awaited thread_created. without this,
+		// the synchronous block below would clobber a different active thread
+		// and start streaming the wrong run's deltas into another chat page.
+		if (chatStore.activeThread?.id !== expectedThreadId) {
+			void stream.return(undefined)
+			if (runId === ctx.activeRun) {
+				ctx.streamingAssistant = null
+				ctx.rebuildRunBlocks()
+			}
+			return
+		}
+
+		const threadData = first.value.data
+		resolvedId = threadData.id
+		idConflict = resolvedId !== expectedThreadId
+
+		// replace the optimistic thread stub with real data from the backend
+		const realThread = threadData as unknown as Thread
+		ctx.thread = realThread
+		chatStore.threadCache.set(realThread)
+		chatStore.activeThread = realThread
+
+		if (
+			!realThread.is_temporary &&
+			!chatStore.recentThreads.some((t) => t.id === realThread.id)
+		) {
+			chatStore.recentThreads = [realThread, ...chatStore.recentThreads]
+		}
+
 		// remaining events are ChatStreamDelta (thread_created consumed above)
 		const chatStream = stream as unknown as AsyncGenerator<ChatStreamDelta, void, unknown>
 		await consumeStream(

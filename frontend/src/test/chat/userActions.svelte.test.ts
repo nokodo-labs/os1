@@ -1,5 +1,5 @@
-import { handleSendMessage } from '$lib/chat/userActions'
 import type { ApiMessage, ChatContext, QueuedSteeringMessage } from '$lib/chat/types'
+import { handleSendMessage } from '$lib/chat/userActions'
 import { ToolExecutionTracker } from '$lib/tools'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -98,9 +98,11 @@ function makeContext(overrides: Partial<ChatContext> = {}): ChatContext {
 		scrollContainer: null,
 		autoScroll: true,
 		toolTracker: new ToolExecutionTracker(),
-		fetchedToolEventMessageIds: new SvelteSet<string>(),
-		toolEventsPendingIds: new SvelteSet<string>(),
-		toolEventsInFlight: false,
+		fetchedEventMessageIds: new SvelteSet<string>(),
+		eventMessageIdsPending: new SvelteSet<string>(),
+		eventsInFlight: false,
+		runActivities: new SvelteMap(),
+		processRunActivityEvent() {},
 		pendingActions: new SvelteMap<string, 'reveal' | 'reference'>(),
 		attachmentStates: new SvelteMap(),
 		threadAttachments: [],

@@ -25,6 +25,7 @@ import {
 	type RunBlock,
 	type StreamingAssistantState,
 } from './helpers'
+import { reduceRunActivityEvent, runActivityKey } from './runActivities'
 import {
 	dropSteering as dropSteeringApi,
 	SteeringRunNotFoundError,
@@ -38,6 +39,8 @@ import type {
 	ChatState,
 	OptimisticUserMessage,
 	QueuedSteeringMessage,
+	RunActivityEvent,
+	RunActivityState,
 } from './types'
 import {
 	deleteUserMessage,
@@ -97,9 +100,10 @@ export function createChatState(): ChatState {
 
 	// tool tracking
 	const toolTracker = new ToolExecutionTracker()
-	const fetchedToolEventMessageIds = new SvelteSet<string>()
-	const toolEventsPendingIds = new SvelteSet<string>()
-	let toolEventsInFlight = $state(false)
+	const fetchedEventMessageIds = new SvelteSet<string>()
+	const eventMessageIdsPending = new SvelteSet<string>()
+	let eventsInFlight = $state(false)
+	const runActivities = new SvelteMap<string, RunActivityState>()
 
 	// attachment tray - pending user actions (reveal/reference) accumulated
 	// until sent with the next RunInput, then cleared.
@@ -178,6 +182,7 @@ export function createChatState(): ChatState {
 			streamingAssistant,
 			optimisticUserMessage,
 			viewingStreamingBranch,
+			runActivities: Array.from(runActivities.values()),
 		})
 
 		// apply side effects: register tool calls and results
@@ -198,6 +203,13 @@ export function createChatState(): ChatState {
 				queuedSteeringServerIdsByClientId.delete(clientId)
 			}
 		}
+	}
+
+	/** merge a message-anchored run activity event and refresh visible run blocks. */
+	function processRunActivityEvent(event: RunActivityEvent): void {
+		const key = runActivityKey(event)
+		runActivities.set(key, reduceRunActivityEvent(runActivities.get(key), event))
+		rebuildRunBlocks()
 	}
 
 	function confirmQueuedSteeringMessage(
@@ -488,10 +500,11 @@ export function createChatState(): ChatState {
 		streamingLeafId = null
 		lastRunInput = ''
 		runBlocks = []
-		// clear tool event tracking for previous thread
-		fetchedToolEventMessageIds.clear()
-		toolEventsPendingIds.clear()
+		// clear message event tracking for previous thread
+		fetchedEventMessageIds.clear()
+		eventMessageIdsPending.clear()
 		toolTracker.clear()
+		runActivities.clear()
 		// clear attachment state for previous thread
 		pendingActions.clear()
 		attachmentStates.clear()
@@ -637,18 +650,22 @@ export function createChatState(): ChatState {
 		get toolTracker() {
 			return toolTracker
 		},
-		get fetchedToolEventMessageIds() {
-			return fetchedToolEventMessageIds
+		get fetchedEventMessageIds() {
+			return fetchedEventMessageIds
 		},
-		get toolEventsPendingIds() {
-			return toolEventsPendingIds
+		get eventMessageIdsPending() {
+			return eventMessageIdsPending
 		},
-		get toolEventsInFlight() {
-			return toolEventsInFlight
+		get eventsInFlight() {
+			return eventsInFlight
 		},
-		set toolEventsInFlight(v) {
-			toolEventsInFlight = v
+		set eventsInFlight(v) {
+			eventsInFlight = v
 		},
+		get runActivities() {
+			return runActivities
+		},
+		processRunActivityEvent,
 
 		// attachment tray
 		get pendingActions() {

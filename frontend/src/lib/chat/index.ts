@@ -10,6 +10,11 @@ export type {
 	ChatState,
 	OptimisticUserMessage,
 	QueuedSteeringMessage,
+	RunActivityEvent,
+	RunActivityOutcome,
+	RunActivityPhase,
+	RunActivityState,
+	RunActivityStatus,
 	SteeringState,
 	StreamDeltaContext,
 	ThreadAttachment,
@@ -52,6 +57,13 @@ export {
 
 // stream processing
 export { consumeStream, processDelta, resumeCreateAndRun, runThreadStream } from './streamProcessor'
+
+export {
+	parseRunActivityEvent,
+	reduceRunActivityEvent,
+	runActivityKey,
+	RUN_ACTIVITY_EVENT_PREFIX,
+} from './runActivities'
 
 // tree navigation
 export {

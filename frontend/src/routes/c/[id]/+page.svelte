@@ -23,6 +23,7 @@
 		unarchiveThread,
 		type ApiMessage,
 	} from '$lib/chat'
+	import { RunActivity } from '$lib/components/chat/activities'
 	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
 	import AssistantChatMessage from '$lib/components/chat/AssistantChatMessage.svelte'
 	import ChatGptLoadingIndicator from '$lib/components/chat/ChatGptLoadingIndicator.svelte'
@@ -800,6 +801,8 @@
 													{#if toolExecs.length > 0}
 														<ToolGroup executions={toolExecs} />
 													{/if}
+												{:else if segment.type === 'run_activity'}
+													<RunActivity activity={segment.activity} />
 												{:else if segment.type === 'streaming_assistant' && chat.streamingAssistant}
 													{@const hasActiveTools = segments.some(
 														(s) =>

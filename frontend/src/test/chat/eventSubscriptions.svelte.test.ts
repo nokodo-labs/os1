@@ -112,9 +112,11 @@ function makeContext(): ChatContext {
 		scrollContainer: null,
 		autoScroll: true,
 		toolTracker: new ToolExecutionTracker(),
-		fetchedToolEventMessageIds: new SvelteSet<string>(),
-		toolEventsPendingIds: new SvelteSet<string>(),
-		toolEventsInFlight: false,
+		fetchedEventMessageIds: new SvelteSet<string>(),
+		eventMessageIdsPending: new SvelteSet<string>(),
+		eventsInFlight: false,
+		runActivities: new SvelteMap(),
+		processRunActivityEvent: vi.fn(),
 		pendingActions: new SvelteMap<string, 'reveal' | 'reference'>(),
 		attachmentStates: new SvelteMap(),
 		threadAttachments: [],
@@ -150,9 +152,43 @@ function dispatch(msg: unknown): void {
 	capturedHandler(msg)
 }
 
-describe('subscribeToChatEvents steering', () => {
+describe('subscribeToChatEvents', () => {
 	afterEach(() => {
 		capturedHandler = null
+	})
+
+	it('dispatches live run activity events', () => {
+		const ctx = makeContext()
+		const unsubscribe = subscribeToChatEvents('thread_1', ctx)
+
+		dispatch(
+			makeStreamMessage(
+				'run.activity.started',
+				{
+					run_id: 'run_1',
+					activity_id: 'activity_1',
+					activity_type: 'context_compaction',
+					title: 'compacting chat',
+				},
+				{
+					id: 'event_1',
+					thread_id: 'thread_1',
+					message_id: 'message_1',
+					created_at: '2026-05-16T10:00:00.000Z',
+				}
+			)
+		)
+
+		expect(ctx.processRunActivityEvent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				activityId: 'activity_1',
+				activityType: 'context_compaction',
+				messageId: 'message_1',
+				runId: 'run_1',
+				status: 'running',
+			})
+		)
+		unsubscribe()
 	})
 
 	it('chains injected steering messages when injection arrives before message.created', () => {

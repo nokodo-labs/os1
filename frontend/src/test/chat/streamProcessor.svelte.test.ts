@@ -99,4 +99,20 @@ describe('processDelta steering reconciliation', () => {
 		expect(result).toBe('done')
 		expect(activeRunsMocks.forgetRun).toHaveBeenCalledWith('run_done')
 	})
+
+	it('forgets the active run when the stream emits an error', () => {
+		const ctx = {} as ChatContext
+
+		expect(() =>
+			processDelta(
+				{
+					event: 'error',
+					data: { run_id: 'run_failed', message: 'generation failed' },
+				},
+				{} as StreamDeltaContext,
+				ctx
+			)
+		).toThrow('generation failed')
+		expect(activeRunsMocks.forgetRun).toHaveBeenCalledWith('run_failed')
+	})
 })

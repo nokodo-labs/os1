@@ -106,9 +106,39 @@ export type ToolChoiceValue = 'web_search' | 'think' | 'generate_image'
 
 // --- run/block types ---
 
+export type RunActivityPhase = 'started' | 'progress' | 'ended'
+export type RunActivityOutcome = 'success' | 'error' | 'cancelled'
+export type RunActivityStatus = 'running' | RunActivityOutcome
+
+export interface RunActivityEvent {
+	id: string
+	type: string
+	phase: RunActivityPhase
+	messageId: string
+	runId: string
+	activityId: string
+	activityType: string
+	status: RunActivityStatus
+	timestamp: Date
+	title?: string
+	message?: string
+	progress?: number
+	outcome?: RunActivityOutcome
+	error?: string
+}
+
+export interface RunActivityState extends Omit<RunActivityEvent, 'type' | 'phase' | 'timestamp'> {
+	key: string
+	eventIds: string[]
+	startedAt: Date
+	updatedAt: Date
+	endedAt?: Date
+}
+
 export type RunItem =
 	| { kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
 	| { kind: 'optimistic_user'; text: string; attachments: PendingAttachment[]; timestamp: Date }
+	| { kind: 'run_activity'; activity: RunActivityState }
 	| { kind: 'assistant'; message: ApiMessage }
 	| { kind: 'tool'; toolCallId: string }
 	| { kind: 'streaming_assistant' }
@@ -191,9 +221,13 @@ export interface ChatContext {
 
 	// tools (reactive tracker - no tick counter needed)
 	readonly toolTracker: ToolExecutionTracker
-	readonly fetchedToolEventMessageIds: SvelteSet<string>
-	readonly toolEventsPendingIds: SvelteSet<string>
-	toolEventsInFlight: boolean
+	readonly fetchedEventMessageIds: SvelteSet<string>
+	readonly eventMessageIdsPending: SvelteSet<string>
+	eventsInFlight: boolean
+
+	// run activities
+	readonly runActivities: SvelteMap<string, RunActivityState>
+	processRunActivityEvent(event: RunActivityEvent): void
 
 	// attachment tray
 	readonly pendingActions: Map<string, 'reveal' | 'reference'>

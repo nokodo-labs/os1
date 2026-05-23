@@ -751,6 +751,54 @@ export interface paths {
         patch: operations["update_access_rule_v1_threads__thread_id__access_rules__rule_id__patch"];
         trace?: never;
     };
+    "/v1/threads/{thread_id}/summaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Thread Summaries
+         * @description list stored summary records for a thread.
+         */
+        get: operations["list_thread_summaries_v1_threads__thread_id__summaries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/summaries/{summary_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Thread Summary
+         * @description fetch one stored summary record.
+         */
+        get: operations["get_thread_summary_v1_threads__thread_id__summaries__summary_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Thread Summary
+         * @description delete a stored summary record. admin only.
+         */
+        delete: operations["delete_thread_summary_v1_threads__thread_id__summaries__summary_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Thread Summary
+         * @description update a stored summary record. admin only.
+         */
+        patch: operations["update_thread_summary_v1_threads__thread_id__summaries__summary_id__patch"];
+        trace?: never;
+    };
     "/v1/threads": {
         parameters: {
             query?: never;
@@ -947,26 +995,6 @@ export interface paths {
          *     when replace is false, only fills in missing metadata.
          */
         post: operations["generate_thread_metadata_v1_threads__thread_id__metadata_generate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/threads/{thread_id}/summaries": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Thread Summaries
-         * @description list stored summary records for a thread. admin only.
-         */
-        get: operations["list_thread_summaries_v1_threads__thread_id__summaries_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4087,6 +4115,131 @@ export interface components {
             similarity_threshold?: number;
         };
         /**
+         * AIContextCompactionSettings
+         * @description context compaction settings.
+         *
+         *     controls token-aware compaction, summarization triggers, tool result
+         *     truncation, and recursive summary condensation. all budget decisions
+         *     are based on estimated token weight, not naive message counts.
+         */
+        AIContextCompactionSettings: {
+            /**
+             * Enabled
+             * @description enable context window management and summarization
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Trigger Ratio
+             * @description start background summarization when unsummarized messages consume this fraction of the available token budget
+             * @default 0.7
+             */
+            trigger_ratio: number;
+            /**
+             * Max Summaries Before Condense
+             * @description condense existing summaries into one when this many window summaries accumulate. enables truly unlimited threads
+             * @default 4
+             */
+            max_summaries_before_condense: number;
+            /**
+             * Prompt Overhead Tokens
+             * @description extra prompt budget reserved for provider framing, message wrappers, and other non-message overhead
+             * @default 300
+             */
+            prompt_overhead_tokens: number;
+            /**
+             * Recent Tool Output Protection Iterations
+             * @description number of latest tool-output groups that must stay raw so the agent can consume them before compaction
+             * @default 1
+             */
+            recent_tool_output_protection_iterations: number;
+            /**
+             * Blocking Summarization Enabled
+             * @description allow last-resort inline summarization when no cheaper context compaction tier can fit the prompt
+             * @default true
+             */
+            blocking_summarization_enabled: boolean;
+            /**
+             * Blocking Summarization Timeout Seconds
+             * @description maximum seconds to wait for last-resort inline summarization
+             * @default 20
+             */
+            blocking_summarization_timeout_seconds: number;
+            /**
+             * Tool Result Max Share
+             * @description maximum fraction of available budget that a single tool result may consume. results exceeding this are truncated
+             * @default 0.25
+             */
+            tool_result_max_share: number;
+            /**
+             * Tool Result Hard Cap
+             * @description absolute character ceiling per tool result
+             * @default 100000
+             */
+            tool_result_hard_cap: number;
+            /**
+             * Tool Results Combined Max Share
+             * @description maximum fraction of available budget for ALL tool results combined. when total tool result tokens exceed this, the oldest tool results are compacted first (Layer 2 guard)
+             * @default 0.5
+             */
+            tool_results_combined_max_share: number;
+            /**
+             * Response Headroom
+             * @description tokens reserved for the model's response
+             * @default 4096
+             */
+            response_headroom: number;
+            /**
+             * Summarization Max Chars Per Message
+             * @description max characters per message in summarization transcripts. keeps tokens manageable without losing essential context. null for unlimited
+             * @default 2000
+             */
+            summarization_max_chars_per_message: number | null;
+        };
+        /** AIContextCompactionSettingsPatch */
+        AIContextCompactionSettingsPatch: {
+            /**
+             * Enabled
+             * @description enable context compaction and summarization
+             */
+            enabled?: boolean;
+            /**
+             * Trigger Ratio
+             * @description fraction of token budget to trigger background summarization
+             */
+            trigger_ratio?: number;
+            /**
+             * Max Summaries Before Condense
+             * @description condense summaries when this many accumulate
+             */
+            max_summaries_before_condense?: number;
+            /**
+             * Tool Result Max Share
+             * @description max fraction of budget for a single tool result
+             */
+            tool_result_max_share?: number;
+            /**
+             * Tool Result Hard Cap
+             * @description absolute character ceiling per tool result
+             */
+            tool_result_hard_cap?: number;
+            /**
+             * Tool Results Combined Max Share
+             * @description max fraction of budget for ALL tool results combined (Layer 2)
+             */
+            tool_results_combined_max_share?: number;
+            /**
+             * Response Headroom
+             * @description tokens reserved for the model's response
+             */
+            response_headroom?: number;
+            /**
+             * Summarization Max Chars Per Message
+             * @description max characters per message in summarization transcripts
+             */
+            summarization_max_chars_per_message?: number | null;
+        };
+        /**
          * AIMediaSettings
          * @description AI media generation settings.
          */
@@ -4214,8 +4367,8 @@ export interface components {
             tasks?: components["schemas"]["AITaskSettings"];
             /** @description native attachment decay settings */
             attachments?: components["schemas"]["AIAttachmentSettings"];
-            /** @description message window and summarization settings */
-            windowing?: components["schemas"]["AIWindowingSettings"];
+            /** @description context compaction and summarization settings */
+            context_compaction?: components["schemas"]["AIContextCompactionSettings"];
             /** @description AI media generation settings */
             media?: components["schemas"]["AIMediaSettings"];
         };
@@ -4244,8 +4397,8 @@ export interface components {
             tasks?: components["schemas"]["AITaskSettingsPatch"];
             /** Attachments */
             attachments?: components["schemas"]["AIAttachmentSettingsPatch"];
-            /** Windowing */
-            windowing?: components["schemas"]["AIWindowingSettingsPatch"];
+            /** Context Compaction */
+            context_compaction?: components["schemas"]["AIContextCompactionSettingsPatch"];
             /** Media */
             media?: components["schemas"]["AIMediaSettingsPatch"];
         };
@@ -4292,6 +4445,16 @@ export interface components {
              */
             web_search_model_id?: string | null;
             /**
+             * Asset Description Model Id
+             * @description model for asset summaries and non-text descriptions
+             */
+            asset_description_model_id?: string | null;
+            /**
+             * Asset Ocr Model Id
+             * @description model for OCR on image-like asset contents
+             */
+            asset_ocr_model_id?: string | null;
+            /**
              * Maintenance Max Chars Per Message
              * @description max characters per message in thread maintenance transcripts. null for unlimited
              * @default 2000
@@ -4336,144 +4499,20 @@ export interface components {
              */
             web_search_model_id?: string | null;
             /**
+             * Asset Description Model Id
+             * @description model for asset summaries and non-text descriptions
+             */
+            asset_description_model_id?: string | null;
+            /**
+             * Asset Ocr Model Id
+             * @description model for OCR on image-like asset contents
+             */
+            asset_ocr_model_id?: string | null;
+            /**
              * Maintenance Max Chars Per Message
              * @description max characters per message in thread maintenance transcripts
              */
             maintenance_max_chars_per_message?: number | null;
-        };
-        /**
-         * AIWindowingSettings
-         * @description context window management settings.
-         *
-         *     controls token-aware windowing, summarization triggers, tool result
-         *     truncation, and recursive summary condensation. all budget decisions
-         *     are based on estimated token weight, not naive message counts.
-         */
-        AIWindowingSettings: {
-            /**
-             * Enabled
-             * @description enable context window management and summarization
-             * @default true
-             */
-            enabled: boolean;
-            /**
-             * Max Messages
-             * @description secondary message count guard. even if tokens are within budget, cap at this many unsummarized messages
-             * @default 50
-             */
-            max_messages: number;
-            /**
-             * Trigger Ratio
-             * @description start background summarization when unsummarized messages consume this fraction of the available token budget
-             * @default 0.7
-             */
-            trigger_ratio: number;
-            /**
-             * Hard Ratio
-             * @description hard-truncate oldest messages when token usage exceeds this fraction of the available budget (last resort if no summary is ready)
-             * @default 0.9
-             */
-            hard_ratio: number;
-            /**
-             * Summary Batch Size
-             * @description number of oldest unsummarized messages per summary batch
-             * @default 20
-             */
-            summary_batch_size: number;
-            /**
-             * Max Summaries Before Condense
-             * @description condense existing summaries into one when this many window summaries accumulate. enables truly unlimited threads
-             * @default 4
-             */
-            max_summaries_before_condense: number;
-            /**
-             * Tool Result Max Share
-             * @description maximum fraction of available budget that a single tool result may consume. results exceeding this are truncated
-             * @default 0.25
-             */
-            tool_result_max_share: number;
-            /**
-             * Tool Result Hard Cap
-             * @description absolute character ceiling per tool result
-             * @default 100000
-             */
-            tool_result_hard_cap: number;
-            /**
-             * Tool Results Combined Max Share
-             * @description maximum fraction of available budget for ALL tool results combined. when total tool result tokens exceed this, the oldest tool results are compacted first (Layer 2 guard)
-             * @default 0.5
-             */
-            tool_results_combined_max_share: number;
-            /**
-             * Response Headroom
-             * @description tokens reserved for the model's response
-             * @default 4096
-             */
-            response_headroom: number;
-            /**
-             * Summarization Max Chars Per Message
-             * @description max characters per message in summarization transcripts. keeps tokens manageable without losing essential context. null for unlimited
-             * @default 2000
-             */
-            summarization_max_chars_per_message: number | null;
-        };
-        /** AIWindowingSettingsPatch */
-        AIWindowingSettingsPatch: {
-            /**
-             * Enabled
-             * @description enable context window management and summarization
-             */
-            enabled?: boolean;
-            /**
-             * Max Messages
-             * @description secondary message count guard
-             */
-            max_messages?: number;
-            /**
-             * Trigger Ratio
-             * @description fraction of token budget to trigger background summarization
-             */
-            trigger_ratio?: number;
-            /**
-             * Hard Ratio
-             * @description fraction of token budget for hard truncation
-             */
-            hard_ratio?: number;
-            /**
-             * Summary Batch Size
-             * @description number of oldest unsummarized messages per summary batch
-             */
-            summary_batch_size?: number;
-            /**
-             * Max Summaries Before Condense
-             * @description condense summaries when this many accumulate
-             */
-            max_summaries_before_condense?: number;
-            /**
-             * Tool Result Max Share
-             * @description max fraction of budget for a single tool result
-             */
-            tool_result_max_share?: number;
-            /**
-             * Tool Result Hard Cap
-             * @description absolute character ceiling per tool result
-             */
-            tool_result_hard_cap?: number;
-            /**
-             * Tool Results Combined Max Share
-             * @description max fraction of budget for ALL tool results combined (Layer 2)
-             */
-            tool_results_combined_max_share?: number;
-            /**
-             * Response Headroom
-             * @description tokens reserved for the model's response
-             */
-            response_headroom?: number;
-            /**
-             * Summarization Max Chars Per Message
-             * @description max characters per message in summarization transcripts
-             */
-            summarization_max_chars_per_message?: number | null;
         };
         /**
          * AccessLevel
@@ -4916,6 +4955,116 @@ export interface components {
              */
             bubbleTailStyle?: "none" | "whatsapp" | "imessage";
         };
+        /**
+         * AssetContentVectorizationSettings
+         * @description asset content vectorization resource limits.
+         */
+        AssetContentVectorizationSettings: {
+            /**
+             * Loader
+             * @description asset content text loader
+             * @default auto
+             * @enum {string}
+             */
+            loader: "auto" | "plain" | "markitdown";
+            /**
+             * Chunking Algorithm
+             * @description asset content chunking algorithm
+             * @default auto
+             * @enum {string}
+             */
+            chunking_algorithm: "auto" | "recursive" | "markdown";
+            /**
+             * Max Bytes
+             * @description maximum bytes read from an asset for text loading
+             * @default 5242880
+             */
+            max_bytes: number;
+            /**
+             * Target Tokens
+             * @description target token count per asset content chunk
+             * @default 700
+             */
+            target_tokens: number;
+            /**
+             * Overlap Tokens
+             * @description token overlap between adjacent asset content chunks
+             * @default 80
+             */
+            overlap_tokens: number;
+            /**
+             * Max Chunks
+             * @description maximum content chunks emitted for one asset
+             * @default 200
+             */
+            max_chunks: number;
+        };
+        /** AssetContentVectorizationSettingsPatch */
+        AssetContentVectorizationSettingsPatch: {
+            /**
+             * Loader
+             * @description asset content text loader
+             * @enum {string}
+             */
+            loader?: "auto" | "plain" | "markitdown";
+            /**
+             * Chunking Algorithm
+             * @description asset content chunking algorithm
+             * @enum {string}
+             */
+            chunking_algorithm?: "auto" | "recursive" | "markdown";
+            /**
+             * Max Bytes
+             * @description maximum bytes read from an asset for text loading
+             */
+            max_bytes?: number;
+            /**
+             * Target Tokens
+             * @description target token count per asset content chunk
+             */
+            target_tokens?: number;
+            /**
+             * Overlap Tokens
+             * @description token overlap between adjacent asset content chunks
+             */
+            overlap_tokens?: number;
+            /**
+             * Max Chunks
+             * @description maximum content chunks emitted for one asset
+             */
+            max_chunks?: number;
+        };
+        /**
+         * AssetDescriptionSettings
+         * @description asset description and summary limits.
+         */
+        AssetDescriptionSettings: {
+            /**
+             * Max Input Chars
+             * @description maximum extracted asset text characters sent to the description model
+             * @default 24000
+             */
+            max_input_chars: number;
+            /**
+             * Max Chars
+             * @description maximum stored asset description characters
+             * @default 1200
+             */
+            max_chars: number;
+        };
+        /** AssetDescriptionSettingsPatch */
+        AssetDescriptionSettingsPatch: {
+            /**
+             * Max Input Chars
+             * @description maximum extracted asset text characters sent to the description model
+             */
+            max_input_chars?: number;
+            /**
+             * Max Chars
+             * @description maximum stored asset description characters
+             */
+            max_chars?: number;
+        };
         /** AssetsSettings */
         AssetsSettings: {
             /**
@@ -4933,6 +5082,10 @@ export interface components {
             rerank?: components["schemas"]["RerankSettings"];
             /** @description file storage backend configuration */
             storage?: components["schemas"]["StorageSettings"];
+            /** @description asset content vectorization resource limits */
+            content_vectorization?: components["schemas"]["AssetContentVectorizationSettings"];
+            /** @description asset description and summary limits */
+            descriptions?: components["schemas"]["AssetDescriptionSettings"];
         };
         /** AssetsSettingsPatch */
         AssetsSettingsPatch: {
@@ -4951,6 +5104,10 @@ export interface components {
             rerank?: components["schemas"]["RerankSettingsPatch"];
             /** Storage */
             storage?: components["schemas"]["StorageSettingsPatch"];
+            /** Content Vectorization */
+            content_vectorization?: components["schemas"]["AssetContentVectorizationSettingsPatch"];
+            /** Descriptions */
+            descriptions?: components["schemas"]["AssetDescriptionSettingsPatch"];
         };
         /**
          * AudioGenerationSettings
@@ -10035,11 +10192,11 @@ export interface components {
             s3?: components["schemas"]["S3StorageConfigPatch"];
         };
         /**
-         * SummaryType
-         * @description type of thread summary.
+         * SummaryPurpose
+         * @description consumer-facing purpose of a thread summary.
          * @enum {string}
          */
-        SummaryType: "window" | "condensed";
+        SummaryPurpose: "agent_context" | "catalog";
         /**
          * Task
          * @description response model.
@@ -10603,7 +10760,7 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             thread_id: string;
-            type: components["schemas"]["SummaryType"];
+            purpose: components["schemas"]["SummaryPurpose"];
             /** Start Message Id */
             start_message_id?: string | null;
             /** End Message Id */
@@ -10620,6 +10777,16 @@ export interface components {
             content: string;
             /** Superseded By Id */
             superseded_by_id?: string | null;
+        };
+        /**
+         * ThreadSummaryUpdate
+         * @description payload for updating a stored summary.
+         */
+        ThreadSummaryUpdate: {
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Content */
+            content?: string;
         };
         /**
          * ThreadSwitchRequest
@@ -15496,6 +15663,390 @@ export interface operations {
             };
         };
     };
+    list_thread_summaries_v1_threads__thread_id__summaries_get: {
+        parameters: {
+            query?: {
+                include_superseded?: boolean;
+                purpose?: components["schemas"]["SummaryPurpose"] | null;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadSummaryRecord"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_thread_summary_v1_threads__thread_id__summaries__summary_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                summary_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadSummaryRecord"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    delete_thread_summary_v1_threads__thread_id__summaries__summary_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                summary_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_thread_summary_v1_threads__thread_id__summaries__summary_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                summary_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThreadSummaryUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadSummaryRecord"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     list_threads_v1_threads_get: {
         parameters: {
             query?: {
@@ -16585,102 +17136,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Thread"];
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    list_thread_summaries_v1_threads__thread_id__summaries_get: {
-        parameters: {
-            query?: {
-                include_superseded?: boolean;
-            };
-            header?: never;
-            path: {
-                thread_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ThreadSummaryRecord"][];
                 };
             };
             /** @description bad request */

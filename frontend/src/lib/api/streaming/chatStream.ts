@@ -50,6 +50,7 @@ export interface TextDelta {
 /** error event payload. */
 export interface StreamError {
 	message: string
+	run_id?: string
 }
 
 /** tool_result event payload. */
@@ -184,10 +185,23 @@ async function streamSseFrames(opts: {
 	}
 
 	if (!response.ok || !response.body) {
-		throw new Error(`stream request failed: ${response.status}`)
+		throw new Error(await streamErrorMessage(response, 'stream request failed'))
 	}
 
 	return response.body.getReader()
+}
+
+async function streamErrorMessage(response: Response, fallback: string): Promise<string> {
+	try {
+		const parsed: unknown = await response.clone().json()
+		if (parsed && typeof parsed === 'object' && 'detail' in parsed) {
+			const detail = (parsed as { detail?: unknown }).detail
+			if (typeof detail === 'string' && detail.trim()) return detail
+		}
+	} catch {
+		// fall through to status-only message.
+	}
+	return `${fallback}: ${response.status}`
 }
 
 /** error thrown when an SSE stream request fails with a non-2xx status. */
@@ -229,7 +243,10 @@ async function streamSseGet(opts: {
 	}
 
 	if (!response.ok || !response.body) {
-		throw new StreamHttpError(response.status, `resume stream failed: ${response.status}`)
+		throw new StreamHttpError(
+			response.status,
+			await streamErrorMessage(response, 'resume stream failed')
+		)
 	}
 
 	return response.body.getReader()

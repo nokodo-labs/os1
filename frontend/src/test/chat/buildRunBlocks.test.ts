@@ -1,5 +1,5 @@
 import { buildRunBlocks, getUserRunItemTimestamp } from '$lib/chat/helpers'
-import type { ApiMessage } from '$lib/chat/types'
+import type { ApiMessage, RunActivityState } from '$lib/chat/types'
 import { describe, expect, it } from 'vitest'
 import { makeApiMessage } from './fixtures'
 
@@ -207,6 +207,55 @@ describe('buildRunBlocks', () => {
 		expect(result.blocks[0].agentId).toBe(agentId)
 	})
 
+	it('places run activity after its timeline anchor message', () => {
+		const firstUser = message({
+			id: 'u1',
+			type: 'user',
+			parent_id: null,
+			sender_user_id: userId,
+			created_at: at(1),
+		})
+		const assistant = message({
+			id: 'a1',
+			type: 'assistant',
+			parent_id: 'u1',
+			sender_user_id: null,
+			sender_agent_id: agentId,
+			content: [{ type: 'text', text: 'done' }],
+			created_at: at(2),
+		})
+		const activity: RunActivityState = {
+			key: 'activity_1',
+			id: 'event_1',
+			eventIds: ['event_1'],
+			messageId: 'u1',
+			runId,
+			activityId: 'activity_1',
+			activityType: 'context_compaction',
+			status: 'success',
+			updatedAt: new Date(at(1)),
+			startedAt: new Date(at(1)),
+			endedAt: new Date(at(1)),
+		}
+
+		const result = buildRunBlocks({
+			messages: [firstUser, assistant],
+			userId,
+			streamingAssistant: null,
+			optimisticUserMessage: null,
+			viewingStreamingBranch: true,
+			runActivities: [activity],
+		})
+
+		expect(result.blocks).toHaveLength(1)
+		expect(result.blocks[0].items.map((item) => item.kind)).toEqual([
+			'user',
+			'run_activity',
+			'assistant',
+		])
+		expect(result.blocks[0].agentId).toBe(agentId)
+	})
+
 	it('splits consecutive assistant and tool messages when the run id changes', () => {
 		const firstUser = message({
 			id: 'u1',
@@ -308,7 +357,7 @@ describe('buildRunBlocks', () => {
 		expect(result.blocks[1].agentId).toBe(otherAgentId)
 	})
 
-	it('places the streaming placeholder after active streaming tools', () => {
+	it('places streaming assistant text before active streaming tools', () => {
 		const firstUser = message({
 			id: 'u1',
 			type: 'user',
@@ -347,8 +396,8 @@ describe('buildRunBlocks', () => {
 		expect(result.blocks[0].items.map((item) => item.kind)).toEqual([
 			'user',
 			'assistant',
-			'streaming_tool',
 			'streaming_assistant',
+			'streaming_tool',
 		])
 	})
 })

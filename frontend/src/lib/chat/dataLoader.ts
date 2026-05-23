@@ -10,6 +10,7 @@ import { session } from '$lib/stores/session.svelte'
 import { parseToolCalls, parseToolEvent, parseToolResult } from '$lib/tools'
 import { tick } from 'svelte'
 import { getMessageCreatedAt, type ApiMessage } from './helpers'
+import { parseRunActivityEvent } from './runActivities'
 import { getMessageSteeringRunId, getMessageSteeringState } from './steering'
 import type { ChatContext } from './types'
 
@@ -31,7 +32,7 @@ function mergeMessages(...groups: ApiMessage[][]): ApiMessage[] {
 	return Array.from(byId.values())
 }
 
-/** replay parsed events into the chat context (tool tracker + attachment states) */
+/** replay parsed events into the chat context (tools, run activities, attachments) */
 function replayEvents(events: ApiEvent[], ctx: ChatContext): void {
 	for (const ev of events) {
 		const toolEv = parseToolEvent({
@@ -43,6 +44,18 @@ function replayEvents(events: ApiEvent[], ctx: ChatContext): void {
 		})
 		if (toolEv) {
 			ctx.toolTracker.processEvent(toolEv)
+			continue
+		}
+
+		const activityEv = parseRunActivityEvent({
+			id: ev.id,
+			type: ev.type,
+			data: (ev.data ?? {}) as Record<string, unknown>,
+			created_at: ev.created_at ?? undefined,
+			message_id: ev.message_id ?? undefined,
+		})
+		if (activityEv) {
+			ctx.processRunActivityEvent(activityEv)
 			continue
 		}
 
@@ -59,7 +72,7 @@ function replayEvents(events: ApiEvent[], ctx: ChatContext): void {
 	}
 }
 
-/** fetch and process events (tool + attachment) for a batch of message ids */
+/** fetch and process message-scoped events for a batch of message ids */
 export async function fetchEventsForThread(
 	threadId: string,
 	msgIds: string[],
@@ -77,27 +90,27 @@ export async function fetchEventsForThread(
 			// replay from cache - skip the API entirely
 			if (!isCurrent()) return
 			replayEvents(cached.events, ctx)
-			for (const id of msgIds) ctx.fetchedToolEventMessageIds.add(id)
+			for (const id of msgIds) ctx.fetchedEventMessageIds.add(id)
 			return
 		}
 	}
 
 	// queue IDs that haven't been fetched yet
 	for (const id of msgIds) {
-		if (!ctx.fetchedToolEventMessageIds.has(id)) {
-			ctx.toolEventsPendingIds.add(id)
+		if (!ctx.fetchedEventMessageIds.has(id)) {
+			ctx.eventMessageIdsPending.add(id)
 		}
 	}
 
 	// if already fetching, the current fetch will pick up queued IDs on completion
-	if (ctx.toolEventsInFlight) return
+	if (ctx.eventsInFlight) return
 
 	// process all pending IDs
-	while (ctx.toolEventsPendingIds.size > 0) {
-		const batch = Array.from(ctx.toolEventsPendingIds)
-		ctx.toolEventsPendingIds.clear()
+	while (ctx.eventMessageIdsPending.size > 0) {
+		const batch = Array.from(ctx.eventMessageIdsPending)
+		ctx.eventMessageIdsPending.clear()
 
-		ctx.toolEventsInFlight = true
+		ctx.eventsInFlight = true
 		try {
 			const { data, error } = await api.POST(
 				'/v1/threads/{thread_id}/events/by-message-ids',
@@ -118,9 +131,9 @@ export async function fetchEventsForThread(
 					chatStore.threadCache.setEvents(threadId, events, batch)
 				}
 			}
-			for (const id of batch) ctx.fetchedToolEventMessageIds.add(id)
+			for (const id of batch) ctx.fetchedEventMessageIds.add(id)
 		} finally {
-			ctx.toolEventsInFlight = false
+			ctx.eventsInFlight = false
 		}
 	}
 }

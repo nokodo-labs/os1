@@ -15,6 +15,8 @@ export async function loadPublicConfig(): Promise<PublicConfig> {
 
 	// SSR/prerender: no browser fetch, only env is available.
 	if (!browser) return { api_origin: null }
+	const testFetch = fetch as typeof fetch & { mock?: unknown }
+	if (import.meta.env.MODE === 'test' && !testFetch.mock) return { api_origin: null }
 
 	try {
 		const response = await fetch('/config.json', {

@@ -1,6 +1,6 @@
 /**
  * real-time event subscriptions - single unified listener that dispatches
- * tool, message, typing, attachment, and citation events by prefix.
+ * tool, run activity, message, typing, attachment, and citation events by prefix.
  *
  * run lifecycle events (runs.active / run.started / run.completed / run.error
  * / run.failed) are NOT handled here - they are owned by the global
@@ -19,6 +19,7 @@ import {
 import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 import { parseToolEvent } from '$lib/tools'
 import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity'
+import { parseRunActivityEvent, RUN_ACTIVITY_EVENT_PREFIX } from './runActivities'
 import { buildMessageChildren, type ApiMessage } from './helpers'
 import {
 	getMessageClientSteeringId,
@@ -61,6 +62,20 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		})
 		if (!toolEv) return
 		ctx.toolTracker.processEvent(toolEv)
+	}
+
+	/** apply live run activity events for this thread. */
+	function handleRunActivityEvent(ev: StreamEvent): void {
+		if (ev.thread_id !== threadId) return
+		const activityEv = parseRunActivityEvent({
+			id: ev.id,
+			type: ev.type,
+			data: (ev.data ?? {}) as Record<string, unknown>,
+			created_at: ev.created_at ?? undefined,
+			message_id: ev.message_id ?? undefined,
+		})
+		if (!activityEv) return
+		ctx.processRunActivityEvent(activityEv)
 	}
 
 	// message events (cross-device sync)
@@ -280,6 +295,7 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 				// 404 = run already finished between store snapshot and our request.
 				// not a real error - just clear the placeholder and move on.
 				if (err instanceof StreamHttpError && err.status === 404) {
+					activeRunsStore.forgetRun(runId)
 					if (ctx.streamingAssistant?.messageId === `resume-${runId}`) {
 						ctx.streamingAssistant = null
 						ctx.streamingAssistantParentId = null
@@ -523,6 +539,8 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 			handleCitationEvent(ev as StreamEvent)
 		} else if (ev.type.startsWith('run.steering.')) {
 			handleSteeringEvent(ev as StreamEvent)
+		} else if (ev.type.startsWith(RUN_ACTIVITY_EVENT_PREFIX)) {
+			handleRunActivityEvent(ev as StreamEvent)
 		}
 	})
 
