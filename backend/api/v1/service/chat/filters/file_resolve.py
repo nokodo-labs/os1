@@ -60,17 +60,24 @@ def _needs_resolution(part: ImageContent | FileContent) -> bool:
 
 
 class FileResolveFilter(Filter):
-	"""resolves file_id references to actual file data (url or base64).
+	"""resolves file_id references to model-ready file data.
 
-	this filter is NOT optional and should NOT be in the plugin registry.
-	it is always appended by the agent service so it runs last in the
-	filter chain. works independently of whether decay or any other
-	filter is present.
+	chat messages can carry lightweight image or file parts that reference
+	a stored file id without embedding the actual bytes. this filter scans
+	user, assistant, and tool messages for unresolved active attachments,
+	loads the file through the file service with normal access checks, and
+	populates the SDK content part with base64 data when available.
+
+	running this before citation indexing and context compaction lets later
+	filters see the same payload the model will receive.
 	"""
 
 	name: str = Field(default="file_resolve")
 	description: str = Field(
-		default="resolves file_id references to url or base64 for chat model execution"
+		default=(
+			"loads referenced file data so image and file attachments can be "
+			"sent to the model"
+		)
 	)
 
 	async def process(

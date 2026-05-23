@@ -15,7 +15,8 @@ from api.schemas.search import (
 )
 from api.v1.service import search as search_service
 from api.v1.service.chat.context import AppContext
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
@@ -92,12 +93,14 @@ class ResourceSearchTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		inp = ResourceSearchInput.model_validate(kwargs)
 		resource_types = [_TYPE_MAP[item] for item in inp.types] if inp.types else None
 		results: list[dict[str, object]] = []
@@ -116,4 +119,4 @@ class ResourceSearchTool(Tool[AppContext]):
 			"count": len(results),
 			"results": results,
 		}
-		return self.success(json.dumps(out), __agent_context__)
+		return self.success(json.dumps(out), __tool_call_context__)

@@ -26,14 +26,10 @@ from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import resource_access_predicate
 from api.v1.service.chat.context import AppContext
-from api.v1.service.chat.filters import ToolResultTruncationFilter, resolve_filters
-from api.v1.service.chat.filters.chat_context import ChatContextFilter
+from api.v1.service.chat.filters import resolve_filters
 from api.v1.service.chat.filters.citation_index import (
-	CitationIndexFilter,
 	resolve_assistant_citations,
 )
-from api.v1.service.chat.filters.context_windowing import ContextWindowingFilter
-from api.v1.service.chat.filters.file_resolve import FileResolveFilter
 from api.v1.service.chat.hooks import resolve_hooks
 from api.v1.service.chat.message_metadata import (
 	MESSAGE_ID_KEY,
@@ -428,11 +424,6 @@ async def build_agent_from_orm(
 		tool_ids=agent_orm.plugin_ids,
 	)
 	filters = resolve_filters(agent_orm.plugin_ids)
-	filters.insert(0, ToolResultTruncationFilter())
-	filters.append(ChatContextFilter())
-	filters.append(FileResolveFilter())
-	filters.append(CitationIndexFilter())
-	filters.append(ContextWindowingFilter())
 	hooks = resolve_hooks(agent_orm.plugin_ids)
 
 	# extract max_iterations from agent config
@@ -577,7 +568,7 @@ async def run_agent(
 		persist_parent_override: TypeID | None = None
 
 		# capture model_id for message metadata before the worker starts.
-		# this lets downstream consumers (e.g. windowing) know which model
+		# this lets downstream consumers (e.g. context compaction) know which model
 		# produced each assistant message without re-loading the agent.
 		_model_id_for_persist: str | None = str(agent.model.id) if agent.model else None
 

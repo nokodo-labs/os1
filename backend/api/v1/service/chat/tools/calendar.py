@@ -19,7 +19,8 @@ from api.v1.service import calendar as calendar_service
 from api.v1.service.calendar.events import list_calendar_scheduled_items
 from api.v1.service.chat.context import AppContext
 from api.v1.service.reminders.core import list_reminder_scheduled_items
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
@@ -212,17 +213,19 @@ class CalendarEventGetTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		inp = CalendarEventGetInput.model_validate(kwargs)
 		if inp.calendar_event_id and inp.query:
 			return self.error(
 				"provide calendar_event_id or query, not both",
-				__agent_context__,
+				__tool_call_context__,
 			)
 
 		try:
@@ -237,7 +240,7 @@ class CalendarEventGetTool(Tool[AppContext]):
 					"message": "calendar event retrieved",
 					"event": _event_payload(calendar_event),
 				}
-				return self.success(json.dumps(out), __agent_context__)
+				return self.success(json.dumps(out), __tool_call_context__)
 
 			if inp.query:
 				page = await calendar_service.search_calendar_events(
@@ -264,22 +267,22 @@ class CalendarEventGetTool(Tool[AppContext]):
 					"has_more": page.has_more,
 					"results": search_results,
 				}
-				return self.success(json.dumps(search_out), __agent_context__)
+				return self.success(json.dumps(search_out), __tool_call_context__)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), __agent_context__)
+			return self.error(str(exc.detail), __tool_call_context__)
 
-		return await self._scheduled_items(inp, __agent_context__, __app_context__)
+		return await self._scheduled_items(inp, __tool_call_context__, __app_context__)
 
 	async def _scheduled_items(
 		self,
 		inp: CalendarEventGetInput,
-		agent_context: AgentContext,
+		tool_call_context: ToolCallContext,
 		app_context: AppContext,
 	) -> ToolMessage:
 		start_at = inp.start_at or datetime.now(tz=UTC)
 		end_at = inp.end_at or start_at + timedelta(days=_DEFAULT_UPCOMING_DAYS)
 		if end_at <= start_at:
-			return self.error("end_at must be after start_at", agent_context)
+			return self.error("end_at must be after start_at", tool_call_context)
 		try:
 			items = [
 				*(
@@ -301,7 +304,7 @@ class CalendarEventGetTool(Tool[AppContext]):
 				),
 			]
 		except HTTPException as exc:
-			return self.error(str(exc.detail), agent_context)
+			return self.error(str(exc.detail), tool_call_context)
 		items.sort(
 			key=lambda item: (
 				item.effective_start_at,
@@ -326,7 +329,7 @@ class CalendarEventGetTool(Tool[AppContext]):
 			"next_skip": next_skip,
 			"results": results,
 		}
-		return self.success(json.dumps(out), agent_context)
+		return self.success(json.dumps(out), tool_call_context)
 
 
 class CalendarEventWriteTool(Tool[AppContext]):
@@ -346,19 +349,21 @@ class CalendarEventWriteTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		inp = CalendarEventWriteInput.model_validate(kwargs)
 
 		if inp.delete:
 			if not inp.calendar_event_id:
 				return self.error(
 					"calendar_event_id is required when deleting",
-					__agent_context__,
+					__tool_call_context__,
 				)
 			try:
 				await calendar_service.delete_calendar_event(
@@ -368,13 +373,13 @@ class CalendarEventWriteTool(Tool[AppContext]):
 					calendar_id=TypeID(inp.calendar_id) if inp.calendar_id else None,
 				)
 			except HTTPException as exc:
-				return self.error(str(exc.detail), __agent_context__)
+				return self.error(str(exc.detail), __tool_call_context__)
 			delete_out: dict[str, object] = {
 				"status": "success",
 				"message": "calendar event deleted",
 				"id": inp.calendar_event_id,
 			}
-			return self.success(json.dumps(delete_out), __agent_context__)
+			return self.success(json.dumps(delete_out), __tool_call_context__)
 
 		if inp.calendar_event_id:
 			update_kwargs: dict[str, object] = {}
@@ -409,18 +414,18 @@ class CalendarEventWriteTool(Tool[AppContext]):
 					calendar_id=TypeID(inp.calendar_id) if inp.calendar_id else None,
 				)
 			except HTTPException as exc:
-				return self.error(str(exc.detail), __agent_context__)
+				return self.error(str(exc.detail), __tool_call_context__)
 			update_out: dict[str, object] = {
 				"status": "success",
 				"message": "calendar event updated",
 				"event": _event_payload(calendar_event),
 			}
-			return self.success(json.dumps(update_out), __agent_context__)
+			return self.success(json.dumps(update_out), __tool_call_context__)
 
 		if not inp.title or inp.start_at is None or inp.end_at is None:
 			return self.error(
 				"title, start_at, and end_at are required when creating an event",
-				__agent_context__,
+				__tool_call_context__,
 			)
 		try:
 			calendar_event = await calendar_service.create_calendar_event(
@@ -442,10 +447,10 @@ class CalendarEventWriteTool(Tool[AppContext]):
 				calendar_id=TypeID(inp.calendar_id) if inp.calendar_id else None,
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), __agent_context__)
+			return self.error(str(exc.detail), __tool_call_context__)
 		create_out: dict[str, object] = {
 			"status": "success",
 			"message": "calendar event created",
 			"event": _event_payload(calendar_event),
 		}
-		return self.success(json.dumps(create_out), __agent_context__)
+		return self.success(json.dumps(create_out), __tool_call_context__)

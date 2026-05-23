@@ -159,6 +159,7 @@ async def generate_thread_metadata(
 			chat_model,
 			thread=sdk_thread,
 			json_schema=_ThreadMetadataOut.model_json_schema(),
+			purpose="thread_metadata",
 		)
 		out = _ThreadMetadataOut.model_validate(data)
 

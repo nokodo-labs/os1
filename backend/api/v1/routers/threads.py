@@ -12,7 +12,6 @@ from api.database import get_db
 from api.models.event import Event
 from api.models.message import Message
 from api.models.thread import Thread
-from api.models.thread_summary import ThreadSummary
 from api.permissions import ResourceType
 from api.schemas.event import Event as EventSchema
 from api.schemas.event import EventsByMessageIDsRequest
@@ -31,7 +30,6 @@ from api.schemas.thread import (
 	ThreadListFilters,
 	ThreadMetadataGenerateRequest,
 	ThreadSortBy,
-	ThreadSummaryRecord,
 	ThreadSwitchRequest,
 	ThreadSwitchResponse,
 	ThreadUpdate,
@@ -43,12 +41,12 @@ from api.schemas.thread_participant import (
 	ThreadUnreadCount,
 )
 from api.v1.routers.resource_access import create_resource_access_router
+from api.v1.routers.thread_summaries import create_thread_summaries_router
 from api.v1.service import runs as runs_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.authorization import require_admin
 from api.v1.service.events import SessionId
-from api.v1.service.threads import summaries as thread_summary_service
 from api.v1.tasks.threads import run_thread_maintenance_backfill_sweep
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.sse import sse_response
@@ -77,6 +75,7 @@ router.include_router(
 		resolve_resource_id=resolve_thread_id,
 	)
 )
+router.include_router(create_thread_summaries_router(resolve_thread_id))
 
 
 @router.post("", response_model=ThreadSchema, status_code=status.HTTP_201_CREATED)
@@ -291,28 +290,6 @@ async def generate_thread_metadata(
 		session=db,
 		replace=request.replace,
 		origin_session_id=x_session_id,
-	)
-
-
-@router.get("/{thread_id}/summaries", response_model=list[ThreadSummaryRecord])
-async def list_thread_summaries(
-	thread_id: ThreadIDPath,
-	include_superseded: bool = True,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[ThreadSummary]:
-	"""list stored summary records for a thread. admin only."""
-	require_admin(principal)
-	thread = await db.get(Thread, thread_id)
-	if thread is None:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="thread not found",
-		)
-	return await thread_summary_service.list_summaries(
-		thread_id,
-		db,
-		include_superseded=include_superseded,
 	)
 
 

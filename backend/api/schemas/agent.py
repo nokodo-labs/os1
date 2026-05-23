@@ -19,6 +19,18 @@ from nokodo_ai.utils.typeid import TypeID
 
 type AgentSortBy = CommonSortBy | Literal["name"]
 
+DEFAULT_AGENT_PLUGIN_IDS: tuple[str, ...] = (
+	"chat_context",
+	"attachment_decay",
+	"file_resolve",
+	"citation_index",
+	"context_compaction",
+)
+
+
+def default_agent_plugin_ids() -> list[str]:
+	return list(DEFAULT_AGENT_PLUGIN_IDS)
+
 
 class AgentListFilters(BaseModel):
 	"""filters for listing agents."""
@@ -61,7 +73,7 @@ class AgentBase(MetadataModel):
 	name: str
 	description: str | None = None
 	system_prompt: str | None = None
-	plugin_ids: list[str] = Field(default_factory=list)
+	plugin_ids: list[str] = Field(default_factory=default_agent_plugin_ids)
 	config: AgentConfig = Field(default_factory=AgentConfig)
 	model_id: TypeID | None = None
 	profile_image_file_id: TypeID | None = None

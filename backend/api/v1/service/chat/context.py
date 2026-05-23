@@ -42,7 +42,6 @@ class AppContext:
 	- principal: authenticated user
 	- event_emitter: function to broadcast events in real-time
 	- run_id: active API run id, when the SDK is running inside a persisted run
-	- event_emitter: function to broadcast events in real-time
 	- context_window: model context window in tokens (from Model ORM)
 	- retrieval: shared embedding cache for the current run
 

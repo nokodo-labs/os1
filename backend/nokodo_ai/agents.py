@@ -13,7 +13,7 @@ from pydantic import Field, SkipValidation, ValidationError
 
 from .base import Base
 from .chat_models import ChatModel
-from .context import AgentContext
+from .context import AgentContext, ToolCallContext
 from .deltas import AgentDelta, ChatModelDelta
 from .filters import Filter
 from .hooks import Hook
@@ -47,6 +47,31 @@ class AgentIterationState[AppContextT = None]:
 	# todo: if filters need context-aware model selection, move the chat model
 	# set into iteration state instead of adding model params piecemeal.
 	tool_choice: AgentToolChoice = "auto"
+	iteration: int = 0
+
+	def snapshot(self) -> AgentIterationSnapshot[AppContextT]:
+		"""return a read-only view for observers."""
+		return AgentIterationSnapshot(
+			thread=self.thread.model_copy(deep=True),
+			tools=[tool.model_copy(deep=True) for tool in self.tools],
+			tool_choice=self.tool_choice,
+			iteration=self.iteration,
+		)
+
+
+@dataclass(frozen=True, slots=True)
+class AgentIterationSnapshot[AppContextT = None]:
+	"""read-only view of one agent loop iteration for hooks and tools.
+
+	snapshots copy thread and tool data so observers cannot mutate live loop
+	state by accident. filters receive ``AgentIterationState`` when they need
+	to write loop state.
+	"""
+
+	thread: Thread
+	tools: list[Tool[AppContextT]]
+	tool_choice: AgentToolChoice
+	iteration: int
 
 
 # strong references to fire-and-forget cancel tasks so the event loop does
@@ -89,23 +114,39 @@ class Agent[AppContextT = None](Base):
 	system prompts belong in the Thread as a SystemMessage.
 
 	usage:
-		from nokodo_ai import Agent, ChatModel, Tool
-		from nokodo_ai.message import SystemMessage, UserMessage
-		from nokodo_ai.thread import Thread
+		from nokodo_ai import (
+			Agent,
+			AgentContext,
+			AgentIterationSnapshot,
+			ChatModel,
+			SystemMessage,
+			Thread,
+			ToolCallContext,
+			ToolMessage,
+			UserMessage,
+			tool,
+		)
 
-		class WeatherTool(Tool[None]):
-			name = "get_weather"
-			description = "get current weather"
-
-			async def call(self, agent_ctx, app_ctx, city: str) -> ToolMessage:
-				return self.success(f"sunny in {city}", agent_ctx)
+		@tool(name="get_weather", description="get current weather")
+		def get_weather(
+			__state__: AgentIterationSnapshot[None],
+			__agent_context__: AgentContext,
+			__tool_call_context__: ToolCallContext,
+			__app_context__: None,
+			city: str,
+		) -> ToolMessage:
+			_ = (__state__, __agent_context__, __app_context__)
+			return ToolMessage(
+				tool_call_id=__tool_call_context__.tool_call_id,
+				tool_output=f"sunny in {city}",
+			)
 
 		chat_model = ChatModel.create(
 			"gpt-4o",
 			adapter={"type": "openai", "api_key": "..."},
 			temperature=0.7,
 		)
-		agent = Agent(chat_model=chat_model, tools=[WeatherTool()])
+		agent = Agent(chat_model=chat_model, tools=[get_weather])
 
 		thread = Thread()
 		thread.add(SystemMessage.from_text("you are a helpful assistant"))
@@ -213,14 +254,9 @@ class Agent[AppContextT = None](Base):
 		produced: AgentProducedMessages = []
 		state = self._initial_iteration_state(thread, tool_choice)
 		model_calls = 0
-		iteration = 0
 
 		while True:
-			agent_context = AgentContext(
-				thread=state.thread,
-				model=self.chat_model,
-				iteration=iteration,
-			)
+			agent_context = AgentContext(model=self.chat_model)
 			state = await self._apply_filters(state, agent_context, app_context)
 			self.tools = state.tools
 
@@ -243,7 +279,7 @@ class Agent[AppContextT = None](Base):
 			# execute hooks after response (read-only observation)
 			for hook in self.hooks:
 				await hook.execute(
-					state.thread,
+					state.snapshot(),
 					agent_context=agent_context,
 					app_context=app_context,
 				)
@@ -251,12 +287,13 @@ class Agent[AppContextT = None](Base):
 			for tool_call in assistant_response.tool_calls:
 				tool_message = await self._execute_tools(
 					tool_call=tool_call,
+					state=state,
 					agent_context=agent_context,
 					app_context=app_context,
 				)
 				state.thread.add(tool_message)
 				produced.append(tool_message)
-			iteration += 1
+			state.iteration += 1
 
 		# max iterations reached. call chat model one more time without tools
 		final_response = await self.chat_model.generate(
@@ -279,14 +316,9 @@ class Agent[AppContextT = None](Base):
 		chunk_index = 0
 		state = self._initial_iteration_state(thread, tool_choice)
 		model_calls = 0
-		iteration = 0
 
 		while True:
-			agent_context = AgentContext(
-				thread=state.thread,
-				model=self.chat_model,
-				iteration=iteration,
-			)
+			agent_context = AgentContext(model=self.chat_model)
 			state = await self._apply_filters(state, agent_context, app_context)
 			self.tools = state.tools
 
@@ -319,7 +351,7 @@ class Agent[AppContextT = None](Base):
 			# execute hooks (read-only observation)
 			for hook in self.hooks:
 				await hook.execute(
-					state.thread,
+					state.snapshot(),
 					agent_context=agent_context,
 					app_context=app_context,
 				)
@@ -328,13 +360,14 @@ class Agent[AppContextT = None](Base):
 			for tool_call in assistant_message.tool_calls:
 				tool_message = await self._execute_tools(
 					tool_call=tool_call,
+					state=state,
 					agent_context=agent_context,
 					app_context=app_context,
 				)
 				state.thread.add(tool_message)
 				yield AgentDelta(tool=tool_message, chunk_index=chunk_index)
 				chunk_index += 1
-			iteration += 1
+			state.iteration += 1
 
 		# max iterations reached - final call without tools
 		final_message = AssistantMessage()
@@ -434,18 +467,17 @@ class Agent[AppContextT = None](Base):
 	) -> AgentIterationState[AppContextT]:
 		"""apply pre-model filters to iteration state."""
 		for filter_ in self.filters:
-			agent_context.thread = state.thread
 			state = await filter_.process(
 				state,
 				agent_context=agent_context,
 				app_context=app_context,
 			)
-		agent_context.thread = state.thread
 		return state
 
 	async def _execute_tools(
 		self,
 		tool_call: ToolCall,
+		state: AgentIterationState[AppContextT],
 		agent_context: AgentContext,
 		app_context: AppContextT | None,
 	) -> ToolMessage:
@@ -499,19 +531,21 @@ class Agent[AppContextT = None](Base):
 			)
 
 		# create tool-specific context
-		tool_ctx = AgentContext(
-			thread=agent_context.thread,
-			model=agent_context.model,
+		tool_ctx = ToolCallContext(
 			tool_call_id=tool_call.id,
-			iteration=agent_context.iteration,
-			retry_count=agent_context.retry_count,
 			tool_call_start_time=tool_call.created_at_monotonic,
 			metadata=tool_call.metadata or {},
 		)
 
 		# execute
 		try:
-			tool_message = await tool.call(tool_ctx, app_context, **args)
+			tool_message = await tool.call(
+				state.snapshot(),
+				agent_context,
+				tool_ctx,
+				app_context,
+				**args,
+			)
 		except (ValidationError, TypeError) as e:
 			logger.warning("invalid arguments for tool %s: %s", tool.name, e)
 			hint = json.dumps(tool.parameters, indent=2)

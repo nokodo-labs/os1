@@ -17,6 +17,7 @@ from api.database import (
 from api.models.access_rule import AccessLevel
 from api.models.message import MessageType
 from api.models.thread import Thread
+from api.models.thread_summary import SummaryPurpose
 from api.permissions import ResourceType
 from api.schemas.search import (
 	CursorPage,
@@ -34,6 +35,7 @@ from api.v1.service.authorization import (
 	vector_acl_filter,
 )
 from api.v1.service.embeddings import embed_text, embed_texts
+from api.v1.service.threads.summaries import latest_active_summary_text
 from api.v1.service.vectorize import (
 	VectorSpec,
 	build_chunk,
@@ -48,16 +50,23 @@ logger = logging.getLogger(__name__)
 
 
 def _thread_dense_text(thread: Thread) -> str:
+	"""build dense vector text from title plus latest catalog summary."""
 	parts: list[str] = []
 	if thread.title:
 		parts.append(thread.title)
-	summary = (thread.metadata_ or {}).get("summary")
+	summary = latest_active_summary_text(
+		thread,
+		SummaryPurpose.CATALOG,
+	)
+	if summary is None:
+		summary = (thread.metadata_ or {}).get("summary")
 	if summary:
 		parts.append(str(summary))
 	return " ".join(parts).strip()
 
 
 def _thread_bm25_text(thread: Thread) -> str:
+	"""build sparse search text from dense fields plus visible message text."""
 	dense = _thread_dense_text(thread)
 	parts = [dense] if dense else []
 	if thread.messages:
@@ -72,6 +81,7 @@ def _thread_bm25_text(thread: Thread) -> str:
 
 
 def _thread_metadata(thread: Thread) -> JSONObject:
+	"""build vector metadata for a thread resource."""
 	return {
 		"resource_type": "thread",
 		"owner_id": str(thread.owner_id),
@@ -90,7 +100,8 @@ async def _thread_should_revectorize(
 	thread_in: ThreadUpdate,
 	session: AsyncSession,
 ) -> bool:
-	# title/tags are metadata-only; summary change is detected via metadata_ key
+	"""return whether an update touches fields represented in vectors."""
+	# catalog summary changes are revectorized by thread maintenance.
 	_fields = {"title", "tags", "metadata_", "owner_id"}
 	update_data = thread_in.model_dump(exclude_unset=True, mode="python")
 	return bool(_fields & update_data.keys())
@@ -115,7 +126,7 @@ async def vectorize_all_threads(session: AsyncSession) -> int:
 			Thread.deleted_at.is_(None),
 			Thread.is_temporary.is_(False),
 		)
-		.options(selectinload(Thread.messages))
+		.options(selectinload(Thread.messages), selectinload(Thread.summaries))
 	)
 	result = await session.execute(stmt)
 	valid: list[tuple[Thread, str]] = []
@@ -208,15 +219,19 @@ async def _hybrid_search_threads(
 	if not results:
 		return []
 	resource_ids = [r.metadata["resource_id"] for r in results]
-	stmt = select(Thread).where(
-		Thread.id.in_(resource_ids),
-		Thread.deleted_at.is_(None),
-		Thread.is_temporary.is_(False),
-		thread_access_predicate(
-			principal,
-			required_level=AccessLevel.READER,
-			include_hidden=False,
-		),
+	stmt = (
+		select(Thread)
+		.options(selectinload(Thread.summaries))
+		.where(
+			Thread.id.in_(resource_ids),
+			Thread.deleted_at.is_(None),
+			Thread.is_temporary.is_(False),
+			thread_access_predicate(
+				principal,
+				required_level=AccessLevel.READER,
+				include_hidden=False,
+			),
+		)
 	)
 	db_result = await db.execute(stmt)
 	by_id = {str(t.id): t for t in db_result.scalars().unique().all()}
@@ -227,7 +242,12 @@ async def _hybrid_search_threads(
 		thread = by_id.get(rid)
 		if not thread:
 			continue
-		summary = (thread.metadata_ or {}).get("summary")
+		summary = latest_active_summary_text(
+			thread,
+			SummaryPurpose.CATALOG,
+		)
+		if summary is None:
+			summary = (thread.metadata_ or {}).get("summary")
 		items.append(
 			SearchResultItem(
 				type=SearchResultType.THREAD,

@@ -9,7 +9,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.v1.service.chat.context import AppContext
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
@@ -65,7 +66,7 @@ class DelegateRequest(BaseModel):
 			"occur.\n\n"
 			"if false, this tool will await the completion of the delegated task "
 			"before returning the result.\nuse this when your main concern is "
-			"CONTEXT USAGE - as this will effectively compress all sub-tasks "
+			"CONTEXT USAGE - as this will effectively compact all sub-tasks "
 			"needed to accomplish a task, into a single efficient tool call."
 		),
 	)
@@ -92,7 +93,9 @@ class DelegateTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
@@ -105,10 +108,9 @@ class DelegateTool(Tool[AppContext]):
 			"status": "pending",
 			"result": None,
 		}
-		tool_call_id, _ = self.tool_call_context(__agent_context__)
 		return ToolMessage(
 			tool_output=json.dumps(response),
-			tool_call_id=tool_call_id,
+			tool_call_id=__tool_call_context__.tool_call_id,
 			metadata={
 				"tool_response": True,
 				"timestamp": time(),

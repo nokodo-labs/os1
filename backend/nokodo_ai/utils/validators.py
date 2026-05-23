@@ -201,6 +201,9 @@ def validate_callable(
 	# validate argument types
 	if expected_arg_types is not None:
 		for i, expected_type in enumerate(expected_arg_types):
+			if expected_type is None:
+				continue
+
 			if i >= len(positional_params):
 				raise TypeError(
 					f"{func_name}: missing parameter at position {i} "

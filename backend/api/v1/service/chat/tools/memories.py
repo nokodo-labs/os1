@@ -16,7 +16,8 @@ from api.schemas.search import SearchMode, SearchParams
 from api.v1.service import memories as memory_service
 from api.v1.service.auth import Principal
 from api.v1.service.chat.context import AppContext
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONArray, JSONObject
@@ -82,19 +83,21 @@ class MemoryRecallTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		ai = __app_context__.principal.user.prefs.ai
 		if isinstance(ai, AIPreferences) and ai.memories_enabled is False:
 			out: JSONObject = {
 				"status": "success",
 				"message": "memory features are disabled by user preferences",
 			}
-			return self.success(json.dumps(out), __agent_context__)
+			return self.success(json.dumps(out), __tool_call_context__)
 		inp = MemorySearchInput.model_validate(kwargs)
 		try:
 			page = await memory_service.search_memories(
@@ -105,7 +108,7 @@ class MemoryRecallTool(Tool[AppContext]):
 				search_params=_HYBRID_SEARCH,
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), __agent_context__)
+			return self.error(str(exc.detail), __tool_call_context__)
 
 		if not page.items:
 			out = {
@@ -114,7 +117,7 @@ class MemoryRecallTool(Tool[AppContext]):
 				"count": 0,
 				"results": [],
 			}
-			return self.success(json.dumps(out), __agent_context__)
+			return self.success(json.dumps(out), __tool_call_context__)
 
 		results: JSONArray = [
 			{
@@ -127,7 +130,7 @@ class MemoryRecallTool(Tool[AppContext]):
 		n = len(results)
 		msg = f"recalled {n} {'memory' if n == 1 else 'memories'}"
 		out = {"status": "success", "message": msg, "count": n, "results": results}
-		return self.success(json.dumps(out), __agent_context__)
+		return self.success(json.dumps(out), __tool_call_context__)
 
 
 class MemoryCreateTool(Tool[AppContext]):
@@ -146,19 +149,21 @@ class MemoryCreateTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		ai = __app_context__.principal.user.prefs.ai
 		if isinstance(ai, AIPreferences) and ai.memories_enabled is False:
 			disabled_out = {
 				"status": "success",
 				"message": "memory features are disabled by user preferences",
 			}
-			return self.success(json.dumps(disabled_out), __agent_context__)
+			return self.success(json.dumps(disabled_out), __tool_call_context__)
 		inp = MemoryCreateInput.model_validate(kwargs)
 
 		# return immediately - persist + vectorize in a background task
@@ -172,7 +177,7 @@ class MemoryCreateTool(Tool[AppContext]):
 		)
 
 		out: JSONObject = {"status": "success", "message": "memory saved"}
-		return self.success(json.dumps(out), __agent_context__)
+		return self.success(json.dumps(out), __tool_call_context__)
 
 
 async def _persist_memory(

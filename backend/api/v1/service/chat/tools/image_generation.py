@@ -24,7 +24,8 @@ from api.v1.service.chat.context import AppContext
 from api.v1.service.files import resolve_file_data
 from api.v1.service.media import MediaError, generate_image
 from api.v1.service.media.images import ImageResult
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ImageContent, ToolAttachment, ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
@@ -117,12 +118,14 @@ class GenerateImageTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		inp = GenerateImageInput.model_validate(kwargs)
 
 		# resolve source image bytes for editing, if requested
@@ -136,7 +139,7 @@ class GenerateImageTool(Tool[AppContext]):
 			if image_bytes is None:
 				return self.error(
 					f"could not load image file '{inp.file_id}'.",
-					__agent_context__,
+					__tool_call_context__,
 				)
 
 		try:
@@ -155,16 +158,15 @@ class GenerateImageTool(Tool[AppContext]):
 			logger.exception("image generation failed")
 			return self.error(
 				"image generation failed. please try again.",
-				__agent_context__,
+				__tool_call_context__,
 			)
 
 		attachments = _build_attachments(results)
 		count = len(results)
 		action = "edited" if inp.file_id else "generated"
 		label = "image" if count == 1 else "images"
-		tool_call_id, _ = self.tool_call_context(__agent_context__)
 		return ToolMessage(
-			tool_call_id=tool_call_id,
+			tool_call_id=__tool_call_context__.tool_call_id,
 			tool_output=json.dumps(
 				{
 					"status": "success",
@@ -173,7 +175,7 @@ class GenerateImageTool(Tool[AppContext]):
 					"file_ids": [r.file_id for r in results if r.file_id],
 				}
 			),
-			metadata=__agent_context__.metadata,
+			metadata=__tool_call_context__.metadata,
 			is_error=False,
 			attachments=attachments,
 		)

@@ -17,7 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.v1.service.chat.context import AppContext
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
@@ -68,7 +69,9 @@ class RevealAttachmentTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
@@ -76,7 +79,7 @@ class RevealAttachmentTool(Tool[AppContext]):
 		if not inp.file_ids:
 			return self.error(
 				json.dumps({"error": "file_ids must be a non-empty list"}),
-				__agent_context__,
+				__tool_call_context__,
 			)
 
 		# emit attachment.revealed events for frontend + persistence
@@ -94,5 +97,5 @@ class RevealAttachmentTool(Tool[AppContext]):
 
 		return self.success(
 			json.dumps({"revealed": inp.file_ids}),
-			__agent_context__,
+			__tool_call_context__,
 		)

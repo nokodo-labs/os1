@@ -13,7 +13,8 @@ from api.schemas.file import FileUpdate
 from api.schemas.search import SearchMode, SearchParams
 from api.v1.service import files as file_service
 from api.v1.service.chat.context import AppContext
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
@@ -96,12 +97,14 @@ class FileGetTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		inp = FileGetInput.model_validate(kwargs)
 
 		if inp.file_id:
@@ -113,7 +116,7 @@ class FileGetTool(Tool[AppContext]):
 					principal=__app_context__.principal,
 				)
 			except HTTPException as exc:
-				return self.error(str(exc.detail), __agent_context__)
+				return self.error(str(exc.detail), __tool_call_context__)
 			result: dict[str, object] = {
 				"status": "success",
 				"message": "file retrieved",
@@ -127,7 +130,7 @@ class FileGetTool(Tool[AppContext]):
 				result["mime_type"] = f.mime_type
 			if f.size_bytes is not None:
 				result["size_bytes"] = f.size_bytes
-			return self.success(json.dumps(result), __agent_context__)
+			return self.success(json.dumps(result), __tool_call_context__)
 
 		if inp.query:
 			try:
@@ -140,7 +143,7 @@ class FileGetTool(Tool[AppContext]):
 					search_params=_HYBRID_SEARCH,
 				)
 			except HTTPException as exc:
-				return self.error(str(exc.detail), __agent_context__)
+				return self.error(str(exc.detail), __tool_call_context__)
 			results = [item.model_dump(mode="json") for item in page.items]
 			out = {
 				"status": "success",
@@ -150,7 +153,7 @@ class FileGetTool(Tool[AppContext]):
 				"next_cursor": page.next_cursor,
 				"has_more": page.has_more,
 			}
-			return self.success(json.dumps(out), __agent_context__)
+			return self.success(json.dumps(out), __tool_call_context__)
 
 		# list recent files
 		try:
@@ -162,7 +165,7 @@ class FileGetTool(Tool[AppContext]):
 				sort_dir=inp.sort_dir,
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), __agent_context__)
+			return self.error(str(exc.detail), __tool_call_context__)
 
 		if not files:
 			out = {
@@ -171,7 +174,7 @@ class FileGetTool(Tool[AppContext]):
 				"count": 0,
 				"results": [],
 			}
-			return self.success(json.dumps(out), __agent_context__)
+			return self.success(json.dumps(out), __tool_call_context__)
 
 		results = [
 			{
@@ -185,7 +188,7 @@ class FileGetTool(Tool[AppContext]):
 		n = len(results)
 		msg = f"found {n} {'file' if n == 1 else 'files'}"
 		out = {"status": "success", "message": msg, "count": n, "results": results}
-		return self.success(json.dumps(out), __agent_context__)
+		return self.success(json.dumps(out), __tool_call_context__)
 
 
 class FileEditTool(Tool[AppContext]):
@@ -199,12 +202,14 @@ class FileEditTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		inp = FileEditInput.model_validate(kwargs)
 		try:
 			f = await file_service.update_file(
@@ -214,7 +219,7 @@ class FileEditTool(Tool[AppContext]):
 				principal=__app_context__.principal,
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), __agent_context__)
+			return self.error(str(exc.detail), __tool_call_context__)
 
 		out = {"status": "success", "message": "file updated", "id": str(f.id)}
-		return self.success(json.dumps(out), __agent_context__)
+		return self.success(json.dumps(out), __tool_call_context__)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import overload
 
 from fastapi import HTTPException, status
@@ -56,7 +57,27 @@ async def _get_embedding_model(session: AsyncSession) -> EmbeddingModel:
 async def embed_text(text: str, session: AsyncSession) -> list[float]:
 	"""embed a single text string."""
 	model = await _get_embedding_model(session)
-	return (await model.embed([text]))[0]
+	extra: dict[str, object] = {
+		"model": model.model_name,
+		"text_count": 1,
+		"input_chars": len(text),
+	}
+	started = time.perf_counter()
+	logger.info("embedding call started", extra=extra)
+	try:
+		vector = (await model.embed([text]))[0]
+	except Exception:
+		logger.exception("embedding call failed", extra=extra)
+		raise
+	logger.info(
+		"embedding call completed",
+		extra={
+			**extra,
+			"duration_ms": round((time.perf_counter() - started) * 1000, 2),
+			"dimension": len(vector),
+		},
+	)
+	return vector
 
 
 async def embed_texts(
@@ -76,13 +97,36 @@ async def embed_texts(
 	model = await _get_embedding_model(session)
 	actual_batch = batch_size or settings.assets.embeddings.batch_size
 	batches = [texts[i : i + actual_batch] for i in range(0, len(texts), actual_batch)]
-	if parallel:
-		nested = await asyncio.gather(*(model.embed(b) for b in batches))
-		return [vec for batch in nested for vec in batch]
-	results: list[list[float]] = []
-	for batch in batches:
-		results.extend(await model.embed(batch))
-	return results
+	extra: dict[str, object] = {
+		"model": model.model_name,
+		"text_count": len(texts),
+		"batch_count": len(batches),
+		"batch_size": actual_batch,
+		"parallel": parallel,
+		"input_chars": sum(len(text) for text in texts),
+	}
+	started = time.perf_counter()
+	logger.info("embedding batch started", extra=extra)
+	try:
+		if parallel:
+			nested = await asyncio.gather(*(model.embed(b) for b in batches))
+			vectors = [vec for batch in nested for vec in batch]
+		else:
+			vectors = []
+			for batch in batches:
+				vectors.extend(await model.embed(batch))
+	except Exception:
+		logger.exception("embedding batch failed", extra=extra)
+		raise
+	logger.info(
+		"embedding batch completed",
+		extra={
+			**extra,
+			"duration_ms": round((time.perf_counter() - started) * 1000, 2),
+			"dimension": len(vectors[0]) if vectors else 0,
+		},
+	)
+	return vectors
 
 
 def build_sdk_adapter_config(

@@ -45,7 +45,7 @@ class Filter[AppContextT = None](Base, ABC):
 
 		args:
 			state: the current iteration state
-			agent_context: runtime context for this agent iteration
+			agent_context: read-only runtime context for this agent run
 			app_context: application-specific context
 
 		returns:

@@ -15,7 +15,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from api.v1.service.chat.context import AppContext
 from api.v1.service.media import MediaError, generate_video
 from api.v1.service.media.videos import VideoResult
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import FileContent, ToolAttachment, ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
@@ -87,12 +88,14 @@ class GenerateVideoTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		inp = GenerateVideoInput.model_validate(kwargs)
 
 		try:
@@ -109,15 +112,14 @@ class GenerateVideoTool(Tool[AppContext]):
 			logger.exception("video generation failed")
 			return self.error(
 				"video generation failed. please try again.",
-				__agent_context__,
+				__tool_call_context__,
 			)
 
 		attachments = _build_attachments(results)
 		count = len(results)
 		label = "video" if count == 1 else "videos"
-		tool_call_id, _ = self.tool_call_context(__agent_context__)
 		return ToolMessage(
-			tool_call_id=tool_call_id,
+			tool_call_id=__tool_call_context__.tool_call_id,
 			tool_output=json.dumps(
 				{
 					"status": "success",
@@ -126,7 +128,7 @@ class GenerateVideoTool(Tool[AppContext]):
 					"file_ids": [r.file_id for r in results if r.file_id],
 				}
 			),
-			metadata=__agent_context__.metadata,
+			metadata=__tool_call_context__.metadata,
 			is_error=False,
 			attachments=attachments,
 		)

@@ -22,6 +22,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from fastapi import HTTPException
 from pydantic import Field
 
 from api.database import async_session_local
@@ -30,6 +31,7 @@ from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.model import Model
 from api.settings import settings as app_settings
+from api.v1.service import files as file_service
 from api.v1.service import threads as thread_service
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.message_metadata import get_message_id
@@ -55,6 +57,7 @@ from nokodo_ai.messages import (
 	UserMessage as SDKUserMessage,
 )
 from nokodo_ai.threads import Thread as SDKThread
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -322,6 +325,23 @@ def _format_attachment_manifest(entries: list[dict[str, object]]) -> str:
 	return "\n".join(lines)
 
 
+def _reference_attachment_text(
+	label: object,
+	part: ImageContent | FileContent,
+	description: str | None = None,
+) -> str:
+	file_id = _extract_file_id(part)
+	payload: dict[str, str] = {}
+	if file_id is not None:
+		payload["id"] = str(file_id)
+	if label:
+		payload["name"] = str(label)
+	summary = description or _extract_description(part)
+	if summary:
+		payload["summary"] = " ".join(summary.split())
+	return "attachment_ref " + json.dumps(payload, separators=(",", ":"))
+
+
 async def _fetch_model_input_modalities(
 	agent_id: object | None,
 ) -> set[str] | None:
@@ -514,6 +534,19 @@ class AttachmentDecayFilter(Filter):
 			if att.file_id not in seen_file_ids:
 				seen_file_ids[att.file_id] = att
 
+		for file_id, att in seen_file_ids.items():
+			try:
+				payload = await file_service.get_file_payload(
+					file_id,
+					app_context.session,
+					app_context.principal,
+				)
+			except HTTPException:
+				log.debug("file payload unavailable for %s", file_id, exc_info=True)
+				continue
+			if payload.description:
+				att.description = payload.description
+
 		# compute decay state for each unique attachment
 		attachment_entries: list[dict[str, object]] = []
 		decayed_file_ids: set[TypeID] = set()
@@ -605,7 +638,11 @@ class AttachmentDecayFilter(Filter):
 							)
 							new_user_content.append(
 								TextContent(
-									text=f"[attachment '{u_label}']",
+									text=_reference_attachment_text(
+										u_label,
+										user_part,
+										seen_file_ids[u_fid].description,
+									),
 									metadata={"decayed_file_id": u_fid},
 								)
 							)
@@ -624,7 +661,11 @@ class AttachmentDecayFilter(Filter):
 							)
 							new_asst_content.append(
 								TextContent(
-									text=f"[attachment '{a_label}']",
+									text=_reference_attachment_text(
+										a_label,
+										asst_part,
+										seen_file_ids[a_fid].description,
+									),
 									metadata={"decayed_file_id": a_fid},
 								)
 							)
@@ -637,6 +678,10 @@ class AttachmentDecayFilter(Filter):
 					if isinstance(tool_part, (ImageContent, FileContent)):
 						t_fid = _extract_file_id(tool_part)
 						if t_fid and t_fid in decayed_file_ids:
+							metadata: JSONObject = {
+								"decayed_file_id": t_fid,
+								"status": "reference",
+							}
 							# tool attachments can't be replaced in-place
 							# since the list type is constrained -
 							# we clear decayed attachments instead
@@ -645,10 +690,7 @@ class AttachmentDecayFilter(Filter):
 								base64=None,
 								filename=tool_part.filename,
 								media_type=tool_part.media_type,
-								metadata={
-									"decayed_file_id": t_fid,
-									"status": "reference",
-								},
+								metadata=metadata,
 							)
 
 		manifest = _format_attachment_manifest(attachment_entries)

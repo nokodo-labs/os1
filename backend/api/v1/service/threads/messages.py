@@ -16,6 +16,7 @@ from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.message import Message, MessageType
 from api.models.thread import Thread
+from api.models.thread_summary import SummaryPurpose
 from api.permissions import ResourceType
 from api.schemas.message import MessageCreate, MessageUpdate
 from api.schemas.sorting import CommonSortBy
@@ -30,6 +31,7 @@ from api.v1.service.threads.core import (
 	_message_event_data,
 )
 from api.v1.service.threads.participants import ensure_participant
+from api.v1.service.threads.summaries import delete_stale_summaries_for_thread
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -38,6 +40,22 @@ logger = logging.getLogger(__name__)
 
 async def _invalidate_thread_payload(thread_id: TypeID) -> None:
 	await invalidate_resource_payload_cache(ResourceType.THREAD, thread_id)
+
+
+async def _delete_stale_thread_summaries(
+	thread_id: TypeID,
+	session: AsyncSession,
+	purpose: SummaryPurpose | None = None,
+	changed_message_ids: list[TypeID | str] | None = None,
+	active_end_message_id: TypeID | str | None = None,
+) -> None:
+	await delete_stale_summaries_for_thread(
+		thread_id,
+		session,
+		purpose=purpose,
+		changed_message_ids=changed_message_ids,
+		active_end_message_id=active_end_message_id,
+	)
 
 
 async def list_messages(
@@ -353,6 +371,12 @@ async def switch_branch(
 		leaf_id = TypeID(children[-1].id)
 
 	thread.current_message_id = leaf_id
+	await _delete_stale_thread_summaries(
+		thread_id,
+		session,
+		purpose=SummaryPurpose.CATALOG,
+		active_end_message_id=leaf_id,
+	)
 
 	# emit thread.updated event for branch switch
 	event = Event(
@@ -540,6 +564,11 @@ async def update_user_message(
 	message.updated_at = now
 	thread.last_activity_at = now
 	thread.updated_at = now
+	await _delete_stale_thread_summaries(
+		thread_id,
+		session,
+		changed_message_ids=[message.id],
+	)
 	await session.flush()
 	await session.commit()
 	await session.refresh(message)
@@ -681,6 +710,11 @@ async def delete_user_message_turn(
 
 	# bulk-delete subtree; DB CASCADE on event FKs handles cleanup
 	await session.execute(sa_delete(Message).where(Message.id.in_(deleted_ids)))
+	await _delete_stale_thread_summaries(
+		thread_id,
+		session,
+		changed_message_ids=deleted_ids,
+	)
 
 	# emit message.deleted event
 	await event_service.persist_and_fanout_event(

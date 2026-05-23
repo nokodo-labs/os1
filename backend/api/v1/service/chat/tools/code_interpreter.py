@@ -23,7 +23,8 @@ from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.message_metadata import E2B_SANDBOX_ID_KEY
 from api.v1.service.files import get_file, read_content, store_file
 from api.v1.service.projects import resolve_thread_project_id
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import FileContent, ImageContent, ToolMessage
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.tool import Tool
@@ -220,31 +221,33 @@ class CodeInterpreterTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		"""execute Python code in a reusable sandbox for the active thread."""
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 
 		ci_settings = settings.code_interpreter
 		if not ci_settings.enabled:
 			return self.error(
 				"code interpreter is not enabled",
-				__agent_context__,
+				__tool_call_context__,
 			)
 
 		if not ci_settings.e2b.api_key:
 			return self.error(
 				"code interpreter is not configured",
-				__agent_context__,
+				__tool_call_context__,
 			)
 
 		inp = CodeInterpreterInput.model_validate(kwargs)
 
 		# find existing sandbox from thread history
-		sandbox_id = _find_sandbox_id(__agent_context__.thread)
+		sandbox_id = _find_sandbox_id(__state__.thread)
 
 		client = E2BClient(
 			api_key=ci_settings.e2b.api_key,
@@ -270,7 +273,7 @@ class CodeInterpreterTool(Tool[AppContext]):
 			logger.exception("code interpreter execution failed")
 			return self.error(
 				"code interpreter execution failed. please try again.",
-				__agent_context__,
+				__tool_call_context__,
 			)
 		finally:
 			try:
@@ -327,14 +330,13 @@ class CodeInterpreterTool(Tool[AppContext]):
 
 		# build metadata with sandbox id for session persistence
 		metadata: JSONObject = {
-			**(__agent_context__.metadata or {}),
+			**(__tool_call_context__.metadata or {}),
 		}
 		if result.sandbox_id:
 			metadata[E2B_SANDBOX_ID_KEY] = result.sandbox_id
 
-		tool_call_id, _ = self.tool_call_context(__agent_context__)
 		return ToolMessage(
-			tool_call_id=tool_call_id,
+			tool_call_id=__tool_call_context__.tool_call_id,
 			tool_output=output,
 			metadata=metadata,
 			is_error=bool(result.error),

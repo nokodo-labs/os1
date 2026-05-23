@@ -15,7 +15,8 @@ from api.v1.service.chat.context import AppContext
 from api.v1.service.web_search.agentic import search_agentic_web
 from api.v1.service.web_search.errors import WebSearchError
 from api.v1.service.web_search.progress import build_agentic_web_search_progress
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject, JSONValue
@@ -65,16 +66,19 @@ class AgenticWebSearchInput(BaseModel):
 class AgenticWebSearchTool(Tool[AppContext]):
 	"""perform an AI-powered agentic web search.
 
-	returns a summary with source citations.
+	this is the preferred web search tool for general agent use. it runs a
+	dedicated search agent/provider flow that gathers sources, synthesizes a
+	concise answer, and returns citations. compared with raw search results,
+	it keeps the tool output smaller and usually gives the model cleaner
+	evidence to cite.
 	"""
 
 	name: str = Field(default="agentic_web_search")
 	description: str = Field(
 		default=(
-			"perform an AI-powered web search using an AI agent. "
-			"returns a summary with source citations. use when the "
-			"user asks about current events, real-time data, or anything you "
-			"can't confidently answer with your knowledge alone."
+			"preferred web search tool. uses a search agent to gather sources, "
+			"summarize them, and return concise cited results instead of raw "
+			"search payloads."
 		),
 	)
 	parameters: JSONObject = Field(
@@ -83,13 +87,15 @@ class AgenticWebSearchTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		"""run the configured agentic search path and return synthesized results."""
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		inp = AgenticWebSearchInput.model_validate(kwargs)
 
 		async def emit_progress(message: str, payload: JSONObject) -> None:
@@ -97,10 +103,10 @@ class AgenticWebSearchTool(Tool[AppContext]):
 			if not __app_context__.thread_id:
 				return
 			data: JSONObject = {
-				"tool_call_id": __agent_context__.tool_call_id,
+				"tool_call_id": __tool_call_context__.tool_call_id,
 				"tool_name": self.name,
 				"tool": {
-					"call_id": __agent_context__.tool_call_id,
+					"call_id": __tool_call_context__.tool_call_id,
 					"name": self.name,
 				},
 				"message": message,
@@ -140,7 +146,7 @@ class AgenticWebSearchTool(Tool[AppContext]):
 			logger.exception("agentic web search failed for query: %s", inp.query)
 			return self.error(
 				"web search failed. please try again.",
-				__agent_context__,
+				__tool_call_context__,
 			)
 
 		sources: list[JSONValue] = [
@@ -197,9 +203,8 @@ class AgenticWebSearchTool(Tool[AppContext]):
 		}
 		output = json.dumps(payload, ensure_ascii=True)
 
-		tool_call_id, _ = self.tool_call_context(__agent_context__)
 		return ToolMessage(
-			tool_call_id=tool_call_id,
+			tool_call_id=__tool_call_context__.tool_call_id,
 			tool_output=output,
 			metadata=metadata,
 		)

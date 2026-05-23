@@ -9,13 +9,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from api.models.message import Message
 from api.models.thread import Thread
-from api.models.thread_summary import ThreadSummary
+from api.models.thread_summary import SummaryPurpose, ThreadSummary
 from api.schemas.search import SearchMode, SearchParams, SearchResultItem
 from api.schemas.thread import ThreadListFilters
 from api.v1.service import threads as chat_service
 from api.v1.service.chat.context import AppContext
 from api.v1.service.threads import summaries as chat_summary_service
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
@@ -128,7 +129,7 @@ def _summary_payload(summary: ThreadSummary) -> dict[str, object]:
 	payload: dict[str, object] = {
 		"id": str(summary.id),
 		"chat_id": str(summary.thread_id),
-		"type": summary.type.value,
+		"purpose": summary.purpose.value,
 		"content": _trim(summary.content, _SUMMARY_TEXT_LIMIT) or "",
 		"message_count": summary.message_count,
 		"created_at": summary.created_at.isoformat(),
@@ -211,36 +212,40 @@ class ChatGetTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		inp = ChatGetInput.model_validate(kwargs)
 		try:
 			if inp.query and (inp.chat_id or inp.message_id):
 				return self.error(
 					"provide query, chat_id, or message_id, not combinations",
-					__agent_context__,
+					__tool_call_context__,
 				)
 			if inp.chat_id and inp.message_id:
 				return self.error(
 					"provide chat_id or message_id, not both",
-					__agent_context__,
+					__tool_call_context__,
 				)
 			if inp.query:
-				return await self._search(inp, __agent_context__, __app_context__)
+				return await self._search(inp, __tool_call_context__, __app_context__)
 			if inp.chat_id or inp.message_id:
-				return await self._chat_page(inp, __agent_context__, __app_context__)
-			return await self._list(inp, __agent_context__, __app_context__)
+				return await self._chat_page(
+					inp, __tool_call_context__, __app_context__
+				)
+			return await self._list(inp, __tool_call_context__, __app_context__)
 		except HTTPException as exc:
-			return self.error(_chat_error(exc), __agent_context__)
+			return self.error(_chat_error(exc), __tool_call_context__)
 
 	async def _list(
 		self,
 		inp: ChatGetInput,
-		agent_context: AgentContext,
+		tool_call_context: ToolCallContext,
 		app_context: AppContext,
 	) -> ToolMessage:
 		filters = ThreadListFilters(
@@ -275,16 +280,18 @@ class ChatGetTool(Tool[AppContext]):
 			"next_skip": next_skip,
 			"results": results,
 		}
-		return self.success(json.dumps(out), agent_context)
+		return self.success(json.dumps(out), tool_call_context)
 
 	async def _search(
 		self,
 		inp: ChatGetInput,
-		agent_context: AgentContext,
+		tool_call_context: ToolCallContext,
 		app_context: AppContext,
 	) -> ToolMessage:
 		if not inp.query:
-			return self.error("query is required when searching chats", agent_context)
+			return self.error(
+				"query is required when searching chats", tool_call_context
+			)
 		page = await chat_service.search_threads(
 			inp.query,
 			app_context.session,
@@ -302,12 +309,12 @@ class ChatGetTool(Tool[AppContext]):
 			"next_cursor": page.next_cursor,
 			"has_more": page.has_more,
 		}
-		return self.success(json.dumps(out), agent_context)
+		return self.success(json.dumps(out), tool_call_context)
 
 	async def _chat_page(
 		self,
 		inp: ChatGetInput,
-		agent_context: AgentContext,
+		tool_call_context: ToolCallContext,
 		app_context: AppContext,
 	) -> ToolMessage:
 		target_message_id = inp.message_id
@@ -316,7 +323,7 @@ class ChatGetTool(Tool[AppContext]):
 			message = await _load_message(target_message_id, app_context)
 			chat_id = message.thread_id
 		if chat_id is None:
-			return self.error("chat_id or message_id is required", agent_context)
+			return self.error("chat_id or message_id is required", tool_call_context)
 		chat = await chat_service.get_thread(
 			chat_id,
 			app_context.session,
@@ -361,7 +368,7 @@ class ChatGetTool(Tool[AppContext]):
 				"results": message_results,
 			},
 		}
-		return self.success(json.dumps(out), agent_context)
+		return self.success(json.dumps(out), tool_call_context)
 
 	async def _summary_payloads(
 		self,
@@ -371,5 +378,6 @@ class ChatGetTool(Tool[AppContext]):
 		summaries = await chat_summary_service.list_active_summaries(
 			chat_id,
 			app_context.session,
+			purpose=SummaryPurpose.CATALOG,
 		)
 		return [_summary_payload(summary) for summary in summaries]

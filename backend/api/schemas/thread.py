@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from api.models.thread_summary import SummaryType
+from api.models.thread_summary import SummaryPurpose
 from api.schemas.common import (
 	MISSING,
 	MetadataModel,
@@ -125,12 +125,18 @@ class ThreadSummaryRecord(MetadataModel, TimestampedModel):
 
 	id: TypeID
 	thread_id: TypeID
-	type: SummaryType
+	purpose: SummaryPurpose
 	start_message_id: TypeID | None = None
 	end_message_id: TypeID | None = None
 	message_count: int = 0
 	content: str = ""
 	superseded_by_id: TypeID | None = None
+
+
+class ThreadSummaryUpdate(MetadataUpdateModel):
+	"""payload for updating a stored summary."""
+
+	content: str | MissingType = Field(default=MISSING, min_length=1)
 
 
 class ThreadSwitchRequest(ORMModel):

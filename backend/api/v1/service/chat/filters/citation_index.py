@@ -47,11 +47,24 @@ logger = logging.getLogger(__name__)
 
 
 class CitationIndexFilter(Filter):
-	"""assign citation indices to tool results and build a reference card."""
+	"""assign citation indices to tool results and build a reference card.
+
+	tools can attach private ``_citable_sources`` metadata to their output.
+	this filter turns those sources into stable numbered citations, appends
+	the numbers to the tool result visible to the model, emits per-message
+	source events for the UI, and replaces the citation sentinel in the
+	system prompt with a compact source list.
+
+	indices continue from persisted ``_next_citation_index`` metadata so a
+	windowed thread does not reuse old citation numbers.
+	"""
 
 	name: str = Field(default="citation_index")
 	description: str = Field(
-		default="assigns [n] citation markers to tool results",
+		default=(
+			"turns citeable tool sources into stable numbered citations and "
+			"adds the source list to the prompt"
+		),
 	)
 
 	async def process(

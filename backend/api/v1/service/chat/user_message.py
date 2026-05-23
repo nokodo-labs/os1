@@ -6,6 +6,7 @@ including input resolution and attachment action event emission.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 
 from fastapi import HTTPException, status
@@ -28,10 +29,37 @@ from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
+_INVISIBLE_PAYLOAD_CHAR_LIMIT = 256
+_INVISIBLE_PAYLOAD_BYTE_LIMIT = 1_024
+_INVISIBLE_PAYLOAD_RE = re.compile(
+	"[\u200b-\u200d\u2060\ufeff\ufe00-\ufe0f\U000e0000-\U000e007f\U000e0100-\U000e01ef]"
+)
+
+
+def _has_invisible_payload(text: str) -> bool:
+	char_count = 0
+	byte_count = 0
+	for match in _INVISIBLE_PAYLOAD_RE.finditer(text):
+		char_count += 1
+		if char_count > _INVISIBLE_PAYLOAD_CHAR_LIMIT:
+			return True
+		byte_count += 4 if ord(match[0]) > 0xFFFF else 3
+		if byte_count > _INVISIBLE_PAYLOAD_BYTE_LIMIT:
+			return True
+	return False
+
+
 def validate_run_input(run_input: RunInput | None) -> None:
 	text = run_input.text if run_input else None
+	if text is None:
+		return
+	if _has_invisible_payload(text):
+		raise HTTPException(
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+			detail="input text contains too many invisible unicode characters",
+		)
 	max_chars = settings.limits.max_chat_input_chars
-	if text is None or max_chars is None or len(text) <= max_chars:
+	if max_chars is None or len(text) <= max_chars:
 		return
 	raise HTTPException(
 		status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

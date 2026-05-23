@@ -26,6 +26,7 @@ from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_thread_access
 from api.v1.service.chat import run_bus
 from api.v1.service.chat.agents import run_agent
+from api.v1.service.chat.run_helpers import broadcast_run_event
 from api.v1.service.chat.run_status import run_status_store
 from api.v1.service.chat.user_message import validate_run_input
 from nokodo_ai.utils.sse import sse_encode
@@ -80,6 +81,7 @@ async def _run_producer(
 	propagate. on any other exception ``fail_run`` is called as a
 	belt-and-suspenders safety net (it is idempotent).
 	"""
+	failure_reason = "generation failed"
 	try:
 		async for _ in run_agent(
 			thread_id,
@@ -96,6 +98,7 @@ async def _run_producer(
 		):
 			pass
 	except asyncio.CancelledError:
+		failure_reason = "cancelled"
 		raise
 	except Exception:
 		logger.exception(
@@ -104,7 +107,15 @@ async def _run_producer(
 		)
 	finally:
 		# idempotent: no-op if the run completed naturally.
-		await run_status_store.fail_run(run_id, reason="producer exited unexpectedly")
+		rs_terminated = await run_status_store.fail_run(run_id, reason=failure_reason)
+		if rs_terminated is not None and thread_id is not None:
+			await broadcast_run_event(
+				thread_id=thread_id,
+				agent_id=agent_id,
+				run_id=run_id,
+				started=False,
+				error=True,
+			)
 
 
 async def subscribe_run_stream(run_id: TypeID) -> AsyncGenerator[bytes]:
@@ -351,6 +362,7 @@ async def create_thread_and_run_stream(
 		)
 
 	final_thread_id = TypeID(thread.id)
+	await session.commit()
 
 	async def _stream() -> AsyncIterator[bytes]:
 		thread_schema = ThreadSchema.model_validate(thread)

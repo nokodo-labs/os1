@@ -36,7 +36,7 @@ from api.v1.service import memories as memory_service
 from api.v1.service import tasks as task_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, load_principal_for_user
-from api.v1.service.chat.summarization import (
+from api.v1.service.chat.context_compaction.summarization import (
 	condense_summaries,
 	summarize_thread_message_range,
 )

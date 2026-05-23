@@ -36,6 +36,9 @@ class EventType(StrEnum):
 	RUN_STARTED = "run.started"
 	RUN_COMPLETED = "run.completed"
 	RUN_ERROR = "run.error"
+	RUN_ACTIVITY_STARTED = "run.activity.started"
+	RUN_ACTIVITY_PROGRESS = "run.activity.progress"
+	RUN_ACTIVITY_ENDED = "run.activity.ended"
 
 	# in-flight steering: a user injects an extra message into a run
 	RUN_STEERING_QUEUED = "run.steering.queued"
@@ -160,6 +163,9 @@ RUN_EVENTS = {
 	EventType.RUN_STARTED,
 	EventType.RUN_COMPLETED,
 	EventType.RUN_ERROR,
+	EventType.RUN_ACTIVITY_STARTED,
+	EventType.RUN_ACTIVITY_PROGRESS,
+	EventType.RUN_ACTIVITY_ENDED,
 	EventType.RUN_STEERING_QUEUED,
 	EventType.RUN_STEERING_INJECTED,
 	EventType.RUN_STEERING_DROPPED,

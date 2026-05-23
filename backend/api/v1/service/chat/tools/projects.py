@@ -11,7 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from api.schemas.search import SearchMode, SearchParams
 from api.v1.service import projects as project_service
 from api.v1.service.chat.context import AppContext
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
@@ -66,12 +67,14 @@ class ProjectGetTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		inp = ProjectGetInput.model_validate(kwargs)
 
 		if inp.project_id:
@@ -82,7 +85,7 @@ class ProjectGetTool(Tool[AppContext]):
 					__app_context__.principal,
 				)
 			except HTTPException as exc:
-				return self.error(str(exc.detail), __agent_context__)
+				return self.error(str(exc.detail), __tool_call_context__)
 			result: dict[str, object] = {
 				"status": "success",
 				"message": "project retrieved",
@@ -93,12 +96,12 @@ class ProjectGetTool(Tool[AppContext]):
 				result["description"] = project.description
 			if project.thread_ids:
 				result["chat_ids"] = [str(chat_id) for chat_id in project.thread_ids]
-			return self.success(json.dumps(result), __agent_context__)
+			return self.success(json.dumps(result), __tool_call_context__)
 
 		if not inp.query:
 			return self.error(
 				"provide project_id to fetch a project or query to search",
-				__agent_context__,
+				__tool_call_context__,
 			)
 
 		try:
@@ -110,7 +113,7 @@ class ProjectGetTool(Tool[AppContext]):
 				search_params=_HYBRID_SEARCH,
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), __agent_context__)
+			return self.error(str(exc.detail), __tool_call_context__)
 
 		if not page.items:
 			out = {
@@ -119,7 +122,7 @@ class ProjectGetTool(Tool[AppContext]):
 				"count": 0,
 				"results": [],
 			}
-			return self.success(json.dumps(out), __agent_context__)
+			return self.success(json.dumps(out), __tool_call_context__)
 
 		results = [
 			{
@@ -137,4 +140,4 @@ class ProjectGetTool(Tool[AppContext]):
 			"count": count,
 			"results": results,
 		}
-		return self.success(json.dumps(out), __agent_context__)
+		return self.success(json.dumps(out), __tool_call_context__)

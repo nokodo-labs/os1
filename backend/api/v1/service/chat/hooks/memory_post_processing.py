@@ -15,6 +15,7 @@ from api.v1.service.chat.run_status import run_status_store
 from api.v1.tasks.threads import (
 	start_memory_post_processing_task,
 )
+from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import AssistantMessage
 from nokodo_ai.threads import Thread as SDKThread
@@ -59,13 +60,14 @@ class MemoryPostProcessingHook(Hook):
 
 	async def execute(
 		self,
-		thread: SDKThread,
+		state: AgentIterationSnapshot[AppContext],
 		agent_context: AgentContext,
 		app_context: AppContext | None,
 	) -> None:
 		_ = agent_context
 		if app_context is None:
 			return
+		thread = state.thread
 		if not await _is_final_assistant_iteration(thread, app_context):
 			return
 

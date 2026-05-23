@@ -7,12 +7,9 @@ from api.v1.service.chat.filters.attachment_decay import AttachmentDecayFilter
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.filters.chat_context import ChatContextFilter
 from api.v1.service.chat.filters.citation_index import CitationIndexFilter
-from api.v1.service.chat.filters.context_windowing import ContextWindowingFilter
+from api.v1.service.chat.filters.context_compaction import ContextCompactionFilter
 from api.v1.service.chat.filters.file_resolve import FileResolveFilter
 from api.v1.service.chat.filters.memory import MemoryContextFilter
-from api.v1.service.chat.filters.tool_result_truncation import (
-	ToolResultTruncationFilter,
-)
 from api.v1.service.chat.filters.user_message_timestamp import (
 	UserMessageTimestampFilter,
 )
@@ -27,6 +24,9 @@ FILTER_REGISTRY: dict[str, AppFilter] = {
 	"chat_context": ChatContextFilter(),
 	"attachment_decay": AttachmentDecayFilter(),
 	"user_message_timestamp": UserMessageTimestampFilter(),
+	"file_resolve": FileResolveFilter(),
+	"citation_index": CitationIndexFilter(),
+	"context_compaction": ContextCompactionFilter(),
 }
 
 
@@ -50,12 +50,11 @@ __all__ = [
 	"AttachmentDecayFilter",
 	"ChatContextFilter",
 	"CitationIndexFilter",
-	"ContextWindowingFilter",
+	"ContextCompactionFilter",
 	"FileResolveFilter",
 	"Filter",
 	"MemoryContextFilter",
 	"UserMessageTimestampFilter",
-	"ToolResultTruncationFilter",
 	"FILTER_REGISTRY",
 	"get_registered_names",
 	"resolve_filters",

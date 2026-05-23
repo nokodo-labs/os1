@@ -14,7 +14,8 @@ from api.schemas.notification import NotificationPayload
 from api.v1.service import notifications as notification_service
 from api.v1.service.authorization import list_accessible_user_ids
 from api.v1.service.chat.context import AppContext
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
@@ -71,7 +72,9 @@ class SendNotificationTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
@@ -79,7 +82,6 @@ class SendNotificationTool(Tool[AppContext]):
 		if __app_context__ is None:
 			raise ValueError("AppContext is required for SendNotificationTool")
 		ctx = __app_context__
-		tool_call_id = __agent_context__.tool_call_id
 
 		inp = SendNotificationInput.model_validate(kwargs)
 
@@ -101,7 +103,7 @@ class SendNotificationTool(Tool[AppContext]):
 				else:
 					return self.error(
 						"no recipients: provide user_id or run inside a chat",
-						__agent_context__,
+						__tool_call_context__,
 					)
 
 				# thread-scoped by default; user_id is opt-in for single-user targeting
@@ -116,7 +118,7 @@ class SendNotificationTool(Tool[AppContext]):
 			logger.exception("send_notification tool failed")
 			return self.error(
 				"failed to send notification",
-				__agent_context__,
+				__tool_call_context__,
 			)
 
 		# emit tool event for chat UI (with first notification ID for reference)
@@ -128,7 +130,7 @@ class SendNotificationTool(Tool[AppContext]):
 			scope_id=thread_id or ctx.user_id,
 			type=EventType.TOOL_NOTIFICATION,
 			data={
-				"tool_call_id": tool_call_id,
+				"tool_call_id": __tool_call_context__.tool_call_id,
 				"tool_name": self.name,
 				"notification_id": first_notification_id,
 				"notification_count": recipient_count,
@@ -145,9 +147,9 @@ class SendNotificationTool(Tool[AppContext]):
 		if recipient_count == 1:
 			return self.success(
 				f'notification sent: "{inp.title}"',
-				__agent_context__,
+				__tool_call_context__,
 			)
 		return self.success(
 			f'notification sent to {recipient_count} participants: "{inp.title}"',
-			__agent_context__,
+			__tool_call_context__,
 		)

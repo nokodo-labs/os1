@@ -12,19 +12,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.message import Message
 from api.models.thread import Thread
-from api.models.thread_summary import SummaryType, ThreadSummary
+from api.models.thread_summary import SummaryPurpose, ThreadSummary
+from api.permissions import ResourceType
 from api.schemas.thread import ThreadUpdate
 from api.settings import settings
 from api.v1.service.auth import Principal
+from api.v1.service.authorization import fetch_acl_metadata
+from api.v1.service.chat.context_compaction import apply_context_compaction
 from api.v1.service.chat.models import (
 	resolve_task_chat_model,
 	run_chat_model_json_schema,
 )
-from api.v1.service.chat.windowing import apply_context_windowing
 from api.v1.service.threads import summaries as summary_service
 from api.v1.service.threads.core import update_thread
 from api.v1.service.threads.messages import get_current_branch, walk_message_branch
 from api.v1.service.threads.metadata import thread_metadata_missing
+from api.v1.service.threads.search import THREAD_SPEC
+from api.v1.service.vectorize import vectorize_resource
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
 from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
@@ -39,27 +43,62 @@ logger = logging.getLogger(__name__)
 
 
 _MAINTENANCE_PROMPT = """\
-given the active chat history, generate thread maintenance data.
+given the active chat history, generate catalog metadata for finding and
+recognizing this thread later.
 
 return:
 - a concise title, emoji followed by 1-3 lowercase words
 - 1-6 short lowercase tags
-- a concise but complete summary of the active chat branch
+- a high-level catalog summary of the active chat branch
 
-preserve decisions, entities, user preferences, unresolved work, and useful
-context for future replies. discard filler and raw tool output details.
+the summary should focus on what is unique about this chat: the user's request,
+the agent's concrete response or actions, decisions, artifacts, named entities,
+files, URLs, preferences, failures, and unresolved work. do not explain generic
+subject matter. for ordinary generated content, state what was requested and
+name the main topics or sections covered without re-teaching them. discard
+filler and raw tool output details.
 """
 
 
 class _ThreadMaintenanceOut(BaseModel):
 	"""structured output schema for thread maintenance."""
 
-	title: str = Field(max_length=50)
-	tags: list[str] = Field(min_length=1, max_length=6)
-	summary: str = Field(min_length=1)
+	title: str = Field(
+		max_length=50,
+		description=(
+			"emoji plus 1-3 lowercase words that identify this exact chat; "
+			"avoid generic topic titles when a more specific artifact or task exists"
+		),
+		examples=["login debug", "tunnel essay"],
+	)
+	tags: list[str] = Field(
+		min_length=1,
+		max_length=6,
+		description=(
+			"short lowercase catalog tags for search and filtering; prefer concrete "
+			"entities, workflows, artifacts, and domains mentioned in the chat"
+		),
+		examples=[["auth", "debugging", "oauth"], ["essay", "physics"]],
+	)
+	summary: str = Field(
+		min_length=1,
+		description=(
+			"high-level catalog summary of what is unique about this active branch: "
+			"user requests, agent actions, artifacts, named entities, decisions, "
+			"failures, and unresolved work. do not re-teach generic subject matter"
+		),
+		examples=[
+			(
+				"the user asked for help debugging an oauth login loop; the agent "
+				"identified the callback mismatch, suggested updating redirect URIs, "
+				"and left verification pending."
+			)
+		],
+	)
 
 
 def _thread_eligible_for_maintenance(thread: Thread) -> bool:
+	"""return whether a thread can receive catalog maintenance."""
 	return (
 		thread.deleted_at is None
 		and not thread.is_temporary
@@ -68,6 +107,7 @@ def _thread_eligible_for_maintenance(thread: Thread) -> bool:
 
 
 def _latest_branch_update(messages: Sequence[Message]) -> datetime | None:
+	"""return the newest create/update timestamp in a branch."""
 	latest: datetime | None = None
 	for message in messages:
 		candidate = message.updated_at or message.created_at
@@ -81,6 +121,7 @@ def _summary_covers_branch(
 	thread: Thread,
 	latest_branch_update: datetime | None,
 ) -> bool:
+	"""return whether a catalog summary still covers the active branch."""
 	if not summary.content.strip():
 		return False
 	if thread.current_message_id is None:
@@ -93,9 +134,14 @@ def _summary_covers_branch(
 
 
 async def _thread_summary_stale(thread: Thread, session: AsyncSession) -> bool:
+	"""return whether the thread's active branch lacks a fresh catalog summary."""
 	branch = await walk_message_branch(session, TypeID(thread.current_message_id))
 	latest_branch_update = _latest_branch_update(branch)
-	summaries = await summary_service.list_active_summaries(thread.id, session)
+	summaries = await summary_service.list_active_summaries(
+		thread.id,
+		session,
+		purpose=SummaryPurpose.CATALOG,
+	)
 	return not any(
 		_summary_covers_branch(summary, thread, latest_branch_update)
 		for summary in summaries
@@ -189,7 +235,11 @@ async def maintain_thread_metadata(
 		return {"thread_id": str(thread_id), "skipped": True, "reason": "empty branch"}
 
 	latest_branch_update = _latest_branch_update(branch)
-	summaries = await summary_service.list_active_summaries(thread_id, session)
+	summaries = await summary_service.list_active_summaries(
+		thread_id,
+		session,
+		purpose=SummaryPurpose.CATALOG,
+	)
 	metadata_needed = replace_metadata or thread_metadata_missing(thread)
 	summary_needed = not any(
 		_summary_covers_branch(summary, thread, latest_branch_update)
@@ -218,15 +268,9 @@ async def maintain_thread_metadata(
 		and not _summary_covers_branch(summary, thread, latest_branch_update)
 		for summary in summaries
 	)
-	if ignore_existing_summaries:
-		windowing = settings.ai.windowing
-		if windowing.enabled and len(sdk_thread.messages) > windowing.max_messages:
-			sdk_thread = sdk_thread.model_copy(
-				update={"messages": sdk_thread.messages[-windowing.max_messages :]}
-			)
-	else:
+	if not ignore_existing_summaries:
 		sdk_thread = (
-			await apply_context_windowing(
+			await apply_context_compaction(
 				sdk_thread,
 				context_window=None,
 				thread_id=thread_id,
@@ -261,6 +305,7 @@ async def maintain_thread_metadata(
 			]
 		),
 		json_schema=_ThreadMaintenanceOut.model_json_schema(),
+		purpose="thread_maintenance",
 	)
 	out = _ThreadMaintenanceOut.model_validate(structured)
 
@@ -294,7 +339,7 @@ async def maintain_thread_metadata(
 	if summary_needed:
 		summary = await summary_service.create_summary(
 			thread_id=thread_id,
-			summary_type=SummaryType.CONDENSED if summaries else SummaryType.WINDOW,
+			purpose=SummaryPurpose.CATALOG,
 			content=out.summary.strip(),
 			message_count=len(branch),
 			start_message_id=branch[0].id,
@@ -306,6 +351,15 @@ async def maintain_thread_metadata(
 			[TypeID(summary.id) for summary in summaries if summary.id != summary_id],
 			summary_id,
 			session,
+		)
+		await session.refresh(thread, attribute_names=["messages", "summaries"])
+		await vectorize_resource(
+			spec=THREAD_SPEC,
+			resource=thread,
+			session=session,
+			extra_metadata=await fetch_acl_metadata(
+				str(thread.id), ResourceType.THREAD, session
+			),
 		)
 
 	return {

@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from api.models.access_rule import AccessLevel
 from api.models.thread import Thread
+from api.models.thread_summary import SummaryPurpose
 from api.schemas.preferences import AIPreferences
 from api.schemas.search import SearchMode, SearchParams
 from api.settings import settings as app_settings
@@ -37,6 +38,11 @@ logger = logging.getLogger(__name__)
 class ChatContextFilter(Filter):
 	"""pre-filter that injects context from other conversations.
 
+	this filter is intentionally sentinel-driven: it only writes chat
+	context when the agent prompt contains ``{{ chat_context }}``. that lets
+	admins decide exactly where recalled chat context should appear in the
+	system prompt, and leaves agents that omit the sentinel unchanged.
+
 	supports two modes controlled by settings.ai.chat_context.mode:
 	- recent: top K chats ordered by last_activity_at descending.
 	- relevant: top K chats by semantic similarity to current messages.
@@ -52,7 +58,10 @@ class ChatContextFilter(Filter):
 
 	name: str = Field(default="chat_context")
 	description: str = Field(
-		default="injects context from other conversations into the system prompt"
+		default=(
+			"fills the chat_context prompt variable with relevant or recent "
+			"conversation context"
+		)
 	)
 
 	async def process(
@@ -234,11 +243,23 @@ class ChatContextFilter(Filter):
 			if t.tags:
 				entry["tags"] = t.tags
 
-			# prefer the most recent summary if available
+			# prefer catalog summaries for cross-chat context.
 			summary_text = None
 			if t.summaries:
-				latest = max(t.summaries, key=lambda s: s.created_at)
-				summary_text = latest.content
+				active = [
+					summary
+					for summary in t.summaries
+					if getattr(summary, "superseded_by_id", None) is None
+				]
+				catalog = [
+					summary
+					for summary in active
+					if getattr(summary, "purpose", None) == SummaryPurpose.CATALOG
+				]
+				latest_pool = catalog or active
+				if latest_pool:
+					latest = max(latest_pool, key=lambda summary: summary.created_at)
+					summary_text = latest.content
 
 			if summary_text:
 				entry["summary"] = summary_text

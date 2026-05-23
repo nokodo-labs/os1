@@ -107,24 +107,46 @@ async def run_chat_model_json_schema(
 	chat_model: ChatModel,
 	thread: SDKThread,
 	json_schema: dict[str, object],
+	purpose: str = "structured_output",
 ) -> dict[str, object]:
 	"""run a chat model with a structured json schema response.
 
 	this is the shared primitive for structured outputs across the api.
 	"""
-	assistant = await chat_model.generate(
-		thread,
-		stream=False,
-		params={"response_model": json_schema},
+	started = time.perf_counter()
+	extra: dict[str, object] = {
+		"purpose": purpose,
+		"model": chat_model.model_name,
+		"message_count": len(thread.messages),
+		"structured": True,
+	}
+	logger.info("chat model call started", extra=extra)
+	try:
+		assistant = await chat_model.generate(
+			thread,
+			stream=False,
+			params={"response_model": json_schema},
+		)
+		data = assistant.json_content
+		if data is None:
+			raw = assistant.text.strip()
+			if not raw:
+				raise ValueError("model returned empty structured output")
+			data = json.loads(raw)
+		if not isinstance(data, dict):
+			raise ValueError("structured output must be an object")
+	except Exception:
+		logger.exception("chat model call failed", extra=extra)
+		raise
+	duration_ms = round((time.perf_counter() - started) * 1000, 2)
+	logger.info(
+		"chat model call completed",
+		extra={
+			**extra,
+			"duration_ms": duration_ms,
+			"output_keys": sorted(str(key) for key in data),
+		},
 	)
-	data = assistant.json_content
-	if data is None:
-		raw = assistant.text.strip()
-		if not raw:
-			raise ValueError("model returned empty structured output")
-		data = json.loads(raw)
-	if not isinstance(data, dict):
-		raise ValueError("structured output must be an object")
 	return dict[str, object](data)
 
 
@@ -291,6 +313,10 @@ async def resolve_task_chat_model(
 		model_id_str = task_settings.memory_post_processing_model_id
 	elif task == "web_search":
 		model_id_str = task_settings.web_search_model_id
+	elif task == "asset_description":
+		model_id_str = task_settings.asset_description_model_id
+	elif task == "asset_ocr":
+		model_id_str = task_settings.asset_ocr_model_id
 
 	if model_id_str is None:
 		model_id_str = task_settings.default_model_id

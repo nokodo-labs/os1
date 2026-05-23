@@ -23,7 +23,8 @@ from api.schemas.scheduled_item import Recurrence
 from api.schemas.search import SearchMode, SearchParams
 from api.v1.service import reminders as reminder_service
 from api.v1.service.chat.context import AppContext
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
@@ -158,12 +159,14 @@ class ReminderGetTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		inp = ReminderGetInput.model_validate(kwargs)
 		provided = sum(
 			value is not None for value in (inp.reminder_id, inp.list_id, inp.query)
@@ -171,24 +174,24 @@ class ReminderGetTool(Tool[AppContext]):
 		if provided > 1:
 			return self.error(
 				"provide reminder_id, list_id, or query, not combinations",
-				__agent_context__,
+				__tool_call_context__,
 			)
 		if inp.reminder_id is not None:
-			return await self._get_reminder(inp, __agent_context__, __app_context__)
+			return await self._get_reminder(inp, __tool_call_context__, __app_context__)
 		if inp.list_id is not None:
-			return await self._get_list(inp, __agent_context__, __app_context__)
+			return await self._get_list(inp, __tool_call_context__, __app_context__)
 		if inp.query is not None:
-			return await self._search(inp, __agent_context__, __app_context__)
-		return await self._list_lists(inp, __agent_context__, __app_context__)
+			return await self._search(inp, __tool_call_context__, __app_context__)
+		return await self._list_lists(inp, __tool_call_context__, __app_context__)
 
 	async def _get_reminder(
 		self,
 		inp: ReminderGetInput,
-		agent_context: AgentContext,
+		tool_call_context: ToolCallContext,
 		app_context: AppContext,
 	) -> ToolMessage:
 		if inp.reminder_id is None:
-			return self.error("reminder_id is required", agent_context)
+			return self.error("reminder_id is required", tool_call_context)
 		try:
 			reminder = await reminder_service.get_reminder(
 				inp.reminder_id,
@@ -197,22 +200,22 @@ class ReminderGetTool(Tool[AppContext]):
 				with_subtasks=True,
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), agent_context)
+			return self.error(str(exc.detail), tool_call_context)
 		out = {
 			"status": "success",
 			"message": "reminder retrieved",
 			"reminder": _reminder_payload(reminder, include_subtasks=True),
 		}
-		return self.success(json.dumps(out), agent_context)
+		return self.success(json.dumps(out), tool_call_context)
 
 	async def _get_list(
 		self,
 		inp: ReminderGetInput,
-		agent_context: AgentContext,
+		tool_call_context: ToolCallContext,
 		app_context: AppContext,
 	) -> ToolMessage:
 		if inp.list_id is None:
-			return self.error("list_id is required", agent_context)
+			return self.error("list_id is required", tool_call_context)
 		try:
 			reminder_list = await reminder_service.get_reminder_list(
 				inp.list_id,
@@ -221,18 +224,18 @@ class ReminderGetTool(Tool[AppContext]):
 			)
 			payload = await _reminder_list_payload(reminder_list, app_context)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), agent_context)
+			return self.error(str(exc.detail), tool_call_context)
 		out = {
 			"status": "success",
 			"message": "reminder list retrieved",
 			"list": payload,
 		}
-		return self.success(json.dumps(out), agent_context)
+		return self.success(json.dumps(out), tool_call_context)
 
 	async def _list_lists(
 		self,
 		inp: ReminderGetInput,
-		agent_context: AgentContext,
+		tool_call_context: ToolCallContext,
 		app_context: AppContext,
 	) -> ToolMessage:
 		try:
@@ -248,7 +251,7 @@ class ReminderGetTool(Tool[AppContext]):
 				principal=app_context.principal,
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), agent_context)
+			return self.error(str(exc.detail), tool_call_context)
 		results = [
 			await _reminder_list_payload(reminder_list, app_context)
 			for reminder_list in lists
@@ -265,16 +268,16 @@ class ReminderGetTool(Tool[AppContext]):
 			"next_skip": next_skip,
 			"results": results,
 		}
-		return self.success(json.dumps(out), agent_context)
+		return self.success(json.dumps(out), tool_call_context)
 
 	async def _search(
 		self,
 		inp: ReminderGetInput,
-		agent_context: AgentContext,
+		tool_call_context: ToolCallContext,
 		app_context: AppContext,
 	) -> ToolMessage:
 		if inp.query is None:
-			return self.error("query is required", agent_context)
+			return self.error("query is required", tool_call_context)
 		try:
 			lists = await reminder_service.search_reminder_lists(
 				inp.query,
@@ -296,7 +299,7 @@ class ReminderGetTool(Tool[AppContext]):
 				search_params=_HYBRID_SEARCH,
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), agent_context)
+			return self.error(str(exc.detail), tool_call_context)
 		reminder_items = page.items
 		if not inp.include_completed:
 			reminder_items = [
@@ -322,7 +325,7 @@ class ReminderGetTool(Tool[AppContext]):
 			"next_cursor": page.next_cursor,
 			"has_more_reminders": page.has_more,
 		}
-		return self.success(json.dumps(out), agent_context)
+		return self.success(json.dumps(out), tool_call_context)
 
 
 class ReminderWriteTool(Tool[AppContext]):
@@ -342,28 +345,33 @@ class ReminderWriteTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		inp = ReminderWriteInput.model_validate(kwargs)
 
 		if inp.delete:
-			return await self._delete(inp, __agent_context__, __app_context__)
+			return await self._delete(inp, __tool_call_context__, __app_context__)
 		if inp.reminder_id is not None:
-			return await self._update(inp, __agent_context__, __app_context__)
-		return await self._create(inp, __agent_context__, __app_context__)
+			return await self._update(inp, __tool_call_context__, __app_context__)
+		return await self._create(inp, __tool_call_context__, __app_context__)
 
 	async def _delete(
 		self,
 		inp: ReminderWriteInput,
-		agent_context: AgentContext,
+		tool_call_context: ToolCallContext,
 		app_context: AppContext,
 	) -> ToolMessage:
 		if inp.reminder_id is None:
-			return self.error("reminder_id is required when deleting", agent_context)
+			return self.error(
+				"reminder_id is required when deleting",
+				tool_call_context,
+			)
 		try:
 			await reminder_service.delete_reminder(
 				inp.reminder_id,
@@ -371,22 +379,22 @@ class ReminderWriteTool(Tool[AppContext]):
 				principal=app_context.principal,
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), agent_context)
+			return self.error(str(exc.detail), tool_call_context)
 		out = {
 			"status": "success",
 			"message": "reminder deleted",
 			"id": str(inp.reminder_id),
 		}
-		return self.success(json.dumps(out), agent_context)
+		return self.success(json.dumps(out), tool_call_context)
 
 	async def _update(
 		self,
 		inp: ReminderWriteInput,
-		agent_context: AgentContext,
+		tool_call_context: ToolCallContext,
 		app_context: AppContext,
 	) -> ToolMessage:
 		if inp.reminder_id is None:
-			return self.error("reminder_id is required", agent_context)
+			return self.error("reminder_id is required", tool_call_context)
 		update_kwargs: dict[str, object] = {}
 		if inp.title is not None:
 			update_kwargs["title"] = inp.title
@@ -415,13 +423,13 @@ class ReminderWriteTool(Tool[AppContext]):
 					principal=app_context.principal,
 				)
 			except HTTPException as exc:
-				return self.error(str(exc.detail), agent_context)
+				return self.error(str(exc.detail), tool_call_context)
 			out = {
 				"status": "success",
 				"message": "reminder completed",
 				"id": str(reminder.id),
 			}
-			return self.success(json.dumps(out), agent_context)
+			return self.success(json.dumps(out), tool_call_context)
 
 		try:
 			reminder = await reminder_service.update_reminder(
@@ -431,24 +439,24 @@ class ReminderWriteTool(Tool[AppContext]):
 				principal=app_context.principal,
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), agent_context)
+			return self.error(str(exc.detail), tool_call_context)
 		out = {
 			"status": "success",
 			"message": "reminder updated",
 			"id": str(reminder.id),
 		}
-		return self.success(json.dumps(out), agent_context)
+		return self.success(json.dumps(out), tool_call_context)
 
 	async def _create(
 		self,
 		inp: ReminderWriteInput,
-		agent_context: AgentContext,
+		tool_call_context: ToolCallContext,
 		app_context: AppContext,
 	) -> ToolMessage:
 		if not inp.title:
 			return self.error(
 				"title is required when creating a reminder",
-				agent_context,
+				tool_call_context,
 			)
 		try:
 			reminder = await reminder_service.create_reminder(
@@ -466,14 +474,14 @@ class ReminderWriteTool(Tool[AppContext]):
 				principal=app_context.principal,
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), agent_context)
+			return self.error(str(exc.detail), tool_call_context)
 		out = {
 			"status": "success",
 			"message": "reminder created",
 			"id": str(reminder.id),
 			"list_id": str(reminder.list_id),
 		}
-		return self.success(json.dumps(out), agent_context)
+		return self.success(json.dumps(out), tool_call_context)
 
 
 def _reminder_payload(

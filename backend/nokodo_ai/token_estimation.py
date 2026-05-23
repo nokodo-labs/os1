@@ -23,6 +23,7 @@ from .messages import (
 	UserMessage,
 )
 from .threads import Thread
+from .tool import ToolDefinition
 from .utils.tokens import estimate_tokens
 
 
@@ -75,6 +76,16 @@ def estimate_message_tokens(message: Message) -> int:
 def estimate_thread_tokens(thread: Thread) -> int:
 	"""estimate total token count for all messages in a thread."""
 	return sum(estimate_message_tokens(m) for m in thread.messages)
+
+
+def estimate_tool_definitions_tokens(tools: Sequence[ToolDefinition]) -> int:
+	"""estimate prompt tokens consumed by tool definition schemas."""
+	total = 0
+	for tool in tools:
+		payload = tool.model_dump(mode="json")
+		text = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+		total += estimate_tokens(text)
+	return total
 
 
 # -- internals --

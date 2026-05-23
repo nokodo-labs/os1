@@ -15,7 +15,8 @@ from api.v1.service.web_search.errors import WebSearchError
 from api.v1.service.web_search.loaders import fetch_url
 from api.v1.service.web_search.progress import source_payload
 from api.v1.service.web_search.search import search_web
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject, JSONValue
@@ -54,13 +55,20 @@ class WebSearchInput(BaseModel):
 
 
 class WebSearchTool(Tool[AppContext]):
-	"""search the web and return source resources."""
+	"""search the web and return raw source resources.
+
+	this is a low-level fallback for cases where the agent specifically
+	needs the raw result list, snippets, URLs, or image hits. for normal web
+	questions, prefer AgenticWebSearchTool: raw search output can be large
+	and expensive to feed back into the model.
+	"""
 
 	name: str = Field(default="web_search")
 	description: str = Field(
 		default=(
-			"search the web through the configured search engine and return "
-			"source result titles, URLs, snippets, and dates."
+			"advanced fallback that returns raw search results, snippets, URLs, "
+			"and images. prefer agentic_web_search for most web questions because "
+			"raw results can use many tokens."
 		),
 	)
 	parameters: JSONObject = Field(
@@ -74,7 +82,9 @@ class WebSearchTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
@@ -96,7 +106,7 @@ class WebSearchTool(Tool[AppContext]):
 			)
 		except WebSearchError as exc:
 			logger.exception("web search failed for query: %s", inp.query)
-			return self.error(str(exc), __agent_context__)
+			return self.error(str(exc), __tool_call_context__)
 
 		sources: list[JSONValue] = [
 			source_payload(result_source) for result_source in result.results
@@ -126,9 +136,8 @@ class WebSearchTool(Tool[AppContext]):
 		}
 		max_chars = settings.web_search.max_chars
 		output = _json_output_with_result_limit(payload, max_chars)
-		tool_call_id, _ = self.tool_call_context(__agent_context__)
 		return ToolMessage(
-			tool_call_id=tool_call_id,
+			tool_call_id=__tool_call_context__.tool_call_id,
 			tool_output=output,
 			metadata=metadata,
 		)
@@ -163,20 +172,22 @@ class FetchUrlTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		"""fetch a URL and return structured page content for the model."""
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		inp = FetchUrlInput.model_validate(kwargs)
 
 		parsed = urlparse(inp.url)
 		if parsed.scheme not in ("http", "https"):
 			return self.error(
 				f"unsupported URL scheme: {parsed.scheme or 'none'}",
-				__agent_context__,
+				__tool_call_context__,
 			)
 
 		try:
@@ -185,18 +196,18 @@ class FetchUrlTool(Tool[AppContext]):
 			logger.exception("fetch_url web search error for %s", inp.url)
 			return self.error(
 				f"failed to fetch {inp.url}",
-				__agent_context__,
+				__tool_call_context__,
 			)
 		except httpx.HTTPStatusError as exc:
 			return self.error(
 				f"HTTP {exc.response.status_code} fetching {inp.url}",
-				__agent_context__,
+				__tool_call_context__,
 			)
 		except httpx.RequestError:
 			logger.exception("fetch_url request error for %s", inp.url)
 			return self.error(
 				f"failed to fetch {inp.url}",
-				__agent_context__,
+				__tool_call_context__,
 			)
 
 		domain = parsed.netloc or "unknown"
@@ -209,9 +220,8 @@ class FetchUrlTool(Tool[AppContext]):
 
 		payload: JSONObject = {"title": domain, "content": content}
 
-		tool_call_id, _ = self.tool_call_context(__agent_context__)
 		return ToolMessage(
-			tool_call_id=tool_call_id,
+			tool_call_id=__tool_call_context__.tool_call_id,
 			tool_output=json.dumps(payload, ensure_ascii=True),
 			metadata={
 				"_citable_sources": [
