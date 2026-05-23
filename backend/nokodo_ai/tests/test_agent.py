@@ -10,6 +10,7 @@ from pydantic import PrivateAttr
 from nokodo_ai import (
 	Agent,
 	AgentContext,
+	AgentIterationSnapshot,
 	AgentIterationState,
 	AssistantMessage,
 	ChatModel,
@@ -17,6 +18,7 @@ from nokodo_ai import (
 	Thread,
 	Tool,
 	ToolCall,
+	ToolCallContext,
 	ToolMessage,
 	UserMessage,
 )
@@ -92,41 +94,58 @@ def _make_chat_model(adapter: BaseChatAdapter) -> ChatModel:
 
 
 class _EchoTool(Tool[None]):
-	async def call(  # type: ignore[override]
+	async def call(
 		self,
+		__state__: AgentIterationSnapshot[None],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: None,
-		text: str,
+		**kwargs: object,
 	) -> ToolMessage:
+		_ = (__state__, __agent_context__, __app_context__)
+		text = kwargs.get("text")
+		assert isinstance(text, str)
 		return self.success(
-			f"{text}:{__agent_context__.tool_call_id}",
-			__agent_context__,
+			f"{text}:{__tool_call_context__.tool_call_id}",
+			__tool_call_context__,
 		)
 
 
 class _TimingCaptureTool(Tool[None]):
-	"""captures tool_call_start_time from the agent context for assertions."""
+	"""captures tool_call_start_time from the tool context for assertions."""
 
 	captured_start_times: list[float] = []
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[None],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: None,
 		**kwargs: object,
 	) -> ToolMessage:
-		assert __agent_context__.tool_call_start_time is not None
-		self.captured_start_times.append(__agent_context__.tool_call_start_time)
-		return self.success("ok", __agent_context__)
+		_ = (__state__, __agent_context__, __app_context__, kwargs)
+		assert __tool_call_context__.tool_call_start_time is not None
+		self.captured_start_times.append(__tool_call_context__.tool_call_start_time)
+		return self.success("ok", __tool_call_context__)
 
 
 class _ExplodingTool(Tool[None]):
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[None],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: None,
 		**kwargs: object,
 	) -> ToolMessage:
+		_ = (
+			__state__,
+			__agent_context__,
+			__tool_call_context__,
+			__app_context__,
+			kwargs,
+		)
 		raise RuntimeError("boom")
 
 
@@ -153,6 +172,26 @@ async def test_agent_sync_without_tools_tool_choice_none() -> None:
 
 def _state_from(thread: Thread) -> AgentIterationState[None]:
 	return AgentIterationState(thread=thread, tools=[])
+
+
+def test_iteration_snapshot_copies_thread_and_tools() -> None:
+	thread = Thread()
+	thread.add(UserMessage.from_text("hello"))
+	tool: Tool[None] = _EchoTool(name="echo", description="echo")
+	state = AgentIterationState[None](thread=thread, tools=[tool])
+
+	snapshot = state.snapshot()
+	snapshot_tool = snapshot.tools[0]
+	snapshot.thread.add(UserMessage.from_text("snapshot only"))
+	snapshot.tools.clear()
+
+	assert isinstance(snapshot.tools, list)
+	assert snapshot.thread is not state.thread
+	assert snapshot.thread.messages[0] is not state.thread.messages[0]
+	assert snapshot.tools is not state.tools
+	assert snapshot_tool is not state.tools[0]
+	assert len(state.thread.messages) == 1
+	assert state.tools == [tool]
 
 
 def test_should_continue_agent_run_from_thread_state() -> None:
@@ -382,8 +421,9 @@ async def test_agent_sync_applies_filters_and_hooks() -> None:
 			agent_context: AgentContext,
 			app_context: None,
 		) -> AgentIterationState[None]:
-			seen.append(f"filter:{agent_context.iteration}")
-			if agent_context.iteration == 0:
+			_ = agent_context
+			seen.append(f"filter:{state.iteration}")
+			if state.iteration == 0:
 				state.thread.add(SystemMessage.from_text("injected"))
 			return state
 
@@ -393,12 +433,12 @@ async def test_agent_sync_applies_filters_and_hooks() -> None:
 
 		async def execute(
 			self,
-			thread: Thread,
+			state: AgentIterationSnapshot[None],
 			agent_context: AgentContext,
 			app_context: None,
 		) -> None:
-			assert agent_context.tool_call_id is None
-			seen.append(f"hook:{agent_context.iteration}")
+			_ = (agent_context, app_context)
+			seen.append(f"hook:{state.iteration}")
 
 	adapter = _QueuedChatAdapter(sync_responses=[AssistantMessage.from_text("ok")])
 	chat_model = _make_chat_model(adapter)
@@ -543,12 +583,12 @@ async def test_agent_sync_runs_hooks_after_each_assistant_response() -> None:
 
 		async def execute(
 			self,
-			thread: Thread,
+			state: AgentIterationSnapshot[None],
 			agent_context: AgentContext,
 			app_context: None,
 		) -> None:
-			assert agent_context.thread is thread
-			seen.append([message.role for message in thread.messages])
+			_ = (agent_context, app_context)
+			seen.append([message.role for message in state.thread.messages])
 
 	adapter = _QueuedChatAdapter(
 		sync_responses=[
@@ -666,8 +706,9 @@ async def test_agent_streaming_applies_filters_and_hooks() -> None:
 			agent_context: AgentContext,
 			app_context: None,
 		) -> AgentIterationState[None]:
-			seen.append(f"filter:{agent_context.iteration}")
-			if agent_context.iteration == 0:
+			_ = agent_context
+			seen.append(f"filter:{state.iteration}")
+			if state.iteration == 0:
 				state.thread.add(SystemMessage.from_text("injected"))
 			return state
 
@@ -677,12 +718,12 @@ async def test_agent_streaming_applies_filters_and_hooks() -> None:
 
 		async def execute(
 			self,
-			thread: Thread,
+			state: AgentIterationSnapshot[None],
 			agent_context: AgentContext,
 			app_context: None,
 		) -> None:
-			assert agent_context.tool_call_id is None
-			seen.append(f"hook:{agent_context.iteration}")
+			_ = (agent_context, app_context)
+			seen.append(f"hook:{state.iteration}")
 
 	adapter = _QueuedChatAdapter(stream_responses=[[AssistantMessage.from_text("ok")]])
 	chat_model = _make_chat_model(adapter)
@@ -766,12 +807,12 @@ async def test_agent_streaming_runs_hooks_after_each_assistant_response() -> Non
 
 		async def execute(
 			self,
-			thread: Thread,
+			state: AgentIterationSnapshot[None],
 			agent_context: AgentContext,
 			app_context: None,
 		) -> None:
-			assert agent_context.thread is thread
-			seen.append([message.role for message in thread.messages])
+			_ = (agent_context, app_context)
+			seen.append([message.role for message in state.thread.messages])
 
 	adapter = _QueuedChatAdapter(
 		stream_responses=[
@@ -876,11 +917,14 @@ async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
 	class _CitableNoteTool(Tool[None]):
 		async def call(
 			self,
+			__state__: AgentIterationSnapshot[None],
 			__agent_context__: AgentContext,
+			__tool_call_context__: ToolCallContext,
 			__app_context__: None,
 			**kwargs: object,
 		) -> ToolMessage:
-			tool_call_id, _ = self.tool_call_context(__agent_context__)
+			_ = (__state__, __agent_context__, __app_context__, kwargs)
+			tool_call_id = __tool_call_context__.tool_call_id
 			# mimics NoteGetTool: returns custom metadata without provider_data
 			return ToolMessage(
 				tool_call_id=tool_call_id,

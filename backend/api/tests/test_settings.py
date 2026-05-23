@@ -220,7 +220,7 @@ def test_settings_patch_accepts_web_search_and_integration_updates() -> None:
 					"web_search_model_id": "model-chat",
 					"maintenance_max_chars_per_message": 3000,
 				},
-				"windowing": {
+				"context_compaction": {
 					"summarization_max_chars_per_message": 3000,
 				},
 			},

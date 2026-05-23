@@ -16,6 +16,7 @@ from api.v1.service.chat.context import AppContext, RetrievalContext
 from api.v1.service.chat.hooks import memory_post_processing as memory_hook_module
 from api.v1.service.chat.hooks.memory_post_processing import MemoryPostProcessingHook
 from api.v1.service.threads.core import create_thread, update_thread
+from nokodo_ai.agents import AgentIterationSnapshot, AgentIterationState
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import AssistantMessage, ToolCall, UserMessage
@@ -27,11 +28,14 @@ async def _noop_event_emitter(event: Event) -> None:
 	_ = event
 
 
-def _agent_context(thread: SDKThread) -> AgentContext:
+def _agent_context() -> AgentContext:
 	return AgentContext(
-		thread=thread,
-		model=ChatModel.model_construct(api=None, model_name="test", adapter=None),
+		model=ChatModel.model_construct(api=None, model_name="test", adapter=None)
 	)
+
+
+def _hook_state(thread: SDKThread) -> AgentIterationSnapshot[None]:
+	return AgentIterationState[None](thread=thread, tools=[]).snapshot()
 
 
 @pytest.mark.asyncio
@@ -155,7 +159,7 @@ async def test_memory_post_processing_hook_skips_tool_iterations(
 	)
 
 	await MemoryPostProcessingHook().execute(
-		thread, _agent_context(thread), app_context
+		_hook_state(thread), _agent_context(), app_context
 	)
 
 	assert calls == []
@@ -216,8 +220,8 @@ async def test_memory_post_processing_hook_skips_when_messages_are_queued(
 	thread.add(AssistantMessage.from_text("done"))
 
 	await MemoryPostProcessingHook().execute(
-		thread,
-		_agent_context(thread),
+		_hook_state(thread),
+		_agent_context(),
 		app_context,
 	)
 
@@ -268,7 +272,7 @@ async def test_memory_post_processing_hook_schedules_after_final_assistant(
 	thread.add(AssistantMessage.from_text("done"))
 
 	await MemoryPostProcessingHook().execute(
-		thread, _agent_context(thread), app_context
+		_hook_state(thread), _agent_context(), app_context
 	)
 
 	assert calls == [("remember this", 10)]

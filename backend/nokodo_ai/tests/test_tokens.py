@@ -71,9 +71,17 @@ class TestEstimateMessageTokens:
 			]
 		)
 		result = estimate_message_tokens(msg)
-		# text tokens + URL-based image estimate
-		image_tokens = estimate_tokens("https://example.com/img.png")
+		# image urls are provider-loaded native media, not cheap URL text.
+		image_tokens = 1024
 		assert result == estimate_tokens("check this") + image_tokens
+
+	def test_user_message_with_image_base64_uses_media_estimate(self) -> None:
+		msg = UserMessage(
+			content=[ImageContent(base64="x" * 40_000, media_type="image/png")]
+		)
+		result = estimate_message_tokens(msg)
+		assert result == 1024
+		assert result < estimate_tokens("x" * 40_000)
 
 	def test_assistant_message_with_usage(self) -> None:
 		"""assistant messages with real output_tokens should use it."""
@@ -124,8 +132,8 @@ class TestEstimateMessageTokens:
 			attachments=[ImageContent(url="https://example.com/img.png")],
 		)
 		result = estimate_message_tokens(msg)
-		# URL-based image estimate (provider loads the full content)
-		image_tokens = estimate_tokens("https://example.com/img.png")
+		# provider loads image URL as native media.
+		image_tokens = 1024
 		assert result == estimate_tokens("done") + image_tokens
 
 	def test_system_message(self) -> None:

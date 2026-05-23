@@ -24,8 +24,8 @@ def _make_filter() -> UserMessageTimestampFilter:
 
 
 def _ctx(thread: Thread) -> AgentContext:
+	_ = thread
 	return AgentContext(
-		thread=thread,
 		model=ChatModel.model_construct(model_name="test"),
 	)
 

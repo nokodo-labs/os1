@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.plugin import Plugin, PluginType
+from api.schemas.agent import DEFAULT_AGENT_PLUGIN_IDS
 from api.schemas.plugin import PluginCreate, PluginListFilters
 from api.v1.service import plugins as plugin_service
 
@@ -28,6 +29,11 @@ class _FakePrincipal:
 
 
 _admin = _FakePrincipal()
+
+
+def test_default_agent_filters_are_native_toggleable_plugins() -> None:
+	native_filter_ids = {plugin.id for plugin in plugin_service._list_native("filter")}
+	assert set(DEFAULT_AGENT_PLUGIN_IDS) <= native_filter_ids
 
 
 def test_list_native_description_fallbacks(

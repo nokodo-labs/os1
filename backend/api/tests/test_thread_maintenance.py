@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.message import MessageType
-from api.models.thread_summary import SummaryType
+from api.models.thread_summary import SummaryPurpose
 from api.schemas.message import MessageCreate, MessageUpdate
 from api.schemas.thread import ThreadCreate
 from api.schemas.user import UserCreate
@@ -62,7 +62,7 @@ async def test_thread_maintenance_noops_when_summary_is_current(
 	await db_session.refresh(thread)
 	await summary_service.create_summary(
 		thread_id=thread.id,
-		summary_type=SummaryType.WINDOW,
+		purpose=SummaryPurpose.CATALOG,
 		content="current summary",
 		message_count=1,
 		start_message_id=message.id,
@@ -120,7 +120,9 @@ async def test_thread_maintenance_generates_metadata_and_summary_once(
 		chat_model: object,
 		thread: object,
 		json_schema: dict[str, Any],
+		purpose: str = "structured_output",
 	) -> dict[str, object]:
+		assert purpose == "thread_maintenance"
 		calls.append(thread)
 		return {
 			"title": "Project Status",
@@ -134,6 +136,24 @@ async def test_thread_maintenance_generates_metadata_and_summary_once(
 	monkeypatch.setattr(
 		thread_maintenance_service, "run_chat_model_json_schema", _run_structured
 	)
+	vectorize_calls: list[object] = []
+
+	async def _fetch_acl_metadata(*args: object) -> dict[str, object]:
+		return {}
+
+	async def _vectorize_resource(**kwargs: object) -> None:
+		vectorize_calls.append(kwargs)
+
+	monkeypatch.setattr(
+		thread_maintenance_service,
+		"fetch_acl_metadata",
+		_fetch_acl_metadata,
+	)
+	monkeypatch.setattr(
+		thread_maintenance_service,
+		"vectorize_resource",
+		_vectorize_resource,
+	)
 
 	result = await thread_service.maintain_thread_metadata(
 		thread.id,
@@ -141,7 +161,11 @@ async def test_thread_maintenance_generates_metadata_and_summary_once(
 		principal=principal,
 	)
 	await db_session.refresh(thread)
-	summaries = await summary_service.list_active_summaries(thread.id, db_session)
+	summaries = await summary_service.list_active_summaries(
+		thread.id,
+		db_session,
+		purpose=SummaryPurpose.CATALOG,
+	)
 
 	assert len(calls) == 1
 	assert result["metadata_updated"] is True
@@ -149,8 +173,10 @@ async def test_thread_maintenance_generates_metadata_and_summary_once(
 	assert thread.title == "project status"
 	assert thread.tags == ["planning", "tasks"]
 	assert len(summaries) == 1
+	assert summaries[0].purpose == SummaryPurpose.CATALOG
 	assert summaries[0].content == "The active branch decided to ship task maintenance."
 	assert str(summaries[0].end_message_id) == str(thread.current_message_id)
+	assert len(vectorize_calls) == 1
 
 
 @pytest.mark.asyncio
@@ -177,7 +203,7 @@ async def test_thread_maintenance_regenerates_summary_after_message_edit(
 	await db_session.refresh(thread)
 	old_summary = await summary_service.create_summary(
 		thread_id=thread.id,
-		summary_type=SummaryType.WINDOW,
+		purpose=SummaryPurpose.CATALOG,
 		content="old summary",
 		message_count=1,
 		start_message_id=message.id,
@@ -204,7 +230,9 @@ async def test_thread_maintenance_regenerates_summary_after_message_edit(
 		chat_model: object,
 		thread: Any,
 		json_schema: dict[str, Any],
+		purpose: str = "structured_output",
 	) -> dict[str, object]:
+		assert purpose == "thread_maintenance"
 		captured_transcripts.append(thread.messages[-1].text)
 		return {
 			"title": "ready",
@@ -218,6 +246,24 @@ async def test_thread_maintenance_regenerates_summary_after_message_edit(
 	monkeypatch.setattr(
 		thread_maintenance_service, "run_chat_model_json_schema", _run_structured
 	)
+	vectorize_calls: list[object] = []
+
+	async def _fetch_acl_metadata(*args: object) -> dict[str, object]:
+		return {}
+
+	async def _vectorize_resource(**kwargs: object) -> None:
+		vectorize_calls.append(kwargs)
+
+	monkeypatch.setattr(
+		thread_maintenance_service,
+		"fetch_acl_metadata",
+		_fetch_acl_metadata,
+	)
+	monkeypatch.setattr(
+		thread_maintenance_service,
+		"vectorize_resource",
+		_vectorize_resource,
+	)
 
 	assert await thread_service.thread_needs_maintenance(thread, db_session) is True
 	result = await thread_service.maintain_thread_metadata(
@@ -226,10 +272,16 @@ async def test_thread_maintenance_regenerates_summary_after_message_edit(
 		principal=principal,
 		observed_last_activity_at=datetime.now(tz=UTC),
 	)
-	summaries = await summary_service.list_active_summaries(thread.id, db_session)
+	summaries = await summary_service.list_active_summaries(
+		thread.id,
+		db_session,
+		purpose=SummaryPurpose.CATALOG,
+	)
 
 	assert result["summary_updated"] is True
 	assert "new edited text" in captured_transcripts[0]
 	assert len(summaries) == 1
+	assert summaries[0].purpose == SummaryPurpose.CATALOG
 	assert summaries[0].content == "new summary"
 	assert summaries[0].id != old_summary.id
+	assert len(vectorize_calls) == 1

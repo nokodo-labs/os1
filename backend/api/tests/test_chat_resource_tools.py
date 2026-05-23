@@ -36,16 +36,23 @@ from api.v1.service.chat.tools.notes import NoteGetTool
 from api.v1.service.chat.tools.projects import ProjectGetTool
 from api.v1.service.chat.tools.reminders import ReminderGetTool, ReminderWriteTool
 from api.v1.service.chat.tools.resource_search import ResourceSearchTool
+from nokodo_ai import AgentContext, AgentIterationSnapshot, AgentIterationState
 from nokodo_ai.chat_models import ChatModel
-from nokodo_ai.context import AgentContext
+from nokodo_ai.context import ToolCallContext
 from nokodo_ai.threads import Thread
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
-def _agent_context(tool_call_id: str = "tool-call") -> AgentContext:
-	return AgentContext(
-		thread=Thread(),
-		model=ChatModel.model_construct(model_name="stub"),
+def _state() -> AgentIterationSnapshot[AppContext]:
+	return AgentIterationState[AppContext](thread=Thread(), tools=[]).snapshot()
+
+
+def _agent_context() -> AgentContext:
+	return AgentContext(model=ChatModel.model_construct(model_name="stub"))
+
+
+def _tool_call_context(tool_call_id: str = "tool-call") -> ToolCallContext:
+	return ToolCallContext(
 		tool_call_id=tool_call_id,
 		tool_call_start_time=0.0,
 	)
@@ -123,7 +130,12 @@ async def test_calendar_get_returns_upcoming_reminders_with_reminder_ids() -> No
 				new=AsyncMock(return_value=[item]),
 			) as reminder_items,
 		):
-			message = await tool.call(_agent_context(), app_context)
+			message = await tool.call(
+				_state(),
+				_agent_context(),
+				_tool_call_context(),
+				app_context,
+			)
 	finally:
 		await app_context.session.close()
 
@@ -166,7 +178,9 @@ async def test_calendar_get_query_uses_hybrid_event_search() -> None:
 			new=AsyncMock(return_value=page),
 		) as search:
 			message = await tool.call(
+				_state(),
 				_agent_context(),
+				_tool_call_context(),
 				app_context,
 				query="planning",
 				limit=7,
@@ -237,7 +251,9 @@ async def test_reminder_get_query_searches_lists_and_reminders_with_hybrid() -> 
 			) as reminder_search,
 		):
 			message = await tool.call(
+				_state(),
 				_agent_context(),
+				_tool_call_context(),
 				app_context,
 				query="draft",
 				limit=5,
@@ -297,7 +313,9 @@ async def test_reminder_write_create_omits_list_id_for_default_list() -> None:
 			new=AsyncMock(return_value=created),
 		) as create_reminder:
 			message = await tool.call(
+				_state(),
 				_agent_context(),
+				_tool_call_context(),
 				app_context,
 				title="send draft",
 			)
@@ -346,7 +364,9 @@ async def test_calendar_write_create_omits_calendar_id_for_default_calendar() ->
 			new=AsyncMock(return_value=created),
 		) as create_event:
 			message = await tool.call(
+				_state(),
 				_agent_context(),
+				_tool_call_context(),
 				app_context,
 				title="planning sync",
 				start_at=now,
@@ -392,7 +412,9 @@ async def test_chat_get_query_uses_hybrid_search_and_chat_output_names() -> None
 			new=AsyncMock(return_value=page),
 		) as search:
 			message = await tool.call(
+				_state(),
 				_agent_context(),
+				_tool_call_context(),
 				app_context,
 				query="planning",
 				limit=3,
@@ -464,7 +486,9 @@ async def test_resource_search_uses_hybrid_and_maps_chat_type() -> None:
 			new=fake_search_stream,
 		):
 			message = await tool.call(
+				_state(),
 				_agent_context(),
+				_tool_call_context(),
 				app_context,
 				query="planning",
 				types=["chat", "file"],
@@ -506,7 +530,9 @@ async def test_note_get_query_uses_hybrid_search() -> None:
 			new=AsyncMock(return_value=page),
 		) as search:
 			message = await tool.call(
+				_state(),
 				_agent_context(),
+				_tool_call_context(),
 				app_context,
 				query="design",
 				limit=4,
@@ -543,7 +569,9 @@ async def test_project_get_query_uses_hybrid_search() -> None:
 			new=AsyncMock(return_value=page),
 		) as search:
 			message = await tool.call(
+				_state(),
 				_agent_context(),
+				_tool_call_context(),
 				app_context,
 				query="release",
 				limit=2,
@@ -588,7 +616,9 @@ async def test_file_get_query_uses_hybrid_search() -> None:
 			new=AsyncMock(return_value=page),
 		) as search:
 			message = await tool.call(
+				_state(),
 				_agent_context(),
+				_tool_call_context(),
 				app_context,
 				query="brief",
 				limit=6,
@@ -623,7 +653,9 @@ async def test_memory_recall_uses_hybrid_search() -> None:
 			new=AsyncMock(return_value=page),
 		) as search:
 			message = await tool.call(
+				_state(),
 				_agent_context(),
+				_tool_call_context(),
 				app_context,
 				query="focus",
 				limit=3,

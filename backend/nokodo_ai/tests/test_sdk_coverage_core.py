@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from nokodo_ai.adapters.chat import resolve_chat_adapter
 from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
-from nokodo_ai.agents import AgentIterationState
+from nokodo_ai.agents import AgentIterationSnapshot, AgentIterationState
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.context import AgentContext
 from nokodo_ai.deltas import (
@@ -167,11 +167,11 @@ def test_schema_from_callable_skips_self_dunder_and_varargs() -> None:
 			self,
 			a: int,
 			b: str = "x",
-			__agent_context__: object | None = None,
+			__tool_call_context__: object | None = None,
 			*args: object,
 			**kwargs: object,
 		) -> None:
-			_ = (a, b, __agent_context__, args, kwargs)
+			_ = (a, b, __tool_call_context__, args, kwargs)
 
 	schema = schema_from_callable(X.f)
 	assert "properties" in schema
@@ -179,7 +179,7 @@ def test_schema_from_callable_skips_self_dunder_and_varargs() -> None:
 	assert isinstance(props, dict)
 	assert "a" in props
 	assert "b" in props
-	assert "__agent_context__" not in props
+	assert "__tool_call_context__" not in props
 
 	schema2 = schema_from_callable(X.f, skip_fields={"b"})
 	props2 = schema2.get("properties") or {}
@@ -393,25 +393,22 @@ async def test_filters_and_hooks_not_implemented_raise_async() -> None:
 	class MyHook(Hook[None]):
 		async def execute(
 			self,
-			thread: Thread,
+			state: AgentIterationSnapshot[None],
 			agent_context: AgentContext,
 			app_context: None,
 		) -> None:
-			await cast(Any, super()).execute(thread, agent_context, app_context)
+			await cast(Any, super()).execute(state, agent_context, app_context)
 
 	f = MyFilter(name="f")
 	h = MyHook(name="h")
 	state = AgentIterationState[None](thread=Thread(), tools=[])
-	agent_context = AgentContext(
-		thread=state.thread,
-		model=ChatModel.model_construct(model_name="test"),
-	)
+	agent_context = AgentContext(model=ChatModel.model_construct(model_name="test"))
 
 	with pytest.raises(NotImplementedError, match="process method must be"):
 		await f.process(state, agent_context, None)
 
 	with pytest.raises(NotImplementedError, match="execute method must be"):
-		await h.execute(state.thread, agent_context, None)
+		await h.execute(state.snapshot(), agent_context, None)
 
 
 # deep_merge

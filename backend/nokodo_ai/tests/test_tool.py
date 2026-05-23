@@ -2,46 +2,36 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable
-
 import pytest
 
-from nokodo_ai import AgentContext, ChatModel, Tool, ToolMessage, tool
-from nokodo_ai.adapters.base.chat import (
-	BaseChatAdapter,
-	ChatGenerationParams,
+from nokodo_ai import (
+	AgentContext,
+	AgentIterationSnapshot,
+	AgentIterationState,
+	ChatModel,
+	Tool,
+	ToolCallContext,
+	ToolMessage,
+	tool,
 )
-from nokodo_ai.messages import AssistantMessage, Message
 from nokodo_ai.threads import Thread
 from nokodo_ai.tool import ToolDefinition
 from nokodo_ai.types.json import JSONObject
 
 
-class _NoopChatAdapter(BaseChatAdapter):
-	def generate(  # type: ignore[override]
-		self,
-		messages: list[Message],
-		model: str,
-		stream: bool = False,
-		tools: list[ToolDefinition] = [],
-		params: ChatGenerationParams | None = None,
-	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
-		raise AssertionError("adapter.generate should not be called in tool tests")
+def _state() -> AgentIterationSnapshot[None]:
+	return AgentIterationState[None](thread=Thread(), tools=[]).snapshot()
 
 
-def _make_agent_context(
+def _agent_context() -> AgentContext:
+	return AgentContext(model=ChatModel.model_construct(model_name="stub"))
+
+
+def _make_tool_call_context(
 	tool_call_id: str = "tc1",
 	metadata: JSONObject | None = None,
-) -> AgentContext:
-	chat_model = ChatModel.model_construct(
-		api=None,
-		model_name="stub",
-		adapter=_NoopChatAdapter(),
-	)
-	return AgentContext(
-		thread=Thread(),
-		model=chat_model,
-		iteration=0,
+) -> ToolCallContext:
+	return ToolCallContext(
 		tool_call_id=tool_call_id,
 		tool_call_start_time=0.0,
 		metadata=metadata or {},
@@ -49,24 +39,38 @@ def _make_agent_context(
 
 
 class _AddTool(Tool[None]):
-	async def call(  # type: ignore[override]
+	async def call(
 		self,
+		__state__: AgentIterationSnapshot[None],
 		__agent_context__: AgentContext,
-		__app_context__: None,
-		a: int = 0,
-		b: int = 0,
-	) -> ToolMessage:
-		return self.success(str(a + b), __agent_context__)
-
-
-class _CallsSuperTool(Tool[None]):
-	async def call(  # type: ignore[override]
-		self,
-		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: None,
 		**kwargs: object,
 	) -> ToolMessage:
-		return await super().call(__agent_context__, __app_context__, **kwargs)  # type: ignore[safe-super]
+		_ = (__state__, __agent_context__, __app_context__)
+		a = kwargs.get("a", 0)
+		b = kwargs.get("b", 0)
+		assert isinstance(a, int)
+		assert isinstance(b, int)
+		return self.success(str(a + b), __tool_call_context__)
+
+
+class _CallsSuperTool(Tool[None]):
+	async def call(
+		self,
+		__state__: AgentIterationSnapshot[None],
+		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
+		__app_context__: None,
+		**kwargs: object,
+	) -> ToolMessage:
+		return await super().call(
+			__state__,
+			__agent_context__,
+			__tool_call_context__,
+			__app_context__,
+			**kwargs,
+		)  # type: ignore[safe-super]
 
 
 def test_tool_definition_uses_explicit_parameters() -> None:
@@ -89,15 +93,28 @@ def test_tool_definition_uses_explicit_parameters() -> None:
 
 
 def test_tool_parameters_resolved_is_cached() -> None:
-	add_tool = _AddTool(name="add", description="add")
-	first = add_tool.parameters_resolved
-	second = add_tool.parameters_resolved
+	@tool(description="cached schema")
+	def cached_schema(
+		__state__: AgentIterationSnapshot[None],
+		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
+		__app_context__: None,
+		value: int,
+	) -> ToolMessage:
+		_ = (__state__, __agent_context__, __app_context__)
+		return ToolMessage(
+			tool_call_id=__tool_call_context__.tool_call_id,
+			tool_output=str(value),
+		)
+
+	first = cached_schema.parameters_resolved
+	second = cached_schema.parameters_resolved
 	assert first is second
 	assert "properties" in first
 
 
 def test_tool_success_and_error_helpers_include_metadata() -> None:
-	ctx = _make_agent_context("call-1", metadata={"x": "y"})
+	ctx = _make_tool_call_context("call-1", metadata={"x": "y"})
 	add_tool = _AddTool(name="add", description="add")
 
 	ok = add_tool.success("ok", ctx)
@@ -115,9 +132,9 @@ def test_tool_success_and_error_helpers_include_metadata() -> None:
 
 @pytest.mark.asyncio
 async def test_tool_call_returns_tool_message() -> None:
-	ctx = _make_agent_context("call-2")
+	ctx = _make_tool_call_context("call-2")
 	add_tool = _AddTool(name="add", description="add")
-	result = await add_tool.call(ctx, None, a=2, b=3)
+	result = await add_tool.call(_state(), _agent_context(), ctx, None, a=2, b=3)
 	assert result.tool_output == "5"
 	assert result.is_error is False
 
@@ -125,11 +142,14 @@ async def test_tool_call_returns_tool_message() -> None:
 def test_tool_decorator_creates_tool_instance_and_schema() -> None:
 	@tool(name="decorated", description="a decorated tool")
 	def decorated(
+		__state__: AgentIterationSnapshot[None],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: None,
 		value: int,
 	) -> ToolMessage:
-		tool_call_id, _ = Tool.tool_call_context(__agent_context__)
+		_ = (__state__, __agent_context__, __app_context__)
+		tool_call_id = __tool_call_context__.tool_call_id
 		return ToolMessage(
 			tool_call_id=tool_call_id,
 			tool_output=str(value * 2),
@@ -144,22 +164,25 @@ def test_tool_decorator_creates_tool_instance_and_schema() -> None:
 
 @pytest.mark.asyncio
 async def test_tool_decorator_executes_function() -> None:
-	ctx = _make_agent_context("call-3")
+	ctx = _make_tool_call_context("call-3")
 
 	@tool(description="uses function name")
 	def auto_named(
+		__state__: AgentIterationSnapshot[None],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: None,
 		text: str,
 	) -> ToolMessage:
-		tool_call_id, _ = Tool.tool_call_context(__agent_context__)
+		_ = (__state__, __agent_context__, __app_context__)
+		tool_call_id = __tool_call_context__.tool_call_id
 		return ToolMessage(
 			tool_call_id=tool_call_id,
 			tool_output=text,
 		)
 
 	assert auto_named.name == "auto_named"
-	result = await auto_named.call(ctx, None, text="ok")
+	result = await auto_named.call(_state(), _agent_context(), ctx, None, text="ok")
 	assert result.tool_output == "ok"
 
 
@@ -168,15 +191,18 @@ def test_tool_decorator_validates_signature() -> None:
 
 		@tool(description="bad")
 		def bad(
-			agent_context: AgentContext,
-			app_context: None,
+			state: AgentIterationSnapshot[None],
+			__agent_context__: AgentContext,
+			__tool_call_context__: ToolCallContext,
+			__app_context__: None,
 		) -> ToolMessage:
+			_ = (state, __agent_context__, __tool_call_context__, __app_context__)
 			return ToolMessage(tool_call_id="x", tool_output="y")
 
 
 @pytest.mark.asyncio
 async def test_tool_call_base_raises_not_implemented() -> None:
-	ctx = _make_agent_context("call-4")
+	ctx = _make_tool_call_context("call-4")
 	t = _CallsSuperTool(name="super", description="calls super")
 	with pytest.raises(NotImplementedError, match="call method must be implemented"):
-		await t.call(ctx, None)
+		await t.call(_state(), _agent_context(), ctx, None)

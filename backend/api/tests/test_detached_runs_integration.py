@@ -22,7 +22,9 @@ from dataclasses import dataclass, field
 
 import pytest
 
+from api.models.user import User
 from api.v1.service import runs as runs_service
+from api.v1.service.auth import Principal
 from api.v1.service.chat.run_status import RunState, run_status_store
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
@@ -121,15 +123,21 @@ class _FakeAgent:
 
 
 @pytest.fixture
-def fake_principal() -> object:
-	class _U:
-		id = "user_test_detached"
-
-	class _P:
-		user_id = "user_test_detached"
-		user = _U()
-
-	return _P()
+def fake_principal() -> Principal:
+	user_id = TypeID(new_typeid("user"))
+	return Principal(
+		user=User(
+			id=user_id,
+			email=f"{user_id}@example.test",
+			username=f"detached-{str(user_id)[-12:]}",
+			display_name=None,
+			bio=None,
+			avatar_url=None,
+			hashed_password="x",
+		),
+		group_ids=(),
+		permissions=frozenset(),
+	)
 
 
 @pytest.fixture
@@ -147,7 +155,7 @@ def agent_id() -> TypeID:
 
 async def test_run_outlives_subscriber_disconnect(
 	monkeypatch: pytest.MonkeyPatch,
-	fake_principal: object,
+	fake_principal: Principal,
 	thread_id: TypeID,
 	agent_id: TypeID,
 ) -> None:
@@ -158,7 +166,7 @@ async def test_run_outlives_subscriber_disconnect(
 	run_id = await runs_service._start_run(
 		thread_id=thread_id,
 		agent_id=agent_id,
-		principal=fake_principal,  # type: ignore[arg-type]
+		principal=fake_principal,
 		input=None,
 		parent_id=None,
 		client_context=None,
@@ -200,7 +208,7 @@ async def test_run_outlives_subscriber_disconnect(
 
 async def test_multiple_concurrent_subscribers_get_same_frames(
 	monkeypatch: pytest.MonkeyPatch,
-	fake_principal: object,
+	fake_principal: Principal,
 	thread_id: TypeID,
 	agent_id: TypeID,
 ) -> None:
@@ -211,7 +219,7 @@ async def test_multiple_concurrent_subscribers_get_same_frames(
 	run_id = await runs_service._start_run(
 		thread_id=thread_id,
 		agent_id=agent_id,
-		principal=fake_principal,  # type: ignore[arg-type]
+		principal=fake_principal,
 		input=None,
 		parent_id=None,
 		client_context=None,
@@ -243,7 +251,7 @@ async def test_multiple_concurrent_subscribers_get_same_frames(
 
 async def test_cancel_run_terminates_producer_and_unblocks_subscribers(
 	monkeypatch: pytest.MonkeyPatch,
-	fake_principal: object,
+	fake_principal: Principal,
 	thread_id: TypeID,
 	agent_id: TypeID,
 ) -> None:
@@ -254,7 +262,7 @@ async def test_cancel_run_terminates_producer_and_unblocks_subscribers(
 	run_id = await runs_service._start_run(
 		thread_id=thread_id,
 		agent_id=agent_id,
-		principal=fake_principal,  # type: ignore[arg-type]
+		principal=fake_principal,
 		input=None,
 		parent_id=None,
 		client_context=None,
@@ -290,7 +298,7 @@ async def test_cancel_run_terminates_producer_and_unblocks_subscribers(
 
 async def test_late_subscriber_after_eviction_raises_unknown_run(
 	monkeypatch: pytest.MonkeyPatch,
-	fake_principal: object,
+	fake_principal: Principal,
 	thread_id: TypeID,
 	agent_id: TypeID,
 ) -> None:
@@ -309,7 +317,7 @@ async def test_late_subscriber_after_eviction_raises_unknown_run(
 	run_id = await runs_service._start_run(
 		thread_id=thread_id,
 		agent_id=agent_id,
-		principal=fake_principal,  # type: ignore[arg-type]
+		principal=fake_principal,
 		input=None,
 		parent_id=None,
 		client_context=None,
@@ -343,7 +351,7 @@ async def test_late_subscriber_after_eviction_raises_unknown_run(
 
 async def test_state_is_running_while_first_subscriber_attached(
 	monkeypatch: pytest.MonkeyPatch,
-	fake_principal: object,
+	fake_principal: Principal,
 	thread_id: TypeID,
 	agent_id: TypeID,
 ) -> None:
@@ -354,7 +362,7 @@ async def test_state_is_running_while_first_subscriber_attached(
 	run_id = await runs_service._start_run(
 		thread_id=thread_id,
 		agent_id=agent_id,
-		principal=fake_principal,  # type: ignore[arg-type]
+		principal=fake_principal,
 		input=None,
 		parent_id=None,
 		client_context=None,
@@ -370,3 +378,79 @@ async def test_state_is_running_while_first_subscriber_attached(
 	# drain so we don't leak the task
 	async for _ in runs_service.subscribe_run_stream(run_id):
 		pass
+
+
+async def test_producer_startup_crash_broadcasts_run_error(
+	monkeypatch: pytest.MonkeyPatch,
+	thread_id: TypeID,
+	agent_id: TypeID,
+) -> None:
+	"""outer producer failures clear global run state via run.error broadcast."""
+	user_id = TypeID(new_typeid("user"))
+	principal = Principal(
+		user=User(
+			id=user_id,
+			email="startup-crash@example.test",
+			username="startup-crash",
+			display_name=None,
+			bio=None,
+			avatar_url=None,
+			hashed_password="x",
+		),
+		group_ids=(),
+		permissions=frozenset(),
+	)
+	seen_broadcasts: list[tuple[TypeID, TypeID, TypeID, bool, bool]] = []
+
+	async def crashing_run_agent(
+		thread_id: TypeID,
+		agent_id: TypeID,
+		principal: Principal,
+		run_id_override: TypeID,
+		ready_event: asyncio.Event,
+		**_kwargs: object,
+	) -> AsyncGenerator[bytes]:
+		await run_status_store.start_run(
+			run_id=run_id_override,
+			thread_id=thread_id,
+			agent_id=agent_id,
+			user_id=principal.user_id,
+		)
+		current = asyncio.current_task()
+		if current is not None:
+			await run_status_store.attach_task(run_id_override, current)
+		ready_event.set()
+		raise RuntimeError("boom")
+		if False:
+			yield b""
+
+	async def fake_broadcast_run_event(
+		thread_id: TypeID,
+		agent_id: TypeID,
+		run_id: TypeID,
+		started: bool,
+		error: bool = False,
+	) -> None:
+		seen_broadcasts.append((thread_id, agent_id, run_id, started, error))
+
+	monkeypatch.setattr(runs_service, "run_agent", crashing_run_agent)
+	monkeypatch.setattr(runs_service, "broadcast_run_event", fake_broadcast_run_event)
+
+	run_id = await runs_service._start_run(
+		thread_id=thread_id,
+		agent_id=agent_id,
+		principal=principal,
+		input=None,
+		parent_id=None,
+		client_context=None,
+		origin_session_id=None,
+		tool_choice=None,
+	)
+
+	for _attempt in range(50):
+		if seen_broadcasts:
+			break
+		await asyncio.sleep(0.02)
+
+	assert await run_status_store.get_run(run_id) is None
+	assert seen_broadcasts == [(thread_id, agent_id, run_id, False, True)]

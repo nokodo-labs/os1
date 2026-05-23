@@ -301,12 +301,20 @@ async def test_publish_task_event_routes_by_user_scope(
 	assert captured == [(None, user.id, False)]
 
 
+@pytest.mark.parametrize(
+	"event_type",
+	[
+		EventType.TOOL_PROGRESS,
+		EventType.RUN_ACTIVITY_PROGRESS,
+	],
+)
 @pytest.mark.asyncio
-async def test_tool_progress_routes_to_thread_readers(
+async def test_thread_progress_events_route_to_thread_readers(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
+	event_type: EventType,
 ) -> None:
-	"""Tool progress events use thread ACL fan-out, including readers."""
+	"""Thread progress events use thread ACL fan-out, including readers."""
 	owner = User(
 		email="tool_owner@example.com",
 		username="tool_owner",
@@ -374,7 +382,7 @@ async def test_tool_progress_routes_to_thread_readers(
 		Event(
 			scope=EventScope.THREAD,
 			scope_id=thread.id,
-			type=EventType.TOOL_PROGRESS,
+			type=event_type,
 			data={"thread_id": str(thread.id), "tool_call_id": "call_1"},
 			user_id=owner.id,
 			thread_id=thread.id,

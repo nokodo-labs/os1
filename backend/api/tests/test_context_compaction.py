@@ -1,4 +1,4 @@
-"""tests for the context windowing filter and Layer 2 combined tool budget."""
+"""tests for the context compaction filter and Layer 2 combined tool budget."""
 
 from __future__ import annotations
 
@@ -7,12 +7,14 @@ from unittest.mock import AsyncMock, MagicMock, _patch, patch
 import pytest
 
 from api.local_tasks import _on_task_done
-from api.v1.service.chat.filters.context_windowing import (
-	ContextWindowingFilter,
-)
-from api.v1.service.chat.windowing import (
-	_COMPACTED_NOTICE,
+from api.models.event_types import EventType
+from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.context_compaction.tool_io import (
+	COMPACTED_TOOL_OUTPUT_NOTICE,
 	enforce_combined_tool_budget,
+)
+from api.v1.service.chat.filters.context_compaction import (
+	ContextCompactionFilter,
 )
 from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.chat_models import ChatModel
@@ -107,9 +109,12 @@ def _thread(*msgs: Message) -> Thread:
 	return Thread(messages=list(msgs))
 
 
-def _agent_context(thread: Thread) -> AgentContext:
+def _state(thread: Thread) -> AgentIterationState[AppContext]:
+	return AgentIterationState[AppContext](thread=thread, tools=[])
+
+
+def _agent_context() -> AgentContext:
 	return AgentContext(
-		thread=thread,
 		model=ChatModel.model_construct(model_name="test"),
 	)
 
@@ -126,6 +131,9 @@ def _mock_ctx(
 	ctx.context_window = context_window
 	ctx.session = AsyncMock()
 	ctx.principal = MagicMock()
+	ctx.event_emitter = AsyncMock()
+	ctx.run_id = None
+	ctx.user_id = TypeID("usr_123")
 	return ctx
 
 
@@ -172,9 +180,9 @@ class TestEnforceCombinedToolBudget:
 		ws.tool_results_combined_max_share = combined_share
 		ws.response_headroom = headroom
 		mock_settings = MagicMock()
-		mock_settings.ai.windowing = ws
+		mock_settings.ai.context_compaction = ws
 		return patch(
-			"api.v1.service.chat.windowing.app_settings",
+			"api.v1.service.chat.context_compaction.tool_io.app_settings",
 			mock_settings,
 		)
 
@@ -216,8 +224,12 @@ class TestEnforceCombinedToolBudget:
 
 		# some oldest tool results should be compacted
 		tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
-		compacted = [m for m in tool_msgs if m.tool_output == _COMPACTED_NOTICE]
-		preserved = [m for m in tool_msgs if m.tool_output != _COMPACTED_NOTICE]
+		compacted = [
+			m for m in tool_msgs if m.tool_output == COMPACTED_TOOL_OUTPUT_NOTICE
+		]
+		preserved = [
+			m for m in tool_msgs if m.tool_output != COMPACTED_TOOL_OUTPUT_NOTICE
+		]
 
 		assert len(compacted) > 0, "at least one tool result should be compacted"
 		assert len(preserved) > 0, "at least one tool result should be preserved"
@@ -225,12 +237,14 @@ class TestEnforceCombinedToolBudget:
 		compacted_indices = [
 			i
 			for i, m in enumerate(result.messages)
-			if isinstance(m, ToolMessage) and m.tool_output == _COMPACTED_NOTICE
+			if isinstance(m, ToolMessage)
+			and m.tool_output == COMPACTED_TOOL_OUTPUT_NOTICE
 		]
 		preserved_indices = [
 			i
 			for i, m in enumerate(result.messages)
-			if isinstance(m, ToolMessage) and m.tool_output != _COMPACTED_NOTICE
+			if isinstance(m, ToolMessage)
+			and m.tool_output != COMPACTED_TOOL_OUTPUT_NOTICE
 		]
 		assert max(compacted_indices) < max(preserved_indices), (
 			"compacted results should be older (earlier) than preserved"
@@ -241,7 +255,7 @@ class TestEnforceCombinedToolBudget:
 		thread = _thread(
 			_sys("s"),
 			_user("q"),
-			_tool(_COMPACTED_NOTICE, "c1"),
+			_tool(COMPACTED_TOOL_OUTPUT_NOTICE, "c1"),
 			_tool("x" * 200, "c2"),
 			_assistant("done"),
 		)
@@ -251,7 +265,7 @@ class TestEnforceCombinedToolBudget:
 
 		# the already-compacted tool should still show the notice
 		tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
-		assert tool_msgs[0].tool_output == _COMPACTED_NOTICE
+		assert tool_msgs[0].tool_output == COMPACTED_TOOL_OUTPUT_NOTICE
 
 	def test_compaction_skips_already_compacted_in_loop(self) -> None:
 		"""when over budget and oldest result is already compacted, skip it."""
@@ -263,7 +277,7 @@ class TestEnforceCombinedToolBudget:
 		thread = _thread(
 			_sys("s"),
 			_user("q"),
-			_tool(_COMPACTED_NOTICE, "c0"),  # already compacted
+			_tool(COMPACTED_TOOL_OUTPUT_NOTICE, "c0"),  # already compacted
 			_tool(big_output, "c1"),  # should be compacted
 			_tool(big_output, "c2"),  # may be compacted
 			_assistant("done"),
@@ -274,10 +288,10 @@ class TestEnforceCombinedToolBudget:
 
 		tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
 		# first tool was already compacted and should remain so
-		assert tool_msgs[0].tool_output == _COMPACTED_NOTICE
+		assert tool_msgs[0].tool_output == COMPACTED_TOOL_OUTPUT_NOTICE
 		# at least one of the non-compacted tools should now be compacted
 		newly_compacted = [
-			m for m in tool_msgs[1:] if m.tool_output == _COMPACTED_NOTICE
+			m for m in tool_msgs[1:] if m.tool_output == COMPACTED_TOOL_OUTPUT_NOTICE
 		]
 		assert len(newly_compacted) > 0
 
@@ -331,72 +345,68 @@ class TestEnforceCombinedToolBudget:
 		assert result is not thread
 
 
-# -- ContextWindowingFilter --
+# -- ContextCompactionFilter --
 
 
-class TestContextWindowingFilter:
-	"""tests for the ContextWindowingFilter."""
+class TestContextCompactionFilter:
+	"""tests for the ContextCompactionFilter."""
 
 	def test_default_fields(self) -> None:
-		f = ContextWindowingFilter()
-		assert f.name == "context_windowing"
+		f = ContextCompactionFilter()
+		assert f.name == "context_compaction"
 
 	@pytest.mark.asyncio()
 	async def test_none_context_skips(self) -> None:
 		"""when app_context is None, thread is returned unchanged."""
-		f = ContextWindowingFilter()
+		f = ContextCompactionFilter()
 		thread = _thread(_user("hi"))
-		state = AgentIterationState(thread=thread, tools=[])
-		result = await f.process(state, _agent_context(thread), None)
+		state = _state(thread)
+		result = await f.process(state, _agent_context(), None)
 		assert result is state
 
 	@pytest.mark.asyncio()
-	async def test_no_thread_id_skips_windowing(self) -> None:
-		"""ephemeral runs with no thread_id skip full windowing."""
-		f = ContextWindowingFilter()
+	async def test_no_thread_id_skips_compaction(self) -> None:
+		"""ephemeral runs with no thread_id skip full compaction."""
+		f = ContextCompactionFilter()
 		thread = _thread(_sys("system"), _user("hi"))
 		ctx = _mock_ctx(thread_id=None)
-		state = AgentIterationState(thread=thread, tools=[])
+		state = _state(thread)
 
-		result = await f.process(state, _agent_context(thread), ctx)
+		result = await f.process(state, _agent_context(), ctx)
 		assert result is state
 
 	@pytest.mark.asyncio()
-	async def test_first_pass_calls_windowing(self) -> None:
-		"""first call triggers full windowing."""
-		f = ContextWindowingFilter()
+	async def test_first_pass_calls_compaction(self) -> None:
+		"""first call triggers full compaction."""
+		f = ContextCompactionFilter()
 		ctx = _mock_ctx()
 		thread = _thread(_sys("system"), _user("hi"))
 
-		mock_windowing_result = MagicMock()
-		mock_windowing_result.thread = thread
-		mock_windowing_result.needs_summarization = False
-		mock_windowing_result.summarize_messages = []
+		mock_compaction_result = MagicMock()
+		mock_compaction_result.thread = thread
+		mock_compaction_result.needs_summarization = False
+		mock_compaction_result.summarize_messages = []
 
 		with (
 			patch(
-				"api.v1.service.chat.filters.context_windowing.apply_context_windowing",
-				AsyncMock(return_value=mock_windowing_result),
+				"api.v1.service.chat.filters.context_compaction.apply_context_compaction",
+				AsyncMock(return_value=mock_compaction_result),
 			) as mock_aw,
 			patch(
-				"api.v1.service.chat.filters.context_windowing.summary_service"
+				"api.v1.service.chat.filters.context_compaction.summary_service"
 			) as mock_svc,
-			patch(
-				"api.v1.service.chat.filters.context_windowing.enforce_combined_tool_budget",
-				return_value=thread,
-			),
 		):
 			mock_svc.count_active_summaries = AsyncMock(return_value=0)
-			state = AgentIterationState(thread=thread, tools=[])
-			result = await f.process(state, _agent_context(thread), ctx)
+			state = _state(thread)
+			result = await f.process(state, _agent_context(), ctx)
 
 		mock_aw.assert_called_once()
 		assert result.thread is thread
 
 	@pytest.mark.asyncio()
-	async def test_second_pass_is_guard_only(self) -> None:
-		"""second call runs only the Layer 2 guard, not full windowing."""
-		f = ContextWindowingFilter()
+	async def test_later_iteration_runs_full_compaction(self) -> None:
+		"""second call reruns the full budget cascade."""
+		f = ContextCompactionFilter()
 		ctx = _mock_ctx()
 		thread = _thread(_sys("s"), _user("hi"))
 
@@ -407,33 +417,161 @@ class TestContextWindowingFilter:
 
 		with (
 			patch(
-				"api.v1.service.chat.filters.context_windowing.apply_context_windowing",
+				"api.v1.service.chat.filters.context_compaction.apply_context_compaction",
 				AsyncMock(return_value=mock_wr),
 			) as mock_aw,
 			patch(
-				"api.v1.service.chat.filters.context_windowing.summary_service"
+				"api.v1.service.chat.filters.context_compaction.summary_service"
 			) as mock_svc,
-			patch(
-				"api.v1.service.chat.filters.context_windowing.enforce_combined_tool_budget",
-				return_value=thread,
-			) as mock_guard,
 		):
 			mock_svc.count_active_summaries = AsyncMock(return_value=0)
-			state = AgentIterationState(thread=thread, tools=[])
+			state = _state(thread)
 
-			# first call: full windowing
-			await f.process(state, _agent_context(thread), ctx)
+			# first iteration: full compaction
+			await f.process(state, _agent_context(), ctx)
 			assert mock_aw.call_count == 1
 
-			# second call: guard only
-			await f.process(state, _agent_context(thread), ctx)
-			assert mock_aw.call_count == 1  # not called again
-			assert mock_guard.call_count == 2  # called both times
+			# later iteration: full cascade again
+			state.iteration = 1
+			await f.process(state, _agent_context(), ctx)
+			assert mock_aw.call_count == 2
+
+	@pytest.mark.asyncio()
+	async def test_first_iteration_is_stateless_across_runs(self) -> None:
+		"""same filter instance can first-pass multiple runs independently."""
+		f = ContextCompactionFilter()
+		ctx = _mock_ctx()
+		thread = _thread(_sys("s"), _user("hi"))
+
+		mock_wr = MagicMock()
+		mock_wr.thread = thread
+		mock_wr.needs_summarization = False
+		mock_wr.summarize_messages = []
+
+		with (
+			patch(
+				"api.v1.service.chat.filters.context_compaction.apply_context_compaction",
+				AsyncMock(return_value=mock_wr),
+			) as mock_aw,
+			patch(
+				"api.v1.service.chat.filters.context_compaction.summary_service"
+			) as mock_svc,
+		):
+			mock_svc.count_active_summaries = AsyncMock(return_value=0)
+			state = _state(thread)
+
+			await f.process(state, _agent_context(), ctx)
+			await f.process(state, _agent_context(), ctx)
+
+		assert mock_aw.call_count == 2
+
+	@pytest.mark.asyncio()
+	async def test_blocking_compaction_emits_lifecycle_events(self) -> None:
+		"""blocking compaction progress emits run context lifecycle events."""
+		f = ContextCompactionFilter()
+		ctx = _mock_ctx()
+		ctx.run_id = TypeID("run_123")
+		captured = []
+
+		async def event_emitter(event):
+			captured.append(event)
+
+		ctx.event_emitter = event_emitter
+		thread = _thread(_sys("s"), _user("hi", "msg_user"))
+
+		async def fake_compaction(*args, **kwargs):
+			_ = args
+			await kwargs["progress_callback"](15, "compacting context")
+			result = MagicMock()
+			result.thread = thread
+			result.needs_summarization = False
+			result.summarize_messages = []
+			result.summary_count = 1
+			result.blocking_summary_count = 1
+			result.dropped_count = 0
+			result.compacted_tool_call_count = 0
+			result.compacted_tool_result_count = 0
+			result.compacted_tool_run_count = 0
+			result.total_tokens = 100
+			result.budget_tokens = 200
+			return result
+
+		with (
+			patch(
+				"api.v1.service.chat.filters.context_compaction.apply_context_compaction",
+				AsyncMock(side_effect=fake_compaction),
+			),
+			patch(
+				"api.v1.service.chat.filters.context_compaction.summary_service"
+			) as mock_svc,
+		):
+			mock_svc.count_active_summaries = AsyncMock(return_value=0)
+			state = _state(thread)
+
+			await f.process(state, _agent_context(), ctx)
+
+		assert [event.type for event in captured] == [
+			EventType.RUN_ACTIVITY_STARTED,
+			EventType.RUN_ACTIVITY_PROGRESS,
+			EventType.RUN_ACTIVITY_ENDED,
+		]
+		assert captured[0].thread_id == str(_TID)
+		assert captured[0].data["run_id"] == "run_123"
+		assert captured[0].message_id == "msg_user"
+		assert captured[0].data["activity_type"] == "context_compaction"
+		assert captured[0].data["title"] == "compacting chat"
+		assert captured[2].data["activity_id"] == captured[0].data["activity_id"]
+		assert captured[2].data["outcome"] == "success"
+
+	@pytest.mark.asyncio()
+	async def test_non_blocking_compaction_does_not_emit_lifecycle_events(
+		self,
+	) -> None:
+		"""non-blocking compaction stays invisible to chat UI events."""
+		f = ContextCompactionFilter()
+		ctx = _mock_ctx()
+		ctx.run_id = TypeID("run_123")
+		captured = []
+
+		async def event_emitter(event):
+			captured.append(event)
+
+		ctx.event_emitter = event_emitter
+		thread = _thread(_sys("s"), _user("hi", "msg_user"))
+
+		async def fake_compaction(*args, **kwargs):
+			_ = (args, kwargs)
+			result = MagicMock()
+			result.thread = thread
+			result.needs_summarization = False
+			result.summarize_messages = []
+			result.summary_count = 1
+			result.blocking_summary_count = 0
+			result.dropped_count = 0
+			result.total_tokens = 100
+			result.budget_tokens = 200
+			return result
+
+		with (
+			patch(
+				"api.v1.service.chat.filters.context_compaction.apply_context_compaction",
+				AsyncMock(side_effect=fake_compaction),
+			),
+			patch(
+				"api.v1.service.chat.filters.context_compaction.summary_service"
+			) as mock_svc,
+		):
+			mock_svc.count_active_summaries = AsyncMock(return_value=0)
+			state = _state(thread)
+
+			await f.process(state, _agent_context(), ctx)
+
+		assert captured == []
 
 	@pytest.mark.asyncio()
 	async def test_schedules_summarization_when_needed(self) -> None:
-		"""when windowing says summarization is needed, enqueues a durable task."""
-		f = ContextWindowingFilter()
+		"""when compaction says summarization is needed, enqueues a durable task."""
+		f = ContextCompactionFilter()
 		ctx = _mock_ctx()
 		thread = _thread(_sys("s"), _user("hi"))
 
@@ -446,32 +584,28 @@ class TestContextWindowingFilter:
 
 		with (
 			patch(
-				"api.v1.service.chat.filters.context_windowing.apply_context_windowing",
+				"api.v1.service.chat.filters.context_compaction.apply_context_compaction",
 				AsyncMock(return_value=mock_wr),
 			),
 			patch(
-				"api.v1.service.chat.filters.context_windowing.summary_service"
+				"api.v1.service.chat.filters.context_compaction.summary_service"
 			) as mock_svc,
 			patch(
-				"api.v1.service.chat.filters.context_windowing.enforce_combined_tool_budget",
-				return_value=thread,
-			),
-			patch(
-				"api.v1.service.chat.filters.context_windowing.start_summarize_messages_task",
+				"api.v1.service.chat.filters.context_compaction.start_summarize_messages_task",
 				new_callable=AsyncMock,
 			) as mock_start_summary,
 		):
 			mock_svc.count_active_summaries = AsyncMock(return_value=0)
-			state = AgentIterationState(thread=thread, tools=[])
+			state = _state(thread)
 
-			await f.process(state, _agent_context(thread), ctx)
+			await f.process(state, _agent_context(), ctx)
 
 			mock_start_summary.assert_awaited_once()
 
 	@pytest.mark.asyncio()
 	async def test_schedules_condensation_when_threshold_met(self) -> None:
 		"""when summary count >= threshold, schedules condensation task."""
-		f = ContextWindowingFilter()
+		f = ContextCompactionFilter()
 		ctx = _mock_ctx()
 		thread = _thread(_sys("s"), _user("hi"))
 
@@ -484,36 +618,34 @@ class TestContextWindowingFilter:
 
 		with (
 			patch(
-				"api.v1.service.chat.filters.context_windowing.apply_context_windowing",
+				"api.v1.service.chat.filters.context_compaction.apply_context_compaction",
 				AsyncMock(return_value=mock_wr),
 			),
 			patch(
-				"api.v1.service.chat.filters.context_windowing.summary_service"
+				"api.v1.service.chat.filters.context_compaction.summary_service"
 			) as mock_svc,
 			patch(
-				"api.v1.service.chat.filters.context_windowing.enforce_combined_tool_budget",
-				return_value=thread,
-			),
-			patch(
-				"api.v1.service.chat.filters.context_windowing.app_settings"
+				"api.v1.service.chat.filters.context_compaction.app_settings"
 			) as mock_settings,
 			patch(
-				"api.v1.service.chat.filters.context_windowing.start_condense_summaries_task",
+				"api.v1.service.chat.filters.context_compaction.start_condense_summaries_task",
 				new_callable=AsyncMock,
 			) as mock_start_condense,
 		):
-			mock_settings.ai.windowing.max_summaries_before_condense = threshold_val
+			mock_settings.ai.context_compaction.max_summaries_before_condense = (
+				threshold_val
+			)
 			mock_svc.count_active_summaries = AsyncMock(return_value=threshold_val)
-			state = AgentIterationState(thread=thread, tools=[])
+			state = _state(thread)
 
-			await f.process(state, _agent_context(thread), ctx)
+			await f.process(state, _agent_context(), ctx)
 
 			mock_start_condense.assert_awaited_once()
 
 	@pytest.mark.asyncio()
 	async def test_skips_summarization_when_message_ids_missing(self) -> None:
 		"""summarization is skipped when persisted message ids are unavailable."""
-		f = ContextWindowingFilter()
+		f = ContextCompactionFilter()
 		ctx = _mock_ctx()
 		thread = _thread(_sys("s"), _user("hi"))
 
@@ -526,25 +658,21 @@ class TestContextWindowingFilter:
 
 		with (
 			patch(
-				"api.v1.service.chat.filters.context_windowing.apply_context_windowing",
+				"api.v1.service.chat.filters.context_compaction.apply_context_compaction",
 				AsyncMock(return_value=mock_wr),
 			),
 			patch(
-				"api.v1.service.chat.filters.context_windowing.summary_service"
+				"api.v1.service.chat.filters.context_compaction.summary_service"
 			) as mock_svc,
 			patch(
-				"api.v1.service.chat.filters.context_windowing.enforce_combined_tool_budget",
-				return_value=thread,
-			),
-			patch(
-				"api.v1.service.chat.filters.context_windowing.start_summarize_messages_task",
+				"api.v1.service.chat.filters.context_compaction.start_summarize_messages_task",
 				new_callable=AsyncMock,
 			) as mock_start_summary,
 		):
 			mock_svc.count_active_summaries = AsyncMock(return_value=0)
-			state = AgentIterationState(thread=thread, tools=[])
+			state = _state(thread)
 
-			await f.process(state, _agent_context(thread), ctx)
+			await f.process(state, _agent_context(), ctx)
 
 			mock_start_summary.assert_not_awaited()
 
@@ -558,7 +686,7 @@ class TestCondensationSizeCap:
 	@pytest.mark.asyncio()
 	async def test_large_input_is_truncated(self) -> None:
 		"""when combined summary text exceeds the cap, it is truncated."""
-		from api.v1.service.chat.summarization import (
+		from api.v1.service.chat.context_compaction.summarization import (
 			_MAX_CONDENSATION_INPUT_CHARS,
 			condense_summaries,
 		)
@@ -583,16 +711,20 @@ class TestCondensationSizeCap:
 		]
 
 		mock_model = AsyncMock()
-		mock_model.generate.return_value = "condensed result"
+		mock_response = MagicMock()
+		mock_response.json_content = {"summary": "condensed result"}
+		mock_model.generate = AsyncMock(return_value=mock_response)
 		condensed_mock = MagicMock()
 		condensed_mock.id = "tsum_condensed"
 
 		with (
 			patch(
-				"api.v1.service.chat.summarization.resolve_task_chat_model",
+				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(return_value=mock_model),
 			),
-			patch("api.v1.service.chat.summarization.summary_service") as mock_svc,
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.summary_service"
+			) as mock_svc,
 		):
 			mock_svc.list_active_summaries = AsyncMock(return_value=existing)
 			mock_svc.create_summary = AsyncMock(return_value=condensed_mock)

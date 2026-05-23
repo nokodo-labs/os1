@@ -12,7 +12,12 @@ from api.models.agent import Agent
 from api.models.model import ModelType
 from api.models.user import User
 from api.permissions import AccessLevel
-from api.schemas.agent import AgentConfig, AgentCreate, AgentUpdate
+from api.schemas.agent import (
+	DEFAULT_AGENT_PLUGIN_IDS,
+	AgentConfig,
+	AgentCreate,
+	AgentUpdate,
+)
 from api.schemas.model import ModelCreate
 from api.schemas.provider import ProviderCreate
 from api.v1.service import agents as agent_service
@@ -56,6 +61,25 @@ async def test_create_agent(db_session: AsyncSession) -> None:
 		principal=principal,
 	)
 	assert agent.name == "test-agent"
+	assert agent.plugin_ids == []
+
+
+def test_agent_create_defaults_runtime_filters() -> None:
+	agent_in = AgentCreate(name="default-filter-agent")
+	assert agent_in.plugin_ids == list(DEFAULT_AGENT_PLUGIN_IDS)
+
+
+@pytest.mark.asyncio
+async def test_create_agent_persists_default_plugins(
+	db_session: AsyncSession,
+) -> None:
+	principal = await _principal(db_session, is_admin=True)
+	agent = await agent_service.create_agent(
+		AgentCreate(name="agent-default-plugins"),
+		db_session,
+		principal=principal,
+	)
+	assert agent.plugin_ids == list(DEFAULT_AGENT_PLUGIN_IDS)
 
 
 @pytest.mark.asyncio

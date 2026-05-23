@@ -788,6 +788,9 @@ async def test_build_agent_from_orm_uses_chat_model_config(
 	assert sdk_agent.chat_model.top_p == 0.9
 	assert sdk_agent.chat_model.reasoning_effort == "none"
 	assert sdk_agent.max_iterations == 7
+	assert sdk_agent.filters == []
+	assert sdk_agent.hooks == []
+	assert sdk_agent.tools == []
 
 
 def test_chat_service_orm_to_sdk_variants() -> None:

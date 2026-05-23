@@ -15,6 +15,7 @@ from api.models.access_rule import AccessLevel, AccessRule
 from api.models.message import Message, MessageType
 from api.models.project import Project
 from api.models.thread import Thread
+from api.models.thread_summary import SummaryPurpose, ThreadSummary
 from api.models.user import User
 from api.schemas.content import TextContent
 from api.schemas.message import MessageCreate
@@ -23,6 +24,7 @@ from api.settings import settings
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
 from api.v1.service.threads import core as thread_core_service
+from api.v1.service.threads import summaries as summary_service
 from api.v1.service.threads.core import _load_thread, _message_event_data
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
@@ -521,6 +523,361 @@ async def test_create_thread_invalid_project(
 	resp = await client.post("/v1/threads", json=thread_payload, headers=headers)
 	assert resp.status_code == 404
 	assert "projects not found" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_thread_summary_visibility(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+	admin_auth: dict[str, object],
+	db_session: AsyncSession,
+) -> None:
+	"""users see catalog summaries; agent summaries are admin-only."""
+	user_headers = user_auth["headers"]
+	assert isinstance(user_headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+	admin_headers = admin_auth["headers"]
+	assert isinstance(admin_headers, dict)
+
+	thread_resp = await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "summary visibility"},
+		headers=user_headers,
+	)
+	assert thread_resp.status_code == 201
+	thread_id = TypeID(thread_resp.json()["id"])
+
+	agent_summary = ThreadSummary(
+		thread_id=thread_id,
+		purpose=SummaryPurpose.AGENT_CONTEXT,
+		content="private agent context",
+		message_count=2,
+	)
+	catalog_summary = ThreadSummary(
+		thread_id=thread_id,
+		purpose=SummaryPurpose.CATALOG,
+		content="visible catalog summary",
+		message_count=2,
+	)
+	db_session.add_all([agent_summary, catalog_summary])
+	await db_session.commit()
+	await db_session.refresh(agent_summary)
+	await db_session.refresh(catalog_summary)
+
+	user_list = await client.get(
+		f"/v1/threads/{thread_id}/summaries",
+		headers=user_headers,
+	)
+	assert user_list.status_code == 200
+	user_items = user_list.json()
+	assert [item["id"] for item in user_items] == [catalog_summary.id]
+
+	user_agent_list = await client.get(
+		f"/v1/threads/{thread_id}/summaries",
+		params={"purpose": SummaryPurpose.AGENT_CONTEXT.value},
+		headers=user_headers,
+	)
+	assert user_agent_list.status_code == 403
+
+	user_agent_get = await client.get(
+		f"/v1/threads/{thread_id}/summaries/{agent_summary.id}",
+		headers=user_headers,
+	)
+	assert user_agent_get.status_code == 403
+
+	user_catalog_get = await client.get(
+		f"/v1/threads/{thread_id}/summaries/{catalog_summary.id}",
+		headers=user_headers,
+	)
+	assert user_catalog_get.status_code == 200
+	assert user_catalog_get.json()["content"] == "visible catalog summary"
+
+	admin_list = await client.get(
+		f"/v1/threads/{thread_id}/summaries",
+		headers=admin_headers,
+	)
+	assert admin_list.status_code == 200
+	assert {item["id"] for item in admin_list.json()} == {
+		agent_summary.id,
+		catalog_summary.id,
+	}
+
+
+@pytest.mark.asyncio
+async def test_admin_updates_and_deletes_thread_summary(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+	admin_auth: dict[str, object],
+	db_session: AsyncSession,
+) -> None:
+	"""admins can edit and delete stored summaries."""
+	user_headers = user_auth["headers"]
+	assert isinstance(user_headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+	admin_headers = admin_auth["headers"]
+	assert isinstance(admin_headers, dict)
+
+	thread_resp = await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "summary admin"},
+		headers=user_headers,
+	)
+	assert thread_resp.status_code == 201
+	thread_id = TypeID(thread_resp.json()["id"])
+
+	summary = ThreadSummary(
+		thread_id=thread_id,
+		purpose=SummaryPurpose.AGENT_CONTEXT,
+		content="old summary",
+		message_count=3,
+	)
+	db_session.add(summary)
+	await db_session.commit()
+	await db_session.refresh(summary)
+
+	user_patch = await client.patch(
+		f"/v1/threads/{thread_id}/summaries/{summary.id}",
+		json={"content": "user edit"},
+		headers=user_headers,
+	)
+	assert user_patch.status_code == 403
+
+	admin_patch = await client.patch(
+		f"/v1/threads/{thread_id}/summaries/{summary.id}",
+		json={"content": "updated summary"},
+		headers=admin_headers,
+	)
+	assert admin_patch.status_code == 200
+	assert admin_patch.json()["content"] == "updated summary"
+
+	admin_delete = await client.delete(
+		f"/v1/threads/{thread_id}/summaries/{summary.id}",
+		headers=admin_headers,
+	)
+	assert admin_delete.status_code == 204
+
+	admin_get = await client.get(
+		f"/v1/threads/{thread_id}/summaries/{summary.id}",
+		headers=admin_headers,
+	)
+	assert admin_get.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_summary_invalidation_only_deletes_overlapping_ranges(
+	db_session: AsyncSession,
+	user_auth: dict[str, object],
+) -> None:
+	"""message edits invalidate summaries whose covered message span overlaps."""
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+	now = datetime.now(UTC)
+	thread = Thread(
+		id=TypeID(new_typeid("thread")),
+		owner_id=user["id"],
+		title="summary invalidation",
+	)
+	db_session.add(thread)
+	await db_session.flush()
+	message_1 = Message(
+		id=TypeID(new_typeid("msg")),
+		thread_id=thread.id,
+		parent_id=None,
+		task_id=None,
+		sender_agent_id=None,
+		sender_user_id=user["id"],
+		type=MessageType.USER,
+		content=[{"type": "text", "text": "first"}],
+		tool_call_id=None,
+		is_error=None,
+		tool_calls=[],
+		usage=None,
+		read_by=[],
+		citations=[],
+		metadata_={},
+		created_at=now,
+		updated_at=now,
+	)
+	db_session.add(message_1)
+	await db_session.flush()
+	message_2 = Message(
+		id=TypeID(new_typeid("msg")),
+		thread_id=thread.id,
+		parent_id=message_1.id,
+		task_id=None,
+		sender_agent_id=None,
+		sender_user_id=user["id"],
+		type=MessageType.USER,
+		content=[{"type": "text", "text": "second"}],
+		tool_call_id=None,
+		is_error=None,
+		tool_calls=[],
+		usage=None,
+		read_by=[],
+		citations=[],
+		metadata_={},
+		created_at=now,
+		updated_at=now,
+	)
+	db_session.add(message_2)
+	await db_session.flush()
+	message_3 = Message(
+		id=TypeID(new_typeid("msg")),
+		thread_id=thread.id,
+		parent_id=message_2.id,
+		task_id=None,
+		sender_agent_id=None,
+		sender_user_id=user["id"],
+		type=MessageType.USER,
+		content=[{"type": "text", "text": "third"}],
+		tool_call_id=None,
+		is_error=None,
+		tool_calls=[],
+		usage=None,
+		read_by=[],
+		citations=[],
+		metadata_={},
+		created_at=now,
+		updated_at=now,
+	)
+	db_session.add(message_3)
+	await db_session.flush()
+	thread.current_message_id = message_3.id
+	kept = ThreadSummary(
+		thread_id=thread.id,
+		purpose=SummaryPurpose.AGENT_CONTEXT,
+		content="covers only first",
+		message_count=1,
+		start_message_id=message_1.id,
+		end_message_id=message_1.id,
+	)
+	removed = ThreadSummary(
+		thread_id=thread.id,
+		purpose=SummaryPurpose.AGENT_CONTEXT,
+		content="covers second and third",
+		message_count=2,
+		start_message_id=message_2.id,
+		end_message_id=message_3.id,
+	)
+	db_session.add_all([kept, removed])
+	await db_session.flush()
+
+	count = await summary_service.delete_stale_summaries_for_thread(
+		thread.id,
+		db_session,
+		changed_message_ids=[message_2.id],
+	)
+
+	assert count == 1
+	assert await db_session.get(ThreadSummary, kept.id) is not None
+	assert await db_session.get(ThreadSummary, removed.id) is None
+
+
+@pytest.mark.asyncio
+async def test_active_end_invalidation_deletes_null_ended_summaries(
+	db_session: AsyncSession,
+	user_auth: dict[str, object],
+) -> None:
+	"""branch switches delete catalog summaries that cannot prove active coverage."""
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+	now = datetime.now(UTC)
+	thread = Thread(
+		id=TypeID(new_typeid("thread")),
+		owner_id=user["id"],
+		title="active summary invalidation",
+	)
+	db_session.add(thread)
+	await db_session.flush()
+	message_1 = Message(
+		id=TypeID(new_typeid("msg")),
+		thread_id=thread.id,
+		parent_id=None,
+		task_id=None,
+		sender_agent_id=None,
+		sender_user_id=user["id"],
+		type=MessageType.USER,
+		content=[{"type": "text", "text": "first"}],
+		tool_call_id=None,
+		is_error=None,
+		tool_calls=[],
+		usage=None,
+		read_by=[],
+		citations=[],
+		metadata_={},
+		created_at=now,
+		updated_at=now,
+	)
+	db_session.add(message_1)
+	await db_session.flush()
+	message_2 = Message(
+		id=TypeID(new_typeid("msg")),
+		thread_id=thread.id,
+		parent_id=message_1.id,
+		task_id=None,
+		sender_agent_id=None,
+		sender_user_id=user["id"],
+		type=MessageType.USER,
+		content=[{"type": "text", "text": "second"}],
+		tool_call_id=None,
+		is_error=None,
+		tool_calls=[],
+		usage=None,
+		read_by=[],
+		citations=[],
+		metadata_={},
+		created_at=now,
+		updated_at=now,
+	)
+	db_session.add(message_2)
+	await db_session.flush()
+	kept = ThreadSummary(
+		thread_id=thread.id,
+		purpose=SummaryPurpose.CATALOG,
+		content="active catalog summary",
+		message_count=2,
+		start_message_id=message_1.id,
+		end_message_id=message_2.id,
+	)
+	stale = ThreadSummary(
+		thread_id=thread.id,
+		purpose=SummaryPurpose.CATALOG,
+		content="old branch catalog summary",
+		message_count=1,
+		start_message_id=message_1.id,
+		end_message_id=message_1.id,
+	)
+	unknown_range = ThreadSummary(
+		thread_id=thread.id,
+		purpose=SummaryPurpose.CATALOG,
+		content="range missing catalog summary",
+		message_count=1,
+	)
+	agent_summary = ThreadSummary(
+		thread_id=thread.id,
+		purpose=SummaryPurpose.AGENT_CONTEXT,
+		content="different purpose summary",
+		message_count=1,
+		start_message_id=message_1.id,
+		end_message_id=message_1.id,
+	)
+	db_session.add_all([kept, stale, unknown_range, agent_summary])
+	await db_session.flush()
+
+	count = await summary_service.delete_stale_summaries_for_thread(
+		thread.id,
+		db_session,
+		purpose=SummaryPurpose.CATALOG,
+		active_end_message_id=message_2.id,
+	)
+
+	assert count == 2
+	assert await db_session.get(ThreadSummary, kept.id) is not None
+	assert await db_session.get(ThreadSummary, stale.id) is None
+	assert await db_session.get(ThreadSummary, unknown_range.id) is None
+	assert await db_session.get(ThreadSummary, agent_summary.id) is not None
 
 
 @pytest.mark.asyncio

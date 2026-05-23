@@ -91,8 +91,8 @@ def _mock_app_ctx(entries: list[Citation] | None = None) -> MagicMock:
 
 
 def _agent_context(thread: Thread) -> AgentContext:
+	_ = thread
 	return AgentContext(
-		thread=thread,
 		model=ChatModel.model_construct(model_name="test"),
 	)
 

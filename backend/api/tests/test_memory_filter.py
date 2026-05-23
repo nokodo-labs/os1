@@ -43,8 +43,8 @@ def _make_memory(
 
 
 def _agent_context(thread: Thread) -> AgentContext:
+	_ = thread
 	return AgentContext(
-		thread=thread,
 		model=ChatModel.model_construct(model_name="test"),
 	)
 

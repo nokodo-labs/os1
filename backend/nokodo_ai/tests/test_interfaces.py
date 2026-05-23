@@ -6,18 +6,19 @@ import pytest
 from pydantic import PrivateAttr, ValidationError
 
 from nokodo_ai import (
+	AgentContext,
+	AgentIterationSnapshot,
 	AssistantMessage,
 	ChatModel,
 	EmbeddingModel,
 	Thread,
-	Tool,
 	ToolMessage,
 	UserMessage,
 	tool,
 )
 from nokodo_ai.adapters.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.adapters.embeddings import BaseEmbeddingAdapter
-from nokodo_ai.context import AgentContext
+from nokodo_ai.context import ToolCallContext
 from nokodo_ai.tool import ToolDefinition
 
 
@@ -251,10 +252,13 @@ async def test_chat_model_streaming_with_tools() -> None:
 
 	@tool(description="noop")
 	def noop(
+		__state__: AgentIterationSnapshot[None],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: None,
 	) -> ToolMessage:
-		tool_call_id, _ = Tool.tool_call_context(__agent_context__)
+		_ = (__state__, __agent_context__, __app_context__)
+		tool_call_id = __tool_call_context__.tool_call_id
 		return ToolMessage(
 			tool_call_id=tool_call_id,
 			tool_output="ok",

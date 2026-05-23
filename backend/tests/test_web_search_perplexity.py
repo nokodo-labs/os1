@@ -24,16 +24,27 @@ from api.v1.service.chat.tools import agentic_web_search as tool_mod
 from api.v1.service.chat.tools.agentic_web_search import AgenticWebSearchTool
 from api.v1.service.chat.tools.web_search import WebSearchTool
 from api.v1.service.web_search.search import is_blacklisted
-from nokodo_ai import ChatModel
-from nokodo_ai.context import AgentContext
+from nokodo_ai import (
+	AgentContext,
+	AgentIterationSnapshot,
+	AgentIterationState,
+	ChatModel,
+)
+from nokodo_ai.context import ToolCallContext
 from nokodo_ai.threads import Thread
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
-def _agent_context(tool_call_id: str) -> AgentContext:
-	return AgentContext(
-		thread=Thread(),
-		model=ChatModel.model_construct(model_name="stub"),
+def _state() -> AgentIterationSnapshot[AppContext]:
+	return AgentIterationState[AppContext](thread=Thread(), tools=[]).snapshot()
+
+
+def _agent_context() -> AgentContext:
+	return AgentContext(model=ChatModel.model_construct(model_name="stub"))
+
+
+def _tool_call_context(tool_call_id: str) -> ToolCallContext:
+	return ToolCallContext(
 		tool_call_id=tool_call_id,
 		tool_call_start_time=0.0,
 	)
@@ -115,7 +126,7 @@ async def test_web_search_tool_returns_citable_sources_and_images(
 		engine="perplexity",
 	)
 	tool = AgenticWebSearchTool()
-	ctx = _agent_context("tool_1")
+	tool_ctx = _tool_call_context("tool_1")
 	events: list[Event] = []
 
 	async def collect_event(event: Event) -> None:
@@ -130,7 +141,9 @@ async def test_web_search_tool_returns_citable_sources_and_images(
 			new=AsyncMock(return_value=result),
 		) as search_mock:
 			message = await tool.call(
-				ctx,
+				_state(),
+				_agent_context(),
+				tool_ctx,
 				app_ctx,
 				query="latest nokodo news",
 				limit=3,
@@ -217,13 +230,19 @@ async def test_standard_search_tool_consumes_configured_search_engine() -> None:
 		],
 	)
 	tool = WebSearchTool(default_limit=3)
-	ctx = _agent_context("web_search_tool_1")
+	tool_ctx = _tool_call_context("web_search_tool_1")
 
 	with patch(
 		"api.v1.service.chat.tools.web_search.search_web",
 		new=AsyncMock(return_value=result),
 	) as engine_mock:
-		message = await tool.call(ctx, None, query="latest nokodo news")
+		message = await tool.call(
+			_state(),
+			_agent_context(),
+			tool_ctx,
+			None,
+			query="latest nokodo news",
+		)
 
 	engine_mock.assert_awaited_once_with(
 		"latest nokodo news",

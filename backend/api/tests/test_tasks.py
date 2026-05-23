@@ -16,6 +16,7 @@ from api.boot_settings import boot_settings
 from api.models.message import Message, MessageType
 from api.models.task import Task, TaskStatus, TaskType
 from api.models.thread import Thread
+from api.models.thread_summary import SummaryPurpose
 from api.schemas.agent import AgentConfig, AgentCreate
 from api.schemas.runs import RunInput
 from api.schemas.task import TaskCreate, TaskListFilters, TaskUpdate
@@ -1301,8 +1302,10 @@ async def test_thread_maintenance_runner_commits_summary_rows(
 		chat_model: object,
 		thread: object,
 		json_schema: dict[str, object],
+		purpose: str = "structured_output",
 	) -> dict[str, object]:
 		_ = (chat_model, thread, json_schema)
+		assert purpose == "thread_maintenance"
 		return {
 			"title": "project notes",
 			"tags": ["project"],
@@ -1315,6 +1318,23 @@ async def test_thread_maintenance_runner_commits_summary_rows(
 	monkeypatch.setattr(
 		thread_maintenance_service, "run_chat_model_json_schema", _run_structured
 	)
+
+	async def _fetch_acl_metadata(*args: object) -> dict[str, object]:
+		return {}
+
+	async def _vectorize_resource(**kwargs: object) -> None:
+		_ = kwargs
+
+	monkeypatch.setattr(
+		thread_maintenance_service,
+		"fetch_acl_metadata",
+		_fetch_acl_metadata,
+	)
+	monkeypatch.setattr(
+		thread_maintenance_service,
+		"vectorize_resource",
+		_vectorize_resource,
+	)
 	context = task_service.TaskContext(
 		task_id=TypeID(task.id),
 		user_id=TypeID(user.id),
@@ -1324,12 +1344,15 @@ async def test_thread_maintenance_runner_commits_summary_rows(
 
 	result = await run_thread_maintenance_task(context)
 	summaries = await summary_service.list_active_summaries(
-		TypeID(thread.id), db_session
+		TypeID(thread.id),
+		db_session,
+		purpose=SummaryPurpose.CATALOG,
 	)
 
 	assert result is not None
 	assert result["summary_updated"] is True
 	assert len(summaries) == 1
+	assert summaries[0].purpose == SummaryPurpose.CATALOG
 	assert summaries[0].content == "The user started a project thread."
 
 
