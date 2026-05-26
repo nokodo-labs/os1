@@ -14,9 +14,6 @@ from nokodo_ai.tool import ToolDefinition
 from nokodo_ai.utils.tokens import compute_available_budget
 
 
-DEFAULT_PROMPT_OVERHEAD_TOKENS = 300
-
-
 def estimate_compaction_message_tokens(message: SDKMessage) -> int:
 	"""estimate prompt-side message cost for compaction decisions."""
 	if isinstance(message, SDKAssistantMessage) and message.tool_calls:
@@ -36,24 +33,16 @@ def tool_definition_tokens(
 	return estimate_tool_definitions_tokens(tool_definitions or ())
 
 
-def setting_int(source: object, name: str, default: int) -> int:
-	"""read an integer setting with a defensive fallback."""
-	value = getattr(source, name, default)
-	if isinstance(value, bool):
-		return default
-	if isinstance(value, int):
-		return value
-	return default
-
-
-def setting_float(source: object, name: str, default: float) -> float:
-	"""read a numeric setting as float with a defensive fallback."""
-	value = getattr(source, name, default)
-	if isinstance(value, bool):
-		return default
-	if isinstance(value, int | float):
-		return float(value)
-	return default
+def effective_context_window(
+	context_window: int | None,
+	target_usage_cap_tokens: int | None,
+) -> int | None:
+	"""apply an optional target usage cap to the model context window."""
+	if target_usage_cap_tokens is None:
+		return context_window
+	if context_window is None:
+		return target_usage_cap_tokens
+	return min(context_window, target_usage_cap_tokens)
 
 
 def budget_for_system(
@@ -95,6 +84,15 @@ def trigger_limit(budget: int, trigger_ratio: float) -> int:
 	return int(budget * trigger_ratio)
 
 
-def summary_cluster_token_limit(budget: int) -> int:
-	"""choose the maximum raw batch size for one generated summary."""
-	return max(512, min(16_000, int(budget * 0.25)))
+def summary_cluster_token_limit(
+	total_tokens: int,
+	budget: int,
+	recovery_target_ratio: float,
+	min_tokens: int,
+	max_tokens: int,
+) -> int:
+	"""choose the raw token target for one generated summary."""
+	tokens_to_free = total_tokens - int(budget * recovery_target_ratio)
+	if tokens_to_free <= 0:
+		return 0
+	return max(min_tokens, min(max_tokens, tokens_to_free))

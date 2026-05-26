@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -18,7 +19,11 @@ from api.redis import on_invalidation
 from api.settings import settings
 from nokodo_ai.adapters.audio import resolve_audio_adapter
 from nokodo_ai.adapters.base.chat import ChatGenerationParams
-from nokodo_ai.adapters.chat import resolve_chat_adapter
+from nokodo_ai.adapters.chat import (
+	GenerationBadRequestError,
+	GenerationError,
+	resolve_chat_adapter,
+)
 from nokodo_ai.adapters.embeddings import resolve_embeddings_adapter
 from nokodo_ai.adapters.images import resolve_image_adapter
 from nokodo_ai.adapters.videos import resolve_video_adapter
@@ -34,10 +39,32 @@ from nokodo_ai.video_models import VideoModel
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True, slots=True)
+class TaskChatModel:
+	"""API task chat model plus API-side capability metadata."""
+
+	chat_model: ChatModel
+	input_modalities: frozenset[str]
+
+
 # process-local cache for task chat models.
-# key: task name, value: (chat_model, expiry_timestamp)
-_task_model_cache: dict[str, tuple[ChatModel, float]] = {}
+# key: task name, value: (task chat model, expiry_timestamp)
+_task_model_cache: dict[str, tuple[TaskChatModel, float]] = {}
 _TASK_MODEL_TTL_S = 300.0
+_CONTEXT_PRESSURE_STATUS_CODES = {400, 413}
+_CONTEXT_PRESSURE_MARKERS = (
+	"context_length_exceeded",
+	"maximum context length",
+	"context length",
+	"context window",
+	"prompt is too long",
+	"input is too long",
+	"input token count",
+	"number of tokens exceeds",
+	"tokens exceed",
+	"exceeds the maximum number of tokens",
+	"request too large",
+)
 
 
 def reset_task_model_cache() -> None:
@@ -48,6 +75,16 @@ def reset_task_model_cache() -> None:
 # self-register for cross-worker invalidation. main.py only starts the
 # subscriber; modules own their own reset hook registration.
 on_invalidation("task_models", reset_task_model_cache)
+
+
+def is_context_pressure_generation_error(exc: GenerationError) -> bool:
+	"""return whether a provider bad request probably means context pressure."""
+	if not isinstance(exc, GenerationBadRequestError):
+		return False
+	if exc.status_code not in _CONTEXT_PRESSURE_STATUS_CODES:
+		return False
+	haystack = f"{exc.code or ''} {exc}".lower()
+	return any(marker in haystack for marker in _CONTEXT_PRESSURE_MARKERS)
 
 
 def build_sdk_adapter_config(
@@ -285,6 +322,14 @@ async def resolve_task_chat_model(
 	session: AsyncSession,
 	task: str,
 ) -> ChatModel:
+	"""resolve the ChatModel for a background task from settings."""
+	return (await resolve_task_chat_model_config(session, task)).chat_model
+
+
+async def resolve_task_chat_model_config(
+	session: AsyncSession,
+	task: str,
+) -> TaskChatModel:
 	"""resolve the chat model for a background task from settings.
 
 	resolution: per-task model_id -> default_model_id -> error.
@@ -294,9 +339,9 @@ async def resolve_task_chat_model(
 	now = time.monotonic()
 	cached = _task_model_cache.get(task)
 	if cached is not None:
-		chat_model, expiry = cached
+		chat_model_config, expiry = cached
 		if now < expiry:
-			return chat_model
+			return chat_model_config
 
 	task_settings = settings.ai.tasks
 
@@ -315,8 +360,8 @@ async def resolve_task_chat_model(
 		model_id_str = task_settings.web_search_model_id
 	elif task == "asset_description":
 		model_id_str = task_settings.asset_description_model_id
-	elif task == "asset_ocr":
-		model_id_str = task_settings.asset_ocr_model_id
+	elif task == "asset_text_extraction":
+		model_id_str = task_settings.asset_text_extraction_model_id
 
 	if model_id_str is None:
 		model_id_str = task_settings.default_model_id
@@ -338,9 +383,12 @@ async def resolve_task_chat_model(
 	if model is None:
 		raise ValueError(f"task model not found: {model_id_str}")
 
-	chat_model = build_chat_model(model)
-	_task_model_cache[task] = (chat_model, now + _TASK_MODEL_TTL_S)
-	return chat_model
+	chat_model_config = TaskChatModel(
+		chat_model=build_chat_model(model),
+		input_modalities=frozenset(model.input_modalities or []),
+	)
+	_task_model_cache[task] = (chat_model_config, now + _TASK_MODEL_TTL_S)
+	return chat_model_config
 
 
 def build_image_model(model: Model) -> ImageModel:

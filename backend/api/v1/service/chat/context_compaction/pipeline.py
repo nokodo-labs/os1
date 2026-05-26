@@ -11,28 +11,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.thread_summary import SummaryPurpose, ThreadSummary
 from api.settings import settings as app_settings
 from api.v1.service.chat.context_compaction.budgets import (
-	DEFAULT_PROMPT_OVERHEAD_TOKENS,
 	budget_for_system,
-	prompt_tokens,
-	setting_float,
-	setting_int,
+	effective_context_window,
 	sum_message_tokens,
+	summary_cluster_token_limit,
 	trigger_limit,
 )
 from api.v1.service.chat.context_compaction.budgets import (
 	tool_definition_tokens as estimate_tool_definition_tokens,
 )
 from api.v1.service.chat.context_compaction.protection import (
-	DEFAULT_RECENT_TOOL_PROTECTION_ITERATIONS,
 	find_run_start_index,
 )
 from api.v1.service.chat.context_compaction.pruning import prune_oldest_until
 from api.v1.service.chat.context_compaction.summarization import (
 	build_compaction_info,
-	build_summary_injection,
-	inject_summary_into_system,
+	build_positional_summary_message,
 	next_summarization_batch,
-	oldest_prefix_summary,
+	oldest_positional_summary,
 	replace_chat_window_sentinel,
 	split_messages,
 	summaries_for_branch,
@@ -40,8 +36,11 @@ from api.v1.service.chat.context_compaction.summarization import (
 from api.v1.service.chat.context_compaction.tool_io import apply_tool_io_cascade
 from api.v1.service.chat.context_compaction.types import (
 	BlockingSummarize,
+	ContextCompactionError,
 	ContextCompactionProgressCallback,
 	ContextCompactionResult,
+	ContextCompactionTier,
+	ContextCompactionTriggerReason,
 )
 from api.v1.service.chat.message_metadata import get_message_id
 from api.v1.service.threads import summaries as summary_service
@@ -84,12 +83,11 @@ async def apply_context_compaction(
 
 	the function keeps raw conversation messages whenever the full prompt fits.
 	when it does not fit, it applies the ordered cascade from the refactor plan:
-	tool I/O compaction, ready summary prefix swaps, blocking summarization, and
-	finally protocol-valid pruning. the active run-start user message and recent
-	tail tool outputs remain protected throughout, and background summarization
-	is only requested for the next unsummarized old prefix.
+	tool I/O compaction, ready positional summary swaps, blocking summarization,
+	and finally protocol-valid pruning. the active run-start user message remains
+	protected throughout, and background summarization is only requested for the
+	next compressible old range.
 	"""
-	_ = iteration
 	compaction_settings = app_settings.ai.context_compaction
 
 	if not compaction_settings.enabled:
@@ -106,25 +104,33 @@ async def apply_context_compaction(
 	)
 	original_conv_count = len(conversation_msgs)
 	tool_definition_tokens = estimate_tool_definition_tokens(tool_definitions)
-	prompt_overhead_tokens = setting_int(
-		compaction_settings,
-		"prompt_overhead_tokens",
-		DEFAULT_PROMPT_OVERHEAD_TOKENS,
-	)
-	protected_tool_groups = setting_int(
-		compaction_settings,
-		"recent_tool_output_protection_iterations",
-		DEFAULT_RECENT_TOOL_PROTECTION_ITERATIONS,
-	)
-	base_budget = budget_for_system(
+	target_usage_cap_tokens = compaction_settings.target_usage_cap_tokens
+	effective_window = effective_context_window(
 		context_window,
+		target_usage_cap_tokens,
+	)
+	prompt_overhead_tokens = compaction_settings.prompt_overhead_tokens
+	base_budget = budget_for_system(
+		effective_window,
 		system_msgs,
 		tool_definition_tokens,
 		prompt_overhead_tokens,
 		compaction_settings.response_headroom,
 	)
+	if base_budget <= 0:
+		raise ContextCompactionError(
+			"context setup exceeds the available model context window"
+		)
 	full_conversation_tokens = sum_message_tokens(conversation_msgs)
-	base_trigger_limit = trigger_limit(base_budget, compaction_settings.trigger_ratio)
+	soft_threshold = compaction_settings.trigger_ratio
+	base_trigger_limit = trigger_limit(base_budget, soft_threshold)
+	base_summary_batch_limit = summary_cluster_token_limit(
+		full_conversation_tokens,
+		base_budget,
+		compaction_settings.recovery_target_ratio,
+		compaction_settings.summary_batch_min_tokens,
+		compaction_settings.summary_batch_max_tokens,
+	)
 	logger.info(
 		"context compaction evaluated",
 		extra={
@@ -135,7 +141,11 @@ async def apply_context_compaction(
 			"conversation_tokens": full_conversation_tokens,
 			"budget_tokens": base_budget,
 			"trigger_tokens": base_trigger_limit,
+			"trigger_ratio": soft_threshold,
+			"summary_batch_tokens": base_summary_batch_limit,
 			"context_window": context_window,
+			"effective_context_window": effective_window,
+			"target_usage_cap_tokens": target_usage_cap_tokens,
 			"tool_definition_tokens": tool_definition_tokens,
 			"fits": full_conversation_tokens <= base_budget,
 		},
@@ -159,8 +169,17 @@ async def apply_context_compaction(
 		dropped_count: int,
 	) -> tuple[bool, list[SDKMessage], TypeID | None, TypeID | None]:
 		"""decide whether to enqueue a background summary batch."""
-		limit = trigger_limit(budget, compaction_settings.trigger_ratio)
+		limit = trigger_limit(budget, soft_threshold)
 		if total_tokens <= limit and dropped_count == 0:
+			return False, [], None, None
+		batch_token_limit = summary_cluster_token_limit(
+			total_tokens,
+			budget,
+			compaction_settings.recovery_target_ratio,
+			compaction_settings.summary_batch_min_tokens,
+			compaction_settings.summary_batch_max_tokens,
+		)
+		if batch_token_limit <= 0:
 			return False, [], None, None
 		summaries = await load_agent_summaries()
 		usable = summaries_for_branch(
@@ -172,7 +191,7 @@ async def apply_context_compaction(
 			conversation_msgs,
 			conversation_ids,
 			usable,
-			budget,
+			batch_token_limit,
 			run_id,
 		)
 		if batch_messages:
@@ -186,6 +205,7 @@ async def apply_context_compaction(
 					"end_message_id": str(end_id) if end_id else None,
 					"total_tokens": total_tokens,
 					"budget_tokens": budget,
+					"summary_batch_tokens": batch_token_limit,
 					"dropped_count": dropped_count,
 				},
 			)
@@ -229,6 +249,9 @@ async def apply_context_compaction(
 			end_message_id=end_message_id,
 			total_tokens=full_conversation_tokens,
 			budget_tokens=base_budget,
+			compaction_tier="raw",
+			trigger_reason="soft_pressure" if needs_summarization else "fits",
+			effective_context_window=effective_window,
 		)
 
 	windowed_system = system_msgs
@@ -241,6 +264,8 @@ async def apply_context_compaction(
 	compacted_tool_result_count = 0
 	compacted_tool_run_count = 0
 	blocking_summary_count = 0
+	compaction_tier: ContextCompactionTier = "raw"
+	trigger_reason: ContextCompactionTriggerReason = "over_budget"
 
 	(
 		working_messages,
@@ -252,11 +277,16 @@ async def apply_context_compaction(
 		working_messages,
 		budget,
 		run_id,
-		protected_tool_groups,
 	)
 	compacted_tool_call_count += tool_call_count
 	compacted_tool_result_count += tool_result_count
 	compacted_tool_run_count += tool_run_count
+	if (
+		tool_call_count > 0
+		or tool_result_count > 0
+		or tool_run_count > 0
+	):
+		compaction_tier = "t1_tool_io"
 
 	if total_tokens > budget:
 		summaries = await load_agent_summaries()
@@ -269,74 +299,65 @@ async def apply_context_compaction(
 		usable_summaries = []
 
 	if total_tokens > budget and usable_summaries:
-		applied_summaries: list[ThreadSummary] = []
 		remaining_summaries = list(usable_summaries)
 		while total_tokens > budget and remaining_summaries:
-			selection = oldest_prefix_summary(
+			selection = oldest_positional_summary(
 				remaining_summaries,
+				working_messages,
 				working_ids,
 			)
 			if selection is None:
 				break
-			summary, end_index = selection
+			summary, start_index, end_index, summary_message = selection
 			remaining_summaries = [
 				candidate
 				for candidate in remaining_summaries
 				if candidate.id != summary.id
 			]
-			candidate_summaries = [*applied_summaries, summary]
-			candidate_messages = working_messages[end_index + 1 :]
-			candidate_ids = working_ids[end_index + 1 :]
-			summary_text = build_summary_injection(candidate_summaries)
-			candidate_system = inject_summary_into_system(system_msgs, summary_text)
-			candidate_budget = budget_for_system(
-				context_window,
-				candidate_system,
-				tool_definition_tokens,
-				prompt_overhead_tokens,
-				response_headroom=compaction_settings.response_headroom,
-			)
-			candidate_tokens = sum_message_tokens(candidate_messages)
-			current_prompt_tokens = prompt_tokens(
-				windowed_system,
-				total_tokens,
-				tool_definition_tokens,
-				prompt_overhead_tokens,
-			)
-			candidate_prompt_tokens = prompt_tokens(
-				candidate_system,
-				candidate_tokens,
-				tool_definition_tokens,
-				prompt_overhead_tokens,
-			)
-			if (
-				candidate_tokens > candidate_budget
-				and candidate_prompt_tokens >= current_prompt_tokens
-			):
-				continue
-			applied_summaries = candidate_summaries
-			windowed_system = candidate_system
-			working_messages = list(candidate_messages)
-			working_ids = list(candidate_ids)
-			budget = candidate_budget
-			summary_count = len(applied_summaries)
-			total_tokens = candidate_tokens
+			working_messages = [
+				*working_messages[:start_index],
+				summary_message,
+				*working_messages[end_index + 1 :],
+			]
+			working_ids = [
+				*working_ids[:start_index],
+				None,
+				*working_ids[end_index + 1 :],
+			]
+			summary_count += 1
+			compaction_tier = "t2_ready_summary"
+			total_tokens = sum_message_tokens(working_messages)
 
 	blocking_enabled = bool(
 		getattr(compaction_settings, "blocking_summarization_enabled", True)
 	)
-	if total_tokens > budget and blocking_enabled and blocking_summarize is not None:
+
+	async def apply_blocking_summarization(total_tokens: int) -> int:
+		"""run T3 inline summarization over the oldest compressible raw range."""
+		nonlocal blocking_summary_count, compaction_tier, summary_count
+		nonlocal working_ids, working_messages
+		if not blocking_enabled or blocking_summarize is None:
+			return total_tokens
 		await _emit_compaction_progress(
 			progress_callback,
 			15,
 			"compacting context",
 		)
 		while total_tokens > budget:
+			batch_token_limit = summary_cluster_token_limit(
+				total_tokens,
+				budget,
+				compaction_settings.recovery_target_ratio,
+				compaction_settings.summary_batch_min_tokens,
+				compaction_settings.summary_batch_max_tokens,
+			)
+			if batch_token_limit <= 0:
+				break
 			batch_messages, start_id, end_id = next_summarization_batch(
 				working_messages,
 				working_ids,
 				[],
-				budget,
+				batch_token_limit,
 				run_id,
 			)
 			if not batch_messages or start_id is None or end_id is None:
@@ -356,18 +377,13 @@ async def apply_context_compaction(
 				)
 				summary = await asyncio.wait_for(
 					blocking_summarize(batch_messages, start_id, end_id),
-					timeout=setting_float(
-						compaction_settings,
-						"blocking_summarization_timeout_seconds",
-						20.0,
-					),
+					timeout=compaction_settings.blocking_summarization_timeout_seconds,
 				)
 			except TimeoutError:
 				logger.warning("inline context summarization timed out")
 				break
 			if summary is None:
 				break
-			blocking_summary_count += 1
 			logger.info(
 				"inline context summarization completed",
 				extra={
@@ -377,29 +393,49 @@ async def apply_context_compaction(
 					"message_count": len(batch_messages),
 				},
 			)
-			windowed_system = inject_summary_into_system(
-				windowed_system,
-				build_summary_injection([summary]),
-			)
-			budget = budget_for_system(
-				context_window,
-				windowed_system,
-				tool_definition_tokens,
-				prompt_overhead_tokens,
-				compaction_settings.response_headroom,
-			)
 			try:
+				start_index = working_ids.index(str(start_id))
 				end_index = working_ids.index(str(end_id))
 			except ValueError:
 				break
-			del working_messages[: end_index + 1]
-			del working_ids[: end_index + 1]
-			total_tokens = sum_message_tokens(working_messages)
+			candidate_messages = [
+				*working_messages[:start_index],
+				build_positional_summary_message(summary),
+				*working_messages[end_index + 1 :],
+			]
+			candidate_ids = [
+				*working_ids[:start_index],
+				None,
+				*working_ids[end_index + 1 :],
+			]
+			candidate_tokens = sum_message_tokens(candidate_messages)
+			if candidate_tokens >= total_tokens:
+				logger.warning(
+					"inline context summarization did not reduce token usage",
+					extra={
+						"thread_id": str(thread_id),
+						"run_id": str(run_id) if run_id else None,
+						"summary_id": str(summary.id),
+						"before_tokens": total_tokens,
+						"after_tokens": candidate_tokens,
+					},
+				)
+				break
+			working_messages = candidate_messages
+			working_ids = candidate_ids
+			total_tokens = candidate_tokens
+			blocking_summary_count += 1
+			summary_count += 1
+			compaction_tier = "t3_blocking_summary"
 			await _emit_compaction_progress(
 				progress_callback,
 				60,
 				"context summary ready",
 			)
+		return total_tokens
+
+	if total_tokens > budget:
+		total_tokens = await apply_blocking_summarization(total_tokens)
 
 	if total_tokens > budget:
 		(
@@ -412,7 +448,15 @@ async def apply_context_compaction(
 			working_ids,
 			budget,
 			run_id,
-			protected_tool_groups,
+		)
+		if dropped_count > 0:
+			compaction_tier = "t4_prune"
+		if total_tokens > budget:
+			total_tokens = await apply_blocking_summarization(total_tokens)
+
+	if total_tokens > budget:
+		raise ContextCompactionError(
+			"unable to fit prompt without dropping protected active-run context"
 		)
 
 	(
@@ -460,7 +504,7 @@ async def apply_context_compaction(
 			"%d tool call args compacted, %d tool results compacted, "
 			"%d tool runs summarized, %d inline summaries, "
 			"%d/%d tokens used, "
-			"summarization_needed=%s",
+			"summarization_needed=%s tier=%s",
 			summary_count,
 			dropped_count,
 			compacted_tool_call_count,
@@ -470,6 +514,7 @@ async def apply_context_compaction(
 			total_tokens,
 			budget,
 			needs_summarization,
+			compaction_tier,
 		)
 
 	return ContextCompactionResult(
@@ -486,4 +531,7 @@ async def apply_context_compaction(
 		compacted_tool_result_count=compacted_tool_result_count,
 		compacted_tool_run_count=compacted_tool_run_count,
 		blocking_summary_count=blocking_summary_count,
+		compaction_tier=compaction_tier,
+		trigger_reason=trigger_reason,
+		effective_context_window=effective_window,
 	)

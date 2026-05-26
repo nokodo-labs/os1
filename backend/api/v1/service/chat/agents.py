@@ -59,6 +59,7 @@ from api.v1.tasks.threads import schedule_thread_inactivity_maintenance
 from nokodo_ai import Agent as SDKAgent
 from nokodo_ai import Filter as SDKFilter
 from nokodo_ai import Hook as SDKHook
+from nokodo_ai.adapters.chat import GenerationError as SDKGenerationError
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.deltas import AgentDelta
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
@@ -175,24 +176,25 @@ async def _resolve_run_thread(
 	return thread, None
 
 
-async def _finalize_partial_assistant_on_cancel(
+async def _finalize_partial_assistant(
 	run_id: TypeID,
 	agent_id: TypeID,
 	current_assistant_id: TypeID | None,
 	chat_deltas: list[SDKAssistantMessage],
 	persist: bool,
 	message_queue: asyncio.Queue[PersistQueueItem],
-) -> None:
-	"""persist whatever assistant content streamed before the cancel hit.
+	partial_reason: str,
+) -> bool:
+	"""persist whatever assistant content streamed before an early stop.
 
-	called from the cancel handler so subscribers, the in-memory RunStatus
-	messages, and (when persisting) the DB all reflect the partial result
-	the user already saw on screen. partial messages are flagged via
-	``metadata.partial_reason='cancelled'`` so DB consumers can distinguish
-	them from complete ones.
+	used by cancel and provider-error handlers so subscribers, the in-memory
+	RunStatus messages, and (when persisting) the DB all reflect the partial
+	result the user already saw on screen. partial messages are flagged via
+	``metadata.partial_reason`` so DB consumers can distinguish them from complete
+	ones.
 	"""
 	if current_assistant_id is None or not chat_deltas:
-		return
+		return False
 	partial = SDKAssistantMessage()
 	for dm in chat_deltas:
 		partial = partial.merge(dm)
@@ -215,17 +217,22 @@ async def _finalize_partial_assistant_on_cancel(
 			tool_calls=partial_tc,
 		)
 		if persist:
+			public_partial_reason = (
+				"cancelled" if partial_reason == "cancelled" else "generation_failed"
+			)
 			partial.metadata = {
 				**(partial.metadata or {}),
 				"partial": True,
-				"partial_reason": "cancelled",
+				"partial_reason": public_partial_reason,
 			}
 			await message_queue.put((current_assistant_id, partial))
+		return True
 	except Exception:
 		logger.exception(
-			"failed to finalize partial assistant message on cancel",
+			"failed to finalize partial assistant message",
 			extra={"run_id": run_id, "message_id": current_assistant_id},
 		)
+	return False
 
 
 def _schedule_terminate_broadcast(
@@ -422,6 +429,7 @@ async def build_agent_from_orm(
 	# resolve plugins from agent's plugin_ids
 	tools = await resolve_tools(
 		tool_ids=agent_orm.plugin_ids,
+		app_context=context,
 	)
 	filters = resolve_filters(agent_orm.plugin_ids)
 	hooks = resolve_hooks(agent_orm.plugin_ids)
@@ -933,13 +941,14 @@ async def run_agent(
 			# a sentinel that never arrives.
 			async def _cancel_cleanup() -> None:
 				"""finalize partial state and broadcasts for a cancelled stream."""
-				await _finalize_partial_assistant_on_cancel(
+				await _finalize_partial_assistant(
 					run_id=run_id,
 					agent_id=agent_id,
 					current_assistant_id=current_assistant_id,
 					chat_deltas=_chat_deltas,
 					persist=persist,
 					message_queue=message_queue,
+					partial_reason="cancelled",
 				)
 				await safe_rollback(session)
 				rs_terminated = await run_status_store.fail_run(
@@ -952,7 +961,50 @@ async def run_agent(
 
 			await asyncio.shield(_cancel_cleanup())
 			raise
+		except SDKGenerationError as exc:
+			partial_finalized = await _finalize_partial_assistant(
+				run_id=run_id,
+				agent_id=agent_id,
+				current_assistant_id=current_assistant_id,
+				chat_deltas=_chat_deltas,
+				persist=persist,
+				message_queue=message_queue,
+				partial_reason=exc.reason,
+			)
+			logger.warning(
+				"sdk generation error during agent streaming",
+				extra={
+					"reason": exc.reason,
+					"provider": exc.provider,
+					"status_code": exc.status_code,
+					"code": exc.code,
+					"retryable": exc.retryable,
+					"partial": partial_finalized,
+				},
+				exc_info=True,
+			)
+			await safe_rollback(session)
+			rs_terminated = await run_status_store.fail_run(run_id, reason=exc.reason)
+			dropped = rs_terminated.in_flight_steering() if rs_terminated else []
+			_schedule_terminate_broadcast(
+				thread_id, agent_id, run_id, error=True, dropped_steering=dropped
+			)
+			error_payload: dict[str, object] = {"message": "generation failed"}
+			if partial_finalized:
+				error_payload["partial"] = True
+			yield sse_event(event="error", data=error_payload)
+			yield sse_event(event="done", data={})
+			return
 		except Exception:
+			partial_finalized = await _finalize_partial_assistant(
+				run_id=run_id,
+				agent_id=agent_id,
+				current_assistant_id=current_assistant_id,
+				chat_deltas=_chat_deltas,
+				persist=persist,
+				message_queue=message_queue,
+				partial_reason="generation_failed",
+			)
 			logger.exception("error during agent streaming")
 			await safe_rollback(session)
 			rs_terminated = await run_status_store.fail_run(
@@ -962,7 +1014,10 @@ async def run_agent(
 			_schedule_terminate_broadcast(
 				thread_id, agent_id, run_id, error=True, dropped_steering=dropped
 			)
-			yield sse_event(event="error", data={"message": "generation failed"})
+			error_payload: dict[str, object] = {"message": "generation failed"}
+			if partial_finalized:
+				error_payload["partial"] = True
+			yield sse_event(event="error", data=error_payload)
 			yield sse_event(event="done", data={})
 			return
 		finally:

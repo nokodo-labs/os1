@@ -16,7 +16,11 @@ from api.models.thread_summary import SummaryPurpose, ThreadSummary
 from api.schemas.thread import ThreadSummaryUpdate
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_admin, require_thread_access
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
+
+
+SUMMARY_COVERED_RAW_IDS_METADATA_KEY = "covered_raw_message_ids"
 
 
 def latest_active_summary_text(
@@ -48,6 +52,7 @@ async def create_summary(
 	start_message_id: TypeID | None = None,
 	end_message_id: TypeID | None = None,
 	purpose: SummaryPurpose = SummaryPurpose.AGENT_CONTEXT,
+	metadata: JSONObject | None = None,
 ) -> ThreadSummary:
 	"""create and persist a new thread summary."""
 	summary = ThreadSummary(
@@ -57,6 +62,7 @@ async def create_summary(
 		message_count=message_count,
 		start_message_id=start_message_id,
 		end_message_id=end_message_id,
+		metadata_=metadata or {},
 	)
 	session.add(summary)
 	await session.flush()
@@ -123,9 +129,7 @@ async def supersede_summaries(
 	"""mark summaries as superseded by a new condensed summary."""
 	if not summary_ids:
 		return
-	stmt = select(ThreadSummary).where(
-		ThreadSummary.id.in_([str(sid) for sid in summary_ids])
-	)
+	stmt = select(ThreadSummary).where(ThreadSummary.id.in_(summary_ids))
 	result = await session.execute(stmt)
 	for summary in result.scalars().all():
 		summary.superseded_by_id = replacement_id
@@ -317,6 +321,12 @@ async def _summary_overlaps_messages(
 	session: AsyncSession,
 ) -> bool:
 	"""return whether a summary's covered branch span intersects changed ids."""
+	covered_raw_ids = summary.metadata_.get(SUMMARY_COVERED_RAW_IDS_METADATA_KEY)
+	if isinstance(covered_raw_ids, list):
+		covered_ids = {
+			message_id for message_id in covered_raw_ids if isinstance(message_id, str)
+		}
+		return bool(covered_ids & changed_ids)
 	branch_ids = await _summary_branch_ids(summary, session)
 	if not branch_ids:
 		return True

@@ -35,6 +35,7 @@ from ...utils.provider_meta import (
 from ...utils.validators import warn_known_model
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseOpenAIAdapter
+from .exceptions import map_openai_generation_exceptions
 from .types import (
 	OpenAIAsyncStream,
 	OpenAIChatCompletion,
@@ -119,6 +120,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 			)
 		return self._generate_once(messages, model=model, tools=tools, params=params)
 
+	@map_openai_generation_exceptions
 	async def _generate_once(
 		self,
 		messages: list[Message],
@@ -165,6 +167,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 
 		return _chat_completion_to_assistant_message(response)
 
+	@map_openai_generation_exceptions
 	async def _generate_streaming(
 		self,
 		messages: list[Message],

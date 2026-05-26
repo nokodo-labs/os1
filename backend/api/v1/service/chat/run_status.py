@@ -561,10 +561,10 @@ class RunStatusStore:
 	) -> RunStatus | None:
 		"""mark a run as errored, push the error frame, and close subscribers.
 
-		the error frame carries ``run_id`` and an optional human-readable
-		``reason`` so subscribers can correlate it with the active run and
-		display something meaningful. the terminal ``done`` event is
-		synthesized by subscribe_run_stream from the ``None`` sentinel.
+		the public error frame carries only ``run_id`` and a sanitized message so
+		late/resume subscribers do not receive provider, model, status, code, or
+		internal reason details. the terminal ``done`` event is synthesized by
+		subscribe_run_stream from the ``None`` sentinel.
 
 		idempotent: if the run is already gone (e.g. concurrent fail/complete)
 		this returns ``None`` and is otherwise a no-op.
@@ -580,20 +580,16 @@ class RunStatusStore:
 			# close pass is purely best-effort sentinel delivery.
 			subscribers = list(self._subscribers.get(run_id, ()))
 			self._subscribers.pop(run_id, None)
-		err_payload: dict[str, Any] = {
-			"run_id": str(run_id),
-			"message": reason or "generation failed",
-		}
-		if reason is not None:
-			err_payload["reason"] = reason
+		message = "cancelled" if reason == "cancelled" else "generation failed"
+		err_payload: dict[str, Any] = {"run_id": str(run_id), "message": message}
 		err_frame = sse_encode(event="error", data=err_payload)
 		# also append to the in-memory log so any catchup-only late subscriber
 		# (race: arrives between pop and the catchup snapshot) still sees the
-		# error reason rather than just a bare done sentinel.
+		# sanitized error frame rather than just a bare done sentinel.
 		rs.sse_log.append(err_frame)
 		# mirror the error frame to redis so cross-worker late subscribers
-		# see the failure reason via the catchup LRANGE; without this they
-		# only see the end sentinel and lose the failure context.
+		# see the sanitized failure via the catchup LRANGE; without this they
+		# only see the end sentinel and lose the terminal error state.
 		await run_bus.mirror_frame(run_id, err_frame)
 		for q in subscribers:
 			try:

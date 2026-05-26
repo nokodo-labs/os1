@@ -3,19 +3,24 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 
 from api.settings import settings as app_settings
 from api.v1.service.chat.context_compaction.budgets import (
 	budget_for_system,
+	effective_context_window,
 	estimate_compaction_message_tokens,
 	sum_message_tokens,
+	tool_definition_tokens,
 )
 from api.v1.service.chat.context_compaction.protection import protected_indices
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
 from nokodo_ai.messages import Message as SDKMessage
+from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.messages import TextContent
 from nokodo_ai.messages import ToolMessage as SDKToolMessage
 from nokodo_ai.threads import Thread as SDKThread
+from nokodo_ai.tool import ToolDefinition
 from nokodo_ai.utils.tokens import CHARS_PER_TOKEN, SAFETY_MARGIN
 from nokodo_ai.utils.typeid import TypeID
 
@@ -23,6 +28,9 @@ from nokodo_ai.utils.typeid import TypeID
 logger = logging.getLogger(__name__)
 
 COMPACTED_TOOL_OUTPUT_NOTICE = "[compacted: tool output removed to free context]"
+COMPACTED_DUPLICATE_TOOL_OUTPUT_NOTICE = (
+	"[compacted: duplicate tool output matched a later result]"
+)
 _COMPACTED_TOOL_ARGUMENTS = {
 	"_compacted": "tool call arguments removed to free context"
 }
@@ -186,6 +194,68 @@ def _compact_combined_tool_outputs(
 	return result, sum_message_tokens(result), compacted_count
 
 
+def _normalized_tool_output(text: str) -> str:
+	"""normalize tool output for exact duplicate detection."""
+	return " ".join(text.split())
+
+
+def _compact_duplicate_tool_outputs(
+	messages: list[SDKMessage],
+	target_tokens: int,
+	protected_indices: set[int] | None = None,
+) -> tuple[list[SDKMessage], int, int]:
+	"""compact older exact-duplicate tool outputs while preserving the newest."""
+	protected = protected_indices or set()
+	total_tokens = sum_message_tokens(messages)
+	if total_tokens <= target_tokens:
+		return messages, total_tokens, 0
+
+	seen_outputs: set[str] = set()
+	duplicate_indices: list[int] = []
+	for index in range(len(messages) - 1, -1, -1):
+		if index in protected:
+			continue
+		message = messages[index]
+		if not isinstance(message, SDKToolMessage) or not message.tool_output:
+			continue
+		if message.tool_output in {
+			COMPACTED_TOOL_OUTPUT_NOTICE,
+			COMPACTED_DUPLICATE_TOOL_OUTPUT_NOTICE,
+		}:
+			continue
+		normalized = _normalized_tool_output(message.tool_output)
+		if len(normalized) < 128:
+			continue
+		if normalized in seen_outputs:
+			duplicate_indices.append(index)
+		else:
+			seen_outputs.add(normalized)
+
+	if not duplicate_indices:
+		return messages, total_tokens, 0
+
+	result = list(messages)
+	compacted_count = 0
+	for index in sorted(duplicate_indices):
+		if total_tokens <= target_tokens:
+			break
+		message = result[index]
+		if not isinstance(message, SDKToolMessage):
+			continue
+		before_tokens = estimate_compaction_message_tokens(message)
+		updated_message = message.model_copy(
+			update={"tool_output": COMPACTED_DUPLICATE_TOOL_OUTPUT_NOTICE}
+		)
+		after_tokens = estimate_compaction_message_tokens(updated_message)
+		if after_tokens >= before_tokens:
+			continue
+		result[index] = updated_message
+		total_tokens -= before_tokens - after_tokens
+		compacted_count += 1
+
+	return result, total_tokens, compacted_count
+
+
 def _tool_run_clusters(messages: list[SDKMessage]) -> list[tuple[int, int]]:
 	"""find assistant/tool-message runs that must be compacted as units."""
 	clusters: list[tuple[int, int]] = []
@@ -295,17 +365,16 @@ def apply_tool_io_cascade(
 	messages: list[SDKMessage],
 	budget_tokens: int,
 	run_id: TypeID | None,
-	protected_tool_groups: int,
 ) -> tuple[list[SDKMessage], int, int, int, int]:
 	"""run the tier-1 tool I/O cascade over unprotected old tool traffic.
 
 	the cascade owns the ordering from the refactor plan: first compact tool-call
-	arguments, then enforce per-output caps, then enforce the combined-output cap,
-	then summarize whole tool runs as protocol-safe units. after each stage it
-	recomputes protection because earlier rewrites can change the message list's
-	shape and token cost.
+	arguments, then squash duplicate outputs, enforce per-output caps, enforce the
+	combined-output cap, and summarize whole tool runs as protocol-safe units.
+	after each stage it recomputes protection because earlier rewrites can change
+	the message list's shape and token cost.
 	"""
-	protected = protected_indices(messages, run_id, protected_tool_groups)
+	protected = protected_indices(messages, run_id)
 	total_tokens = sum_message_tokens(messages)
 	tool_call_count = 0
 	tool_result_count = 0
@@ -319,7 +388,15 @@ def apply_tool_io_cascade(
 		)
 		tool_call_count += count
 	if total_tokens > budget_tokens:
-		protected = protected_indices(working, run_id, protected_tool_groups)
+		protected = protected_indices(working, run_id)
+		working, total_tokens, count = _compact_duplicate_tool_outputs(
+			working,
+			budget_tokens,
+			protected,
+		)
+		tool_result_count += count
+	if total_tokens > budget_tokens:
+		protected = protected_indices(working, run_id)
 		working, total_tokens, count = _truncate_tool_results_to_cap(
 			working,
 			budget_tokens,
@@ -327,7 +404,7 @@ def apply_tool_io_cascade(
 		)
 		tool_result_count += count
 	if total_tokens > budget_tokens:
-		protected = protected_indices(working, run_id, protected_tool_groups)
+		protected = protected_indices(working, run_id)
 		working, total_tokens, count = _compact_combined_tool_outputs(
 			working,
 			budget_tokens,
@@ -335,27 +412,38 @@ def apply_tool_io_cascade(
 		)
 		tool_result_count += count
 	if total_tokens > budget_tokens:
-		protected = protected_indices(working, run_id, protected_tool_groups)
+		protected = protected_indices(working, run_id)
 		working, total_tokens, count = _summarize_tool_runs_until(
 			working,
 			budget_tokens,
 			protected,
 		)
 		tool_run_count += count
-	return working, total_tokens, tool_call_count, tool_result_count, tool_run_count
+	return (
+		working,
+		total_tokens,
+		tool_call_count,
+		tool_result_count,
+		tool_run_count,
+	)
 
 
 def enforce_combined_tool_budget(
 	thread: SDKThread,
 	context_window: int | None,
+	tool_definitions: Sequence[ToolDefinition] | None = None,
 ) -> SDKThread:
 	"""enforce a combined token budget across all tool results."""
 	compaction_settings = app_settings.ai.context_compaction
+	system_messages: list[SDKMessage] = [
+		message for message in thread.messages if isinstance(message, SDKSystemMessage)
+	]
+	target_usage_cap_tokens = compaction_settings.target_usage_cap_tokens
 	budget = budget_for_system(
-		context_window,
-		[],
-		0,
-		0,
+		effective_context_window(context_window, target_usage_cap_tokens),
+		system_messages,
+		tool_definition_tokens(tool_definitions),
+		compaction_settings.prompt_overhead_tokens,
 		response_headroom=compaction_settings.response_headroom,
 	)
 	combined_limit = int(budget * compaction_settings.tool_results_combined_max_share)

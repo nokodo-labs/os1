@@ -33,6 +33,7 @@ from ...utils.provider_meta import (
 )
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseGoogleAdapter
+from .exceptions import map_google_generation_exceptions
 from .types import (
 	GoogleBlob,
 	GoogleContent,
@@ -169,6 +170,18 @@ def _content_part_to_google(
 				)
 			return None
 		case FileContent():
+			if part.base64 and part.media_type:
+				return GooglePart(
+					inline_data=GoogleBlob(
+						data=base64.b64decode(part.base64),
+						mime_type=part.media_type,
+					)
+				)
+			if part.url:
+				return GooglePart.from_uri(
+					file_uri=part.url,
+					mime_type=(part.media_type or "application/octet-stream"),
+				)
 			if part.filename:
 				return GooglePart.from_text(
 					text=f"[file: {part.filename}]",
@@ -454,6 +467,7 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 		"""
 		return False
 
+	@map_google_generation_exceptions
 	async def _generate_once(
 		self,
 		messages: list[Message],
@@ -509,6 +523,7 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 					pass
 		return msg
 
+	@map_google_generation_exceptions
 	async def _generate_streaming(
 		self,
 		messages: list[Message],
@@ -541,16 +556,16 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 			else None,
 		)
 
+		# per-provider_id state: auto-generated SDK id, name, created_at, metadata
+		tc_sdk_ids: dict[str, str] = {}
+		tc_created_at: dict[str, float] = {}
+		final_usage: Usage | None = None
+
 		stream = await self._client.models.generate_content_stream(
 			model=model,
 			contents=contents,
 			config=config,
 		)
-
-		# per-provider_id state: auto-generated SDK id, name, created_at, metadata
-		tc_sdk_ids: dict[str, str] = {}
-		tc_created_at: dict[str, float] = {}
-		final_usage: Usage | None = None
 
 		async for chunk in stream:
 			now = time()

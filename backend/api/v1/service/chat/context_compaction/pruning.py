@@ -43,7 +43,6 @@ def prune_oldest_until(
 	message_ids: list[str | None],
 	target_tokens: int,
 	run_id: TypeID | None,
-	protected_tool_groups: int,
 ) -> tuple[list[SDKMessage], list[str | None], int, int]:
 	"""remove oldest unprotected protocol-valid clusters until budget fits."""
 	result = list(messages)
@@ -51,7 +50,7 @@ def prune_oldest_until(
 	total_tokens = sum_message_tokens(result)
 	pruned_count = 0
 	while total_tokens > target_tokens and len(result) > 1:
-		protected = protected_indices(result, run_id, protected_tool_groups)
+		protected = protected_indices(result, run_id)
 		cluster: tuple[int, int] | None = None
 		for index in range(len(result)):
 			start, end = _cluster_bounds_for_prune(result, index)

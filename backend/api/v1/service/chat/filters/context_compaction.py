@@ -19,9 +19,9 @@ from pydantic import Field
 
 from api.database import async_session_local
 from api.models.thread_summary import SummaryPurpose, ThreadSummary
-from api.settings import settings as app_settings
 from api.v1.service.chat.context_compaction import apply_context_compaction
 from api.v1.service.chat.context_compaction.summarization import summarize_messages
+from api.v1.service.chat.context_compaction.types import ContextCompactionError
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.message_metadata import get_message_id
 from api.v1.service.chat.run_activities import RunActivityEmitter, start_run_activity
@@ -42,6 +42,18 @@ if TYPE_CHECKING:
 	from api.v1.service.chat.context import AppContext
 
 logger = logging.getLogger(__name__)
+
+
+def _compaction_int_field(result: object, name: str) -> int:
+	"""read an integer result field with a JSON-safe fallback."""
+	value = getattr(result, name, 0)
+	return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _compaction_str_field(result: object, name: str, default: str) -> str:
+	"""read a string result field with a JSON-safe fallback."""
+	value = getattr(result, name, default)
+	return value if isinstance(value, str) else default
 
 
 def _latest_context_message_id(thread: SDKThread) -> str | None:
@@ -189,6 +201,23 @@ class ContextCompactionFilter(Filter):
 				blocking_summarize=blocking_summarize,
 				progress_callback=progress,
 			)
+		except ContextCompactionError as exc:
+			if not compaction_started:
+				activity = await start_run_activity(
+					app_context,
+					activity_type="context_compaction",
+					message_id=anchor_message_id,
+					title="context limit reached",
+					message=str(exc),
+				)
+			if activity is not None:
+				await stop_timer()
+				await activity.ended(
+					outcome="error",
+					message=str(exc),
+					error=exc.__class__.__name__,
+				)
+			raise
 		except Exception as exc:
 			if compaction_started and activity is not None:
 				await stop_timer()
@@ -204,6 +233,25 @@ class ContextCompactionFilter(Filter):
 			await activity.ended(
 				outcome="success",
 				message=latest_stage,
+				data={
+					"tier": _compaction_str_field(compaction, "compaction_tier", "raw"),
+					"trigger_reason": _compaction_str_field(
+						compaction, "trigger_reason", "fits"
+					),
+					"total_tokens": _compaction_int_field(compaction, "total_tokens"),
+					"budget_tokens": _compaction_int_field(compaction, "budget_tokens"),
+					"summary_count": _compaction_int_field(compaction, "summary_count"),
+					"dropped_count": _compaction_int_field(compaction, "dropped_count"),
+					"compacted_tool_call_count": _compaction_int_field(
+						compaction, "compacted_tool_call_count"
+					),
+					"compacted_tool_result_count": _compaction_int_field(
+						compaction, "compacted_tool_result_count"
+					),
+					"compacted_tool_run_count": _compaction_int_field(
+						compaction, "compacted_tool_run_count"
+					),
+				},
 			)
 
 		if (
@@ -220,6 +268,7 @@ class ContextCompactionFilter(Filter):
 						thread_id=thread_id,
 						start_message_id=compaction.start_message_id,
 						end_message_id=compaction.end_message_id,
+						branch_head_message_id=anchor_message_id,
 					)
 				logger.info(
 					"background context summarization enqueued",
@@ -246,14 +295,14 @@ class ContextCompactionFilter(Filter):
 			app_context.session,
 			purpose=SummaryPurpose.AGENT_CONTEXT,
 		)
-		threshold = app_settings.ai.context_compaction.max_summaries_before_condense
-		if summary_count >= threshold:
+		if summary_count >= 2:
 			try:
 				async with async_session_local() as task_session:
 					await start_condense_summaries_task(
 						task_session,
 						app_context.principal,
 						thread_id=thread_id,
+						branch_head_message_id=anchor_message_id,
 					)
 				logger.info(
 					"summary condensation enqueued",
@@ -263,7 +312,6 @@ class ContextCompactionFilter(Filter):
 						if app_context.run_id
 						else None,
 						"summary_count": summary_count,
-						"threshold": threshold,
 					},
 				)
 			except Exception:

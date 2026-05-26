@@ -37,6 +37,7 @@ from api.v1.service import tasks as task_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, load_principal_for_user
 from api.v1.service.chat.context_compaction.summarization import (
+	SummaryRangeStaleError,
 	condense_summaries,
 	summarize_thread_message_range,
 )
@@ -159,13 +160,17 @@ async def start_summarize_messages_task(
 	thread_id: TypeID,
 	start_message_id: TypeID,
 	end_message_id: TypeID,
+	branch_head_message_id: str | None = None,
 ) -> Task:
 	"""enqueue durable summarization for a persisted thread message range."""
 	metadata: JSONObject = {
 		"thread_id": str(thread_id),
+		"purpose": "agent_context",
 		"start_message_id": str(start_message_id),
 		"end_message_id": str(end_message_id),
 	}
+	if branch_head_message_id is not None:
+		metadata["branch_head_message_id"] = branch_head_message_id
 	existing = await task_service.find_active_task(
 		session, CHAT_SUMMARIZE_MESSAGES_TASK, metadata
 	)
@@ -187,9 +192,12 @@ async def start_condense_summaries_task(
 	session: AsyncSession,
 	principal: Principal,
 	thread_id: TypeID,
+	branch_head_message_id: str | None = None,
 ) -> Task:
 	"""enqueue durable summary condensation for one thread."""
 	metadata: JSONObject = {"thread_id": str(thread_id)}
+	if branch_head_message_id is not None:
+		metadata["branch_head_message_id"] = branch_head_message_id
 	existing = await task_service.find_active_task(
 		session, CHAT_CONDENSE_SUMMARIES_TASK, metadata
 	)
@@ -453,22 +461,38 @@ async def run_summarize_messages_task(context: task_service.TaskContext) -> JSON
 	thread_id_value = context.metadata.get("thread_id")
 	start_value = context.metadata.get("start_message_id")
 	end_value = context.metadata.get("end_message_id")
+	branch_head_value = context.metadata.get("branch_head_message_id")
 	if not isinstance(thread_id_value, str) or not thread_id_value:
 		raise ValueError("thread_id metadata is required")
 	if not isinstance(start_value, str) or not start_value:
 		raise ValueError("start_message_id metadata is required")
 	if not isinstance(end_value, str) or not end_value:
 		raise ValueError("end_message_id metadata is required")
+	branch_head_message_id = (
+		TypeID(branch_head_value)
+		if isinstance(branch_head_value, str) and branch_head_value
+		else None
+	)
 
 	thread_id = TypeID(thread_id_value)
 	await context.update(progress=10, stage="loading messages")
 	async with async_session_local() as session:
-		summary_id = await summarize_thread_message_range(
-			thread_id=thread_id,
-			start_message_id=TypeID(start_value),
-			end_message_id=TypeID(end_value),
-			session=session,
-		)
+		try:
+			summary_id = await summarize_thread_message_range(
+				thread_id=thread_id,
+				start_message_id=TypeID(start_value),
+				end_message_id=TypeID(end_value),
+				branch_head_message_id=branch_head_message_id,
+				session=session,
+			)
+		except SummaryRangeStaleError as exc:
+			await context.update(progress=90, stage="summary range stale")
+			return {
+				"thread_id": str(thread_id),
+				"summary_id": None,
+				"skipped": True,
+				"reason": str(exc),
+			}
 		await session.commit()
 	await context.update(progress=90, stage="finalizing")
 	return {"thread_id": str(thread_id), "summary_id": str(summary_id)}
@@ -481,12 +505,31 @@ async def run_summarize_messages_task(context: task_service.TaskContext) -> JSON
 async def run_condense_summaries_task(context: task_service.TaskContext) -> JSONObject:
 	"""run summary condensation for one thread."""
 	thread_id_value = context.metadata.get("thread_id")
+	branch_head_value = context.metadata.get("branch_head_message_id")
 	if not isinstance(thread_id_value, str) or not thread_id_value:
 		raise ValueError("thread_id metadata is required")
 	thread_id = TypeID(thread_id_value)
+	branch_head_message_id = (
+		TypeID(branch_head_value)
+		if isinstance(branch_head_value, str) and branch_head_value
+		else None
+	)
 	await context.update(progress=10, stage="loading summaries")
 	async with async_session_local() as session:
-		summary_id = await condense_summaries(thread_id=thread_id, session=session)
+		try:
+			summary_id = await condense_summaries(
+				thread_id=thread_id,
+				expected_branch_head_message_id=branch_head_message_id,
+				session=session,
+			)
+		except SummaryRangeStaleError as exc:
+			await context.update(progress=90, stage="condensation range stale")
+			return {
+				"thread_id": str(thread_id),
+				"summary_id": None,
+				"skipped": True,
+				"reason": str(exc),
+			}
 		await session.commit()
 	await context.update(progress=90, stage="finalizing")
 	return {

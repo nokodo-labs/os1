@@ -32,6 +32,7 @@ from ...utils.provider_meta import (
 )
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseAnthropicAdapter
+from .exceptions import map_anthropic_generation_exceptions
 from .types import (
 	AnthropicBase64ImageSourceParam,
 	AnthropicContentBlockParam,
@@ -134,6 +135,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		"""
 		return False
 
+	@map_anthropic_generation_exceptions
 	async def _generate_once(
 		self,
 		messages: list[Message],
@@ -230,6 +232,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 
 		return AssistantMessage(content=content, tool_calls=tool_calls, usage=usage)
 
+	@map_anthropic_generation_exceptions
 	async def _generate_streaming(
 		self,
 		messages: list[Message],

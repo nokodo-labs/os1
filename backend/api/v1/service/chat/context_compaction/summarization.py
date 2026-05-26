@@ -2,45 +2,97 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Sequence
 from datetime import datetime
+from math import floor
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import session_scope
+from api.models.thread import Thread
 from api.models.thread_summary import SummaryPurpose, ThreadSummary
 from api.settings import settings
 from api.v1.service import threads as thread_service
 from api.v1.service.chat.context_compaction.budgets import (
 	estimate_compaction_message_tokens,
-	summary_cluster_token_limit,
 )
 from api.v1.service.chat.context_compaction.protection import find_run_start_index
 from api.v1.service.chat.message_metadata import persisted_message_metadata
 from api.v1.service.chat.models import (
+	is_context_pressure_generation_error,
 	resolve_task_chat_model,
 	run_chat_model_json_schema,
 )
 from api.v1.service.prompt_runtime import SENTINEL_CHAT_WINDOW_INFO
 from api.v1.service.threads import summaries as summary_service
+from nokodo_ai.adapters.chat import GenerationBadRequestError
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
 from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.messages import ToolMessage as SDKToolMessage
 from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.threads import Thread as SDKThread
-from nokodo_ai.utils.tokens import DEFAULT_CONTEXT_WINDOW
-from nokodo_ai.utils.typeid import TypeID
+from nokodo_ai.types.json import JSONObject, JSONValue
+from nokodo_ai.utils.tokens import (
+	CHARS_PER_TOKEN,
+	DEFAULT_CONTEXT_WINDOW,
+	SAFETY_MARGIN,
+	estimate_tokens,
+)
+from nokodo_ai.utils.typeid import TypeID, is_typeid
 
 
 logger = logging.getLogger(__name__)
+SUMMARY_MESSAGE_METADATA_KEY = "_context_summary_id"
+SUMMARY_COVERED_RAW_IDS_METADATA_KEY = (
+	summary_service.SUMMARY_COVERED_RAW_IDS_METADATA_KEY
+)
+SUMMARY_PREDECESSOR_IDS_METADATA_KEY = "predecessor_summary_ids"
+SUMMARY_BRANCH_HEAD_METADATA_KEY = "branch_head_message_id"
+
+
+class SummaryRangeStaleError(RuntimeError):
+	"""raised when an async summary target no longer matches the active branch."""
+
 
 # max chars to send to the condensation model. computed from
 # DEFAULT_CONTEXT_WINDOW (128K tokens) at ~4 chars/token, leaving
 # 30% headroom for the system prompt and response.
 _MAX_CONDENSATION_INPUT_CHARS = int(DEFAULT_CONTEXT_WINDOW * 4 * 0.70)
+
+_SUMMARY_POSITIONAL_PREFIX = (
+	"[compacted conversation summary replacing earlier raw messages]\n"
+)
+
+_SUMMARY_FIELD_DESCRIPTION = (
+	"dense agent-context continuity summary of this exact conversation segment. "
+	"preserve unique requests, constraints, corrections, artifacts, tool "
+	"conclusions, failures, preferences, and unresolved work; do not explain "
+	"generic subject matter"
+)
+_SUMMARY_FIELD_EXAMPLES = [
+	(
+		"the user asked the agent to draft an essay on quantum tunneling; "
+		"the agent produced a structured essay covering barrier penetration, "
+		"wavefunctions, applications, and analogies."
+	)
+]
+
+_CONDENSE_FIELD_DESCRIPTION = (
+	"single merged continuity summary preserving unique chat history from the "
+	"provided summaries. remove repetition, keep chronological decisions and "
+	"unresolved work, and avoid generic exposition"
+)
+_CONDENSE_FIELD_EXAMPLES = [
+	(
+		"the user iterated on a release checklist, asked for migration safety "
+		"checks, accepted the service-layer approach, and left frontend wiring "
+		"as the next task."
+	)
+]
 
 
 _SUMMARIZE_PROMPT = """\
@@ -81,58 +133,105 @@ remove repetition and do not expand generic subject-matter explanations.
 return the summary field only; no preamble or formatting outside the schema."""
 
 
-class _SummaryOut(BaseModel):
-	"""structured output schema for agent-context summaries."""
-
-	summary: str = Field(
-		min_length=1,
-		description=(
-			"dense agent-context continuity summary of this exact conversation "
-			"segment. preserve unique requests, constraints, corrections, "
-			"artifacts, tool conclusions, failures, preferences, and unresolved work; "
-			"do not explain generic subject matter"
+def _bounded_summary_model(
+	name: str,
+	max_chars: int,
+	description: str,
+	examples: list[str],
+) -> type[BaseModel]:
+	"""build a pydantic structured-output model with a hard summary cap."""
+	return create_model(
+		name,
+		summary=(
+			str,
+			Field(
+				min_length=1,
+				max_length=max_chars,
+				description=description,
+				examples=examples,
+			),
 		),
-		examples=[
-			(
-				"the user asked the agent to draft an essay on quantum tunneling; "
-				"the agent produced a structured essay covering barrier penetration, "
-				"wavefunctions, applications, and analogies."
-			)
-		],
 	)
 
 
-class _CondensedSummaryOut(BaseModel):
-	"""structured output schema for merged agent-context summaries."""
+def _summary_text_from_structured(
+	structured: dict[str, object],
+	model: type[BaseModel],
+) -> str:
+	"""validate structured summary output and extract text."""
+	data: dict[str, object] = model.model_validate(structured).model_dump()
+	summary = data.get("summary")
+	if not isinstance(summary, str):
+		raise ValueError("structured summary output must include summary text")
+	return summary.strip()
 
-	summary: str = Field(
-		min_length=1,
-		description=(
-			"single merged continuity summary preserving unique chat history from "
-			"the provided summaries. remove repetition, keep chronological decisions "
-			"and unresolved work, and avoid generic exposition"
-		),
-		examples=[
-			(
-				"the user iterated on a release checklist, asked for migration safety "
-				"checks, accepted the service-layer approach, and left frontend wiring "
-				"as the next task."
-			)
-		],
+
+def _minimum_saving_summary_input_tokens() -> int:
+	"""return the smallest raw span that can beat the summary marker."""
+	return estimate_tokens(f"{_SUMMARY_POSITIONAL_PREFIX}x") + 1
+
+
+def _summary_output_max_chars_for_messages(messages: Sequence[SDKMessage]) -> int:
+	"""derive the largest summary text that still saves estimated tokens."""
+	covered_tokens = sum(
+		estimate_compaction_message_tokens(message) for message in messages
 	)
+	if covered_tokens < _minimum_saving_summary_input_tokens():
+		return 0
+	target_tokens = covered_tokens - 1
+	max_chars = max(
+		1,
+		floor(target_tokens * CHARS_PER_TOKEN / SAFETY_MARGIN)
+		- len(_SUMMARY_POSITIONAL_PREFIX),
+	)
+	while (
+		max_chars > 0
+		and estimate_tokens(f"{_SUMMARY_POSITIONAL_PREFIX}{'x' * max_chars}")
+		>= covered_tokens
+	):
+		max_chars -= 1
+	return max_chars
+
+
+def _bounded_text(text: str, max_chars: int) -> str:
+	"""trim text to a non-empty character cap."""
+	stripped = text.strip()
+	if len(stripped) <= max_chars:
+		return stripped
+	trimmed = stripped[:max_chars].rstrip()
+	return trimmed or stripped[:max_chars]
+
+
+def _summary_typeids_from_metadata(values: object) -> list[TypeID]:
+	"""parse stored predecessor summary ids from metadata."""
+	if not isinstance(values, list):
+		return []
+	return [
+		TypeID(value)
+		for value in values
+		if isinstance(value, str) and is_typeid(value, prefix="tsum")
+	]
+
+
+def _is_positional_summary_message(message: SDKMessage) -> bool:
+	"""return whether a system-role message is a positional summary swap."""
+	metadata = message.metadata or {}
+	return isinstance(metadata.get(SUMMARY_MESSAGE_METADATA_KEY), str)
 
 
 def split_messages(
 	messages: list[SDKMessage],
 	branch_ids: list[str | None],
 ) -> tuple[list[SDKMessage], list[SDKMessage], list[str | None]]:
-	"""separate system messages from branch conversation messages."""
+	"""separate fixed system messages from branch conversation messages."""
 	system_msgs: list[SDKMessage] = []
 	conversation_msgs: list[SDKMessage] = []
 	conversation_ids: list[str | None] = []
 
 	for index, message in enumerate(messages):
-		if isinstance(message, SDKSystemMessage):
+		if isinstance(message, SDKSystemMessage) and not _is_positional_summary_message(
+			message
+		):
 			system_msgs.append(message)
 		else:
 			conversation_msgs.append(message)
@@ -171,39 +270,148 @@ def summaries_for_branch(
 	return usable
 
 
-def oldest_prefix_summary(
-	summaries: list[ThreadSummary],
-	message_ids: list[str | None],
-) -> tuple[ThreadSummary, int] | None:
-	"""select the smallest ready summary that replaces the current raw prefix.
+def _summary_metadata_header(summary: ThreadSummary) -> str:
+	"""build a concise prompt-visible metadata line for an injected summary."""
+	metadata = summary.metadata_ if isinstance(summary.metadata_, dict) else {}
+	covered = metadata.get(SUMMARY_COVERED_RAW_IDS_METADATA_KEY)
+	predecessors = metadata.get(SUMMARY_PREDECESSOR_IDS_METADATA_KEY)
+	branch_head = metadata.get(SUMMARY_BRANCH_HEAD_METADATA_KEY)
+	parts = [f"id={summary.id}"]
+	if summary.start_message_id or summary.end_message_id:
+		parts.append(
+			f"range={summary.start_message_id or '?'}..{summary.end_message_id or '?'}"
+		)
+	if isinstance(covered, list) and covered:
+		parts.append(f"covered_raw={len(covered)}")
+	if isinstance(predecessors, list) and predecessors:
+		parts.append(f"predecessors={len(predecessors)}")
+	if isinstance(branch_head, str) and branch_head:
+		parts.append(f"branch_head={branch_head}")
+	return "[summary metadata: " + "; ".join(parts) + "]\n"
 
-	prompt-time summary injection is only valid for prefix coverage: a stored
-	summary can replace messages up to its end id only when its optional start id
-	is absent from the remaining visible window or starts at index zero. summaries
-	that begin later would leave a gap, so they wait until older messages have been
-	removed or summarized first.
-	"""
+
+def build_positional_summary_message(summary: ThreadSummary) -> SDKSystemMessage:
+	"""build a positional system message that replaces a raw covered span."""
+	text = (
+		f"{_SUMMARY_POSITIONAL_PREFIX}"
+		f"{_summary_metadata_header(summary)}"
+		f"{summary.content.strip()}"
+	)
+	return SDKSystemMessage.from_text(text).model_copy(
+		update={"metadata": {SUMMARY_MESSAGE_METADATA_KEY: str(summary.id)}}
+	)
+
+
+def _dedupe_preserve_order(values: list[str]) -> list[str]:
+	"""dedupe string values without reordering them."""
+	seen: set[str] = set()
+	result: list[str] = []
+	for value in values:
+		if value in seen:
+			continue
+		seen.add(value)
+		result.append(value)
+	return result
+
+
+def _json_string_list(values: list[str]) -> list[JSONValue]:
+	"""return strings widened to json values for metadata."""
+	return [value for value in values]
+
+
+def _summary_metadata_for_messages(
+	messages: list[SDKMessage],
+	start_message_id: TypeID | None,
+	end_message_id: TypeID | None,
+) -> JSONObject:
+	"""collect raw coverage and predecessor lineage for a summary bundle."""
+	covered_raw_ids: list[str] = []
+	predecessor_ids: list[str] = []
+	for message in messages:
+		metadata = message.metadata or {}
+		message_id = metadata.get("_message_id")
+		if isinstance(message_id, str) and message_id:
+			covered_raw_ids.append(message_id)
+		predecessor_id = metadata.get(SUMMARY_MESSAGE_METADATA_KEY)
+		if isinstance(predecessor_id, str) and predecessor_id:
+			predecessor_ids.append(predecessor_id)
+	metadata: JSONObject = {}
+	metadata[SUMMARY_COVERED_RAW_IDS_METADATA_KEY] = _json_string_list(
+		_dedupe_preserve_order(covered_raw_ids)
+	)
+	metadata[SUMMARY_PREDECESSOR_IDS_METADATA_KEY] = _json_string_list(
+		_dedupe_preserve_order(predecessor_ids)
+	)
+	if end_message_id is not None:
+		metadata[SUMMARY_BRANCH_HEAD_METADATA_KEY] = str(end_message_id)
+	return metadata
+
+
+def _summary_coverage_indices(
+	summary: ThreadSummary,
+	message_ids: list[str | None],
+) -> tuple[int, int] | None:
+	"""return the prompt span covered by a summary in the current bundle."""
+	if summary.end_message_id is None:
+		return None
 	positions = {
 		message_id: index
 		for index, message_id in enumerate(message_ids)
 		if message_id is not None
 	}
-	candidates: list[tuple[int, ThreadSummary]] = []
+	end_index = positions.get(str(summary.end_message_id))
+	if end_index is None:
+		return None
+	start_index = 0
+	if summary.start_message_id is not None:
+		start_index = positions.get(str(summary.start_message_id), 0)
+	return start_index, end_index
+
+
+def _first_uncompressed_index(message_ids: list[str | None]) -> int | None:
+	"""find the first raw message still selected in the prompt bundle."""
+	for index, message_id in enumerate(message_ids):
+		if message_id is not None:
+			return index
+	return None
+
+
+def oldest_positional_summary(
+	summaries: list[ThreadSummary],
+	messages: list[SDKMessage],
+	message_ids: list[str | None],
+) -> tuple[ThreadSummary, int, int, SDKMessage] | None:
+	"""select the smallest saving summary for the oldest raw prompt range."""
+	oldest_raw_index = _first_uncompressed_index(message_ids)
+	if oldest_raw_index is None:
+		return None
+	candidates: list[tuple[int, ThreadSummary, int, int, SDKMessage]] = []
 	for summary in summaries:
-		if summary.end_message_id is None:
+		if not summary.content.strip():
 			continue
-		end_index = positions.get(str(summary.end_message_id))
-		if end_index is None:
+		coverage = _summary_coverage_indices(summary, message_ids)
+		if coverage is None:
 			continue
-		if summary.start_message_id is not None:
-			start_index = positions.get(str(summary.start_message_id))
-			if start_index is not None and start_index > 0:
-				continue
-		candidates.append((end_index, summary))
+		start_index, end_index = coverage
+		if start_index > oldest_raw_index or end_index < oldest_raw_index:
+			continue
+		summary_message = build_positional_summary_message(summary)
+		covered_tokens = sum(
+			estimate_compaction_message_tokens(message)
+			for message in messages[start_index : end_index + 1]
+		)
+		summary_tokens = estimate_compaction_message_tokens(summary_message)
+		would_save = covered_tokens - summary_tokens
+		if would_save <= 0:
+			continue
+		candidates.append((end_index, summary, start_index, end_index, summary_message))
 	if not candidates:
 		return None
-	end_index, summary = min(candidates, key=lambda item: item[0])
-	return summary, end_index
+	_, summary, start_index, end_index, summary_message = min(
+		candidates,
+		key=lambda item: item[0],
+	)
+	return summary, start_index, end_index, summary_message
 
 
 def _summarization_batch(
@@ -214,17 +422,27 @@ def _summarization_batch(
 	"""choose an oldest-prefix batch for one summary generation call."""
 	if not messages:
 		return [], None, None
+	minimum_input_tokens = _minimum_saving_summary_input_tokens()
+	target_token_limit = max(token_limit, minimum_input_tokens)
+	start_index = next(
+		(index for index, message_id in enumerate(message_ids) if message_id),
+		None,
+	)
+	if start_index is None:
+		return [], None, None
 
 	total_tokens = 0
-	end_index = 0
-	for index, message in enumerate(messages):
+	end_index = start_index
+	for index, message in enumerate(messages[start_index:], start=start_index):
 		total_tokens += estimate_compaction_message_tokens(message)
 		end_index = index + 1
-		if total_tokens >= token_limit:
+		if total_tokens >= target_token_limit:
 			break
+	if total_tokens < minimum_input_tokens:
+		return [], None, None
 
-	batch_messages = messages[:end_index]
-	batch_ids = message_ids[:end_index]
+	batch_messages = messages[start_index:end_index]
+	batch_ids = message_ids[start_index:end_index]
 	first_id = next((message_id for message_id in batch_ids if message_id), None)
 	last_id = next(
 		(message_id for message_id in reversed(batch_ids) if message_id),
@@ -241,7 +459,7 @@ def next_summarization_batch(
 	messages: list[SDKMessage],
 	message_ids: list[str | None],
 	summaries: list[ThreadSummary],
-	budget: int,
+	token_limit: int,
 	run_id: TypeID | None,
 ) -> tuple[list[SDKMessage], TypeID | None, TypeID | None]:
 	"""choose the next old unsummarized batch for background or blocking work.
@@ -253,7 +471,7 @@ def next_summarization_batch(
 	cutoff = find_summarized_cutoff(summaries, message_ids)
 	run_start_index = find_run_start_index(messages, run_id)
 	if run_start_index is None:
-		max_end_index = max(len(messages) - 1, 0)
+		max_end_index = len(messages)
 	else:
 		max_end_index = run_start_index
 	if cutoff >= max_end_index:
@@ -261,7 +479,7 @@ def next_summarization_batch(
 	return _summarization_batch(
 		messages[cutoff:max_end_index],
 		message_ids[cutoff:max_end_index],
-		summary_cluster_token_limit(budget),
+		token_limit,
 	)
 
 
@@ -287,48 +505,6 @@ def find_summarized_cutoff(
 			max_cutoff = max(max_cutoff, index + 1)
 
 	return max_cutoff
-
-
-def build_summary_injection(summaries: list[ThreadSummary]) -> str:
-	"""build the summary text to inject into the system message."""
-	if not summaries:
-		return ""
-
-	parts: list[str] = []
-	for summary in summaries:
-		if summary.content:
-			parts.append(summary.content)
-
-	if not parts:
-		return ""
-
-	combined = "\n---\n".join(parts)
-	return (
-		"\n\n## conversation history summary\n\n"
-		"the following is a summary of earlier messages in this conversation "
-		"that have been compacted to save context space:\n\n"
-		f"{combined}"
-	)
-
-
-def inject_summary_into_system(
-	messages: list[SDKMessage],
-	summary_text: str,
-) -> list[SDKMessage]:
-	"""append summary text to the system message."""
-	if not summary_text:
-		return messages
-
-	result = list(messages)
-	for index, message in enumerate(result):
-		if isinstance(message, SDKSystemMessage):
-			existing = message.text or ""
-			new_text = existing + summary_text
-			result[index] = SDKSystemMessage.from_text(new_text)
-			return result
-
-	result.insert(0, SDKSystemMessage.from_text(summary_text.strip()))
-	return result
 
 
 def build_compaction_info(
@@ -413,7 +589,23 @@ def _format_transcript(messages: Sequence[SDKMessage]) -> str:
 		role = msg.role
 		if isinstance(msg, SDKToolMessage):
 			text = msg.tool_output or ""
-		elif isinstance(msg, (SDKUserMessage, SDKAssistantMessage, SDKSystemMessage)):
+		elif isinstance(msg, SDKAssistantMessage):
+			parts: list[str] = []
+			if msg.text:
+				parts.append(msg.text)
+			for tool_call in msg.tool_calls:
+				arguments = json.dumps(
+					tool_call.arguments,
+					ensure_ascii=True,
+					separators=(",", ":"),
+					default=str,
+				)
+				parts.append(
+					f"tool_call id={tool_call.id} name={tool_call.name} "
+					f"arguments={arguments}"
+				)
+			text = "\n".join(parts)
+		elif isinstance(msg, (SDKUserMessage, SDKSystemMessage)):
 			text = msg.text or ""
 		else:
 			text = ""
@@ -428,15 +620,20 @@ def _placeholder_summary(
 	messages: Sequence[SDKMessage],
 	start_time: datetime | None = None,
 	end_time: datetime | None = None,
+	max_chars: int | None = None,
 ) -> str:
 	"""generate a minimal fallback when model summarization fails."""
 	count = len(messages)
 	if start_time and end_time:
-		return (
+		text = (
 			f"[{count} messages from {start_time.isoformat()} "
 			f"to {end_time.isoformat()}]"
 		)
-	return f"[{count} messages - summary unavailable]"
+	else:
+		text = f"[{count} messages - summary unavailable]"
+	if max_chars is None:
+		return text
+	return _bounded_text(text, max_chars)
 
 
 async def summarize_messages(
@@ -457,6 +654,19 @@ async def summarize_messages(
 	"""
 	async with session_scope(session) as session:
 		transcript = _format_transcript(messages)
+		input_chars = len(transcript.strip())
+		max_summary_chars = min(
+			_summary_output_max_chars_for_messages(messages),
+			max(0, input_chars - 1),
+		)
+		if max_summary_chars <= 0:
+			raise ValueError("summary batch is too small to compact")
+		output_model = _bounded_summary_model(
+			"SummaryOut",
+			max_summary_chars,
+			_SUMMARY_FIELD_DESCRIPTION,
+			_SUMMARY_FIELD_EXAMPLES,
+		)
 		content: str
 		log_extra: dict[str, object] = {
 			"thread_id": str(thread_id),
@@ -465,6 +675,7 @@ async def summarize_messages(
 			"start_message_id": str(start_message_id) if start_message_id else None,
 			"end_message_id": str(end_message_id) if end_message_id else None,
 			"transcript_chars": len(transcript),
+			"summary_max_chars": max_summary_chars,
 		}
 		logger.info("agent context summary generation started", extra=log_extra)
 
@@ -472,25 +683,47 @@ async def summarize_messages(
 			chat_model = await resolve_task_chat_model(session, "summarization")
 			sdk_thread = SDKThread(
 				messages=[
-					SDKSystemMessage.from_text(_SUMMARIZE_PROMPT),
+					SDKSystemMessage.from_text(
+						f"{_SUMMARIZE_PROMPT}\n\n"
+						f"summary must be {max_summary_chars} characters or fewer."
+					),
 					SDKUserMessage.from_text(transcript),
 				]
 			)
 			structured = await run_chat_model_json_schema(
 				chat_model,
 				thread=sdk_thread,
-				json_schema=_SummaryOut.model_json_schema(),
+				json_schema=output_model.model_json_schema(),
 				purpose="summarization",
 			)
-			content = _SummaryOut.model_validate(structured).summary.strip()
+			content = _summary_text_from_structured(structured, output_model)
 			if not content:
-				content = _placeholder_summary(messages)
+				content = _placeholder_summary(messages, max_chars=max_summary_chars)
+		except GenerationBadRequestError as exc:
+			if is_context_pressure_generation_error(exc):
+				logger.warning(
+					"summarization request exceeded provider context, "
+					"using placeholder",
+					extra={
+						**log_extra,
+						"provider": exc.provider,
+						"status_code": exc.status_code,
+						"code": exc.code,
+					},
+					exc_info=True,
+				)
+			else:
+				logger.exception(
+					"summarization failed for thread %s, using placeholder",
+					thread_id,
+				)
+			content = _placeholder_summary(messages, max_chars=max_summary_chars)
 		except Exception:
 			logger.exception(
 				"summarization failed for thread %s, using placeholder",
 				thread_id,
 			)
-			content = _placeholder_summary(messages)
+			content = _placeholder_summary(messages, max_chars=max_summary_chars)
 
 		summary = await summary_service.create_summary(
 			thread_id=thread_id,
@@ -500,7 +733,20 @@ async def summarize_messages(
 			start_message_id=start_message_id,
 			end_message_id=end_message_id,
 			session=session,
+			metadata=_summary_metadata_for_messages(
+				messages,
+				start_message_id,
+				end_message_id,
+			),
 		)
+		predecessor_ids = summary.metadata_.get(SUMMARY_PREDECESSOR_IDS_METADATA_KEY)
+		parsed_predecessor_ids = _summary_typeids_from_metadata(predecessor_ids)
+		if parsed_predecessor_ids:
+			await summary_service.supersede_summaries(
+				parsed_predecessor_ids,
+				summary.id,
+				session,
+			)
 		logger.info(
 			"agent context summary stored",
 			extra={
@@ -516,11 +762,19 @@ async def summarize_thread_message_range(
 	thread_id: TypeID,
 	start_message_id: TypeID,
 	end_message_id: TypeID,
+	branch_head_message_id: TypeID | None = None,
 	session: AsyncSession | None = None,
 ) -> TypeID:
 	"""summarize a persisted active-branch message range by message ids."""
 	async with session_scope(session) as session:
-		branch = await thread_service.walk_message_branch(session, end_message_id)
+		branch_leaf_id = branch_head_message_id or end_message_id
+		if branch_head_message_id is not None:
+			thread = await session.get(Thread, str(thread_id))
+			if thread is None or str(thread.current_message_id) != str(
+				branch_head_message_id
+			):
+				raise SummaryRangeStaleError("summary branch head is stale")
+		branch = await thread_service.walk_message_branch(session, branch_leaf_id)
 		ids = [str(message.id) for message in branch]
 		try:
 			start_index = ids.index(str(start_message_id))
@@ -558,6 +812,7 @@ async def summarize_thread_message_range(
 
 async def condense_summaries(
 	thread_id: TypeID,
+	expected_branch_head_message_id: TypeID | None = None,
 	session: AsyncSession | None = None,
 ) -> TypeID | None:
 	"""merge active agent-context summaries into one replacement summary.
@@ -568,6 +823,12 @@ async def condense_summaries(
 	records to consider.
 	"""
 	async with session_scope(session) as session:
+		if expected_branch_head_message_id is not None:
+			thread = await session.get(Thread, str(thread_id))
+			if thread is None or str(thread.current_message_id) != str(
+				expected_branch_head_message_id
+			):
+				raise SummaryRangeStaleError("condensation branch head is stale")
 		existing = await summary_service.list_active_summaries(
 			thread_id,
 			session,
@@ -596,7 +857,40 @@ async def condense_summaries(
 			)
 			combined = combined[:_MAX_CONDENSATION_INPUT_CHARS]
 
+		max_summary_chars = max(0, len(combined.strip()) - 1)
+		if max_summary_chars <= 0:
+			logger.info(
+				"summary condensation skipped",
+				extra={
+					"thread_id": str(thread_id),
+					"purpose": SummaryPurpose.AGENT_CONTEXT.value,
+					"summary_count": len(existing),
+					"reason": "input too small",
+				},
+			)
+			return None
+		output_model = _bounded_summary_model(
+			"CondensedSummaryOut",
+			max_summary_chars,
+			_CONDENSE_FIELD_DESCRIPTION,
+			_CONDENSE_FIELD_EXAMPLES,
+		)
+
 		total_message_count = sum(summary.message_count for summary in existing)
+		covered_raw_ids: list[str] = []
+		predecessor_ids: list[str] = []
+		for summary in existing:
+			covered = summary.metadata_.get(SUMMARY_COVERED_RAW_IDS_METADATA_KEY)
+			if isinstance(covered, list):
+				covered_raw_ids.extend(
+					value for value in covered if isinstance(value, str)
+				)
+			predecessor_ids.append(str(summary.id))
+			predecessors = summary.metadata_.get(SUMMARY_PREDECESSOR_IDS_METADATA_KEY)
+			if isinstance(predecessors, list):
+				predecessor_ids.extend(
+					value for value in predecessors if isinstance(value, str)
+				)
 		first_start = next(
 			(
 				summary.start_message_id
@@ -622,32 +916,71 @@ async def condense_summaries(
 				"purpose": SummaryPurpose.AGENT_CONTEXT.value,
 				"summary_count": len(existing),
 				"input_chars": len(combined),
+				"summary_max_chars": max_summary_chars,
 			},
 		)
 		try:
 			chat_model = await resolve_task_chat_model(session, "summarization")
 			sdk_thread = SDKThread(
 				messages=[
-					SDKSystemMessage.from_text(_CONDENSE_PROMPT),
+					SDKSystemMessage.from_text(
+						f"{_CONDENSE_PROMPT}\n\n"
+						f"summary must be {max_summary_chars} characters or fewer."
+					),
 					SDKUserMessage.from_text(combined),
 				]
 			)
 			structured = await run_chat_model_json_schema(
 				chat_model,
 				thread=sdk_thread,
-				json_schema=_CondensedSummaryOut.model_json_schema(),
+				json_schema=output_model.model_json_schema(),
 				purpose="summary_condensation",
 			)
-			content = _CondensedSummaryOut.model_validate(structured).summary.strip()
+			content = _summary_text_from_structured(structured, output_model)
 			if not content:
-				content = combined
+				content = _bounded_text(combined, max_summary_chars)
+		except GenerationBadRequestError as exc:
+			if is_context_pressure_generation_error(exc):
+				logger.warning(
+					"summary condensation request exceeded provider context, "
+					"concatenating existing summaries",
+					extra={
+						"thread_id": str(thread_id),
+						"purpose": SummaryPurpose.AGENT_CONTEXT.value,
+						"summary_count": len(existing),
+						"input_chars": len(combined),
+						"summary_max_chars": max_summary_chars,
+						"provider": exc.provider,
+						"status_code": exc.status_code,
+						"code": exc.code,
+					},
+					exc_info=True,
+				)
+			else:
+				logger.exception(
+					"summary condensation failed for thread %s, "
+					"concatenating existing summaries",
+					thread_id,
+				)
+			content = _bounded_text(combined, max_summary_chars)
 		except Exception:
 			logger.exception(
 				"summary condensation failed for thread %s, "
 				"concatenating existing summaries",
 				thread_id,
 			)
-			content = combined
+			content = _bounded_text(combined, max_summary_chars)
+
+		condensed_metadata: JSONObject = {}
+		condensed_metadata[SUMMARY_COVERED_RAW_IDS_METADATA_KEY] = _json_string_list(
+			_dedupe_preserve_order(covered_raw_ids)
+		)
+		condensed_metadata[SUMMARY_PREDECESSOR_IDS_METADATA_KEY] = _json_string_list(
+			_dedupe_preserve_order(predecessor_ids)
+		)
+		condensed_metadata[SUMMARY_BRANCH_HEAD_METADATA_KEY] = (
+			str(last_end) if last_end else None
+		)
 
 		condensed = await summary_service.create_summary(
 			thread_id=thread_id,
@@ -657,6 +990,7 @@ async def condense_summaries(
 			start_message_id=first_start,
 			end_message_id=last_end,
 			session=session,
+			metadata=condensed_metadata,
 		)
 
 		old_ids = [summary.id for summary in existing]

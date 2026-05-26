@@ -10,6 +10,14 @@ from .anthropic.messages import AnthropicMessagesAdapter
 from .base.chat import (
 	BaseChatAdapter,
 	ChatGenerationParams,
+	GenerationAuthenticationError,
+	GenerationBadRequestError,
+	GenerationError,
+	GenerationPermissionError,
+	GenerationProviderConnectionError,
+	GenerationProviderTimeoutError,
+	GenerationProviderUnavailableError,
+	GenerationRateLimitError,
 )
 from .google.generate_content import GoogleGenerateContentAdapter
 from .ollama.chat import OllamaChatAdapter
@@ -47,5 +55,13 @@ __all__ = [
 	"BaseChatAdapter",
 	"ChatAdapter",
 	"ChatGenerationParams",
+	"GenerationError",
+	"GenerationRateLimitError",
+	"GenerationAuthenticationError",
+	"GenerationPermissionError",
+	"GenerationProviderUnavailableError",
+	"GenerationProviderConnectionError",
+	"GenerationProviderTimeoutError",
+	"GenerationBadRequestError",
 	"resolve_chat_adapter",
 ]
