@@ -1,10 +1,7 @@
-"""Prompt rendering, variable building, and validation with Jinja2.
+"""prompt rendering, variable building, and validation with Jinja2.
 
-this module is the single entry point for all prompt-related operations:
-- jinja2 template rendering with composable includes
-- runtime prompt variable building from user + client context
-- full agent instruction rendering via render_agent_instructions()
-- prompt validation for CRUD operations
+this module owns prompt template rendering, runtime variable building, agent
+instruction rendering, and prompt reference validation.
 """
 
 from __future__ import annotations
@@ -17,13 +14,14 @@ from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 from jinja2 import DictLoader, Environment, StrictUndefined, TemplateNotFound
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.prompt import Prompt
 from api.models.user import User
 from api.schemas.common import MISSING, MissingType
 from api.schemas.preferences import AccountPreferences, AIPreferences
+from api.v1.service.prompts.cache import list_prompt_templates
+from api.v1.service.prompts.external import render_external_prompt_content_map
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -32,6 +30,7 @@ if TYPE_CHECKING:
 
 
 def _preference_value[T](value: T | MissingType, default: T) -> T:
+	"""return a preference value or its default when missing."""
 	if value is MISSING:
 		return default
 	return cast(T, value)
@@ -58,19 +57,19 @@ def normalize_command(command: str) -> str:
 
 
 def _prepare_template(text: str) -> str:
-	"""Convert legacy PROMPTS.* placeholders to Jinja include directives."""
-	return _PROMPT_REF_RE.sub(lambda m: f'{{% include "{m.group(1)}" %}}', text)
+	"""convert legacy PROMPTS.* placeholders to Jinja include directives."""
+	return _PROMPT_REF_RE.sub(lambda match: f'{{% include "{match.group(1)}" %}}', text)
 
 
 def _collect_includes(text: str) -> set[str]:
-	"""Find referenced prompts via Jinja include or legacy PROMPTS.* syntax."""
+	"""find referenced prompts via Jinja include or legacy PROMPTS.* syntax."""
 	names = set(_PROMPT_REF_RE.findall(text))
 	names |= {match for match in _INCLUDE_RE.findall(text)}
 	return {normalize_command(name) for name in names}
 
 
 class PromptValidationError(ValueError):
-	"""Raised when prompt references are invalid."""
+	"""raised when prompt references are invalid."""
 
 
 def _validate_graph(
@@ -78,9 +77,11 @@ def _validate_graph(
 	start_key: str,
 	max_depth: int = _MAX_DEPTH,
 ) -> None:
+	"""validate prompt include graph reachability and recursion limits."""
 	errors: list[str] = []
 
 	def visit(current: str, path: list[str], depth: int) -> None:
+		"""walk reachable prompt references from one prompt key."""
 		if depth > max_depth:
 			errors.append(
 				f"nesting depth ({depth}) exceeds maximum allowed ({max_depth})"
@@ -103,13 +104,14 @@ def _validate_graph(
 
 
 def _finalize(value: object) -> object:
-	"""Jinja2 finalize hook: render None as empty string."""
+	"""Jinja2 finalize hook that renders None as an empty string."""
 	if value is None:
 		return ""
 	return value
 
 
 def _build_env(prompt_map: dict[str, str]) -> Environment:
+	"""build a strict Jinja2 environment for prompt templates."""
 	return Environment(
 		loader=DictLoader(prompt_map),
 		autoescape=False,
@@ -125,8 +127,9 @@ def render_prompt_from_map(
 	variables: dict[str, object] | None = None,
 	max_depth: int = _MAX_DEPTH,
 ) -> str:
+	"""render one prompt template from an already-loaded prompt map."""
 	key = normalize_command(command)
-	prepared_map = {k: _prepare_template(v) for k, v in prompt_map.items()}
+	prepared_map = {key: _prepare_template(value) for key, value in prompt_map.items()}
 	_validate_graph(prepared_map, key, max_depth=max_depth)
 	env = _build_env(prepared_map)
 	try:
@@ -144,8 +147,15 @@ async def render_prompt_from_db(
 	variables: dict[str, object] | None = None,
 	max_depth: int = _MAX_DEPTH,
 ) -> str:
-	result = await session.execute(select(Prompt.command, Prompt.content))
-	prompt_map = {normalize_command(cmd): content for cmd, content in result.all()}
+	"""render one prompt command using cached DB prompt templates."""
+	prompt_map = await list_prompt_templates(session)
+	external_prompts = await _render_referenced_external_prompts(
+		session,
+		prompt_map,
+		normalize_command(command),
+		max_depth=max_depth,
+	)
+	prompt_map.update(external_prompts)
 	return render_prompt_from_map(
 		prompt_map,
 		command=command,
@@ -160,11 +170,17 @@ async def render_inline_with_prompts(
 	variables: dict[str, object] | None = None,
 	max_depth: int = _MAX_DEPTH,
 ) -> str:
-	"""Render an inline template that may include DB prompts."""
-	result = await session.execute(select(Prompt.command, Prompt.content))
-	prompt_map = {normalize_command(cmd): content for cmd, content in result.all()}
+	"""render an inline template that may include DB or external prompts."""
+	prompt_map = await list_prompt_templates(session)
 	inline_key = "__inline__"
 	prompt_map[inline_key] = text
+	external_prompts = await _render_referenced_external_prompts(
+		session,
+		prompt_map,
+		inline_key,
+		max_depth=max_depth,
+	)
+	prompt_map.update(external_prompts)
 	return render_prompt_from_map(
 		prompt_map,
 		command=inline_key,
@@ -179,22 +195,62 @@ def validate_prompt_content(
 	content: str,
 	max_depth: int = _MAX_DEPTH,
 	self_id: TypeID | None = None,
+	extra_prompt_map: dict[str, str] | None = None,
 ) -> None:
+	"""validate that a prompt template references only available prompts."""
 	prompt_map: dict[str, str] = {}
-	for p in all_prompts:
-		if self_id is not None and str(p.id) == str(self_id):
+	for prompt in all_prompts:
+		if self_id is not None and str(prompt.id) == str(self_id):
 			continue
-		prompt_map[normalize_command(p.command)] = p.content
+		prompt_map[normalize_command(prompt.command)] = prompt.content
+	if extra_prompt_map:
+		prompt_map.update(extra_prompt_map)
 	prompt_map[normalize_command(command)] = content
-	prepared_map = {k: _prepare_template(v) for k, v in prompt_map.items()}
+	prepared_map = {key: _prepare_template(value) for key, value in prompt_map.items()}
 	_validate_graph(prepared_map, normalize_command(command), max_depth=max_depth)
 
 
+async def _render_referenced_external_prompts(
+	session: AsyncSession,
+	prompt_map: dict[str, str],
+	start_key: str,
+	max_depth: int,
+) -> dict[str, str]:
+	"""render external prompts referenced by a local prompt graph."""
+	references = _collect_reachable_includes(prompt_map, start_key, max_depth=max_depth)
+	references.add(start_key)
+	return await render_external_prompt_content_map(session, references)
+
+
+def _collect_reachable_includes(
+	prompt_map: dict[str, str],
+	start_key: str,
+	max_depth: int,
+) -> set[str]:
+	"""collect include commands reachable from one prompt key."""
+	prepared_map = {key: _prepare_template(value) for key, value in prompt_map.items()}
+	references: set[str] = set()
+	visited: set[str] = set()
+
+	def visit(current: str, depth: int) -> None:
+		"""walk local prompt includes while collecting referenced commands."""
+		if depth > max_depth or current in visited:
+			return
+		visited.add(current)
+		content = prepared_map.get(current)
+		if content is None:
+			return
+		for ref in _collect_includes(content):
+			references.add(ref)
+			visit(ref, depth + 1)
+
+	visit(start_key, 0)
+	return references
+
+
 def http_error_from_validation(err: PromptValidationError) -> HTTPException:
+	"""convert prompt validation errors into HTTP 400 responses."""
 	return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
-
-
-# runtime prompt variable building
 
 
 def _resolve_bio(
@@ -231,9 +287,9 @@ def _tz_label(dt: datetime) -> str:
 	if offset is not None:
 		total = int(offset.total_seconds())
 		sign = "+" if total >= 0 else "-"
-		h, rem = divmod(abs(total), 3600)
-		m = rem // 60
-		offset_str = f"UTC{sign}{h:02d}:{m:02d}"
+		hours, remainder = divmod(abs(total), 3600)
+		minutes = remainder // 60
+		offset_str = f"UTC{sign}{hours:02d}:{minutes:02d}"
 	else:
 		offset_str = ""
 	if abbr and offset_str:
@@ -305,10 +361,8 @@ def _build_date_variables(
 	utc_now = datetime.now(UTC)
 	variables: dict[str, object] = {}
 
-	# server time (UTC) - always available
 	variables.update(_build_date_set(utc_now, "server"))
 
-	# user time - only if client provides timezone
 	user_now: datetime | None = None
 	if client_context and client_context.timezone:
 		try:
@@ -321,7 +375,6 @@ def _build_date_variables(
 		variables.update(_build_date_set(user_now, "current"))
 		variables.update(_tz_display(user_now))
 	else:
-		# fall back to server time for current_* variables
 		variables.update(_build_date_set(utc_now, "current"))
 		variables.update(
 			{
@@ -372,23 +425,12 @@ def build_prompt_variables(
 	user: User | None = None,
 	client_context: ClientContext | None = None,
 ) -> dict[str, object]:
-	"""build the dict of always-available prompt template variables.
-
-	these are injected into every jinja2 render call so prompts
-	and system instructions can reference them without explicit wiring.
-
-	args:
-		user: the authenticated user, or none for anonymous context.
-		client_context: optional device/environment data from the client.
-
-	returns:
-		flat dict of variable_name → value.
-	"""
+	"""build the dict of always-available prompt template variables."""
 	now = _resolve_now(client_context)
 	variables: dict[str, object] = _build_date_variables(client_context)
 
-	# helper: extract attribute from client context, defaulting to None.
-	def _ctx(attr: str) -> object:
+	def client_value(attr: str) -> object:
+		"""read an optional field from the client context."""
 		if client_context is None:
 			return None
 		return getattr(client_context, attr, None)
@@ -399,48 +441,44 @@ def build_prompt_variables(
 		else None
 	)
 
-	# client context variables
 	variables.update(
 		{
-			"client_timezone": _ctx("timezone"),
-			"client_language": _ctx("language"),
-			"client_os": _ctx("os"),
-			"client_browser": _ctx("browser"),
-			"client_is_mobile": _ctx("is_mobile"),
-			"client_pwa_installed": _ctx("pwa_installed"),
-			"client_user_agent": _ctx("user_agent"),
-			"client_offline": _ctx("offline"),
-			"client_display_mode": _ctx("display_mode"),
-			"client_preferred_color_scheme": _ctx("preferred_color_scheme"),
-			"client_prefers_reduced_motion": _ctx("prefers_reduced_motion"),
-			"client_prefers_contrast": _ctx("prefers_contrast"),
-			"client_idle_state": _ctx("idle_state"),
-			"client_gamepad_count": _ctx("gamepad_count"),
+			"client_timezone": client_value("timezone"),
+			"client_language": client_value("language"),
+			"client_os": client_value("os"),
+			"client_browser": client_value("browser"),
+			"client_is_mobile": client_value("is_mobile"),
+			"client_pwa_installed": client_value("pwa_installed"),
+			"client_user_agent": client_value("user_agent"),
+			"client_offline": client_value("offline"),
+			"client_display_mode": client_value("display_mode"),
+			"client_preferred_color_scheme": client_value("preferred_color_scheme"),
+			"client_prefers_reduced_motion": client_value("prefers_reduced_motion"),
+			"client_prefers_contrast": client_value("prefers_contrast"),
+			"client_idle_state": client_value("idle_state"),
+			"client_gamepad_count": client_value("gamepad_count"),
 			"client_gamepads": gamepads,
-			"client_connection_type": _ctx("connection_type"),
-			"client_connection_effective_type": _ctx("connection_effective_type"),
-			"client_connection_downlink_mbps": _ctx("connection_downlink_mbps"),
-			"client_connection_rtt_ms": _ctx("connection_rtt_ms"),
-			"client_connection_save_data": _ctx("connection_save_data"),
-			"client_battery_supported": _ctx("battery_supported"),
-			"client_battery_charging": _ctx("battery_charging"),
-			"client_battery_level": _ctx("battery_level"),
-			"client_battery_charging_time_seconds": _ctx(
+			"client_connection_type": client_value("connection_type"),
+			"client_connection_effective_type": client_value(
+				"connection_effective_type"
+			),
+			"client_connection_downlink_mbps": client_value("connection_downlink_mbps"),
+			"client_connection_rtt_ms": client_value("connection_rtt_ms"),
+			"client_connection_save_data": client_value("connection_save_data"),
+			"client_battery_supported": client_value("battery_supported"),
+			"client_battery_charging": client_value("battery_charging"),
+			"client_battery_level": client_value("battery_level"),
+			"client_battery_charging_time_seconds": client_value(
 				"battery_charging_time_seconds"
 			),
-			"client_battery_discharging_time_seconds": _ctx(
+			"client_battery_discharging_time_seconds": client_value(
 				"battery_discharging_time_seconds"
 			),
 		}
 	)
 
-	# location variables (from browser geolocation)
 	variables.update(_build_location_variables(client_context))
 
-	# filter injection sentinels - filters find-and-replace these at runtime.
-	# if the admin didn't include the variable in their prompt, the sentinel
-	# is absent and the filter skips all processing.
-	# user_memories and chat_context sentinels are set later, gated by prefs.
 	variables["referenced_attachments"] = SENTINEL_REFERENCED_ATTACHMENTS
 	variables["chat_window_info"] = SENTINEL_CHAT_WINDOW_INFO
 	variables["citation_sources"] = SENTINEL_CITATION_SOURCES
@@ -472,16 +510,11 @@ def build_prompt_variables(
 		account_section if isinstance(account_section, AccountPreferences) else None
 	)
 
-	# gate memories sentinel on user preference (default: enabled).
-	# when disabled, the sentinel is replaced with an empty string so the
-	# MemoryContextFilter sees nothing to inject into.
 	if ai and _preference_value(ai.memories_enabled, True) is False:
 		variables["user_memories"] = ""
 	else:
 		variables["user_memories"] = SENTINEL_USER_MEMORIES
 
-	# gate chat context sentinel on user preference (default: enabled).
-	# chat_recall=False disables cross-chat context injection.
 	if ai and _preference_value(ai.chat_recall, True) is False:
 		variables["chat_context"] = ""
 	else:
@@ -517,30 +550,13 @@ def build_prompt_variables(
 	return variables
 
 
-# unified agent instruction rendering
-
-
 async def render_agent_instructions(
 	session: AsyncSession,
 	text: str,
 	user: User | None = None,
 	client_context: ClientContext | None = None,
 ) -> str:
-	"""render agent system instructions with full context.
-
-	this is the single entry point agents.py should call.
-	it builds runtime variables from user + client context,
-	loads prompt library from DB, and renders through jinja2.
-
-	args:
-		session: active database session.
-		text: the raw system prompt template text.
-		user: the authenticated user (or none).
-		client_context: optional device/environment data from the client.
-
-	returns:
-		fully rendered instruction string.
-	"""
+	"""render agent system instructions with runtime context variables."""
 	variables = build_prompt_variables(user, client_context)
 	return await render_inline_with_prompts(
 		session,

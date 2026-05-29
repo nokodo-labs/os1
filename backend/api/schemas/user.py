@@ -64,7 +64,7 @@ class UserBase(BaseModel):
 	avatar_url: str | None = None
 	is_active: bool = True
 	is_superuser: bool = False
-	find_by_email: bool = True
+	find_by_email: bool = False
 	privacy: UserPrivacy = Field(default_factory=UserPrivacy)
 	preferences: UserPreferences = Field(default_factory=UserPreferences)
 	integration_tokens: dict[str, Any] = Field(default_factory=dict)

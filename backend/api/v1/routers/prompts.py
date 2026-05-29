@@ -47,7 +47,7 @@ async def list_prompts(
 	sort_dir: SortDir = "asc",
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> list[Prompt]:
+) -> list[PromptSchema]:
 	"""list prompts."""
 	return await prompt_service.list_prompts(
 		db,
@@ -56,7 +56,7 @@ async def list_prompts(
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
-		q=filters.q,
+		filters=filters,
 	)
 
 
@@ -67,12 +67,16 @@ async def count_prompts(
 	db: AsyncSession = Depends(get_db),
 ) -> int:
 	"""count prompts matching the list filters."""
-	return await prompt_service.count_prompts(db, principal=principal, q=filters.q)
+	return await prompt_service.count_prompts(
+		db,
+		principal=principal,
+		filters=filters,
+	)
 
 
 @router.get("/{prompt_id}", response_model=PromptSchema)
 async def get_prompt(
-	prompt_id: TypeID,
+	prompt_id: str,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> PromptSchema:

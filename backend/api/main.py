@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.boot_settings import boot_settings
 from api.constants import API_V1_MOUNT_PATH
-from api.database import init_db
+from api.database import init_db, session_scope
 from api.exceptions import (
 	http_exception_handler,
 	unhandled_exception_handler,
@@ -34,6 +34,11 @@ from api.storage import configure_storage_backends
 from api.taskiq import shutdown_taskiq, startup_taskiq
 from api.v1.router import api_router
 from api.v1.service.events import start_remote_fanout_relay
+from api.v1.service.integrations.mcp import (
+	initialize_global_mcp_servers,
+	start_mcp_list_change_listeners,
+	stop_mcp_list_change_listeners,
+)
 from api.v1.tasks.calendar import reconcile_calendar_event_notification_schedules
 from api.v1.tasks.reminders import reconcile_reminder_notification_schedules
 from api.v1.tasks.threads import (
@@ -64,6 +69,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 	if not boot_settings.TESTING:
 		await init_db()
+		async with session_scope() as session:
+			await initialize_global_mcp_servers(session)
 		await redis_client.connect()
 		await clear_disabled_thread_maintenance_backfill_schedule()
 		await startup_taskiq()
@@ -77,7 +84,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 	# state (imported transitively through the router tree).
 	invalidation_task: asyncio.Task[None] | None = None
 	event_task: asyncio.Task[None] | None = None
+	mcp_list_change_tasks: list[asyncio.Task[None]] = []
 	if not boot_settings.TESTING:
+		mcp_list_change_tasks = await start_mcp_list_change_listeners()
 		invalidation_task = await start_invalidation_subscriber()
 		event_task = await start_remote_fanout_relay()
 
@@ -92,6 +101,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 		invalidation_task.cancel()
 	if event_task is not None:
 		event_task.cancel()
+	await stop_mcp_list_change_listeners(mcp_list_change_tasks)
 	await close_storage()
 	if not boot_settings.TESTING:
 		await shutdown_taskiq()

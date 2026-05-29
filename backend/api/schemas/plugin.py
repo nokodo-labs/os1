@@ -1,4 +1,4 @@
-"""Plugin schemas."""
+"""plugin schemas."""
 
 from __future__ import annotations
 
@@ -19,17 +19,20 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 PluginTypeStr = Literal["tool", "filter", "hook"]
+PluginSourceStr = Literal["native", "external", "custom"]
 type PluginTypeFilter = PluginTypeStr | None
+type PluginSourceFilter = PluginSourceStr | None
 
 
 class PluginListFilters(BaseModel):
 	"""filters for listing plugins."""
 
 	plugin_type: PluginTypeFilter = None
+	source: PluginSourceFilter = None
 
 
 class PluginBase(MetadataModel):
-	"""Shared plugin fields."""
+	"""shared plugin fields."""
 
 	name: str = Field(description="unique plugin name/identifier")
 	description: str | None = Field(default=None, description="what the plugin does")
@@ -42,13 +45,13 @@ class PluginBase(MetadataModel):
 
 
 class PluginCreate(PluginBase):
-	"""Payload for plugin creation."""
+	"""payload for plugin creation."""
 
 	pass
 
 
 class PluginUpdate(MetadataUpdateModel):
-	"""Payload for plugin update."""
+	"""payload for plugin update."""
 
 	name: str | MissingType = MISSING
 	description: str | None | MissingType = MISSING
@@ -59,21 +62,18 @@ class PluginUpdate(MetadataUpdateModel):
 
 
 class Plugin(PluginBase, TimestampedModel):
-	"""Response schema."""
+	"""response schema."""
 
 	id: TypeID
 
 
 class PluginInfo(ORMModel):
-	"""metadata about an available plugin (native or user-defined)."""
+	"""metadata about a plugin catalog item."""
 
 	id: str = Field(description="unique plugin identifier")
 	name: str = Field(description="display name of the plugin")
 	description: str = Field(description="what the plugin does")
+	source: PluginSourceStr = Field(description="where this plugin comes from")
 	type: PluginTypeStr = Field(
 		description="type of plugin: 'tool', 'filter', or 'hook'"
-	)
-	is_native: bool = Field(
-		default=False,
-		description="whether this plugin is built-in (native) or user-defined",
 	)

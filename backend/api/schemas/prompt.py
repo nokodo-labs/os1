@@ -18,12 +18,15 @@ from api.schemas.sorting import CommonSortBy
 
 
 type PromptSortBy = CommonSortBy | Literal["command"]
+PromptSourceStr = Literal["native", "external", "custom"]
+type PromptSourceFilter = PromptSourceStr | None
 
 
 class PromptListFilters(BaseModel):
 	"""filters for listing prompts."""
 
 	q: str | None = Field(default=None, min_length=1, max_length=500)
+	source: PromptSourceFilter = None
 
 
 _COMMAND_PATTERN = r"^[a-zA-Z0-9][a-zA-Z0-9-_]*$"
@@ -82,3 +85,4 @@ class Prompt(PromptBase, TimestampedModel):
 	"""response schema."""
 
 	id: str
+	source: PromptSourceStr = "custom"

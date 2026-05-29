@@ -8,6 +8,7 @@ from api.models.event import Event
 from api.models.file import File
 from api.models.friendship import Friendship, FriendshipEvent
 from api.models.group import Group
+from api.models.mcp import MCPServer
 from api.models.memory import Memory
 from api.models.message import Message
 from api.models.model import Model
@@ -43,6 +44,7 @@ __all__ = [
 	"FriendshipEvent",
 	"Group",
 	"Memory",
+	"MCPServer",
 	"Message",
 	"Model",
 	"Note",

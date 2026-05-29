@@ -12,6 +12,10 @@ from api.v1.service.chat.tools.calendar import (
 )
 from api.v1.service.chat.tools.chats import ChatGetTool
 from api.v1.service.chat.tools.code_interpreter import CodeInterpreterTool
+from api.v1.service.chat.tools.external import (
+	has_external_tool_source,
+	resolve_external_tools,
+)
 from api.v1.service.chat.tools.files import FileEditTool, FileGetTool
 from api.v1.service.chat.tools.image_generation import GenerateImageTool
 from api.v1.service.chat.tools.memories import (
@@ -77,15 +81,22 @@ def get_registered_names() -> frozenset[str]:
 
 async def resolve_tools(
 	tool_ids: list[str],
+	app_context: AppContext | None = None,
 ) -> list[Tool[AppContext]]:
 	"""resolve tool ids to instantiated Tool objects."""
 	tools: list[Tool[AppContext]] = []
+	external_tool_ids: list[str] = []
 	for tool_id in tool_ids:
 		tool = TOOL_REGISTRY.get(tool_id)
 		if tool is None:
+			if has_external_tool_source(tool_id):
+				external_tool_ids.append(tool_id)
+				continue
 			logger.warning("unknown tool id requested: %s", tool_id)
 			continue
 		tools.append(tool)
+	if external_tool_ids and app_context is not None:
+		tools.extend(await resolve_external_tools(external_tool_ids, app_context))
 	return tools
 
 

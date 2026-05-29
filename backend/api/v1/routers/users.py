@@ -185,3 +185,13 @@ async def update_user(
 	return await user_service.update_user(
 		user_id, body, db, principal=principal, origin_session_id=x_session_id
 	)
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+	user_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> None:
+	"""delete user."""
+	await user_service.delete_user(user_id, db, principal=principal)
