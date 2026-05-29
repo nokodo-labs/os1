@@ -226,7 +226,9 @@
 			"matchCommandLine": true
 		},
 		"Push-Location": true,
-		"Pop-Location": true
+		"Pop-Location": true,
+		"uv run alembic current": true,
+		"uv run python ../tools/autogen-migration": true
 	},
 	"postman.settings.dotenv-detection-notification-visibility": false
 }
