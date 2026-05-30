@@ -28,6 +28,7 @@ from api.v1.service.vectorize import (
 	build_chunk,
 	remove_vectorized_resource,
 )
+from api.v1.service.vectorstores import VectorChunkResourceType
 from nokodo_ai.types import JSONObject
 from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
@@ -74,7 +75,7 @@ async def _reminder_should_revectorize(
 
 
 REMINDER_SPEC: VectorSpec[Reminder] = VectorSpec(
-	resource_type="reminder",
+	resource_type=VectorChunkResourceType.REMINDER,
 	resource_id=lambda reminder: str(reminder.id),
 	dense_text=_reminder_dense_text,
 	bm25_text=_reminder_dense_text,
@@ -195,7 +196,9 @@ async def _hybrid_search_reminders(
 		else (await embed_text(text=query_text, session=db) if need_dense else None)
 	)
 	text_query = query_text if need_sparse else None
-	query_filter = vectorstore_service.resource_filter("reminder")
+	query_filter = vectorstore_service.resource_types_filter(
+		[VectorChunkResourceType.REMINDER]
+	)
 	results = await vectorstore_service.search(
 		session=db,
 		query=query_emb,

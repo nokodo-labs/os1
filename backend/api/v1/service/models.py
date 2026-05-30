@@ -245,9 +245,10 @@ def _infer_google_modalities(model_type: ModelType) -> list[str]:
 		return [InputModality.TEXT]
 	if model_type == ModelType.IMAGE:
 		return [InputModality.TEXT, InputModality.IMAGES]
-	# gemini chat models accept text, images, audio, video
+	# gemini chat models accept text, documents, images, audio, and video
 	return [
 		InputModality.TEXT,
+		InputModality.DOCUMENTS,
 		InputModality.IMAGES,
 		InputModality.AUDIO,
 		InputModality.VIDEO,

@@ -28,6 +28,7 @@ from api.v1.service.vectorize import (
 	build_chunk,
 	remove_vectorized_resource,
 )
+from api.v1.service.vectorstores import VectorChunkResourceType
 from nokodo_ai.types import JSONObject
 from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
@@ -46,7 +47,7 @@ def _calendar_event_dense_text(calendar_event: CalendarEvent) -> str:
 
 def _calendar_event_metadata(calendar_event: CalendarEvent) -> JSONObject:
 	return {
-		"resource_type": "calendar_event",
+		"resource_type": VectorChunkResourceType.CALENDAR_EVENT.value,
 		"scheduled_kind": "event",
 		"scheduled_source": "master",
 		"owner_id": str(calendar_event.owner_id),
@@ -83,7 +84,7 @@ async def _calendar_event_should_revectorize(
 
 
 CALENDAR_EVENT_SPEC: VectorSpec[CalendarEvent] = VectorSpec(
-	resource_type="calendar_event",
+	resource_type=VectorChunkResourceType.CALENDAR_EVENT,
 	resource_id=lambda calendar_event: str(calendar_event.id),
 	dense_text=_calendar_event_dense_text,
 	bm25_text=_calendar_event_dense_text,
@@ -215,7 +216,9 @@ async def _hybrid_search_calendar_events(
 		query=query_emb,
 		text_query=text_query,
 		limit=limit,
-		query_filter=vectorstore_service.resource_filter("calendar_event"),
+		query_filter=vectorstore_service.resource_types_filter(
+			[VectorChunkResourceType.CALENDAR_EVENT]
+		),
 		normalize=params.normalize,
 	)
 	if not results:

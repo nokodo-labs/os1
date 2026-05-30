@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Sequence
+from enum import StrEnum
 from functools import lru_cache
 from typing import overload
 from urllib.parse import urlparse
@@ -34,9 +35,23 @@ from nokodo_ai.vectorstores import Vectorstore
 
 logger = logging.getLogger(__name__)
 
+
+class VectorChunkResourceType(StrEnum):
+	"""resource_type values stored on vector chunks."""
+
+	THREAD = "thread"
+	NOTE = "note"
+	MEMORY = "memory"
+	FILE = "file"
+	FILE_CONTENT = "file_content"
+	CALENDAR_EVENT = "calendar_event"
+	REMINDER = "reminder"
+
 DEFAULT_INDEXES: Index = {
 	"resource_type": "keyword",
 	"resource_id": "keyword",
+	"parent_resource_type": "keyword",
+	"parent_resource_id": "keyword",
 	"owner_id": "keyword",
 	# acl fields - indexed for fast principal-scoped search
 	"allowed_user_ids": "keyword",
@@ -171,19 +186,31 @@ def collection_name(model_name: str) -> str:
 	)
 
 
-def resource_filter(
-	resource_type: str,
+def _resource_type_condition(
+	resource_types: list[VectorChunkResourceType],
+) -> FieldMatch | FieldMatchAny:
+	"""build a scalar or multi-value resource type payload condition."""
+	values = [resource_type.value for resource_type in resource_types]
+	if len(values) == 1:
+		return FieldMatch(key="resource_type", value=values[0])
+	return FieldMatchAny(key="resource_type", values=values)
+
+
+def resource_types_filter(
+	resource_types: list[VectorChunkResourceType],
 	resource_id: str | None = None,
 	owner_id: str | None = None,
 ) -> ChunkFilter:
-	"""build a filter for a specific resource type.
+	"""build a filter for one or more resource types.
 
 	always filters by resource_type. adds resource_id for precise chunk
 	identification (used for upsert/delete). adds owner_id for user-scoped
 	access-controlled search.
 	"""
+	if not resource_types:
+		raise ValueError("resource_types cannot be empty")
 	all_of: list[FieldMatch | FieldMatchAny] = [
-		FieldMatch(key="resource_type", value=resource_type),
+		_resource_type_condition(resource_types)
 	]
 	if resource_id is not None:
 		all_of.append(FieldMatch(key="resource_id", value=resource_id))
@@ -192,8 +219,31 @@ def resource_filter(
 	return ChunkFilter(all_of=all_of)
 
 
+def parent_resource_filter(
+	parent_resource_type: VectorChunkResourceType,
+	parent_resource_id: str,
+	resource_types: list[VectorChunkResourceType] | None = None,
+) -> ChunkFilter:
+	"""build a filter for chunks attached to a parent resource."""
+	all_of: list[FieldMatch | FieldMatchAny] = []
+	if resource_types is not None:
+		if not resource_types:
+			raise ValueError("resource_types cannot be empty")
+		all_of.append(_resource_type_condition(resource_types))
+	all_of.extend(
+		(
+			FieldMatch(
+				key="parent_resource_type",
+				value=parent_resource_type.value,
+			),
+			FieldMatch(key="parent_resource_id", value=parent_resource_id),
+		)
+	)
+	return ChunkFilter(all_of=all_of)
+
+
 def acl_filter(
-	resource_type: str,
+	chunk_resource_types: list[VectorChunkResourceType],
 	is_admin: bool,
 	user_id: str,
 	group_ids: tuple[str, ...] | list[str] = (),
@@ -209,7 +259,7 @@ def acl_filter(
 	- any(role_ids) in allowed_role_ids
 	"""
 	all_of: list[FieldMatch | FieldMatchAny] = [
-		FieldMatch(key="resource_type", value=resource_type),
+		_resource_type_condition(chunk_resource_types)
 	]
 	if is_admin:
 		return ChunkFilter(all_of=all_of)

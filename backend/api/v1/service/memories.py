@@ -43,6 +43,7 @@ from api.v1.service.vectorize import (
 	remove_vectorized_resource,
 	vectorize_resource,
 )
+from api.v1.service.vectorstores import VectorChunkResourceType
 from nokodo_ai.messages import SystemMessage, UserMessage
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.types.json import JSONObject, JSONValue
@@ -62,36 +63,198 @@ type MemoryPostProcessingProgress = Callable[[int, str], Awaitable[None]]
 
 
 _POST_PROCESSING_PROMPT = """\
-you are a memory maintenance agent. you receive:
-1. the latest conversation context
-2. existing memories that are relevant to that context
+You maintain a collection of Memories - individual facts about a user, each
+automatically timestamped on creation or update.
 
-your job is to determine what maintenance actions to take on the
-memory collection. you CANNOT create new memories - only update
-or delete existing ones.
+You will be provided with:
+1. The most recent conversation turns (negative indices; -1 is the most
+   recent overall message).
+2. Existing memories semantically related to that conversation, ordered by
+   relevance (most relevant first).
 
-actions:
-- UPDATE: modify an existing memory when information has changed,
-  or consolidate closely related memories into one.
-- DELETE: remove a memory when it is an exact duplicate, directly
-  contradicted by conversation, or was consolidated into another.
+Determine what actions to take on the memory collection based on the user's
+**latest** message.
 
-rules:
-- only use memory IDs from the provided relevant memories list.
-- keep memories granular - prefer separate facts over combined ones.
-- only consolidate when memories are inseparable or exact duplicates.
-- if no maintenance is needed, return an empty actions list.
+<key_instructions>
+1. Focus on the user's most **recent** message. Older messages provide
+   context but should not generate new memories unless explicitly referenced
+   in the latest message.
+2. Each memory must represent **a single fact**. Never combine multiple
+   unrelated facts into one memory.
+3. When the latest message contradicts an existing memory, **update** that
+   memory rather than creating a conflicting new one.
+4. If memories are exact duplicates or direct conflicts about the same topic,
+   **consolidate** them by updating or deleting as appropriate.
+5. Capture anything valuable for **personalizing future interactions**.
+6. Always **honor memory requests**, whether direct from the user ("remember
+   this", "forget that") or implicit through the assistant ("I'll remember
+   that"). Treat these as strong signals to store, update, or delete.
+7. Each memory must be **self-contained and understandable without external
+   context**. Avoid ambiguous references like "it" or "that" - include the
+   specific subject. Prefer "User's new TV broke" over "It broke".
+8. Be alert to **sarcasm, jokes, and non-literal language**. Do not store
+   hyperbole or jokes as factual memories.
+9. **Always refer to the user in the third person as "user"**, never by name.
+   Normalize the subject of every memory: rewrite "joe loves chocolate" to
+   "user loves chocolate". When an existing memory uses a proper name for the
+   user, UPDATE it to use "user".
+10. Use the `created_at` / `updated_at` timestamps to decide which memory is
+    most recent when resolving conflicts.
+</key_instructions>
+
+<what_to_extract>
+- Personal preferences, opinions, and feelings
+- Long-term personal information (likely true for months/years)
+- Future-oriented statements ("from now on", "going forward")
+- Direct memory requests ("remember that", "forget that")
+- Hobbies, interests, skills
+- Important life details (job, education, relationships, location)
+- Long-term goals, plans, aspirations
+- Recurring patterns or habits
+- Strong likes/dislikes affecting future conversations
+</what_to_extract>
+
+<what_not_to_extract>
+- The user's own name, gender, age, birthdate (already in profile)
+- Short-term or ephemeral information unlikely to matter later
+- Content from translation/rewrite/summarization tasks
+- Trivial observations, fleeting thoughts, temporary activities
+- Sarcastic remarks, obvious jokes, hyperbole
+</what_not_to_extract>
+
+<actions>
+Return a list of actions. Use only memory IDs from the related memories list.
+
+**ADD**: create a new memory for new information not already covered, distinct
+facts, or explicit memory requests. Provide `content` and optional `tags`.
+**UPDATE**: modify an existing memory when information changed, to consolidate
+inseparable facts, to honor an update request, or to normalize phrasing.
+Provide `id` and `new_content`.
+**DELETE**: remove a memory the user asks to forget, that is directly
+contradicted, an exact duplicate (keep the oldest), or obsolete. Provide `id`.
+
+If no maintenance is needed, return an empty actions list.
+</actions>
+
+<consolidation_rules>
+Default to keeping memories granular for precise retrieval. Only consolidate
+when it meaningfully improves quality:
+- **Exact duplicates**: delete the newer, keep the oldest.
+- **Direct conflicts**: update the older memory to the latest information, or
+  delete if obsolete.
+- **Inseparable facts**: merge into the oldest memory as one self-contained
+  statement, then delete the redundant ones. Test: would retrieving one
+  without the other create confusion? ("User's cat is named Luna" + "User's
+  cat is a Siamese" -> "User has a Siamese cat named Luna").
+Keep facts SEPARATE when independently meaningful ("User works at Google" vs
+"User got promoted to team lead"). If an existing memory wrongly combines
+separable facts, UPDATE it to keep one fact (preserves the timestamp) and ADD
+the others.
+</consolidation_rules>
+
+<examples>
+**Example 1 - Add new, distinct facts**
+Conversation:
+-2. user: I work as a senior data scientist at Tesla and I love Rust
+-1. assistant: That's impressive! Rust is great for systems programming.
+Related Memories: []
+Output:
+{
+  "actions": [
+    {"action": "add", "content": "User works as a senior data scientist at \
+Tesla", "tags": ["work"]},
+    {"action": "add", "content": "User's favorite programming language is \
+Rust", "tags": ["preferences"]}
+  ]
+}
+
+**Example 2 - Update on changed preference**
+Conversation:
+-2. user: Actually I prefer TypeScript over JavaScript these days
+-1. assistant: TypeScript's type safety makes frontend more maintainable!
+Related Memories:
+[{"id": "memory_abc", "created_at": "2024-02-20T14:30:00",
+  "content": "User prefers JavaScript for frontend projects"}]
+Output:
+{
+  "actions": [
+    {"action": "update", "id": "memory_abc",
+     "new_content": "User prefers TypeScript for frontend work"}
+  ]
+}
+
+**Example 3 - Delete on negation / sarcasm**
+Conversation:
+-2. user: I'm joking! I didn't actually buy the iPhone!
+-1. assistant: Ahh, you got me! No worries.
+Related Memories:
+[{"id": "memory_xyz", "created_at": "2024-03-01T09:00:00",
+  "content": "User just bought a new iPhone"}]
+Output:
+{"actions": [{"action": "delete", "id": "memory_xyz"}]}
+
+**Example 4 - Normalize a name reference**
+Conversation:
+-2. user: just call me joe by the way
+-1. assistant: Got it, Joe!
+Related Memories:
+[{"id": "memory_111", "created_at": "2024-01-10T11:00:00",
+  "content": "joe loves chocolate"}]
+Output:
+{
+  "actions": [
+    {"action": "update", "id": "memory_111",
+     "new_content": "User loves chocolate"}
+  ]
+}
+
+**Example 5 - Passive maintenance: dedupe and merge**
+Conversation:
+-2. user: Can you help me write a Python function to sort a list?
+-1. assistant: Of course! Here's an example using sorted()...
+Related Memories:
+[
+  {"id": "memory_a", "created_at": "2024-02-10T09:00:00",
+   "content": "User prefers Python for scripting"},
+  {"id": "memory_b", "created_at": "2024-03-15T14:30:00",
+   "content": "User likes Python for scripting tasks"},
+  {"id": "memory_c", "created_at": "2024-01-15T08:00:00",
+   "content": "User's cat is named Luna"},
+  {"id": "memory_d", "created_at": "2024-02-20T10:00:00",
+   "content": "User's cat is a Siamese"}
+]
+Output:
+{
+  "actions": [
+    {"action": "delete", "id": "memory_b"},
+    {"action": "update", "id": "memory_c",
+     "new_content": "User has a Siamese cat named Luna"},
+    {"action": "delete", "id": "memory_d"}
+  ]
+}
+</examples>
 """
 
 
 class _MemoryPostProcessingAction(BaseModel):
 	"""a single memory maintenance action."""
 
-	action: Literal["update", "delete"]
-	id: str = Field(description="memory id to act on")
+	action: Literal["add", "update", "delete"]
+	id: str | None = Field(
+		default=None,
+		description="memory id to act on; required for update and delete",
+	)
+	content: str | None = Field(
+		default=None,
+		description="content for a new memory; required for add",
+	)
 	new_content: str | None = Field(
 		default=None,
-		description="updated content; required for update, omit for delete",
+		description="updated content; required for update",
+	)
+	tags: list[str] | None = Field(
+		default=None,
+		description="optional tags for a new memory (add only)",
 	)
 
 
@@ -379,7 +542,10 @@ async def delete_all_memories(
 	)
 
 	await vectorstore_service.delete(
-		target=vectorstore_service.resource_filter("memory", owner_id=str(user_id)),
+		target=vectorstore_service.resource_types_filter(
+			[VectorChunkResourceType.MEMORY],
+			owner_id=str(user_id),
+		),
 		session=session,
 	)
 
@@ -391,7 +557,7 @@ def _memory_dense_text(memory: Memory) -> str:
 def _memory_metadata(memory: Memory) -> JSONObject:
 	tags: list[JSONValue] = list(memory.tags) if memory.tags else []
 	return {
-		"resource_type": "memory",
+		"resource_type": VectorChunkResourceType.MEMORY.value,
 		"owner_id": str(memory.user_id),
 		"tags": tags,
 	}
@@ -408,7 +574,7 @@ async def _memory_should_revectorize(
 
 
 MEMORY_SPEC: VectorSpec[Memory] = VectorSpec(
-	resource_type="memory",
+	resource_type=VectorChunkResourceType.MEMORY,
 	resource_id=lambda m: str(m.id),
 	dense_text=_memory_dense_text,
 	bm25_text=_memory_dense_text,
@@ -494,8 +660,8 @@ async def _hybrid_search_memories(
 	)
 	text_query = query_text if need_sparse else None
 	# memories are user-private (no sharing) - owner_id filter is efficient.
-	query_filter = vectorstore_service.resource_filter(
-		"memory",
+	query_filter = vectorstore_service.resource_types_filter(
+		[VectorChunkResourceType.MEMORY],
 		owner_id=(str(principal.user.id) if not principal.is_admin else None),
 	)
 	results = await vectorstore_service.search(
@@ -614,8 +780,8 @@ async def query_relevant_memories(
 		full Memory objects ordered by relevance (best first).
 	"""
 	query_emb = query_embedding or await embed_text(text=query_text, session=db)
-	query_filter = vectorstore_service.resource_filter(
-		"memory",
+	query_filter = vectorstore_service.resource_types_filter(
+		[VectorChunkResourceType.MEMORY],
 		owner_id=(str(principal.user.id) if not principal.is_admin else None),
 	)
 	results = await vectorstore_service.search(
@@ -651,15 +817,20 @@ async def post_process_relevant_memories(
 	session: AsyncSession,
 	principal: Principal,
 	max_related_memories: int = 10,
+	conversation_snapshot: str | None = None,
 	progress_callback: MemoryPostProcessingProgress | None = None,
 ) -> JSONObject:
-	"""update/delete memories relevant to the latest conversation context."""
+	"""create/update/delete memories from the latest conversation context."""
 	query = _truncate_post_processing_text(
 		query_text,
 		MEMORY_POST_PROCESSING_QUERY_MAX_CHARS,
 	)
 	if not query:
 		return {"skipped": True, "reason": "empty query"}
+	conversation = _truncate_post_processing_text(
+		conversation_snapshot or query_text,
+		MEMORY_POST_PROCESSING_QUERY_MAX_CHARS,
+	)
 
 	try:
 		await _notify_memory_post_processing_progress(
@@ -695,8 +866,6 @@ async def post_process_relevant_memories(
 			exc.cause_type,
 		)
 		return exc.to_result()
-	if not memories:
-		return {"skipped": True, "reason": "no relevant memories"}
 
 	await _notify_memory_post_processing_progress(
 		progress_callback,
@@ -709,7 +878,7 @@ async def post_process_relevant_memories(
 		logger.debug("memory post-processing skipped: no task model configured")
 		return {"skipped": True, "reason": "no model"}
 
-	memory_entries: list[dict[str, str]] = []
+	memory_entries: list[dict[str, object]] = []
 	for memory in memories:
 		memory_entries.append(
 			{
@@ -718,6 +887,10 @@ async def post_process_relevant_memories(
 					memory.content,
 					MEMORY_POST_PROCESSING_MEMORY_MAX_CHARS,
 				),
+				"tags": list(memory.tags) if memory.tags else [],
+				"created_at": memory.created_at.isoformat()
+				if memory.created_at
+				else "",
 				"updated_at": memory.updated_at.isoformat()
 				if memory.updated_at
 				else "",
@@ -739,13 +912,14 @@ async def post_process_relevant_memories(
 					messages=[
 						SystemMessage.from_text(_POST_PROCESSING_PROMPT),
 						UserMessage.from_text(
-							"conversation context:\n"
-							f"{query}\n\nrelevant memories:\n"
+							"recent conversation:\n"
+							f"{conversation}\n\nrelated memories:\n"
 							f"{json.dumps(memory_entries, ensure_ascii=False)}"
 						),
 					]
 				),
 				json_schema=_MemoryPostProcessingResponse.model_json_schema(),
+				purpose="memory_post_processing",
 			),
 		)
 	except _MemoryPostProcessingTimeoutError as exc:
@@ -757,7 +931,7 @@ async def post_process_relevant_memories(
 		return exc.to_result()
 	result = _MemoryPostProcessingResponse.model_validate(raw)
 	if not result.actions:
-		return {"actions": 0, "updated": 0, "deleted": 0}
+		return {"actions": 0, "created": 0, "updated": 0, "deleted": 0}
 
 	await _notify_memory_post_processing_progress(
 		progress_callback,
@@ -765,10 +939,26 @@ async def post_process_relevant_memories(
 		"applying memory actions",
 	)
 	memory_ids = {str(memory.id) for memory in memories}
+	created = 0
 	updated = 0
 	deleted = 0
 	for action in result.actions:
-		if action.id not in memory_ids:
+		if action.action == "add":
+			content = (action.content or "").strip()
+			if not content:
+				continue
+			await create_memory(
+				MemoryCreate(
+					content=content,
+					tags=action.tags or None,
+					user_id=TypeID(principal.user.id),
+				),
+				session,
+				principal,
+			)
+			created += 1
+			continue
+		if action.id is None or action.id not in memory_ids:
 			logger.warning(
 				"post-processing: unknown memory id %s for user %s",
 				action.id,
@@ -789,4 +979,9 @@ async def post_process_relevant_memories(
 			deleted += 1
 
 	await session.commit()
-	return {"actions": len(result.actions), "updated": updated, "deleted": deleted}
+	return {
+		"actions": len(result.actions),
+		"created": created,
+		"updated": updated,
+		"deleted": deleted,
+	}

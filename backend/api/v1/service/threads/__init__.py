@@ -9,6 +9,7 @@ from api.v1.service.threads.core import (
 	get_thread,
 	get_thread_payload,
 	list_threads,
+	restore_thread,
 	update_thread,
 )
 from api.v1.service.threads.maintenance import (
@@ -69,6 +70,7 @@ __all__ = [
 	"load_thread_with_branch",
 	"maintain_thread_metadata",
 	"mark_thread_read",
+	"restore_thread",
 	"search_threads",
 	"switch_branch",
 	"thread_metadata_missing",

@@ -30,7 +30,6 @@ from api.v1.service.chat.tools.reminders import (
 	ReminderWriteTool,
 )
 from api.v1.service.chat.tools.resource_search import ResourceSearchTool
-from api.v1.service.chat.tools.reveal_attachment import RevealAttachmentTool
 from api.v1.service.chat.tools.send_notification import SendNotificationTool
 from api.v1.service.chat.tools.think import ThinkingTool
 from api.v1.service.chat.tools.web_search import FetchUrlTool, WebSearchTool
@@ -66,7 +65,6 @@ _TOOLS: list[Tool[AppContext]] = [
 	# GenerateVideoTool(), WIP
 	# GenerateAudioTool(), WIP
 	CodeInterpreterTool(),
-	RevealAttachmentTool(),
 	SendNotificationTool(),
 	ThinkingTool(),
 ]

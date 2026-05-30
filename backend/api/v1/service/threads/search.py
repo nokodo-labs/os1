@@ -41,6 +41,7 @@ from api.v1.service.vectorize import (
 	build_chunk,
 	remove_vectorized_resource,
 )
+from api.v1.service.vectorstores import VectorChunkResourceType
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
@@ -83,7 +84,7 @@ def _thread_bm25_text(thread: Thread) -> str:
 def _thread_metadata(thread: Thread) -> JSONObject:
 	"""build vector metadata for a thread resource."""
 	return {
-		"resource_type": "thread",
+		"resource_type": VectorChunkResourceType.THREAD.value,
 		"owner_id": str(thread.owner_id),
 		"title": thread.title or "",
 		"tags": list(thread.tags or []),
@@ -108,7 +109,7 @@ async def _thread_should_revectorize(
 
 
 THREAD_SPEC: VectorSpec[Thread] = VectorSpec(
-	resource_type="thread",
+	resource_type=VectorChunkResourceType.THREAD,
 	resource_id=lambda t: str(t.id),
 	dense_text=_thread_dense_text,
 	bm25_text=_thread_bm25_text,
@@ -207,7 +208,7 @@ async def _hybrid_search_threads(
 		else (await embed_text(text=query_text, session=db) if need_dense else None)
 	)
 	text_query = query_text if need_sparse else None
-	query_filter = vector_acl_filter(ResourceType.THREAD, principal)
+	query_filter = vector_acl_filter([VectorChunkResourceType.THREAD], principal)
 	results = await vectorstore_service.search(
 		session=db,
 		query=query_emb,

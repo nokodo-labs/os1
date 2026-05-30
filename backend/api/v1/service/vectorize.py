@@ -28,12 +28,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.permissions import ResourceType
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.authorization import (
+	ACL_SYNC_VECTOR_CHUNK_RESOURCE_TYPES,
+	VECTOR_CHUNK_PARENT_RESOURCE_TYPES,
 	fetch_acl_metadata,
 	fetch_bulk_acl_metadata,
 	load_descendant_resource_ids,
 )
 from api.v1.service.embeddings import embed_text
-from nokodo_ai.adapters.base.vectorstores import Chunk
+from api.v1.service.vectorstores import VectorChunkResourceType
+from nokodo_ai.adapters.base.vectorstores import Chunk, ChunkFilter
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
@@ -55,7 +58,7 @@ class VectorSpec[T]:
 	- sort_key: SearchResultItem field name used for cursor sort
 	"""
 
-	resource_type: str
+	resource_type: VectorChunkResourceType
 	resource_id: Callable[[T], str]
 	dense_text: Callable[[T], str]
 	bm25_text: Callable[[T], str]
@@ -85,7 +88,7 @@ def build_chunk[T](
 	meta: JSONObject = {
 		**spec.metadata(resource),
 		**(extra_metadata or {}),
-		"resource_type": spec.resource_type,
+		"resource_type": spec.resource_type.value,
 		"resource_id": rid,
 	}
 	return Chunk(
@@ -103,8 +106,8 @@ async def remove_vectorized_resource[T](
 ) -> None:
 	"""remove all chunks for a resource from the vectorstore."""
 	await vectorstore_service.delete(
-		target=vectorstore_service.resource_filter(
-			spec.resource_type, resource_id=resource_id
+		target=vectorstore_service.resource_types_filter(
+			[spec.resource_type], resource_id=resource_id
 		),
 		session=session,
 	)
@@ -181,12 +184,13 @@ async def _sync_resource_vector_acl_payload(
 			await fetch_acl_metadata(resource_id, resource_type, session)
 		).items()
 	}
-	target = vectorstore_service.resource_filter(
-		resource_type.value, resource_id=resource_id
-	)
+	targets = _acl_sync_chunk_filters(resource_type, resource_id)
+	if not targets:
+		return
 	coll = await vectorstore_service.get_collection(session)
 	vs = vectorstore_service.get_vectorstore(collection=coll)
-	await vs.update(target, payload=payload)
+	for target in targets:
+		await vs.update(target, payload=payload)
 
 
 async def _sync_resource_vector_acl_payloads(
@@ -201,6 +205,8 @@ async def _sync_resource_vector_acl_payloads(
 	"""
 	if not resource_ids:
 		return
+	if resource_type not in ACL_SYNC_VECTOR_CHUNK_RESOURCE_TYPES:
+		return
 	unique_resource_ids = list(dict.fromkeys(resource_ids))
 	acl_by_id = await fetch_bulk_acl_metadata(
 		unique_resource_ids,
@@ -211,14 +217,45 @@ async def _sync_resource_vector_acl_payloads(
 	vs = vectorstore_service.get_vectorstore(collection=coll)
 
 	async def _sync_one(rid: str) -> None:
-		target = vectorstore_service.resource_filter(
-			resource_type.value, resource_id=rid
-		)
 		payload: dict[str, object] = {
 			key: value for key, value in acl_by_id[rid].items()
 		}
-		await vs.update(target, payload=payload)
+		for target in _acl_sync_chunk_filters(resource_type, rid):
+			await vs.update(target, payload=payload)
 
 	for offset in range(0, len(unique_resource_ids), _VECTOR_ACL_UPDATE_CONCURRENCY):
 		batch = unique_resource_ids[offset : offset + _VECTOR_ACL_UPDATE_CONCURRENCY]
 		await asyncio.gather(*(_sync_one(rid) for rid in batch))
+
+
+def _acl_sync_chunk_filters(
+	resource_type: ResourceType,
+	resource_id: str,
+) -> list[ChunkFilter]:
+	chunk_resource_types = ACL_SYNC_VECTOR_CHUNK_RESOURCE_TYPES.get(resource_type)
+	if chunk_resource_types is None:
+		return []
+	direct_resource_types: list[VectorChunkResourceType] = []
+	targets: list[ChunkFilter] = []
+	for chunk_resource_type in chunk_resource_types:
+		parent_resource_type = VECTOR_CHUNK_PARENT_RESOURCE_TYPES.get(
+			chunk_resource_type
+		)
+		if parent_resource_type is None:
+			direct_resource_types.append(chunk_resource_type)
+			continue
+		targets.append(
+			vectorstore_service.parent_resource_filter(
+				parent_resource_type,
+				resource_id,
+				resource_types=[chunk_resource_type],
+			)
+		)
+	if direct_resource_types:
+		targets.append(
+			vectorstore_service.resource_types_filter(
+				direct_resource_types,
+				resource_id=resource_id,
+			)
+		)
+	return targets

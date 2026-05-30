@@ -56,6 +56,7 @@ from api.v1.service.vectorize import (
 	remove_vectorized_resource,
 	vectorize_resource,
 )
+from api.v1.service.vectorstores import VectorChunkResourceType
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
@@ -64,12 +65,14 @@ from nokodo_ai.utils.typeid import TypeID
 logger = logging.getLogger(__name__)
 
 
-async def _load_note(note_id: TypeID, session: AsyncSession) -> Note:
-	stmt = (
-		select(Note)
-		.where(Note.id == note_id, Note.deleted_at.is_(None))
-		.options(selectinload(Note.projects))
-	)
+async def _load_note(
+	note_id: TypeID, session: AsyncSession, include_deleted: bool = False
+) -> Note:
+	stmt = select(Note).where(Note.id == note_id).options(selectinload(Note.projects))
+	if include_deleted:
+		stmt = stmt.execution_options(include_deleted=True)
+	else:
+		stmt = stmt.where(Note.deleted_at.is_(None))
 	result = await session.execute(stmt)
 	note = result.scalars().one_or_none()
 	if not note:
@@ -85,6 +88,7 @@ async def _get_note(
 	session: AsyncSession,
 	principal: Principal,
 	required_level: AccessLevel = AccessLevel.READER,
+	include_deleted: bool = False,
 ) -> Note:
 	await require_resource_access(
 		note_id,
@@ -92,8 +96,9 @@ async def _get_note(
 		principal,
 		ResourceType.NOTE,
 		required_level=required_level,
+		include_deleted=include_deleted,
 	)
-	return await _load_note(note_id, session)
+	return await _load_note(note_id, session, include_deleted=include_deleted)
 
 
 async def create_note(
@@ -153,6 +158,14 @@ async def create_note(
 	return await _get_note(note_id, session, principal)
 
 
+def _ensure_admin_for_deleted(include_deleted: bool, principal: Principal) -> None:
+	if include_deleted and not principal.is_admin:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
+
+
 async def list_notes(
 	session: AsyncSession,
 	principal: Principal,
@@ -163,10 +176,15 @@ async def list_notes(
 	sort_dir: SortDir = "desc",
 ) -> list[Note]:
 	note_filters = filters or NoteListFilters()
+	_ensure_admin_for_deleted(note_filters.include_deleted, principal)
+	include_deleted = note_filters.include_deleted
 	stmt = select(Note).where(
-		Note.deleted_at.is_(None),
-		resource_access_predicate(principal, ResourceType.NOTE),
+		resource_access_predicate(
+			principal, ResourceType.NOTE, include_deleted=include_deleted
+		),
 	)
+	if include_deleted:
+		stmt = stmt.execution_options(include_deleted=True)
 	stmt = _apply_note_filters(stmt, note_filters)
 	stmt = apply_sort(
 		stmt,
@@ -191,14 +209,19 @@ async def count_notes(
 	filters: NoteListFilters | None = None,
 ) -> int:
 	note_filters = filters or NoteListFilters()
+	_ensure_admin_for_deleted(note_filters.include_deleted, principal)
+	include_deleted = note_filters.include_deleted
 	stmt = (
 		select(func.count())
 		.select_from(Note)
 		.where(
-			Note.deleted_at.is_(None),
-			resource_access_predicate(principal, ResourceType.NOTE),
+			resource_access_predicate(
+				principal, ResourceType.NOTE, include_deleted=include_deleted
+			),
 		)
 	)
+	if include_deleted:
+		stmt = stmt.execution_options(include_deleted=True)
 	stmt = _apply_note_filters(stmt, note_filters)
 	return await session.scalar(stmt) or 0
 
@@ -327,12 +350,19 @@ async def delete_note(
 	session: AsyncSession,
 	principal: Principal,
 	origin_session_id: str | None = None,
+	permanent: bool = False,
 ) -> None:
+	if permanent and not principal.is_admin:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
 	note = await _get_note(
 		note_id,
 		session,
 		principal,
 		required_level=AccessLevel.EDITOR,
+		include_deleted=permanent,
 	)
 	project_ids = {project.id for project in note.projects}
 	delete_recipients = await list_accessible_user_ids(
@@ -340,10 +370,11 @@ async def delete_note(
 		note_id,
 		session,
 	)
-	if settings.soft_delete.notes:
-		note.soft_delete()
-	else:
+	hard_delete = permanent or not settings.soft_delete.notes
+	if hard_delete:
 		await session.delete(note)
+	else:
+		note.soft_delete()
 	event = Event(
 		scope=EventScope.USER,
 		scope_id=principal.user_id,
@@ -370,6 +401,55 @@ async def delete_note(
 	)
 
 
+async def restore_note(
+	note_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+	origin_session_id: str | None = None,
+) -> Note:
+	if not principal.is_admin:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
+	note = await _get_note(
+		note_id,
+		session,
+		principal,
+		required_level=AccessLevel.EDITOR,
+		include_deleted=True,
+	)
+	if note.deleted_at is None:
+		return note
+	project_ids = {project.id for project in note.projects}
+	note.restore()
+	await session.flush()
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=principal.user_id,
+		type=EventType.NOTE_UPDATED,
+		data=NoteOut.model_validate(note).model_dump(mode="json"),
+		user_id=principal.user_id,
+	)
+	await event_service.persist_and_fanout_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
+	await invalidate_resource_payload_cache(ResourceType.NOTE, note_id)
+	await invalidate_accessible_users_for_resource(ResourceType.NOTE, note_id, session)
+	await invalidate_project_payload_caches(project_ids)
+	await vectorize_resource(
+		spec=NOTE_SPEC,
+		resource=note,
+		session=session,
+		extra_metadata=await fetch_acl_metadata(
+			str(note.id), ResourceType.NOTE, session
+		),
+	)
+	return note
+
+
 def _note_searchable_text(note: Note) -> str:
 	"""build combined searchable text for a note (title + content)."""
 	parts = [note.title or ""]
@@ -380,7 +460,7 @@ def _note_searchable_text(note: Note) -> str:
 
 def _note_metadata(note: Note) -> JSONObject:
 	return {
-		"resource_type": "note",
+		"resource_type": VectorChunkResourceType.NOTE.value,
 		"owner_id": str(note.user_id),
 		"title": note.title or "",
 		"labels": list(note.labels or []),
@@ -403,7 +483,7 @@ async def _note_should_revectorize(
 
 
 NOTE_SPEC: VectorSpec[Note] = VectorSpec(
-	resource_type="note",
+	resource_type=VectorChunkResourceType.NOTE,
 	resource_id=lambda n: str(n.id),
 	dense_text=_note_searchable_text,
 	bm25_text=_note_searchable_text,
@@ -497,7 +577,7 @@ async def _hybrid_search_notes(
 		else (await embed_text(text=query_text, session=db) if need_dense else None)
 	)
 	text_query = query_text if need_sparse else None
-	query_filter = vector_acl_filter(ResourceType.NOTE, principal)
+	query_filter = vector_acl_filter([VectorChunkResourceType.NOTE], principal)
 	results = await vectorstore_service.search(
 		session=db,
 		query=query_emb,

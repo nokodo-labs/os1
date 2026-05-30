@@ -126,10 +126,11 @@ migrations live in `backend/api/migrations`; applied automatically on startup.
 to create a new migration, use the **`backend: autogen migration` VS Code task** or:
 
 ```bash
-uv run --project backend python tools/autogen-migration.py --message "description"
+uv run python tools/autogen-migration.py --message "description"
 ```
 
 creates a temp DB, upgrades to `head`, autogenerates against the model diff, saves to `temp/alembic-autogen/`. review, edit, move to `backend/api/migrations/versions/`.
+to check for drift without generating a file, use `--check`, no message needed.
 
 never run bare `alembic revision --autogenerate` against the live dev DB - local drift causes false positives.
 
