@@ -13,6 +13,7 @@ from typing import Any, cast
 import pytest
 
 from nokodo_ai.adapters.anthropic import base as anthropic_base
+from nokodo_ai.adapters.anthropic import exceptions as anthropic_exceptions
 from nokodo_ai.adapters.anthropic import messages as am
 from nokodo_ai.adapters.anthropic.base import BaseAnthropicAdapter
 from nokodo_ai.adapters.anthropic.messages import (
@@ -23,10 +24,17 @@ from nokodo_ai.adapters.anthropic.messages import (
 )
 from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.adapters.base.client import BaseClientAdapter
+from nokodo_ai.adapters.chat import (
+	GenerationBadRequestError,
+	GenerationProviderUnavailableError,
+	GenerationRateLimitError,
+)
+from nokodo_ai.adapters.google import exceptions as google_exceptions
 from nokodo_ai.adapters.ollama.chat import OllamaChatAdapter
 from nokodo_ai.adapters.ollama.embeddings import OllamaEmbeddingsAdapter
 from nokodo_ai.adapters.openai import base as openai_base
 from nokodo_ai.adapters.openai import chat_completions as cc
+from nokodo_ai.adapters.openai import exceptions as openai_exceptions
 from nokodo_ai.adapters.openai import responses as resp_mod
 from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
 from nokodo_ai.adapters.openai.chat_completions import (
@@ -73,6 +81,130 @@ class _DummyAsyncIterator:
 		if not self._items:
 			raise StopAsyncIteration
 		return self._items.pop(0)
+
+
+def test_openai_exceptions_map_context_length_as_bad_request(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	class _FakeOpenAIError(Exception):
+		def __init__(
+			self,
+			message: str,
+			status_code: int | None = None,
+			code: str | None = None,
+		) -> None:
+			super().__init__(message)
+			self.status_code = status_code
+			self.code = code
+
+	class _FakeBadRequestError(_FakeOpenAIError):
+		pass
+
+	monkeypatch.setattr(openai_exceptions.openai, "OpenAIError", _FakeOpenAIError)
+	monkeypatch.setattr(
+		openai_exceptions.openai, "BadRequestError", _FakeBadRequestError
+	)
+
+	exc = _FakeBadRequestError(
+		"maximum context length exceeded",
+		status_code=400,
+		code="context_length_exceeded",
+	)
+
+	mapped = openai_exceptions.map_generation_error("openai.chat_completions", exc)
+
+	assert isinstance(mapped, GenerationBadRequestError)
+	assert mapped.provider == "openai.chat_completions"
+	assert mapped.status_code == 400
+	assert mapped.code == "context_length_exceeded"
+	assert mapped.retryable is False
+
+
+@pytest.mark.asyncio
+async def test_openai_chat_adapter_raises_sdk_generation_error(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	class _FakeOpenAIError(Exception):
+		def __init__(
+			self,
+			message: str,
+			status_code: int | None = None,
+			code: str | None = None,
+		) -> None:
+			super().__init__(message)
+			self.status_code = status_code
+			self.code = code
+
+	class _FakeBadRequestError(_FakeOpenAIError):
+		pass
+
+	exc = _FakeBadRequestError(
+		"maximum context length exceeded",
+		status_code=400,
+		code="context_length_exceeded",
+	)
+
+	class _DummyCompletions:
+		async def create(self, **_kwargs: object) -> object:
+			raise exc
+
+	class _DummyChat:
+		completions = _DummyCompletions()
+
+	class _DummyClient:
+		chat = _DummyChat()
+
+	monkeypatch.setattr(openai_exceptions.openai, "OpenAIError", _FakeOpenAIError)
+	monkeypatch.setattr(
+		openai_exceptions.openai, "BadRequestError", _FakeBadRequestError
+	)
+	adapter = OpenAIChatCompletionsAdapter(api_key="test")
+	cast(Any, adapter)._client = _DummyClient()
+
+	with pytest.raises(GenerationBadRequestError):
+		await adapter.generate([UserMessage.from_text("hi")], "gpt-test")
+
+
+def test_anthropic_exceptions_map_rate_limit(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	class _FakeAnthropicError(Exception):
+		def __init__(self, message: str, status_code: int | None = None) -> None:
+			super().__init__(message)
+			self.status_code = status_code
+
+	class _FakeRateLimitError(_FakeAnthropicError):
+		pass
+
+	monkeypatch.setattr(
+		anthropic_exceptions.anthropic, "AnthropicError", _FakeAnthropicError
+	)
+	monkeypatch.setattr(
+		anthropic_exceptions.anthropic, "RateLimitError", _FakeRateLimitError
+	)
+
+	exc = _FakeRateLimitError("rate limit exceeded", status_code=429)
+
+	mapped = anthropic_exceptions.map_generation_error("anthropic.messages", exc)
+
+	assert isinstance(mapped, GenerationRateLimitError)
+	assert mapped.retryable is True
+
+
+def test_google_exceptions_map_server_error() -> None:
+	class _FakeGoogleServerError(Exception):
+		__module__ = "google.genai.errors"
+
+		def __init__(self, message: str, status_code: int | None = None) -> None:
+			super().__init__(message)
+			self.status_code = status_code
+
+	exc = _FakeGoogleServerError("backend overloaded", status_code=503)
+
+	mapped = google_exceptions.map_generation_error("google.generate_content", exc)
+
+	assert isinstance(mapped, GenerationProviderUnavailableError)
+	assert mapped.retryable is True
 
 
 def test_base_api_adapter_not_implemented_get_client_is_covered() -> None:

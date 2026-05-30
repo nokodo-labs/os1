@@ -112,6 +112,7 @@ async def test_create_user(client: AsyncClient) -> None:
 
 	data = response.json()
 	assert data["email"] == user_data["email"]
+	assert data["find_by_email"] is False
 	assert "id" in data
 	assert "created_at" in data
 
@@ -1091,6 +1092,50 @@ async def test_create_duplicate_user(
 	assert resp2.status_code == 400
 	assert resp2.json()["detail"] == "email already registered"
 
+	resp3 = await client.post(
+		"/v1/users",
+		json={
+			"email": "duplicate-username@example.com",
+			"username": "duplicate_test",
+			"password": "password",
+		},
+		headers=headers,
+	)
+	assert resp3.status_code == 400
+	assert resp3.json()["detail"] == "username already taken"
+
+
+@pytest.mark.asyncio
+async def test_delete_user(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+) -> None:
+	admin_headers = auth_headers(admin_auth)
+	user = await create_test_user(client, admin_headers, "deleteuser")
+	user_id = user["id"]
+	assert isinstance(user_id, str)
+
+	delete_resp = await client.delete(f"/v1/users/{user_id}", headers=admin_headers)
+	assert delete_resp.status_code == 204
+
+	get_resp = await client.get(f"/v1/users/{user_id}", headers=admin_headers)
+	assert get_resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_user_rejects_self_delete(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+) -> None:
+	admin_headers = auth_headers(admin_auth)
+	admin = auth_user(admin_auth)
+	admin_id = admin["id"]
+	assert isinstance(admin_id, str)
+
+	delete_resp = await client.delete(f"/v1/users/{admin_id}", headers=admin_headers)
+	assert delete_resp.status_code == 400
+	assert delete_resp.json()["detail"] == "cannot delete your own account"
+
 
 @pytest.mark.asyncio
 async def test_service_create_user(db_session: AsyncSession) -> None:
@@ -1111,6 +1156,7 @@ async def test_service_create_user(db_session: AsyncSession) -> None:
 	)
 	user = await user_service.create_user(user_in, db_session)
 	assert user.email == user_in.email
+	assert user.find_by_email is False
 	assert user.id is not None
 
 
@@ -1230,6 +1276,20 @@ async def test_service_create_duplicate_user(db_session: AsyncSession) -> None:
 			principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 		)
 	assert exc.value.status_code == 400
+	assert exc.value.detail == "email already registered"
+
+	with pytest.raises(HTTPException) as exc:
+		await user_service.create_user(
+			UserCreate(
+				email="duplicate_service_username@example.com",
+				username="duplicate_svc",
+				password="password123",
+			),
+			db_session,
+			principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+		)
+	assert exc.value.status_code == 400
+	assert exc.value.detail == "username already taken"
 
 
 @pytest.mark.asyncio

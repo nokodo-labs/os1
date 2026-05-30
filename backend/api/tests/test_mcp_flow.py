@@ -12,6 +12,7 @@ import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_attribute
 
 from api.mcp import MCPClientConfig, MCPError, MCPListChangedEvent
 from api.mcp.types import (
@@ -22,15 +23,20 @@ from api.mcp.types import (
 	MCPToolCallResult,
 	MCPToolSpec,
 )
-from api.models.mcp import MCPServer, MCPServerStatus
+from api.models.mcp import MCPAuthType, MCPServer, MCPServerScope, MCPServerStatus
 from api.models.user import User
 from api.permissions import ActionPermission
+from api.schemas.agent import AgentConfig, AgentFeatures, UserMCPToolsFeature
 from api.schemas.mcp import (
+	MCPCapabilityType,
+	MCPCapabilityUpdate,
 	MCPServerCreate,
 	MCPServerUpdate,
 	MCPSurfaceConfig,
 )
+from api.schemas.plugin import PluginListFilters
 from api.settings import settings
+from api.v1.service import plugins as plugin_service
 from api.v1.service.auth import Principal
 from api.v1.service.chat.context import AppContext
 from api.v1.service.integrations.mcp import lifecycle as mcp_lifecycle
@@ -39,7 +45,11 @@ from api.v1.service.integrations.mcp import prompts as mcp_prompts
 from api.v1.service.integrations.mcp import service as mcp_service
 from api.v1.service.integrations.mcp.cache import invalidate_mcp_cache
 from api.v1.service.integrations.mcp.ids import mcp_tool_plugin_id
-from api.v1.service.integrations.mcp.tools import MCPRemoteTool, resolve_mcp_tools
+from api.v1.service.integrations.mcp.tools import (
+	MCPRemoteTool,
+	resolve_mcp_extra_tools,
+	resolve_mcp_tools,
+)
 from api.v1.service.prompts import (
 	load_external_prompt_placeholders,
 	render_external_prompt_content_map,
@@ -112,6 +122,27 @@ def _app_context(session: AsyncSession) -> AppContext:
 		session=session,
 		principal=Principal(user=user, group_ids=(), permissions=frozenset()),
 		event_emitter=_noop_event_emitter,
+	)
+
+
+def _app_context_for_principal(
+	session: AsyncSession,
+	principal: Principal,
+) -> AppContext:
+	"""create an app context for a specific principal."""
+	return AppContext(
+		session=session,
+		principal=principal,
+		event_emitter=_noop_event_emitter,
+	)
+
+
+def _user_mcp_agent_config(enabled: bool) -> AgentConfig:
+	"""build agent config for user MCP extra tool tests."""
+	return AgentConfig(
+		features=AgentFeatures(
+			user_mcp_tools=UserMCPToolsFeature(enabled=enabled),
+		)
 	)
 
 
@@ -334,6 +365,56 @@ async def _create_discovered_server(
 	return server
 
 
+async def _create_user_mcp_tool_server(
+	db_session: AsyncSession,
+	principal: Principal,
+	name: str,
+) -> tuple[MCPServer, str]:
+	"""create a user-owned MCP server with one discovered tool snapshot."""
+	server = await mcp_service.create_server(
+		MCPServerCreate(
+			name=name,
+			scope=MCPServerScope.USER,
+			url="https://example.test/mcp",
+			auth_type=MCPAuthType.BEARER,
+			access_token="secret-token",
+			capabilities=MCPSurfaceConfig(
+				tools=True,
+				resources=False,
+				prompts=False,
+				sampling=False,
+			),
+		),
+		db_session,
+		principal=principal,
+	)
+	tool_id = new_typeid("mcptool")
+	server.status = MCPServerStatus.READY
+	set_attribute(
+		server,
+		"discovered_tools",
+		[
+			{
+				"id": tool_id,
+				"name": "lookup",
+				"normalized_name": f"{name.lower().replace(' ', '_')}_lookup",
+				"description": "look up owned data",
+				"input_schema": {
+					"type": "object",
+					"properties": {"query": {"type": "string"}},
+				},
+				"output_schema": None,
+				"enabled": True,
+				"schema_hash": "owned-tool",
+				"last_discovered_at": None,
+			}
+		],
+	)
+	db_session.add(server)
+	await db_session.flush()
+	return server, mcp_tool_plugin_id(str(server.id), tool_id)
+
+
 @pytest.mark.asyncio
 async def test_mcp_endpoint_discovery_hydrates_catalogs_and_runtime_objects(
 	client: AsyncClient,
@@ -465,6 +546,141 @@ async def test_mcp_endpoint_discovery_hydrates_catalogs_and_runtime_objects(
 		and config.headers["Authorization"] == "Bearer secret-token"
 		for config in _RuntimeClient.configs
 	)
+
+
+@pytest.mark.asyncio
+async def test_user_mcp_permission_sees_only_owned_mcp_tool_plugins(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""user.mcp:manage sees only owned user MCP tools in the plugin catalog."""
+	await invalidate_mcp_cache(db_session)
+	owner = await _principal(
+		db_session,
+		frozenset({ActionPermission.USER_MCP_MANAGE}),
+	)
+	other = await _principal(
+		db_session,
+		frozenset({ActionPermission.USER_MCP_MANAGE}),
+	)
+	admin = await _principal(
+		db_session,
+		frozenset({ActionPermission.MCP_MANAGE, ActionPermission.PLUGINS_READ}),
+	)
+	owned_server, owned_plugin_id = await _create_user_mcp_tool_server(
+		db_session, owner, "Owned MCP"
+	)
+	other_server, other_plugin_id = await _create_user_mcp_tool_server(
+		db_session, other, "Other MCP"
+	)
+	global_server = await mcp_service.create_server(
+		MCPServerCreate(
+			name="Global MCP",
+			url="https://example.test/mcp",
+			capabilities=MCPSurfaceConfig(tools=True),
+		),
+		db_session,
+		principal=admin,
+	)
+	global_tool_id = new_typeid("mcptool")
+	global_plugin_id = mcp_tool_plugin_id(str(global_server.id), global_tool_id)
+	global_server.status = MCPServerStatus.READY
+	set_attribute(
+		global_server,
+		"discovered_tools",
+		[
+			{
+				"id": global_tool_id,
+				"name": "global_lookup",
+				"normalized_name": "global_mcp_global_lookup",
+				"description": "global tool",
+				"input_schema": {},
+				"output_schema": None,
+				"enabled": True,
+				"schema_hash": "global-tool",
+				"last_discovered_at": None,
+			}
+		],
+	)
+	db_session.add(global_server)
+	await db_session.flush()
+
+	plugins = await plugin_service.list_plugins(
+		db_session,
+		principal=owner,
+		include_native=True,
+		filters=PluginListFilters(),
+	)
+	plugin_ids = {plugin.id for plugin in plugins}
+	assert plugin_ids == {owned_plugin_id}
+	assert other_plugin_id not in plugin_ids
+	assert global_plugin_id not in plugin_ids
+	assert plugins[0].name == f"{owned_server.name}: lookup"
+
+	admin_plugins = await plugin_service.list_plugins(
+		db_session,
+		principal=admin,
+		include_native=True,
+		filters=PluginListFilters(source="external", plugin_type="tool"),
+	)
+	admin_plugin_ids = {plugin.id for plugin in admin_plugins}
+	assert global_plugin_id in admin_plugin_ids
+	assert owned_plugin_id not in admin_plugin_ids
+	assert other_plugin_id not in admin_plugin_ids
+	assert other_server.owner_user_id == str(other.user_id)
+
+
+@pytest.mark.asyncio
+async def test_extra_plugins_resolve_only_allowed_owned_user_mcp_tools(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""extra_plugins can attach owned user MCP tools only when the agent opts in."""
+	await invalidate_mcp_cache(db_session)
+	_RuntimeClient.reset()
+	monkeypatch.setattr(mcp_service, "MCPClient", _RuntimeClient)
+	owner = await _principal(
+		db_session,
+		frozenset({ActionPermission.USER_MCP_MANAGE}),
+	)
+	other = await _principal(
+		db_session,
+		frozenset({ActionPermission.USER_MCP_MANAGE}),
+	)
+	_, owned_plugin_id = await _create_user_mcp_tool_server(
+		db_session, owner, "Owned Runtime MCP"
+	)
+	_, other_plugin_id = await _create_user_mcp_tool_server(
+		db_session, other, "Other Runtime MCP"
+	)
+
+	disabled_tools = await resolve_mcp_extra_tools(
+		[owned_plugin_id],
+		_app_context_for_principal(db_session, owner),
+		_user_mcp_agent_config(False),
+	)
+	assert disabled_tools == []
+
+	resolved_tools = await resolve_mcp_extra_tools(
+		[owned_plugin_id, other_plugin_id, "think"],
+		_app_context_for_principal(db_session, owner),
+		_user_mcp_agent_config(True),
+	)
+	assert len(resolved_tools) == 1
+	runtime_tool = resolved_tools[0]
+	assert isinstance(runtime_tool, MCPRemoteTool)
+	assert runtime_tool.mcp_tool_name == "lookup"
+
+	message = await runtime_tool.call(
+		_state(),
+		_agent_context(),
+		_tool_call_context(),
+		_app_context_for_principal(db_session, owner),
+		query="beta",
+	)
+	assert isinstance(message, ToolMessage)
+	assert not message.is_error
+	assert _RuntimeClient.tool_calls == [("lookup", {"query": "beta"})]
 
 
 @pytest.mark.asyncio
@@ -631,6 +847,16 @@ async def test_mcp_manage_principal_can_manage_and_discover_server(
 	]
 	assert capabilities.resources[0].mime_type == "text/markdown"
 	assert [prompt.name for prompt in capabilities.prompts] == ["brief"]
+
+	toggled = await mcp_service.update_capability(
+		server.id,
+		MCPCapabilityType.TOOL,
+		capabilities.tools[0].id,
+		MCPCapabilityUpdate(enabled=False),
+		db_session,
+		principal=principal,
+	)
+	assert toggled.discovered_tools[0]["enabled"] is False
 
 
 @pytest.mark.asyncio
@@ -843,3 +1069,73 @@ async def test_mcp_server_flows_require_manage_permission(
 			principal=principal,
 		)
 	assert create_exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_user_mcp_server_origin_policy_modes(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""user-owned MCP server origins obey allow and deny policy modes."""
+	principal = await _principal(
+		db_session,
+		frozenset({ActionPermission.USER_MCP_MANAGE}),
+	)
+
+	monkeypatch.setattr(settings.integrations.mcp, "user_server_origin_mode", "deny")
+	monkeypatch.setattr(
+		settings.integrations.mcp,
+		"user_server_origins",
+		["https://blocked.test"],
+	)
+	with pytest.raises(HTTPException) as denied_exc:
+		await mcp_service.create_server(
+			MCPServerCreate(
+				name="blocked user MCP",
+				scope=MCPServerScope.USER,
+				url="https://blocked.test/mcp",
+			),
+			db_session,
+			principal=principal,
+		)
+	assert denied_exc.value.status_code == 400
+
+	allowed_by_deny_mode = await mcp_service.create_server(
+		MCPServerCreate(
+			name="unblocked user MCP",
+			scope=MCPServerScope.USER,
+			url="https://allowed.test/mcp",
+		),
+		db_session,
+		principal=principal,
+	)
+	assert allowed_by_deny_mode.url == "https://allowed.test/mcp"
+
+	monkeypatch.setattr(settings.integrations.mcp, "user_server_origin_mode", "allow")
+	monkeypatch.setattr(
+		settings.integrations.mcp,
+		"user_server_origins",
+		["https://allowed.test"],
+	)
+	with pytest.raises(HTTPException) as not_allowed_exc:
+		await mcp_service.create_server(
+			MCPServerCreate(
+				name="not allowlisted user MCP",
+				scope=MCPServerScope.USER,
+				url="https://other.test/mcp",
+			),
+			db_session,
+			principal=principal,
+		)
+	assert not_allowed_exc.value.status_code == 400
+
+	allowed_by_allow_mode = await mcp_service.create_server(
+		MCPServerCreate(
+			name="allowlisted user MCP",
+			scope=MCPServerScope.USER,
+			url="https://allowed.test/mcp",
+		),
+		db_session,
+		principal=principal,
+	)
+	assert allowed_by_allow_mode.url == "https://allowed.test/mcp"

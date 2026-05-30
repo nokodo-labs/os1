@@ -776,6 +776,87 @@ async def test_summary_invalidation_only_deletes_overlapping_ranges(
 
 
 @pytest.mark.asyncio
+async def test_stale_invalidation_uses_summary_coverage_metadata(
+	db_session: AsyncSession,
+	user_auth: dict[str, object],
+) -> None:
+	"""covered raw id metadata narrows summary invalidation."""
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+	now = datetime.now(UTC)
+	thread = Thread(
+		id=TypeID(new_typeid("thread")),
+		owner_id=user["id"],
+		title="summary metadata invalidation",
+		current_message_id=None,
+		created_at=now,
+		updated_at=now,
+	)
+	db_session.add(thread)
+	await db_session.flush()
+	message_1 = Message(
+		thread_id=thread.id,
+		parent_id=None,
+		task_id=None,
+		sender_agent_id=None,
+		sender_user_id=user["id"],
+		type=MessageType.USER,
+		content=[{"type": "text", "text": "first"}],
+		tool_call_id=None,
+		is_error=None,
+		tool_calls=[],
+		usage=None,
+		read_by=[],
+		citations=[],
+		metadata_={},
+		created_at=now,
+		updated_at=now,
+	)
+	db_session.add(message_1)
+	await db_session.flush()
+	message_2 = Message(
+		thread_id=thread.id,
+		parent_id=message_1.id,
+		task_id=None,
+		sender_agent_id=None,
+		sender_user_id=user["id"],
+		type=MessageType.USER,
+		content=[{"type": "text", "text": "second"}],
+		tool_call_id=None,
+		is_error=None,
+		tool_calls=[],
+		usage=None,
+		read_by=[],
+		citations=[],
+		metadata_={},
+		created_at=now,
+		updated_at=now,
+	)
+	db_session.add(message_2)
+	await db_session.flush()
+	summary = ThreadSummary(
+		thread_id=thread.id,
+		purpose=SummaryPurpose.AGENT_CONTEXT,
+		content="covers only first via metadata",
+		message_count=1,
+		start_message_id=message_1.id,
+		end_message_id=message_2.id,
+		metadata_={"covered_raw_message_ids": [str(message_1.id)]},
+	)
+	db_session.add(summary)
+	await db_session.flush()
+
+	count = await summary_service.delete_stale_summaries_for_thread(
+		thread.id,
+		db_session,
+		changed_message_ids=[message_2.id],
+	)
+
+	assert count == 0
+	assert await db_session.get(ThreadSummary, summary.id) is not None
+
+
+@pytest.mark.asyncio
 async def test_active_end_invalidation_deletes_null_ended_summaries(
 	db_session: AsyncSession,
 	user_auth: dict[str, object],

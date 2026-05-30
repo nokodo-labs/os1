@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.calendar import CalendarEvent
@@ -148,7 +149,11 @@ async def test_calendar_get_returns_upcoming_reminders_with_reminder_ids() -> No
 	payload = json.loads(message.tool_output)
 	assert payload["count"] == 1
 	assert payload["results"][0]["type"] == "reminder"
+	assert payload["results"][0]["id"] == str(reminder_id)
+	assert payload["results"][0]["occurrence_id"] == item.id
 	assert payload["results"][0]["reminder_id"] == str(reminder_id)
+	assert payload["results"][0]["reminder_list_id"] == str(list_id)
+	assert "calendar_id" not in payload["results"][0]
 	assert payload["results"][0]["status"] == ReminderStatus.COMPLETED.value
 
 
@@ -639,6 +644,104 @@ async def test_file_get_query_uses_hybrid_search() -> None:
 	assert payload["has_more"] is True
 	assert payload["next_cursor"] == "next"
 	assert payload["results"][0]["title"] == "brief.pdf"
+
+
+@pytest.mark.asyncio
+async def test_file_get_batch_attaches_supported_media_to_one_message() -> None:
+	app_context = _app_context()
+	now = datetime.now(tz=UTC)
+	img_id = new_typeid("file")
+	doc_id = new_typeid("file")
+
+	def _fake_file(file_id: TypeID, mime: str, name: str) -> MagicMock:
+		f = MagicMock()
+		f.id = file_id
+		f.filename = name
+		f.mime_type = mime
+		f.size_bytes = 10
+		f.created_at = now
+		f.updated_at = now
+		f.status = MagicMock(value="ready")
+		f.source = MagicMock(value="upload")
+		return f
+
+	files_by_id = {
+		img_id: _fake_file(img_id, "image/png", "shot.png"),
+		doc_id: _fake_file(doc_id, "application/pdf", "brief.pdf"),
+	}
+
+	async def _get_file(file_id: TypeID, *_a: object, **_k: object) -> MagicMock:
+		return files_by_id[file_id]
+
+	tool = FileGetTool()
+
+	try:
+		with (
+			patch(
+				"api.v1.service.chat.tools.files.file_service.get_file",
+				new=AsyncMock(side_effect=_get_file),
+			),
+			patch(
+				"api.v1.service.chat.tools.files.fetch_agent_input_modalities",
+				new=AsyncMock(return_value={"text", "images"}),
+			) as modalities,
+		):
+			message = await tool.call(
+				_state(),
+				_agent_context(),
+				_tool_call_context(),
+				app_context,
+				file_ids=[str(img_id), str(doc_id)],
+			)
+	finally:
+		await app_context.session.close()
+
+	# all fetched media lands on one tool message sharing one protection turn
+	assert not message.is_error
+	payload = json.loads(message.tool_output)
+	assert payload["count"] == 2
+	# only the image is a supported native modality -> one attachment
+	assert len(message.attachments) == 1
+	att = message.attachments[0]
+	assert att.metadata is not None
+	assert att.metadata["file_id"] == str(img_id)
+	assert att.metadata["fetched"] is True
+	assert att.metadata["updated_at"] == now.isoformat()
+	# modalities are fetched once for the whole batch, not per file
+	modalities.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_file_get_batch_reports_missing_file_as_error_entry() -> None:
+	app_context = _app_context()
+	missing_id = new_typeid("file")
+
+	async def _get_file(*_a: object, **_k: object) -> MagicMock:
+		raise HTTPException(status_code=404, detail="file not found")
+
+	tool = FileGetTool()
+
+	try:
+		with patch(
+			"api.v1.service.chat.tools.files.file_service.get_file",
+			new=AsyncMock(side_effect=_get_file),
+		):
+			message = await tool.call(
+				_state(),
+				_agent_context(),
+				_tool_call_context(),
+				app_context,
+				file_ids=[str(missing_id)],
+			)
+	finally:
+		await app_context.session.close()
+
+	# a missing file does not fail the whole batch; it is reported per-entry
+	assert not message.is_error
+	payload = json.loads(message.tool_output)
+	assert payload["count"] == 1
+	assert payload["results"][0]["status"] == "error"
+	assert message.attachments == []
 
 
 @pytest.mark.asyncio

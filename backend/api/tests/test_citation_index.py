@@ -18,7 +18,7 @@ from api.v1.service.chat.filters.citation_index import (
 	_resolve_nci,
 	resolve_assistant_citations,
 )
-from api.v1.service.prompt_runtime import SENTINEL_CITATION_SOURCES
+from api.v1.service.prompts import SENTINEL_CITATION_SOURCES
 from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.context import AgentContext

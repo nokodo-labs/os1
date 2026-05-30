@@ -19,6 +19,7 @@ from api.settings import (
 	DEFAULT_SECRET_KEY,
 	BrandingSettings,
 	DbSettingsSource,
+	MCPIntegrationSettings,
 	QdrantVectorDatabaseSettings,
 	SecuritySettings,
 	Settings,
@@ -221,6 +222,13 @@ def test_settings_patch_accepts_web_search_and_integration_updates() -> None:
 					"maintenance_max_chars_per_message": 3000,
 				},
 				"context_compaction": {
+					"recovery_target_ratio": 0.55,
+					"target_usage_cap_tokens": 64000,
+					"summary_batch_min_tokens": 512,
+					"summary_batch_max_tokens": 16000,
+					"prompt_overhead_tokens": 300,
+					"blocking_summarization_enabled": True,
+					"blocking_summarization_timeout_seconds": 20.0,
 					"summarization_max_chars_per_message": 3000,
 				},
 			},
@@ -293,6 +301,41 @@ def test_settings_patch_accepts_web_search_and_integration_updates() -> None:
 	assert dumped["tasks"]["thread_maintenance"]["runner_timeout_seconds"] == 1200
 	assert dumped["tasks"]["maintenance_backfill"]["enabled"] is True
 	assert dumped["tasks"]["maintenance_backfill"]["batch_size"] == 25
+
+
+def test_mcp_settings_origin_policy_and_transport_validation() -> None:
+	mcp = MCPIntegrationSettings.model_validate(
+		{
+			"allowed_transports": ["streamable_http", "sse", "sse"],
+			"user_server_origin_mode": "deny",
+			"user_server_origins": [
+				"HTTPS://tools.example.com/",
+				"https://tools.example.com",
+				"",
+			],
+		}
+	)
+
+	assert mcp.allowed_transports == ["streamable_http", "sse"]
+	assert mcp.user_server_origins == ["https://tools.example.com"]
+
+	with pytest.raises(ValidationError):
+		MCPIntegrationSettings.model_validate({"allowed_transports": []})
+
+	with pytest.raises(ValidationError, match="MCP origin allow mode"):
+		MCPIntegrationSettings.model_validate({"user_server_origin_mode": "allow"})
+
+	with pytest.raises(ValidationError, match="MCP origin allow mode"):
+		SettingsPatch.model_validate(
+			{
+				"integrations": {
+					"mcp": {
+						"user_server_origin_mode": "allow",
+						"user_server_origins": [],
+					}
+				}
+			}
+		)
 
 
 def test_settings_patch_rejects_old_web_search_integration_nesting() -> None:

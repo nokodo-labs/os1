@@ -16,6 +16,8 @@ from api.v1.service.chat.context_compaction.tool_io import (
 from api.v1.service.chat.filters.context_compaction import (
 	ContextCompactionFilter,
 )
+from api.v1.service.chat.models import is_context_pressure_generation_error
+from nokodo_ai.adapters.chat import GenerationBadRequestError, GenerationRateLimitError
 from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.context import AgentContext
@@ -28,6 +30,7 @@ from nokodo_ai.messages import (
 	UserMessage,
 )
 from nokodo_ai.threads import Thread
+from nokodo_ai.tool import ToolDefinition
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
@@ -76,6 +79,58 @@ class TestAppContextWithEmitter:
 
 
 # -- helpers --
+
+
+class TestProviderContextPressureHelper:
+	def test_detects_openai_context_length_bad_request(self) -> None:
+		exc = GenerationBadRequestError(
+			"this model's maximum context length is 128000 tokens",
+			provider="openai.chat_completions",
+			status_code=400,
+			code="context_length_exceeded",
+		)
+
+		assert is_context_pressure_generation_error(exc) is True
+
+	def test_detects_anthropic_prompt_too_long_bad_request(self) -> None:
+		exc = GenerationBadRequestError(
+			"prompt is too long: 103078 tokens > 102398 maximum",
+			provider="anthropic.messages",
+			status_code=400,
+			code="invalid_request_error",
+		)
+
+		assert is_context_pressure_generation_error(exc) is True
+
+	def test_detects_google_input_token_count_bad_request(self) -> None:
+		exc = GenerationBadRequestError(
+			"the input token count exceeds the maximum number of tokens allowed",
+			provider="google.generate_content",
+			status_code=400,
+			code="INVALID_ARGUMENT",
+		)
+
+		assert is_context_pressure_generation_error(exc) is True
+
+	def test_rejects_generic_bad_request(self) -> None:
+		exc = GenerationBadRequestError(
+			"unknown model",
+			provider="openai.chat_completions",
+			status_code=400,
+			code="invalid_request_error",
+		)
+
+		assert is_context_pressure_generation_error(exc) is False
+
+	def test_rejects_non_bad_request_error(self) -> None:
+		exc = GenerationRateLimitError(
+			"too many requests",
+			provider="openai.chat_completions",
+			status_code=429,
+			code="rate_limit_exceeded",
+		)
+
+		assert is_context_pressure_generation_error(exc) is False
 
 
 def _sys(text: str) -> SystemMessage:
@@ -175,10 +230,13 @@ class TestEnforceCombinedToolBudget:
 		self,
 		combined_share: float = 0.50,
 		headroom: int = 4096,
+		prompt_overhead_tokens: int = 0,
 	) -> _patch[MagicMock]:
 		ws = MagicMock()
 		ws.tool_results_combined_max_share = combined_share
 		ws.response_headroom = headroom
+		ws.prompt_overhead_tokens = prompt_overhead_tokens
+		ws.target_usage_cap_tokens = None
 		mock_settings = MagicMock()
 		mock_settings.ai.context_compaction = ws
 		return patch(
@@ -306,6 +364,55 @@ class TestEnforceCombinedToolBudget:
 			result = enforce_combined_tool_budget(thread, context_window=128_000)
 		assert result is thread
 
+	def test_system_prompt_and_overhead_reduce_tool_budget(self) -> None:
+		"""standalone tool budgeting uses the same fixed prompt costs."""
+		thread = _thread(
+			_sys("s" * 2000),
+			_user("q"),
+			_tool("x" * 500, "c1"),
+			_assistant("done"),
+		)
+
+		with self._patch_settings(
+			combined_share=0.50,
+			headroom=100,
+			prompt_overhead_tokens=100,
+		):
+			result = enforce_combined_tool_budget(thread, context_window=1000)
+
+		tool_msg = next(
+			message for message in result.messages if isinstance(message, ToolMessage)
+		)
+		assert tool_msg.tool_output == COMPACTED_TOOL_OUTPUT_NOTICE
+
+	def test_tool_definitions_reduce_tool_budget(self) -> None:
+		"""standalone tool budgeting includes tool definition schema tokens."""
+		thread = _thread(
+			_sys("s"),
+			_user("q"),
+			_tool("x" * 500, "c1"),
+			_assistant("done"),
+		)
+		tools = [
+			ToolDefinition(
+				name="large_schema_tool",
+				description="x" * 2000,
+				parameters={"type": "object", "properties": {}},
+			)
+		]
+
+		with self._patch_settings(combined_share=0.50, headroom=100):
+			result = enforce_combined_tool_budget(
+				thread,
+				context_window=1000,
+				tool_definitions=tools,
+			)
+
+		tool_msg = next(
+			message for message in result.messages if isinstance(message, ToolMessage)
+		)
+		assert tool_msg.tool_output == COMPACTED_TOOL_OUTPUT_NOTICE
+
 	def test_none_context_window_uses_default(self) -> None:
 		"""when context_window is None, uses DEFAULT_CONTEXT_WINDOW."""
 		thread = _thread(
@@ -408,7 +515,7 @@ class TestContextCompactionFilter:
 		"""second call reruns the full budget cascade."""
 		f = ContextCompactionFilter()
 		ctx = _mock_ctx()
-		thread = _thread(_sys("s"), _user("hi"))
+		thread = _thread(_sys("s"), _user("hi", "msg_head"))
 
 		mock_wr = MagicMock()
 		mock_wr.thread = thread
@@ -441,7 +548,7 @@ class TestContextCompactionFilter:
 		"""same filter instance can first-pass multiple runs independently."""
 		f = ContextCompactionFilter()
 		ctx = _mock_ctx()
-		thread = _thread(_sys("s"), _user("hi"))
+		thread = _thread(_sys("s"), _user("hi", "msg_head"))
 
 		mock_wr = MagicMock()
 		mock_wr.thread = thread
@@ -573,7 +680,7 @@ class TestContextCompactionFilter:
 		"""when compaction says summarization is needed, enqueues a durable task."""
 		f = ContextCompactionFilter()
 		ctx = _mock_ctx()
-		thread = _thread(_sys("s"), _user("hi"))
+		thread = _thread(_sys("s"), _user("hi", "msg_head"))
 
 		mock_wr = MagicMock()
 		mock_wr.thread = thread
@@ -601,10 +708,12 @@ class TestContextCompactionFilter:
 			await f.process(state, _agent_context(), ctx)
 
 			mock_start_summary.assert_awaited_once()
+			call_kwargs = mock_start_summary.await_args.kwargs
+			assert call_kwargs["branch_head_message_id"] == "msg_head"
 
 	@pytest.mark.asyncio()
-	async def test_schedules_condensation_when_threshold_met(self) -> None:
-		"""when summary count >= threshold, schedules condensation task."""
+	async def test_schedules_condensation_when_multiple_summaries_exist(self) -> None:
+		"""when multiple summaries exist, schedules condensation task."""
 		f = ContextCompactionFilter()
 		ctx = _mock_ctx()
 		thread = _thread(_sys("s"), _user("hi"))
@@ -613,8 +722,6 @@ class TestContextCompactionFilter:
 		mock_wr.thread = thread
 		mock_wr.needs_summarization = False
 		mock_wr.summarize_messages = []
-
-		threshold_val = 4  # default max_summaries_before_condense
 
 		with (
 			patch(
@@ -625,17 +732,11 @@ class TestContextCompactionFilter:
 				"api.v1.service.chat.filters.context_compaction.summary_service"
 			) as mock_svc,
 			patch(
-				"api.v1.service.chat.filters.context_compaction.app_settings"
-			) as mock_settings,
-			patch(
 				"api.v1.service.chat.filters.context_compaction.start_condense_summaries_task",
 				new_callable=AsyncMock,
 			) as mock_start_condense,
 		):
-			mock_settings.ai.context_compaction.max_summaries_before_condense = (
-				threshold_val
-			)
-			mock_svc.count_active_summaries = AsyncMock(return_value=threshold_val)
+			mock_svc.count_active_summaries = AsyncMock(return_value=2)
 			state = _state(thread)
 
 			await f.process(state, _agent_context(), ctx)
@@ -738,3 +839,117 @@ class TestCondensationSizeCap:
 		# the raw summary content should be <= cap
 		capped = huge_content[:_MAX_CONDENSATION_INPUT_CHARS]
 		assert len(capped) <= _MAX_CONDENSATION_INPUT_CHARS
+
+
+# -- protected indices + island-aware summarization --
+
+
+_RUN = TypeID("run_abc")
+
+
+def _run_user(text: str, msg_id: str) -> UserMessage:
+	# the run-start anchor: a user message stamped with the active run_id.
+	return UserMessage(
+		content=[TextContent(text=text)],
+		metadata={"_message_id": msg_id, "run_id": str(_RUN)},
+	)
+
+
+def _protected_tool(output: str = "media", call_id: str = "cm") -> ToolMessage:
+	# a tool message carrying hard-protected native media (marked by projection).
+	from api.v1.service.chat.context_compaction.media import (
+		MEDIA_PROTECTED_METADATA_KEY,
+	)
+
+	return ToolMessage(
+		tool_call_id=call_id,
+		tool_output=output,
+		metadata={MEDIA_PROTECTED_METADATA_KEY: True},
+	)
+
+
+class TestProtectedIndices:
+	"""protected_indices returns the run anchor plus each hard-media island."""
+
+	def test_collects_run_start_and_media_islands(self) -> None:
+		from api.v1.service.chat.context_compaction.protection import (
+			find_media_protected_index,
+			protected_indices,
+		)
+
+		messages: list[Message] = [
+			_user("old", "m0"),
+			_assistant("a0", "m1"),
+			_protected_tool(call_id="c_media"),
+			_run_user("current request", "m3"),
+			_assistant("a3", "m4"),
+		]
+
+		protected = protected_indices(messages, _RUN)
+
+		# index 2 is the marked media message, index 3 is the run-start anchor
+		assert protected == {2, 3}
+		assert find_media_protected_index(messages) == 2
+
+	def test_empty_without_run_or_media(self) -> None:
+		from api.v1.service.chat.context_compaction.protection import (
+			protected_indices,
+		)
+
+		messages: list[Message] = [_user("a", "m0"), _assistant("b", "m1")]
+
+		assert protected_indices(messages, None) == set()
+
+
+class TestIslandAwareSummarization:
+	"""next_summarization_batch never crosses a protected island."""
+
+	def test_batch_stops_at_run_start_anchor(self) -> None:
+		from api.v1.service.chat.context_compaction.summarization import (
+			next_summarization_batch,
+		)
+
+		long = "word " * 40  # comfortably above the minimum-saving threshold
+		messages: list[Message] = [
+			_user(long, "m0"),
+			_assistant(long, "m1"),
+			_run_user(long, "m2"),
+			_assistant(long, "m3"),
+		]
+		message_ids = ["m0", "m1", "m2", "m3"]
+
+		batch, start_id, end_id = next_summarization_batch(
+			messages, message_ids, [], token_limit=10_000, run_id=_RUN
+		)
+
+		# the oldest compressible run is m0..m1; the run-start anchor at m2
+		# bounds the batch so it is never summarized.
+		assert start_id == TypeID("m0")
+		assert end_id == TypeID("m1")
+		assert len(batch) == 2
+
+	def test_batch_stops_at_mid_thread_media_island(self) -> None:
+		from api.v1.service.chat.context_compaction.summarization import (
+			next_summarization_batch,
+		)
+
+		# a hard-media island sits between two compressible spans. the oldest
+		# batch must stop at the island instead of jumping past it to grab the
+		# newer compressible span (which would wall off the recoverable gap).
+		long = "word " * 40
+		messages: list[Message] = [
+			_user(long, "m0"),
+			_assistant(long, "m1"),
+			_protected_tool(call_id="c_media"),
+			_user(long, "m3"),
+			_assistant(long, "m4"),
+		]
+		message_ids = ["m0", "m1", None, "m3", "m4"]
+
+		batch, start_id, end_id = next_summarization_batch(
+			messages, message_ids, [], token_limit=10_000, run_id=None
+		)
+
+		assert start_id == TypeID("m0")
+		assert end_id == TypeID("m1")
+		assert len(batch) == 2

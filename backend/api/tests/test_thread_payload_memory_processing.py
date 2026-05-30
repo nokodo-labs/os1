@@ -34,8 +34,8 @@ def _agent_context() -> AgentContext:
 	)
 
 
-def _hook_state(thread: SDKThread) -> AgentIterationSnapshot[None]:
-	return AgentIterationState[None](thread=thread, tools=[]).snapshot()
+def _hook_state(thread: SDKThread) -> AgentIterationSnapshot[AppContext]:
+	return AgentIterationState[AppContext](thread=thread, tools=[]).snapshot()
 
 
 @pytest.mark.asyncio
@@ -127,8 +127,22 @@ async def test_memory_post_processing_hook_skips_tool_iterations(
 		principal: Principal,
 		query_text: str,
 		max_related_memories: int,
+		conversation_snapshot: str | None = None,
+		thread_id: str | None = None,
+		message_id: str | None = None,
+		run_id: str | None = None,
+		emit_activity: bool = False,
 	) -> None:
-		_ = (task_session, principal, max_related_memories)
+		_ = (
+			task_session,
+			principal,
+			max_related_memories,
+			conversation_snapshot,
+			thread_id,
+			message_id,
+			run_id,
+			emit_activity,
+		)
 		calls.append(query_text)
 
 	monkeypatch.setattr(
@@ -178,8 +192,22 @@ async def test_memory_post_processing_hook_skips_when_messages_are_queued(
 		principal: Principal,
 		query_text: str,
 		max_related_memories: int,
+		conversation_snapshot: str | None = None,
+		thread_id: str | None = None,
+		message_id: str | None = None,
+		run_id: str | None = None,
+		emit_activity: bool = False,
 	) -> None:
-		_ = (task_session, principal, max_related_memories)
+		_ = (
+			task_session,
+			principal,
+			max_related_memories,
+			conversation_snapshot,
+			thread_id,
+			message_id,
+			run_id,
+			emit_activity,
+		)
 		calls.append(query_text)
 
 	monkeypatch.setattr(
@@ -235,16 +263,28 @@ async def test_memory_post_processing_hook_schedules_after_final_assistant(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	"""memory maintenance schedules once the final assistant answer is present."""
-	calls: list[tuple[str, int]] = []
+	calls: list[tuple[str, int, str | None, bool]] = []
 
 	async def fake_start_memory_post_processing_task(
 		task_session: AsyncSession,
 		principal: Principal,
 		query_text: str,
 		max_related_memories: int,
+		conversation_snapshot: str | None = None,
+		thread_id: str | None = None,
+		message_id: str | None = None,
+		run_id: str | None = None,
+		emit_activity: bool = False,
 	) -> None:
-		_ = (task_session, principal)
-		calls.append((query_text, max_related_memories))
+		_ = (task_session, principal, thread_id, message_id, run_id)
+		calls.append(
+			(
+				query_text,
+				max_related_memories,
+				conversation_snapshot,
+				emit_activity,
+			)
+		)
 
 	monkeypatch.setattr(
 		memory_hook_module,
@@ -275,7 +315,14 @@ async def test_memory_post_processing_hook_schedules_after_final_assistant(
 		_hook_state(thread), _agent_context(), app_context
 	)
 
-	assert calls == [("remember this", 10)]
+	assert calls == [
+		(
+			"remember this",
+			10,
+			"-2. user: remember this\n-1. assistant: done",
+			True,
+		)
+	]
 
 
 @pytest.mark.asyncio

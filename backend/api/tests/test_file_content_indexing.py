@@ -2,19 +2,189 @@
 
 from __future__ import annotations
 
+import base64
+from collections.abc import AsyncIterator, Awaitable
+from typing import Literal, overload
+
+import pytest
+from pydantic import PrivateAttr
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from api.models.file import File, FileSource, FileStatus
 from api.settings import settings
+from api.storage.base import FileInfo, MimeType, StorageBackend
+from api.v1.service.chat.models import TaskChatModel
+from api.v1.service.files import content_vectorization as content_vectorization_service
 from api.v1.service.files.content_vectorization import (
 	chunk_loaded_text,
+	load_file_content_chunks,
+	load_sdk_file_text,
+	vectorize_file_content,
 )
-from api.v1.service.files.metadata import CONTENT_CHUNK_SOURCE
-from api.v1.service.files.vectorization import _build_file_chunk
-from nokodo_ai import File as SDKFile
-from nokodo_ai import Loader, Text
+from api.v1.service.files.description import _content_excerpt, _truncate_description
+from api.v1.service.files.metadata import FILE_CONTENT_RESOURCE_TYPE, FILE_RESOURCE_TYPE
+from api.v1.service.files.modalities import should_try_model_text
+from api.v1.service.files.search import _group_file_hits, _matched_chunk_payload
+from api.v1.service.files.vectorization import FILE_SPEC, _build_file_content_chunk
+from api.v1.service.vectorize import build_chunk
+from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
+from nokodo_ai.adapters.base.vectorstores import Chunk as VectorChunk
+from nokodo_ai.adapters.base.vectorstores import ChunkSearchResult
+from nokodo_ai.chat_models import ChatModel
+from nokodo_ai.chunkers import ContentChunk
+from nokodo_ai.loaders import File as SDKFile
+from nokodo_ai.loaders import Text
+from nokodo_ai.messages import (
+	AssistantMessage,
+	FileContent,
+	ImageContent,
+	Message,
+	UserMessage,
+)
+from nokodo_ai.tool import ToolDefinition
 from nokodo_ai.utils.typeid import new_typeid
 
 
-def test_content_chunks_are_indexed_with_total(monkeypatch) -> None:
+class _ExtractionChatAdapter(BaseChatAdapter):
+	type: Literal["test.file_extraction"] = "test.file_extraction"
+	_response: str = PrivateAttr(default="")
+	_messages: list[Message] = PrivateAttr(default_factory=list)
+
+	def __init__(self, response: str) -> None:
+		super().__init__()
+		self._response = response
+
+	@property
+	def messages(self) -> list[Message]:
+		return self._messages
+
+	@overload
+	def generate(
+		self,
+		messages: list[Message],
+		model: str,
+		stream: Literal[False] = False,
+		tools: list[ToolDefinition] = [],
+		params: ChatGenerationParams | None = None,
+	) -> Awaitable[AssistantMessage]: ...
+
+	@overload
+	def generate(
+		self,
+		messages: list[Message],
+		model: str,
+		stream: Literal[True],
+		tools: list[ToolDefinition] = [],
+		params: ChatGenerationParams | None = None,
+	) -> AsyncIterator[AssistantMessage]: ...
+
+	def generate(
+		self,
+		messages: list[Message],
+		model: str,
+		stream: bool = False,
+		tools: list[ToolDefinition] = [],
+		params: ChatGenerationParams | None = None,
+	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
+		self._messages = messages
+		if stream:
+
+			async def empty_stream() -> AsyncIterator[AssistantMessage]:
+				if False:
+					yield AssistantMessage.from_text("")
+
+			return empty_stream()
+
+		async def response() -> AssistantMessage:
+			return AssistantMessage.from_text(self._response)
+
+		return response()
+
+
+class _MemoryStorageBackend(StorageBackend):
+	def __init__(self, data: bytes) -> None:
+		super().__init__("memory")
+		self.data = data
+
+	async def put(
+		self,
+		key: str,
+		data: bytes | AsyncIterator[bytes],
+		content_type: MimeType,
+	) -> None:
+		if isinstance(data, bytes):
+			self.data = data
+		else:
+			parts: list[bytes] = []
+			async for chunk in data:
+				parts.append(chunk)
+			self.data = b"".join(parts)
+
+	async def get(self, key: str) -> AsyncIterator[bytes]:
+		return _single_chunk(self.data)
+
+	async def delete(self, key: str) -> None:
+		self.data = b""
+
+	async def exists(self, key: str) -> bool:
+		return True
+
+	async def stat(self, key: str) -> FileInfo | None:
+		return None
+
+	async def copy(self, src_key: str, dst_key: str) -> None:
+		return None
+
+	async def get_url(self, key: str, expires_in: int | None = None) -> str | None:
+		return None
+
+
+async def _single_chunk(data: bytes) -> AsyncIterator[bytes]:
+	yield data
+
+
+def _task_chat_model(
+	response: str,
+	input_modalities: frozenset[str] = frozenset(
+		{"documents", "images", "audio", "video"}
+	),
+) -> tuple[TaskChatModel, _ExtractionChatAdapter]:
+	adapter = _ExtractionChatAdapter(response)
+	chat_model = ChatModel.model_construct(model_name="extractor", adapter=adapter)
+	return (
+		TaskChatModel(chat_model=chat_model, input_modalities=input_modalities),
+		adapter,
+	)
+
+
+def _file_record(
+	filename: str,
+	mime_type: str,
+	data: bytes,
+) -> File:
+	return File(
+		id=new_typeid("file"),
+		owner_id=new_typeid("user"),
+		source=FileSource.UPLOAD,
+		storage_backend="memory",
+		storage_key=f"tests/{filename}",
+		filename=filename,
+		mime_type=mime_type,
+		size_bytes=len(data),
+		checksum_sha256=None,
+		description="stored file",
+		status=FileStatus.AVAILABLE,
+		projects=[],
+	)
+
+
+def _user_message(adapter: _ExtractionChatAdapter) -> UserMessage:
+	message = adapter.messages[1]
+	assert isinstance(message, UserMessage)
+	return message
+
+
+async def test_content_chunks_are_indexed_with_total(monkeypatch) -> None:
 	monkeypatch.setattr(settings.assets.content_vectorization, "target_tokens", 50)
 	monkeypatch.setattr(settings.assets.content_vectorization, "overlap_tokens", 5)
 	monkeypatch.setattr(settings.assets.content_vectorization, "max_chunks", 20)
@@ -25,7 +195,7 @@ def test_content_chunks_are_indexed_with_total(monkeypatch) -> None:
 	)
 	text = "\n\n".join(f"paragraph {index} " + "word " * 80 for index in range(8))
 
-	chunks = chunk_loaded_text(
+	chunks = await chunk_loaded_text(
 		Text(
 			content=text,
 			status="loaded",
@@ -45,7 +215,7 @@ def test_content_chunks_are_indexed_with_total(monkeypatch) -> None:
 		assert line_start <= line_end
 
 
-def test_file_vector_chunk_metadata_hard_links_resource() -> None:
+def test_file_vector_metadata_uses_file_resource_identity() -> None:
 	file_id = new_typeid("file")
 	owner_id = new_typeid("user")
 	file = File(
@@ -63,37 +233,423 @@ def test_file_vector_chunk_metadata_hard_links_resource() -> None:
 		projects=[],
 	)
 
-	chunk = _build_file_chunk(
+	chunk = build_chunk(FILE_SPEC, file, [0.1, 0.2])
+
+	assert chunk.metadata["resource_type"] == FILE_RESOURCE_TYPE
+	assert chunk.metadata["resource_id"] == str(file_id)
+	assert chunk.metadata["owner_id"] == str(owner_id)
+	assert "chunk_index" not in chunk.metadata
+	assert "chunk_count" not in chunk.metadata
+	assert "chunk_source" not in chunk.metadata
+	assert "parent_resource_type" not in chunk.metadata
+	assert "parent_resource_id" not in chunk.metadata
+
+
+def test_file_content_chunk_metadata_uses_parent_resource_identity() -> None:
+	file_id = new_typeid("file")
+	owner_id = new_typeid("user")
+	file = File(
+		id=file_id,
+		owner_id=owner_id,
+		source=FileSource.UPLOAD,
+		storage_backend="local",
+		storage_key="file-key",
+		filename="report.txt",
+		mime_type="text/plain",
+		size_bytes=100,
+		checksum_sha256=None,
+		description="quarterly report",
+		status=FileStatus.AVAILABLE,
+		projects=[],
+	)
+
+	chunk = _build_file_content_chunk(
 		file=file,
 		content="body text",
 		embedding=[0.1, 0.2],
-		chunk_source=CONTENT_CHUNK_SOURCE,
 		chunk_index=2,
 		chunk_count=7,
 		extra_metadata={"line_start": 10, "line_end": 20},
 	)
 
-	assert chunk.metadata["resource_type"] == "file"
-	assert chunk.metadata["resource_id"] == str(file_id)
+	assert chunk.metadata["resource_type"] == FILE_CONTENT_RESOURCE_TYPE
+	assert "resource_id" not in chunk.metadata
+	assert chunk.metadata["parent_resource_type"] == FILE_RESOURCE_TYPE
+	assert chunk.metadata["parent_resource_id"] == str(file_id)
 	assert chunk.metadata["owner_id"] == str(owner_id)
-	assert chunk.metadata["chunk_source"] == CONTENT_CHUNK_SOURCE
 	assert chunk.metadata["chunk_index"] == 2
 	assert chunk.metadata["chunk_count"] == 7
 	assert chunk.metadata["line_start"] == 10
 	assert chunk.metadata["line_end"] == 20
+	assert "filename" not in chunk.metadata
+	assert "mime_type" not in chunk.metadata
+	assert "status" not in chunk.metadata
+	assert "project_ids" not in chunk.metadata
+	assert "chunk_source" not in chunk.metadata
 
 
-def test_auto_loader_routes_images_to_ocr_required() -> None:
-	loaded = Loader(adapter="auto").load(
+def test_file_search_groups_content_hits_by_parent_file_id() -> None:
+	file_id = str(new_typeid("file"))
+	hits = [
+		ChunkSearchResult(
+			id="content-chunk",
+			content="body match",
+			embedding=[],
+			score=0.9,
+			metadata={
+				"resource_type": FILE_CONTENT_RESOURCE_TYPE,
+				"parent_resource_id": file_id,
+				"chunk_index": 0,
+				"chunk_count": 2,
+			},
+		),
+		ChunkSearchResult(
+			id="file-chunk",
+			content="description match",
+			embedding=[],
+			score=0.7,
+			metadata={
+				"resource_type": FILE_RESOURCE_TYPE,
+				"resource_id": file_id,
+			},
+		),
+	]
+
+	groups = _group_file_hits(hits)
+	matched_payload = _matched_chunk_payload(hits[0])
+
+	assert list(groups) == [file_id]
+	assert len(groups[file_id].hits) == 2
+	assert matched_payload["resource_type"] == FILE_CONTENT_RESOURCE_TYPE
+	assert matched_payload["chunk_index"] == 0
+	assert matched_payload["chunk_count"] == 2
+	assert "chunk_source" not in matched_payload
+
+
+async def test_api_auto_loader_routes_images_to_missing_chat_model_fact(
+	monkeypatch,
+) -> None:
+	monkeypatch.setattr(settings.assets.content_vectorization, "loader", "auto")
+	loaded = await load_sdk_file_text(
 		SDKFile(data=b"", filename="scan.png", mime_type="image/png")
 	)
 
-	assert loaded.status == "ocr_required"
-	assert loaded.skipped_reason == "ocr_required"
-	assert loaded.metadata["ocr_required"] is True
+	assert loaded.status == "unsupported"
+	assert loaded.skipped_reason == "missing_chat_model"
+	assert loaded.metadata["input_modality"] == "images"
 
 
-def test_markdown_chunker_keeps_markdown_metadata(monkeypatch) -> None:
+async def test_api_auto_loader_rejects_unsupported_chat_model_modality(
+	monkeypatch,
+) -> None:
+	monkeypatch.setattr(settings.assets.content_vectorization, "loader", "auto")
+	chat_model = TaskChatModel(
+		chat_model=ChatModel.model_construct(
+			model_name="text-only",
+			adapter=None,
+		),
+		input_modalities=frozenset({"text"}),
+	)
+
+	loaded = await load_sdk_file_text(
+		SDKFile(data=b"image-bytes", filename="scan.png", mime_type="image/png"),
+		chat_model=chat_model,
+	)
+
+	assert loaded.status == "unsupported"
+	assert loaded.skipped_reason == "unsupported_input_modality"
+	assert loaded.metadata["input_modality"] == "images"
+	assert loaded.metadata["model_input_modalities"] == ["text"]
+
+
+async def test_api_auto_loader_keeps_text_files_on_local_loader(monkeypatch) -> None:
+	monkeypatch.setattr(settings.assets.content_vectorization, "loader", "auto")
+	loaded = await load_sdk_file_text(
+		SDKFile(
+			data=b"# release notes\n\n- shipped file search",
+			filename="notes.md",
+			mime_type="text/markdown",
+		)
+	)
+
+	assert loaded.status == "loaded"
+	assert loaded.source == "plain"
+	assert loaded.format == "markdown"
+	assert "file search" in loaded.content
+
+
+@pytest.mark.parametrize(
+	("filename", "mime_type", "modality", "content_type"),
+	[
+		("scan.png", "image/png", "images", ImageContent),
+		("meeting.mp3", "audio/mpeg", "audio", FileContent),
+		("demo.mp4", "video/mp4", "video", FileContent),
+	],
+)
+async def test_api_auto_loader_routes_media_shapes_to_chatmodel_extraction(
+	monkeypatch,
+	filename: str,
+	mime_type: str,
+	modality: str,
+	content_type: type[ImageContent] | type[FileContent],
+) -> None:
+	monkeypatch.setattr(settings.assets.content_vectorization, "loader", "auto")
+	chat_model, adapter = _task_chat_model(
+		f"# extracted {modality}\n\ninvoice total: $42"
+	)
+
+	loaded = await load_sdk_file_text(
+		SDKFile(data=b"binary media bytes", filename=filename, mime_type=mime_type),
+		chat_model=chat_model,
+	)
+
+	assert loaded.status == "loaded"
+	assert loaded.source == "chatmodel_loader"
+	assert loaded.content.startswith(f"# extracted {modality}")
+	assert loaded.metadata["input_modality"] == modality
+	user_message = _user_message(adapter)
+	assert any(isinstance(part, content_type) for part in user_message.content)
+
+
+async def test_api_auto_loader_falls_back_to_chatmodel_for_large_scanned_pdf(
+	monkeypatch,
+) -> None:
+	monkeypatch.setattr(settings.assets.content_vectorization, "loader", "auto")
+	chat_model, adapter = _task_chat_model(
+		"# extracted document\n\nOCR text from scanned annual report."
+	)
+	data = b"%PDF-1.7\n" + b"0" * (128 * 1024)
+
+	loaded = await load_sdk_file_text(
+		SDKFile(data=data, filename="scan.pdf", mime_type="application/pdf"),
+		chat_model=chat_model,
+	)
+
+	assert loaded.status == "loaded"
+	assert loaded.source == "chatmodel_loader"
+	assert "OCR text" in loaded.content
+	assert loaded.metadata["input_modality"] == "documents"
+	user_message = _user_message(adapter)
+	assert any(isinstance(part, FileContent) for part in user_message.content)
+
+
+async def test_load_file_content_chunks_reads_storage_extracts_and_chunks_media(
+	monkeypatch,
+) -> None:
+	monkeypatch.setattr(settings.assets.content_vectorization, "loader", "auto")
+	monkeypatch.setattr(
+		settings.assets.content_vectorization,
+		"chunking_algorithm",
+		"auto",
+	)
+	monkeypatch.setattr(settings.assets.content_vectorization, "target_tokens", 35)
+	monkeypatch.setattr(settings.assets.content_vectorization, "overlap_tokens", 0)
+	monkeypatch.setattr(settings.assets.content_vectorization, "max_chunks", 20)
+	data = b"image bytes from storage"
+	file = _file_record("receipt.png", "image/png", data)
+	backend = _MemoryStorageBackend(data)
+	chat_model, adapter = _task_chat_model(
+		"# receipt\n\nmerchant: northwind\n\ntotal: $42"
+	)
+
+	async def resolve_chat_model(session: AsyncSession) -> TaskChatModel | None:
+		return chat_model
+
+	monkeypatch.setattr(
+		content_vectorization_service,
+		"get_storage_backend",
+		lambda storage_backend: backend,
+	)
+	monkeypatch.setattr(
+		content_vectorization_service,
+		"resolve_content_loader_chat_model",
+		resolve_chat_model,
+	)
+
+	async with AsyncSession() as session:
+		batch = await load_file_content_chunks(file, session)
+
+	assert batch.text_loadable
+	assert batch.loader == "chatmodel_loader"
+	assert batch.chunker == "markdown"
+	assert batch.skipped_reason is None
+	assert batch.chunks
+	assert "northwind" in "\n".join(chunk.text for chunk in batch.chunks)
+	assert batch.chunks[0].metadata["input_modality"] == "images"
+	user_message = _user_message(adapter)
+	assert any(isinstance(part, ImageContent) for part in user_message.content)
+
+
+async def test_load_file_content_chunks_can_disable_byte_cap(monkeypatch) -> None:
+	monkeypatch.setattr(settings.assets.content_vectorization, "loader", "auto")
+	monkeypatch.setattr(settings.assets.content_vectorization, "max_bytes", None)
+	data = b"full image bytes from storage"
+	file = _file_record("receipt.png", "image/png", data)
+	backend = _MemoryStorageBackend(data)
+	chat_model, adapter = _task_chat_model("# receipt\n\nfull content")
+
+	async def resolve_chat_model(session: AsyncSession) -> TaskChatModel | None:
+		return chat_model
+
+	monkeypatch.setattr(
+		content_vectorization_service,
+		"get_storage_backend",
+		lambda storage_backend: backend,
+	)
+	monkeypatch.setattr(
+		content_vectorization_service,
+		"resolve_content_loader_chat_model",
+		resolve_chat_model,
+	)
+
+	async with AsyncSession() as session:
+		batch = await load_file_content_chunks(file, session)
+
+	assert batch.text_loadable
+	user_message = _user_message(adapter)
+	image = next(
+		part for part in user_message.content if isinstance(part, ImageContent)
+	)
+	assert image.base64 is not None
+	assert base64.b64decode(image.base64) == data
+
+
+async def test_vectorize_file_content_upserts_content_chunks(monkeypatch) -> None:
+	file = _file_record("report.txt", "text/plain", b"ignored")
+	file.description = "quarterly revenue report"
+	content_chunks = [
+		ContentChunk(
+			index=0,
+			total=2,
+			text="northwind revenue increased",
+			metadata={"line_start": 1, "line_end": 3},
+		),
+		ContentChunk(
+			index=1,
+			total=2,
+			text="contoso revenue decreased",
+			metadata={"line_start": 4, "line_end": 8},
+		),
+	]
+	upserted_chunks: list[VectorChunk] = []
+	removed: list[tuple[str, bool, bool]] = []
+
+	async def remove_vectors(
+		file_id: str,
+		session: AsyncSession,
+		include_file_vector: bool = True,
+		include_content_vectors: bool = True,
+	) -> None:
+		_ = session
+		removed.append((file_id, include_file_vector, include_content_vectors))
+
+	async def fetch_acl(
+		resource_id: str,
+		resource_type: object,
+		session: AsyncSession,
+	) -> dict[str, object]:
+		_ = resource_type, session
+		return {"acl_resource_id": resource_id}
+
+	async def embed(texts: list[str], session: AsyncSession) -> list[list[float]]:
+		_ = session
+		return [[float(index), 0.0] for index, _text in enumerate(texts)]
+
+	async def upsert_chunks(
+		chunks: list[VectorChunk],
+		session: AsyncSession,
+	) -> None:
+		_ = session
+		upserted_chunks.extend(chunks)
+
+	monkeypatch.setattr(
+		content_vectorization_service,
+		"remove_file_vectors",
+		remove_vectors,
+	)
+	monkeypatch.setattr(
+		content_vectorization_service,
+		"fetch_acl_metadata",
+		fetch_acl,
+	)
+	monkeypatch.setattr(content_vectorization_service, "embed_texts", embed)
+	monkeypatch.setattr(
+		content_vectorization_service.vectorstore_service,
+		"upsert_chunks",
+		upsert_chunks,
+	)
+
+	async with AsyncSession() as session:
+		batch = await vectorize_file_content(file, session, content_chunks)
+
+	assert batch.chunks == content_chunks
+	assert batch.text_loadable
+	assert removed == [(str(file.id), False, True)]
+	assert len(upserted_chunks) == 2
+	assert upserted_chunks[0].content.startswith("report.txt")
+	assert "quarterly revenue report" in upserted_chunks[0].content
+	assert "northwind revenue increased" in upserted_chunks[0].content
+	assert upserted_chunks[0].embedding == [0.0, 0.0]
+	assert upserted_chunks[1].embedding == [1.0, 0.0]
+	metadata = upserted_chunks[0].metadata
+	assert metadata["resource_type"] == FILE_CONTENT_RESOURCE_TYPE
+	assert "resource_id" not in metadata
+	assert metadata["parent_resource_type"] == FILE_RESOURCE_TYPE
+	assert metadata["parent_resource_id"] == str(file.id)
+	assert metadata["owner_id"] == str(file.owner_id)
+	assert "chunk_source" not in metadata
+	assert "filename" not in metadata
+	assert "mime_type" not in metadata
+	assert "status" not in metadata
+	assert "project_ids" not in metadata
+	assert metadata["chunk_index"] == 0
+	assert metadata["chunk_count"] == 2
+	assert metadata["line_start"] == 1
+	assert metadata["line_end"] == 3
+	assert metadata["text_loader"] == settings.assets.content_vectorization.loader
+	assert metadata["chunking_algorithm"] == (
+		settings.assets.content_vectorization.chunking_algorithm
+	)
+	assert metadata["acl_resource_id"] == str(file.id)
+
+
+def test_document_model_fallback_uses_extracted_text_density() -> None:
+	assert should_try_model_text(
+		"scan.pdf",
+		"application/pdf",
+		"invoice total 42",
+		size_bytes=10 * 1024 * 1024,
+	)
+	assert not should_try_model_text(
+		"report.pdf",
+		"application/pdf",
+		"word " * 3000,
+		size_bytes=1024 * 1024,
+	)
+	assert not should_try_model_text(
+		"note.pdf",
+		"application/pdf",
+		"this small exported pdf already has searchable text " * 3,
+		size_bytes=8 * 1024,
+	)
+
+
+def test_description_caps_can_be_disabled(monkeypatch) -> None:
+	monkeypatch.setattr(settings.assets.descriptions, "max_input_chars", None)
+	monkeypatch.setattr(settings.assets.descriptions, "max_chars", None)
+	chunks = [
+		ContentChunk(index=0, total=2, text="alpha " * 100),
+		ContentChunk(index=1, total=2, text="bravo " * 100),
+	]
+	description = "  ".join(["long"] * 1000)
+
+	assert (
+		_content_excerpt(chunks) == "\n\n".join(chunk.text for chunk in chunks).strip()
+	)
+	assert _truncate_description(description) == " ".join(description.split())
+
+
+async def test_markdown_chunker_keeps_markdown_metadata(monkeypatch) -> None:
 	monkeypatch.setattr(settings.assets.content_vectorization, "target_tokens", 35)
 	monkeypatch.setattr(settings.assets.content_vectorization, "overlap_tokens", 0)
 	monkeypatch.setattr(settings.assets.content_vectorization, "max_chunks", 20)
@@ -110,7 +666,7 @@ def test_markdown_chunker_keeps_markdown_metadata(monkeypatch) -> None:
 		)
 	)
 
-	chunks = chunk_loaded_text(
+	chunks = await chunk_loaded_text(
 		Text(
 			content=text,
 			status="loaded",

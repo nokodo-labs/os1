@@ -37,11 +37,13 @@ from api.v1.routers import openai as openai_router
 from api.v1.routers import prompts as prompts_router
 from api.v1.routers import runs as runs_router
 from api.v1.routers import threads as threads_router
-from api.v1.service import prompt_runtime
-from api.v1.service import prompts as prompt_service
 from api.v1.service.authorization import require_thread_access
 from api.v1.service.chat import agents as chat_runner
 from api.v1.service.chat import models as chat_service
+from api.v1.service.chat.tools import external as external_tools
+from api.v1.service.prompts import external as prompt_external
+from api.v1.service.prompts import runtime as prompt_runtime
+from api.v1.service.prompts import service as prompt_service
 from api.v1.service.threads.core import _ensure_admin_for_hidden
 from nokodo_ai.messages import (
 	AssistantMessage,
@@ -243,7 +245,7 @@ async def test_prompts_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 		limit: int = 50,
 		sort_by: str = "command",
 		sort_dir: str = "asc",
-		q: str | None = None,
+		filters: PromptListFilters | None = None,
 	) -> list[object]:
 		return [fake_prompt]
 
@@ -418,6 +420,7 @@ async def test_runs_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
 			stream=True,
 			persist=True,
 			tool_choice=None,
+			extra_plugins=[],
 		),
 		principal=principal,  # type: ignore[arg-type]
 		db=None,  # type: ignore[arg-type]
@@ -506,6 +509,16 @@ async def test_prompts_service_validation_paths(
 ) -> None:
 	existing = SimpleNamespace(id="2", command="/dup", content="hi")
 
+	async def load_external_prompt_placeholders(_session: object) -> dict[str, str]:
+		"""return no external prompts for local validation coverage."""
+		return {}
+
+	monkeypatch.setattr(
+		prompt_service,
+		"load_external_prompt_placeholders",
+		load_external_prompt_placeholders,
+	)
+
 	# type: ignore[arg-type]
 	async def exec_conflict(stmt: object) -> _FakeResult:
 		return _FakeResult(existing)
@@ -564,6 +577,7 @@ async def test_prompts_service_get_prompt_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_prompts_service_list_and_get(monkeypatch: pytest.MonkeyPatch) -> None:
+	monkeypatch.setattr(prompt_external, "_SOURCES_BY_NAME", {})
 	now = datetime.now(UTC)
 	prompt_obj = SimpleNamespace(
 		id="1", command="/p", content="hi", created_at=now, updated_at=now
@@ -578,7 +592,8 @@ async def test_prompts_service_list_and_get(monkeypatch: pytest.MonkeyPatch) -> 
 
 	admin = _FakePrincipal(is_admin=True)  # type: ignore[arg-type]
 	listed = await prompt_service.list_prompts(session, principal=admin)  # type: ignore[arg-type]
-	assert listed == [prompt_obj]
+	assert len(listed) == 1
+	assert listed[0].id == prompt_obj.id
 
 	async def fake_get_prompt(pid: object, s: object) -> object:
 		return prompt_obj
@@ -681,6 +696,7 @@ async def test_chat_service_conversions() -> None:
 			self.provider = provider
 			self.name = "chat"
 			self.adapter = adapter
+			self.input_modalities = ["text"]
 
 		# type: ignore[arg-type]
 
@@ -723,6 +739,7 @@ def test_chat_service_build_chat_model_applies_full_param_set() -> None:
 	model = ModelORM()
 	model.name = "chat"
 	model.adapter = None
+	model.input_modalities = ["text", "images"]
 	model.provider = provider
 
 	chat_model = chat_service.build_chat_model(
@@ -770,7 +787,11 @@ async def test_build_agent_from_orm_uses_chat_model_config(
 		"max_iterations": 7,
 	}
 
-	async def _resolve_tools(tool_ids: list[str]) -> list[object]:
+	async def _resolve_tools(
+		tool_ids: list[str],
+		app_context: object | None = None,
+	) -> list[object]:
+		_ = app_context
 		assert tool_ids == []
 		return []
 
@@ -996,3 +1017,140 @@ async def test_prompt_runtime_render_inline(monkeypatch: pytest.MonkeyPatch) -> 
 		text="{{ PROMPTS.a }}",  # type: ignore[arg-type]
 	)
 	assert rendered == "hi"
+
+
+@pytest.mark.asyncio
+async def test_external_prompt_source_registry_routes_prefix(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	monkeypatch.setattr(prompt_external, "_SOURCES_BY_NAME", {})
+	render_calls: list[set[str]] = []
+
+	async def load_placeholders(_session: object) -> dict[str, str]:
+		return {"covprompt-one": ""}
+
+	async def render_content_map(
+		_session: object,
+		commands: set[str],
+	) -> dict[str, str]:
+		render_calls.append(commands)
+		return {command: "rendered" for command in commands}
+
+	async def list_prompts(_session: object) -> list[object]:
+		return []
+
+	async def get_prompt(_prompt_id: str, _session: object) -> object | None:
+		return None
+
+	prompt_external.register_external_prompt_source(
+		prompt_external.ExternalPromptSource(
+			name="coverage-prompts",
+			prefix="covprompt-",
+			load_placeholders=load_placeholders,
+			render_content_map=render_content_map,
+			list_prompts=list_prompts,
+			get_prompt=get_prompt,
+		)
+	)
+
+	placeholders = await prompt_external.load_external_prompt_placeholders(object())
+	rendered = await prompt_external.render_external_prompt_content_map(
+		object(),
+		{"covprompt-one", "local"},
+	)
+
+	assert placeholders == {"covprompt-one": ""}
+	assert render_calls == [{"covprompt-one"}]
+	assert rendered == {"covprompt-one": "rendered"}
+
+
+def test_external_prompt_source_registry_rejects_prefix_conflict(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	monkeypatch.setattr(prompt_external, "_SOURCES_BY_NAME", {})
+
+	async def load_placeholders(_session: object) -> dict[str, str]:
+		return {}
+
+	async def render_content_map(
+		_session: object,
+		_commands: set[str],
+	) -> dict[str, str]:
+		return {}
+
+	async def list_prompts(_session: object) -> list[object]:
+		return []
+
+	async def get_prompt(_prompt_id: str, _session: object) -> object | None:
+		return None
+
+	prompt_external.register_external_prompt_source(
+		prompt_external.ExternalPromptSource(
+			name="coverage-prompts",
+			prefix="covprompt-",
+			load_placeholders=load_placeholders,
+			render_content_map=render_content_map,
+			list_prompts=list_prompts,
+			get_prompt=get_prompt,
+		)
+	)
+	with pytest.raises(ValueError, match="prefix conflicts"):
+		prompt_external.register_external_prompt_source(
+			prompt_external.ExternalPromptSource(
+				name="coverage-prompts-other",
+				prefix="covprompt-one-",
+				load_placeholders=load_placeholders,
+				render_content_map=render_content_map,
+				list_prompts=list_prompts,
+				get_prompt=get_prompt,
+			)
+		)
+
+
+@pytest.mark.asyncio
+async def test_external_tool_source_registry_routes_prefix(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	monkeypatch.setattr(external_tools, "_SOURCES_BY_NAME", {})
+	context = object()
+	resolve_calls: list[list[str]] = []
+
+	async def resolve_tools(
+		tool_ids: list[str],
+		app_context: object,
+	) -> list[object]:
+		resolve_calls.append(tool_ids)
+		assert app_context is context
+		return []
+
+	async def list_plugins(
+		_session: object,
+		_plugin_type: object = None,
+		_principal: object = None,
+	) -> list[object]:
+		return []
+
+	async def get_plugin(
+		_plugin_id: str,
+		_session: object,
+		_principal: object,
+	) -> object | None:
+		return None
+
+	external_tools.register_external_tool_source(
+		external_tools.ExternalToolSource(
+			name="coverage-tools",
+			prefix="covtool:",
+			resolve_tools=resolve_tools,
+			list_plugins=list_plugins,
+			get_plugin=get_plugin,
+		)
+	)
+
+	assert external_tools.has_external_tool_source("covtool:item")
+	assert not external_tools.has_external_tool_source("native")
+	resolved = await external_tools.resolve_external_tools(
+		["covtool:item", "native"], context
+	)
+	assert resolved == []
+	assert resolve_calls == [["covtool:item"]]

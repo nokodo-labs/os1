@@ -11,15 +11,19 @@ from api.v1.service.chat.context_compaction import (
 	ContextCompactionResult,
 	apply_context_compaction,
 )
+from api.v1.service.chat.context_compaction.media import (
+	MEDIA_PROTECTED_METADATA_KEY,
+)
 from api.v1.service.chat.context_compaction.summarization import (
 	build_compaction_info,
-	build_summary_injection,
+	build_positional_summary_message,
 	find_summarized_cutoff,
-	inject_summary_into_system,
+	oldest_positional_summary,
 	replace_chat_window_sentinel,
 )
+from api.v1.service.chat.context_compaction.types import ContextCompactionError
 from api.v1.service.chat.message_metadata import get_message_id
-from api.v1.service.prompt_runtime import SENTINEL_CHAT_WINDOW_INFO
+from api.v1.service.prompts import SENTINEL_CHAT_WINDOW_INFO
 from nokodo_ai.messages import (
 	AssistantMessage,
 	Message,
@@ -54,6 +58,15 @@ def _assistant(text: str, msg_id: str | None = None) -> AssistantMessage:
 	meta: JSONObject | None = {"_message_id": msg_id} if msg_id else None
 	return AssistantMessage(
 		content=[TextContent(text=text)],
+		metadata=meta,
+	)
+
+
+def _assistant_tool_call(name: str, msg_id: str | None = None) -> AssistantMessage:
+	meta: JSONObject | None = {"_message_id": msg_id} if msg_id else None
+	return AssistantMessage(
+		content=[TextContent(text=f"calling {name}")],
+		tool_calls=[ToolCall(id="call_1", name=name, arguments={})],
 		metadata=meta,
 	)
 
@@ -145,66 +158,40 @@ class TestFindSummarizedCutoff:
 		assert result == 2
 
 
-# -- build_summary_injection --
+# -- positional summary selection --
 
 
-class TestBuildSummaryInjection:
-	def test_empty_summaries(self) -> None:
-		assert build_summary_injection([]) == ""
+class TestPositionalSummaries:
+	def test_builds_system_message_with_summary_marker(self) -> None:
+		summary = _mock_summary(content="users discussed login flow")
+		message = build_positional_summary_message(summary)
+		assert isinstance(message, SystemMessage)
+		assert "compacted conversation summary" in (message.text or "")
+		assert "users discussed login flow" in (message.text or "")
 
-	def test_single_summary(self) -> None:
-		s = _mock_summary(content="users discussed login flow")
-		result = build_summary_injection([s])
-		assert "conversation history summary" in result
-		assert "users discussed login flow" in result
+	def test_selects_oldest_saving_summary(self) -> None:
+		summary = _mock_summary(
+			start_message_id="m1",
+			end_message_id="m2",
+			content="short unique summary",
+		)
+		messages: list[Message] = [_user("x" * 2000, "m1"), _user("y" * 2000, "m2")]
+		selection = oldest_positional_summary([summary], messages, ["m1", "m2"])
+		assert selection is not None
+		selected, start_index, end_index, summary_message = selection
+		assert selected is summary
+		assert (start_index, end_index) == (0, 1)
+		assert isinstance(summary_message, SystemMessage)
 
-	def test_multiple_summaries_joined(self) -> None:
-		s1 = _mock_summary(content="part one")
-		s2 = _mock_summary(content="part two")
-		result = build_summary_injection([s1, s2])
-		assert "part one" in result
-		assert "part two" in result
-		assert "---" in result
-
-	def test_empty_content_filtered(self) -> None:
-		s1 = _mock_summary(content="")
-		s2 = _mock_summary(content="real content")
-		result = build_summary_injection([s1, s2])
-		assert "real content" in result
-
-	def test_all_empty_returns_empty(self) -> None:
-		s1 = _mock_summary(content="")
-		s2 = _mock_summary(content="")
-		assert build_summary_injection([s1, s2]) == ""
-
-
-# -- inject_summary_into_system --
-
-
-class TestInjectSummaryIntoSystem:
-	def test_no_text_returns_original(self) -> None:
-		msgs: list[Message] = [_sys("you are helpful")]
-		result = inject_summary_into_system(msgs, "")
-		assert isinstance(result[0], SystemMessage)
-		assert result[0].text == "you are helpful"
-
-	def test_appends_to_system_message(self) -> None:
-		msgs: list[Message] = [_sys("you are helpful")]
-		result = inject_summary_into_system(msgs, "\n\nsummary here")
-		assert isinstance(result[0], SystemMessage)
-		assert result[0].text == "you are helpful\n\nsummary here"
-
-	def test_creates_system_if_none(self) -> None:
-		msgs: list[Message] = [_user("hi")]
-		result = inject_summary_into_system(msgs, "\n\nsummary here")
-		assert isinstance(result[0], SystemMessage)
-		assert "summary here" in (result[0].text or "")
-
-	def test_does_not_mutate_original(self) -> None:
-		original: list[Message] = [_sys("original")]
-		inject_summary_into_system(original, "\n\naddition")
-		assert isinstance(original[0], SystemMessage)
-		assert original[0].text == "original"
+	def test_skips_summary_that_would_not_save_tokens(self) -> None:
+		summary = _mock_summary(
+			start_message_id="m1",
+			end_message_id="m1",
+			content="x" * 4000,
+		)
+		messages: list[Message] = [_user("short", "m1")]
+		selection = oldest_positional_summary([summary], messages, ["m1"])
+		assert selection is None
 
 
 # -- build_compaction_info --
@@ -307,15 +294,18 @@ def _compaction_settings(**overrides: bool | int | float) -> MagicMock:
 	defaults = {
 		"enabled": True,
 		"trigger_ratio": 0.70,
-		"max_summaries_before_condense": 4,
+		"recovery_target_ratio": 0.55,
+		"target_usage_cap_tokens": None,
+		"summary_batch_min_tokens": 512,
+		"summary_batch_max_tokens": 16_000,
 		"prompt_overhead_tokens": 300,
-		"recent_tool_output_protection_iterations": 1,
 		"blocking_summarization_enabled": True,
 		"blocking_summarization_timeout_seconds": 20.0,
 		"tool_result_max_share": 0.25,
 		"tool_result_hard_cap": 100_000,
 		"tool_results_combined_max_share": 0.50,
 		"response_headroom": 4096,
+		"summarization_max_chars_per_message": 2000,
 	}
 	defaults.update(overrides)
 	ws = MagicMock()
@@ -441,10 +431,10 @@ class TestApplyContextCompaction:
 		):
 			mock_settings.ai.context_compaction = ws
 			mock_svc.list_active_summaries = AsyncMock(return_value=[])
-			# small context window to force hard truncation
+			# small positive prompt budget to force hard truncation
 			result = await apply_context_compaction(
 				thread,
-				context_window=200,
+				context_window=4_600,
 				thread_id=_TID,
 				session=mock_session,
 			)
@@ -453,12 +443,79 @@ class TestApplyContextCompaction:
 		assert result.dropped_count > 0
 
 	@pytest.mark.asyncio()
+	async def test_throws_when_protected_media_busts_budget(
+		self,
+		mock_session: AsyncMock,
+	) -> None:
+		# a hard-protected (read-this-iteration) tool message alone exceeds the
+		# window. prune cannot drop it, so the cascade hits the terminal throw
+		# with the media-specific guidance.
+		ws = _compaction_settings()
+		protected_tool = ToolMessage(
+			tool_call_id="call_1",
+			tool_output="y" * 80_000,
+			metadata={"_message_id": "m3", MEDIA_PROTECTED_METADATA_KEY: True},
+		)
+		thread = _thread(
+			_sys("system"),
+			_user("show me the file", "m1"),
+			_assistant_tool_call("file_get", "m2"),
+			protected_tool,
+		)
+
+		with (
+			patch(PIPELINE_SETTINGS) as mock_settings,
+			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+		):
+			mock_settings.ai.context_compaction = ws
+			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			with pytest.raises(ContextCompactionError, match="protected native media"):
+				await apply_context_compaction(
+					thread,
+					context_window=4_600,
+					thread_id=_TID,
+					session=mock_session,
+				)
+
+	@pytest.mark.asyncio()
+	async def test_throws_generic_when_protected_run_start_busts_budget(
+		self,
+		mock_session: AsyncMock,
+	) -> None:
+		# the active run-start user message alone exceeds the window and carries
+		# no media. prune protects it, so the cascade hits the generic terminal
+		# throw (not the media-specific one).
+		ws = _compaction_settings()
+		run_id = TypeID("run_1")
+		run_start = UserMessage(
+			content=[TextContent(text="y" * 80_000)],
+			metadata={"_message_id": "m1", "run_id": str(run_id)},
+		)
+		thread = _thread(_sys("system"), run_start)
+
+		with (
+			patch(PIPELINE_SETTINGS) as mock_settings,
+			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+		):
+			mock_settings.ai.context_compaction = ws
+			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			with pytest.raises(
+				ContextCompactionError, match="protected active-run context"
+			):
+				await apply_context_compaction(
+					thread,
+					context_window=4_600,
+					thread_id=_TID,
+					session=mock_session,
+					run_id=run_id,
+				)
+
+	@pytest.mark.asyncio()
 	async def test_trigger_signals_summarization(
 		self,
 		mock_session: AsyncMock,
 	) -> None:
-		# use a tiny context window so even modest content exceeds trigger
-		ws = _compaction_settings(trigger_ratio=0.01)
+		ws = _compaction_settings(trigger_ratio=0.70, recovery_target_ratio=0.55)
 		msgs: list[Message] = [_sys("system")]
 		# each message ~300 chars to build up enough token mass
 		for i in range(10):
@@ -471,8 +528,85 @@ class TestApplyContextCompaction:
 		):
 			mock_settings.ai.context_compaction = ws
 			mock_svc.list_active_summaries = AsyncMock(return_value=[])
-			# context window large enough for positive budget but small
-			# enough that trigger_ratio (0.01) is exceeded
+			# context window large enough to fit raw messages but small
+			# enough that current pressure crosses the soft threshold
+			result = await apply_context_compaction(
+				thread,
+				context_window=5_600,
+				thread_id=_TID,
+				session=mock_session,
+			)
+
+		assert result.needs_summarization
+		assert len(result.summarize_messages) > 0
+
+	@pytest.mark.asyncio()
+	async def test_trigger_uses_current_pressure_without_iteration_heuristics(
+		self,
+		mock_session: AsyncMock,
+	) -> None:
+		ws = _compaction_settings(trigger_ratio=0.90)
+		msgs: list[Message] = [_sys("system")]
+		for i in range(10):
+			msgs.append(_user(f"{'x' * 300} message {i}", f"m{i}"))
+		thread = _thread(
+			*msgs,
+			_assistant_tool_call("web_search", "m_tool_call"),
+			_tool("y" * 3000, "m_tool_result"),
+		)
+
+		with (
+			patch(PIPELINE_SETTINGS) as mock_settings,
+			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+		):
+			mock_settings.ai.context_compaction = ws
+			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			first_iteration = await apply_context_compaction(
+				thread,
+				context_window=8_000,
+				thread_id=_TID,
+				session=mock_session,
+				run_id=TypeID("run_1"),
+				iteration=0,
+			)
+			second_iteration = await apply_context_compaction(
+				thread,
+				context_window=8_000,
+				thread_id=_TID,
+				session=mock_session,
+				run_id=TypeID("run_1"),
+				iteration=1,
+			)
+
+		assert (
+			first_iteration.needs_summarization == second_iteration.needs_summarization
+		)
+		assert len(first_iteration.summarize_messages) == len(
+			second_iteration.summarize_messages
+		)
+
+	@pytest.mark.asyncio()
+	async def test_recovery_target_sizes_summary_batch(
+		self,
+		mock_session: AsyncMock,
+	) -> None:
+		ws = _compaction_settings(
+			trigger_ratio=0.01,
+			recovery_target_ratio=0.10,
+			summary_batch_min_tokens=1,
+			summary_batch_max_tokens=300,
+		)
+		msgs: list[Message] = [_sys("system")]
+		for i in range(10):
+			msgs.append(_user(f"{'x' * 300} message {i}", f"m{i}"))
+		thread = _thread(*msgs)
+
+		with (
+			patch(PIPELINE_SETTINGS) as mock_settings,
+			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+		):
+			mock_settings.ai.context_compaction = ws
+			mock_svc.list_active_summaries = AsyncMock(return_value=[])
 			result = await apply_context_compaction(
 				thread,
 				context_window=10_000,
@@ -481,7 +615,7 @@ class TestApplyContextCompaction:
 			)
 
 		assert result.needs_summarization
-		assert len(result.summarize_messages) > 0
+		assert len(result.summarize_messages) < len(msgs) - 1
 
 	@pytest.mark.asyncio()
 	async def test_summary_not_injected_when_full_thread_fits(
@@ -527,7 +661,7 @@ class TestApplyContextCompaction:
 		assert len(conversation_msgs) == 4
 
 	@pytest.mark.asyncio()
-	async def test_summary_injected_only_when_full_thread_over_budget(
+	async def test_summary_swapped_only_when_full_thread_over_budget(
 		self,
 		mock_session: AsyncMock,
 	) -> None:
@@ -562,17 +696,50 @@ class TestApplyContextCompaction:
 				purpose=SummaryPurpose.AGENT_CONTEXT,
 			)
 
-		sys_msg = result.thread.messages[0]
-		assert isinstance(sys_msg, SystemMessage)
-		sys_text = sys_msg.text or ""
-		assert "user discussed project setup" in sys_text
-		assert "conversation history summary" in sys_text
-		conversation_msgs = [
-			m for m in result.thread.messages if not isinstance(m, SystemMessage)
+		assert isinstance(result.thread.messages[1], SystemMessage)
+		assert "user discussed project setup" in (result.thread.messages[1].text or "")
+		assert isinstance(result.thread.messages[2], UserMessage)
+		assert result.thread.messages[2].text == "next question"
+
+	@pytest.mark.asyncio()
+	async def test_target_usage_cap_can_force_compaction_below_model_window(
+		self,
+		mock_session: AsyncMock,
+	) -> None:
+		ws = _compaction_settings(target_usage_cap_tokens=5_000)
+		summary = _mock_summary(
+			end_message_id="m1",
+			content="summary forced by target usage cap",
+		)
+		thread = _thread(
+			_sys("system"),
+			_user("x" * 2500, "m1"),
+			_user("latest", "m2"),
+		)
+
+		with (
+			patch(PIPELINE_SETTINGS) as mock_settings,
+			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+		):
+			mock_settings.ai.context_compaction = ws
+			mock_svc.list_active_summaries = AsyncMock(return_value=[summary])
+			result = await apply_context_compaction(
+				thread,
+				context_window=128_000,
+				thread_id=_TID,
+				session=mock_session,
+			)
+
+		conversation_texts = [
+			message.text
+			for message in result.thread.messages
+			if isinstance(message, (SystemMessage, UserMessage))
 		]
-		assert len(conversation_msgs) == 1
-		assert isinstance(conversation_msgs[0], UserMessage)
-		assert conversation_msgs[0].text == "next question"
+		assert any(
+			"summary forced by target usage cap" in (text or "")
+			for text in conversation_texts
+		)
+		assert result.budget_tokens < 128_000
 
 	@pytest.mark.asyncio()
 	async def test_ready_summaries_apply_only_until_thread_fits(
@@ -612,16 +779,18 @@ class TestApplyContextCompaction:
 				session=mock_session,
 			)
 
-		sys_msg = result.thread.messages[0]
-		assert isinstance(sys_msg, SystemMessage)
-		sys_text = sys_msg.text or ""
-		assert "first ready summary" in sys_text
-		assert "second ready summary" not in sys_text
+		summary_texts = [
+			message.text
+			for message in result.thread.messages
+			if isinstance(message, SystemMessage)
+		]
 		conversation_texts = [
 			message.text
 			for message in result.thread.messages
 			if isinstance(message, UserMessage)
 		]
+		assert any("first ready summary" in (text or "") for text in summary_texts)
+		assert not any("second ready summary" in (text or "") for text in summary_texts)
 		assert "middle raw message" in conversation_texts
 		assert "latest" in conversation_texts
 
@@ -742,6 +911,42 @@ class TestApplyContextCompaction:
 		assert "[... truncated:" in compacted_tool.tool_output
 
 	@pytest.mark.asyncio()
+	async def test_duplicate_tool_outputs_compacted_before_drop(
+		self,
+		mock_session: AsyncMock,
+	) -> None:
+		ws = _compaction_settings()
+		duplicate_output = "search result " + "x" * 4000
+		thread = _thread(
+			_sys("system"),
+			_user("first request", "m1"),
+			_tool(duplicate_output, "m2"),
+			_tool(duplicate_output, "m3"),
+			_user("latest", "m4"),
+		)
+
+		with (
+			patch(PIPELINE_SETTINGS) as mock_settings,
+			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+		):
+			mock_settings.ai.context_compaction = ws
+			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			result = await apply_context_compaction(
+				thread,
+				context_window=5_000,
+				thread_id=_TID,
+				session=mock_session,
+			)
+
+		tool_outputs = [
+			message.tool_output
+			for message in result.thread.messages
+			if isinstance(message, ToolMessage)
+		]
+		assert result.compacted_tool_result_count >= 1
+		assert any("duplicate tool output" in output for output in tool_outputs)
+
+	@pytest.mark.asyncio()
 	async def test_tool_schema_overhead_participates_in_budget(
 		self,
 		mock_session: AsyncMock,
@@ -778,9 +983,12 @@ class TestApplyContextCompaction:
 				tool_definitions=tools,
 			)
 
-		sys_msg = result.thread.messages[0]
-		assert isinstance(sys_msg, SystemMessage)
-		assert "old request summary" in (sys_msg.text or "")
+		conversation_texts = [
+			message.text
+			for message in result.thread.messages
+			if isinstance(message, (SystemMessage, UserMessage))
+		]
+		assert any("old request summary" in (text or "") for text in conversation_texts)
 
 	@pytest.mark.asyncio()
 	async def test_run_start_user_message_is_not_summarized_or_dropped(
@@ -824,7 +1032,7 @@ class TestApplyContextCompaction:
 		assert "incorrectly cover the active request" not in all_text
 
 	@pytest.mark.asyncio()
-	async def test_tail_tool_output_is_protected_until_consumed(
+	async def test_tail_tool_output_can_be_compacted(
 		self,
 		mock_session: AsyncMock,
 	) -> None:
@@ -860,7 +1068,8 @@ class TestApplyContextCompaction:
 			for message in result.thread.messages
 			if isinstance(message, ToolMessage)
 		)
-		assert tool_msg.tool_output == fresh_output
+		assert tool_msg.tool_output != fresh_output
+		assert "compacted" in tool_msg.tool_output
 
 	@pytest.mark.asyncio()
 	async def test_blocking_summary_is_last_resort_before_drop(
@@ -901,10 +1110,161 @@ class TestApplyContextCompaction:
 				blocking_summarize=blocking_summarize,
 			)
 
-		sys_msg = result.thread.messages[0]
-		assert isinstance(sys_msg, SystemMessage)
-		assert "inline summary through" in (sys_msg.text or "")
+		conversation_texts = [
+			message.text
+			for message in result.thread.messages
+			if isinstance(message, (SystemMessage, UserMessage))
+		]
+		assert any(
+			"inline summary through" in (text or "") for text in conversation_texts
+		)
 		assert result.blocking_summary_count > 0
+
+	@pytest.mark.asyncio()
+	async def test_blocking_summary_skips_ready_summary_placeholders(
+		self,
+		mock_session: AsyncMock,
+	) -> None:
+		ws = _compaction_settings()
+		ready_summary = _mock_summary(
+			start_message_id="m1",
+			end_message_id="m1",
+			content="ready summary for first message",
+		)
+		thread = _thread(
+			_sys("system"),
+			_user("x" * 2500, "m1"),
+			_user("y" * 2500, "m2"),
+			_user("latest", "m3"),
+		)
+		captured_batches: list[list[Message]] = []
+
+		async def blocking_summarize(
+			messages: list[Message],
+			start_message_id: TypeID | None,
+			end_message_id: TypeID | None,
+		):
+			_ = start_message_id
+			captured_batches.append(messages)
+			return _mock_summary(
+				end_message_id=str(end_message_id),
+				content=f"inline summary through {end_message_id}",
+			)
+
+		with (
+			patch(PIPELINE_SETTINGS) as mock_settings,
+			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+		):
+			mock_settings.ai.context_compaction = ws
+			mock_svc.list_active_summaries = AsyncMock(return_value=[ready_summary])
+			result = await apply_context_compaction(
+				thread,
+				context_window=5_000,
+				thread_id=_TID,
+				session=mock_session,
+				blocking_summarize=blocking_summarize,
+			)
+
+		assert captured_batches
+		assert all(
+			"ready summary for first message" not in (message.text or "")
+			for message in captured_batches[0]
+			if isinstance(message, UserMessage)
+		)
+		conversation_texts = [
+			message.text
+			for message in result.thread.messages
+			if isinstance(message, (SystemMessage, UserMessage))
+		]
+		assert any(
+			"ready summary for first message" in (text or "")
+			for text in conversation_texts
+		)
+		assert any(
+			"inline summary through" in (text or "") for text in conversation_texts
+		)
+
+	@pytest.mark.asyncio()
+	async def test_blocking_summary_retries_after_t4_when_range_remains(
+		self,
+		mock_session: AsyncMock,
+	) -> None:
+		ws = _compaction_settings(
+			summary_batch_min_tokens=1,
+			summary_batch_max_tokens=8000,
+		)
+		thread = _thread(_sys("system"), _user("x" * 2500, "m1"))
+		calls = 0
+
+		async def blocking_summarize(
+			messages: list[Message],
+			start_message_id: TypeID | None,
+			end_message_id: TypeID | None,
+		):
+			nonlocal calls
+			_ = (messages, start_message_id)
+			calls += 1
+			if calls == 1:
+				return None
+			return _mock_summary(
+				end_message_id=str(end_message_id),
+				content="post-prune inline summary",
+			)
+
+		with (
+			patch(PIPELINE_SETTINGS) as mock_settings,
+			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+		):
+			mock_settings.ai.context_compaction = ws
+			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			result = await apply_context_compaction(
+				thread,
+				context_window=5_000,
+				thread_id=_TID,
+				session=mock_session,
+				blocking_summarize=blocking_summarize,
+			)
+
+		assert calls == 2
+		assert result.dropped_count == 0
+		assert result.blocking_summary_count == 1
+		assert any(
+			"post-prune inline summary" in (message.text or "")
+			for message in result.thread.messages
+			if isinstance(message, (SystemMessage, UserMessage))
+		)
+
+	@pytest.mark.asyncio()
+	async def test_blocking_summary_can_be_disabled(
+		self,
+		mock_session: AsyncMock,
+	) -> None:
+		ws = _compaction_settings(blocking_summarization_enabled=False)
+		thread = _thread(
+			_sys("system"),
+			_user("x" * 2500, "m1"),
+			_user("y" * 2500, "m2"),
+			_user("latest", "m3"),
+		)
+		blocking_summarize = AsyncMock()
+
+		with (
+			patch(PIPELINE_SETTINGS) as mock_settings,
+			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+		):
+			mock_settings.ai.context_compaction = ws
+			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			result = await apply_context_compaction(
+				thread,
+				context_window=5_000,
+				thread_id=_TID,
+				session=mock_session,
+				blocking_summarize=blocking_summarize,
+			)
+
+		blocking_summarize.assert_not_awaited()
+		assert result.blocking_summary_count == 0
+		assert result.dropped_count > 0
 
 	@pytest.mark.asyncio()
 	async def test_sentinel_replaced_in_output(

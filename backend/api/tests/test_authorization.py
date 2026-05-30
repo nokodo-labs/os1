@@ -14,6 +14,9 @@ from api.permissions import DefaultResourceAccess, ResourceType
 from api.v1.service import vectorize as vectorize_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
+	ACL_SYNC_VECTOR_CHUNK_RESOURCE_TYPES,
+	VECTOR_CHUNK_ACCESS_RESOURCE_TYPES,
+	VECTOR_CHUNK_PARENT_RESOURCE_TYPES,
 	allowed_levels,
 	project_access_predicate,
 	require_permission,
@@ -23,7 +26,85 @@ from api.v1.service.authorization import (
 )
 from api.v1.service.authorization import cache as authorization_cache
 from api.v1.service.authorization import resolve as authorization_resolve
+from api.v1.service.vectorstores import VectorChunkResourceType
+from nokodo_ai.adapters.base.vectorstores import FieldMatch, FieldMatchAny
 from nokodo_ai.utils.typeid import TypeID, new_typeid
+
+
+def test_vector_chunk_acl_mappings_are_plural_and_parent_aware() -> None:
+	assert (
+		VECTOR_CHUNK_ACCESS_RESOURCE_TYPES[VectorChunkResourceType.FILE]
+		== ResourceType.FILE
+	)
+	assert (
+		VECTOR_CHUNK_ACCESS_RESOURCE_TYPES[VectorChunkResourceType.FILE_CONTENT]
+		== ResourceType.FILE
+	)
+	assert ACL_SYNC_VECTOR_CHUNK_RESOURCE_TYPES[ResourceType.FILE] == (
+		VectorChunkResourceType.FILE,
+		VectorChunkResourceType.FILE_CONTENT,
+	)
+	assert (
+		VECTOR_CHUNK_PARENT_RESOURCE_TYPES[VectorChunkResourceType.FILE_CONTENT]
+		== VectorChunkResourceType.FILE
+	)
+	for access_resource_type, chunk_resource_types in (
+		ACL_SYNC_VECTOR_CHUNK_RESOURCE_TYPES.items()
+	):
+		for chunk_resource_type in chunk_resource_types:
+			assert (
+				VECTOR_CHUNK_ACCESS_RESOURCE_TYPES[chunk_resource_type]
+				== access_resource_type
+			)
+
+
+def test_acl_sync_chunk_filters_split_direct_and_parented_file_chunks() -> None:
+	filters = vectorize_service._acl_sync_chunk_filters(ResourceType.FILE, "file-1")
+	assert len(filters) == 2
+	direct_filter = next(
+		chunk_filter
+		for chunk_filter in filters
+		if any(
+			isinstance(match, FieldMatch)
+			and match.key == "resource_id"
+			and match.value == "file-1"
+			for match in chunk_filter.all_of
+		)
+	)
+	parent_filter = next(
+		chunk_filter
+		for chunk_filter in filters
+		if any(
+			isinstance(match, FieldMatch)
+			and match.key == "parent_resource_id"
+			and match.value == "file-1"
+			for match in chunk_filter.all_of
+		)
+	)
+	direct_type = next(
+		match
+		for match in direct_filter.all_of
+		if isinstance(match, FieldMatch) and match.key == "resource_type"
+	)
+	assert direct_type.value == VectorChunkResourceType.FILE.value
+	parent_types = {
+		match.key: match.value
+		for match in parent_filter.all_of
+		if isinstance(match, FieldMatch)
+	}
+	assert parent_types == {
+		"resource_type": VectorChunkResourceType.FILE_CONTENT.value,
+		"parent_resource_type": VectorChunkResourceType.FILE.value,
+		"parent_resource_id": "file-1",
+	}
+	assert not any(isinstance(match, FieldMatchAny) for match in parent_filter.all_of)
+
+
+def test_acl_sync_chunk_filters_ignore_unaddressable_acl_resources() -> None:
+	assert (
+		vectorize_service._acl_sync_chunk_filters(ResourceType.CALENDAR, "cal-1")
+		== []
+	)
 
 
 @pytest.mark.asyncio

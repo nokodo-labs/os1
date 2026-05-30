@@ -2,6 +2,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import TypedDict
 
 import pytest
@@ -43,8 +44,10 @@ from api.v1.tasks.threads import (
 	schedule_thread_inactivity_maintenance,
 	start_thread_maintenance_task,
 )
+from nokodo_ai.adapters.chat import GenerationBadRequestError
 from nokodo_ai.deltas import AgentDelta, ChatModelDelta
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
+from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
@@ -125,6 +128,49 @@ class _FakeCompletedRunAgent:
 					done=True,
 				),
 				chunk_index=0,
+			)
+			yield AgentDelta.done_sentinel(chunk_index=1)
+
+		return stream()
+
+
+class _FakeBadRequestRunAgent:
+	async def run(
+		self,
+		*_args: object,
+		**_kwargs: object,
+	) -> AsyncIterator[AgentDelta]:
+		async def stream() -> AsyncIterator[AgentDelta]:
+			raise GenerationBadRequestError(
+				"maximum context length exceeded",
+				provider="openai.chat_completions",
+				status_code=400,
+				code="context_length_exceeded",
+			)
+			yield AgentDelta.done_sentinel(chunk_index=0)
+
+		return stream()
+
+
+class _FakePartialBadRequestRunAgent:
+	async def run(
+		self,
+		*_args: object,
+		**_kwargs: object,
+	) -> AsyncIterator[AgentDelta]:
+		async def stream() -> AsyncIterator[AgentDelta]:
+			yield AgentDelta(
+				chat=ChatModelDelta(
+					message=SDKAssistantMessage.from_text("partial answer"),
+					done=False,
+				),
+				chunk_index=0,
+			)
+			raise GenerationBadRequestError(
+				"maximum context length exceeded",
+				provider="openai.chat_completions",
+				status_code=400,
+				code="context_length_exceeded",
 			)
 			yield AgentDelta.done_sentinel(chunk_index=1)
 
@@ -849,6 +895,147 @@ async def test_thread_inactivity_schedule_skips_up_to_date_thread(
 	assert scheduled is False
 	assert fake_source.deleted == [f"thread:inactivity-maintenance:{thread.id}"]
 	assert fake_task.kicker_instance.scheduled == []
+
+
+@pytest.mark.asyncio
+async def test_run_agent_surfaces_sdk_generation_error(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	user = await user_service.create_user(
+		UserCreate(
+			email="sdk-generation-error@example.com",
+			username="sdk_generation_error",
+			password="secret123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	agent_id = TypeID(new_typeid("agent"))
+	fake_agent = SimpleNamespace(model=None, parsed_config=None)
+	fake_run_agent = _FakeBadRequestRunAgent()
+
+	async def fake_load_agent(*_args: object, **_kwargs: object) -> object:
+		return fake_agent
+
+	async def fake_build_agent_from_orm(*_args: object, **_kwargs: object) -> object:
+		return object()
+
+	async def fake_inject_system_instructions(
+		_agent: object,
+		thread: SDKThread,
+		**_kwargs: object,
+	) -> SDKThread:
+		return thread
+
+	async def fake_prepare_steering(
+		**_kwargs: object,
+	) -> tuple[_FakeBadRequestRunAgent, None]:
+		return fake_run_agent, None
+
+	monkeypatch.setattr(chat_agents, "_load_agent", fake_load_agent)
+	monkeypatch.setattr(
+		chat_agents,
+		"build_agent_from_orm",
+		fake_build_agent_from_orm,
+	)
+	monkeypatch.setattr(
+		chat_agents,
+		"inject_system_instructions",
+		fake_inject_system_instructions,
+	)
+	monkeypatch.setattr(chat_agents, "prepare_steering", fake_prepare_steering)
+
+	frames = [
+		frame
+		async for frame in chat_agents.run_agent(
+			None,
+			agent_id,
+			principal,
+			input=RunInput(text="hello"),
+			persist=False,
+		)
+	]
+
+	joined = b"".join(frames)
+	assert b"event: error" in joined
+	assert b"generation failed" in joined
+	assert b"provider_bad_request" not in joined
+	assert b"provider rejected the generation request" not in joined
+	assert b"openai" not in joined
+	assert b"context_length_exceeded" not in joined
+
+
+@pytest.mark.asyncio
+async def test_run_agent_marks_partial_message_on_sdk_generation_error(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	user = await user_service.create_user(
+		UserCreate(
+			email="sdk-partial-generation-error@example.com",
+			username="sdk_partial_generation_error",
+			password="secret123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	agent_id = TypeID(new_typeid("agent"))
+	fake_agent = SimpleNamespace(model=None, parsed_config=None)
+	fake_run_agent = _FakePartialBadRequestRunAgent()
+
+	async def fake_load_agent(*_args: object, **_kwargs: object) -> object:
+		return fake_agent
+
+	async def fake_build_agent_from_orm(*_args: object, **_kwargs: object) -> object:
+		return object()
+
+	async def fake_inject_system_instructions(
+		_agent: object,
+		thread: SDKThread,
+		**_kwargs: object,
+	) -> SDKThread:
+		return thread
+
+	async def fake_prepare_steering(
+		**_kwargs: object,
+	) -> tuple[_FakePartialBadRequestRunAgent, None]:
+		return fake_run_agent, None
+
+	monkeypatch.setattr(chat_agents, "_load_agent", fake_load_agent)
+	monkeypatch.setattr(
+		chat_agents,
+		"build_agent_from_orm",
+		fake_build_agent_from_orm,
+	)
+	monkeypatch.setattr(
+		chat_agents,
+		"inject_system_instructions",
+		fake_inject_system_instructions,
+	)
+	monkeypatch.setattr(chat_agents, "prepare_steering", fake_prepare_steering)
+
+	frames = [
+		frame
+		async for frame in chat_agents.run_agent(
+			None,
+			agent_id,
+			principal,
+			input=RunInput(text="hello"),
+			persist=False,
+		)
+	]
+
+	joined = b"".join(frames)
+	assert b"partial answer" in joined
+	assert b"event: error" in joined
+	assert b'"partial":true' in joined
+	assert b'"continuation_available"' not in joined
+	assert b"provider_bad_request" not in joined
+	assert b"openai" not in joined
+	assert b"context_length_exceeded" not in joined
 
 
 @pytest.mark.asyncio

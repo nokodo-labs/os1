@@ -17,8 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.event import Event, EventScope
 from api.models.message import Message, MessageType
+from api.models.note import Note
 from api.models.notification import Notification
 from api.models.thread import Thread
+from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.schemas.thread import ThreadCreate
 from api.schemas.user import UserCreate
@@ -430,3 +432,39 @@ async def test_delete_user_message_preserves_siblings(
 	# thread leaf should point to the deepest remaining leaf
 	await db_session.refresh(thread)
 	assert thread.current_message_id == assistant_2.id
+
+
+@pytest.mark.asyncio
+async def test_delete_user_cascades_owned_rows(db_session: AsyncSession) -> None:
+	admin = await user_service.create_user(
+		UserCreate(
+			email="delete-owner-admin@example.com",
+			password="password123",
+			username="delete_owner_admin",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	principal = Principal(user=admin, group_ids=(), permissions=frozenset())
+	target = await user_service.create_user(
+		UserCreate(
+			email="delete-owner-target@example.com",
+			password="password123",
+			username="delete_owner_target",
+		),
+		db_session,
+		principal=principal,
+	)
+	note = Note(
+		user_id=target.id,
+		title="delete me",
+		content="owned by deleted user",
+	)
+	db_session.add(note)
+	await db_session.commit()
+	await db_session.refresh(note)
+
+	await user_service.delete_user(TypeID(target.id), db_session, principal=principal)
+
+	assert await db_session.get(User, target.id) is None
+	assert await db_session.get(Note, note.id) is None

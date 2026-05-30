@@ -12,7 +12,7 @@ from api.schemas.preferences import AIPreferences
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters.chat_context import ChatContextFilter
 from api.v1.service.chat.filters.memory import MemoryContextFilter
-from api.v1.service.prompt_runtime import SENTINEL_CHAT_CONTEXT, SENTINEL_USER_MEMORIES
+from api.v1.service.prompts import SENTINEL_CHAT_CONTEXT, SENTINEL_USER_MEMORIES
 from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.context import AgentContext
