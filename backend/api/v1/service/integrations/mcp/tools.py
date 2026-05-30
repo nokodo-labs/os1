@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.mcp import MCPError
 from api.models.mcp import MCPServer, MCPServerScope
+from api.permissions import ActionPermission
+from api.schemas.agent import AgentConfig
 from api.schemas.mcp import MCPDiscoveredTool, MCPSurfaceConfig
 from api.settings import settings
 from api.v1.service.chat.context import AppContext
@@ -45,6 +47,7 @@ def mcp_external_tool_source() -> ExternalToolSource:
 		resolve_tools=resolve_mcp_tools_for_context,
 		list_plugins=list_available_plugins,
 		get_plugin=get_available_plugin,
+		resolve_extra_tools=resolve_mcp_extra_tools_for_context,
 	)
 
 
@@ -54,6 +57,15 @@ async def resolve_mcp_tools_for_context(
 ) -> list[Tool[AppContext]]:
 	"""resolve MCP plugin ids from a chat app context."""
 	return await resolve_mcp_tools(tool_ids, app_context.session)
+
+
+async def resolve_mcp_extra_tools_for_context(
+	tool_ids: list[str],
+	app_context: AppContext,
+	agent_config: AgentConfig,
+) -> list[Tool[AppContext]]:
+	"""resolve request-scoped user MCP tool plugin ids."""
+	return await resolve_mcp_extra_tools(tool_ids, app_context, agent_config)
 
 
 class MCPRemoteTool(Tool[AppContext]):
@@ -85,6 +97,7 @@ class MCPRemoteTool(Tool[AppContext]):
 				self.mcp_tool_name,
 				arguments,
 				__app_context__.session,
+				__app_context__.principal,
 			)
 		except HTTPException as exc:
 			return self.error(str(exc.detail), __tool_call_context__)
@@ -133,6 +146,44 @@ async def resolve_mcp_tools(
 	return tools
 
 
+async def resolve_mcp_extra_tools(
+	tool_ids: list[str],
+	app_context: AppContext,
+	agent_config: AgentConfig,
+) -> list[Tool[AppContext]]:
+	"""resolve extra MCP tools from the current user's owned servers only."""
+	if not settings.integrations.mcp.enabled:
+		return []
+	if not app_context.principal.has_permission(ActionPermission.USER_MCP_MANAGE):
+		return []
+	if not agent_config.features.user_mcp_tools.enabled:
+		return []
+	tool_refs: set[tuple[str, str]] = set()
+	for tool_id in tool_ids:
+		tool_ref = parse_mcp_tool_plugin_id(tool_id)
+		if tool_ref is not None:
+			tool_refs.add(tool_ref)
+	if not tool_refs:
+		return []
+	server_tools = await _load_user_server_tools(
+		{server_id for server_id, _ in tool_refs},
+		app_context.session,
+		str(app_context.user_id),
+	)
+	tools: list[Tool[AppContext]] = []
+	seen_tools: set[tuple[str, str]] = set()
+	for server_id, mcp_tool_id in tool_refs:
+		tool = _find_enabled_tool(server_tools.get(server_id, []), mcp_tool_id)
+		if tool is None:
+			continue
+		key = (server_id, mcp_tool_id)
+		if key in seen_tools:
+			continue
+		seen_tools.add(key)
+		tools.append(_tool_from_snapshot(server_id, tool))
+	return tools
+
+
 async def _load_server_tools(
 	server_ids: set[str],
 	session: AsyncSession,
@@ -161,6 +212,25 @@ async def _load_server_tools(
 		server_tools[server_id] = tools
 		await set_cached_mcp_server_tools(session, server_id, tools)
 	return server_tools
+
+
+async def _load_user_server_tools(
+	server_ids: set[str],
+	session: AsyncSession,
+	user_id: str,
+) -> dict[str, list[MCPDiscoveredTool]]:
+	"""load enabled tool snapshots for owned user MCP servers."""
+	if not server_ids:
+		return {}
+	result = await session.execute(
+		select(MCPServer).where(
+			MCPServer.scope == MCPServerScope.USER,
+			MCPServer.owner_user_id == user_id,
+			MCPServer.enabled.is_(True),
+			MCPServer.id.in_(server_ids),
+		)
+	)
+	return {str(server.id): _enabled_tools(server) for server in result.scalars().all()}
 
 
 def _enabled_tools(server: MCPServer) -> list[MCPDiscoveredTool]:

@@ -246,12 +246,30 @@ async def update_file(
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_file(
 	file_id: TypeID,
+	permanent: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
 ) -> None:
-	"""soft-delete a file."""
+	"""delete a file."""
 	await file_service.delete_file(
+		file_id,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+		permanent=permanent,
+	)
+
+
+@router.post("/{file_id}/restore", response_model=FileSchema)
+async def restore_file(
+	file_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
+) -> File:
+	"""restore a soft-deleted file. admin only."""
+	return await file_service.restore_file(
 		file_id,
 		db,
 		principal=principal,

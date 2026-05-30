@@ -50,7 +50,7 @@ class TaskChatModel:
 # process-local cache for task chat models.
 # key: task name, value: (task chat model, expiry_timestamp)
 _task_model_cache: dict[str, tuple[TaskChatModel, float]] = {}
-_TASK_MODEL_TTL_S = 300.0
+_TASK_MODEL_TTL_S = 60.0 * 60.0 * 24.0
 _CONTEXT_PRESSURE_STATUS_CODES = {400, 413}
 _CONTEXT_PRESSURE_MARKERS = (
 	"context_length_exceeded",
@@ -389,6 +389,32 @@ async def resolve_task_chat_model_config(
 	)
 	_task_model_cache[task] = (chat_model_config, now + _TASK_MODEL_TTL_S)
 	return chat_model_config
+
+
+async def fetch_agent_input_modalities(
+	agent_id: TypeID | None,
+	session: AsyncSession,
+) -> set[str] | None:
+	"""fetch the agent's chat model input_modalities.
+
+	returns a set of modality strings (e.g. {"text", "images"}), or none when
+	the agent/model can't be resolved (callers should fail open).
+	"""
+	if agent_id is None:
+		return None
+	try:
+		agent = await session.get(Agent, str(agent_id))
+		if agent is None or agent.model_id is None:
+			return None
+		model = await session.get(Model, agent.model_id)
+		if model is None:
+			return None
+		return set(model.input_modalities or [])
+	except Exception:
+		logger.debug(
+			"could not fetch input modalities for agent %s", agent_id, exc_info=True
+		)
+		return None
 
 
 def build_image_model(model: Model) -> ImageModel:

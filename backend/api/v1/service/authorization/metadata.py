@@ -14,11 +14,75 @@ from api.v1.service.authorization.inheritance import (
 	PARENT_LINKS_BY_CHILD,
 	inherited_parent_resource_types,
 )
+from api.v1.service.vectorstores import VectorChunkResourceType
 from nokodo_ai.adapters.base.vectorstores import ChunkFilter
 from nokodo_ai.utils.typeid import TypeID
 
 
 type ACLPrincipalMetadata = dict[str, list[str]]
+
+
+VECTOR_CHUNK_ACCESS_RESOURCE_TYPES: dict[VectorChunkResourceType, ResourceType] = {
+	VectorChunkResourceType.THREAD: ResourceType.THREAD,
+	VectorChunkResourceType.NOTE: ResourceType.NOTE,
+	VectorChunkResourceType.MEMORY: ResourceType.MEMORY,
+	VectorChunkResourceType.FILE: ResourceType.FILE,
+	VectorChunkResourceType.FILE_CONTENT: ResourceType.FILE,
+	VectorChunkResourceType.CALENDAR_EVENT: ResourceType.CALENDAR,
+	VectorChunkResourceType.REMINDER: ResourceType.REMINDER_LIST,
+}
+ACL_SYNC_VECTOR_CHUNK_RESOURCE_TYPES: dict[
+	ResourceType, tuple[VectorChunkResourceType, ...]
+] = {
+	ResourceType.THREAD: (VectorChunkResourceType.THREAD,),
+	ResourceType.NOTE: (VectorChunkResourceType.NOTE,),
+	ResourceType.MEMORY: (VectorChunkResourceType.MEMORY,),
+	ResourceType.FILE: (
+		VectorChunkResourceType.FILE,
+		VectorChunkResourceType.FILE_CONTENT,
+	),
+}
+VECTOR_CHUNK_PARENT_RESOURCE_TYPES: dict[
+	VectorChunkResourceType, VectorChunkResourceType
+] = {
+	VectorChunkResourceType.FILE_CONTENT: VectorChunkResourceType.FILE,
+}
+
+
+def _validate_vector_chunk_acl_mappings() -> None:
+	for access_resource_type, chunk_resource_types in (
+		ACL_SYNC_VECTOR_CHUNK_RESOURCE_TYPES.items()
+	):
+		if access_resource_type not in RESOURCE_CONFIG:
+			raise RuntimeError(
+				f"{access_resource_type.value} is not an ACL resource type"
+			)
+		for chunk_resource_type in chunk_resource_types:
+			chunk_access_resource_type = VECTOR_CHUNK_ACCESS_RESOURCE_TYPES[
+				chunk_resource_type
+			]
+			if chunk_access_resource_type != access_resource_type:
+				raise RuntimeError(
+					f"{chunk_resource_type.value} does not resolve to "
+					f"{access_resource_type.value}"
+				)
+	for chunk_resource_type, parent_resource_type in (
+		VECTOR_CHUNK_PARENT_RESOURCE_TYPES.items()
+	):
+		chunk_access_resource_type = VECTOR_CHUNK_ACCESS_RESOURCE_TYPES[
+			chunk_resource_type
+		]
+		parent_access_resource_type = VECTOR_CHUNK_ACCESS_RESOURCE_TYPES[
+			parent_resource_type
+		]
+		if chunk_access_resource_type != parent_access_resource_type:
+			raise RuntimeError(
+				f"{chunk_resource_type.value} parent "
+				f"{parent_resource_type.value} resolves to a different ACL type"
+			)
+
+
+_validate_vector_chunk_acl_mappings()
 
 
 def empty_acl_metadata() -> ACLPrincipalMetadata:
@@ -76,13 +140,24 @@ async def fetch_acl_metadata(
 
 
 def vector_acl_filter(
-	resource_type: ResourceType,
+	chunk_resource_types: list[VectorChunkResourceType],
 	principal: Principal,
 ) -> ChunkFilter:
 	"""build a vector prefilter from the same ACL graph used by SQL auth."""
+	if not chunk_resource_types:
+		raise ValueError("chunk_resource_types cannot be empty")
+	access_resource_types = {
+		VECTOR_CHUNK_ACCESS_RESOURCE_TYPES[resource_type]
+		for resource_type in chunk_resource_types
+	}
+	if len(access_resource_types) != 1:
+		raise ValueError(
+			"vector_acl_filter chunk_resource_types must share one ACL resource type"
+		)
+	access_resource_type = next(iter(access_resource_types))
 	return vectorstore_service.acl_filter(
-		resource_type.value,
-		is_admin=_principal_can_skip_vector_acl(resource_type, principal),
+		chunk_resource_types,
+		is_admin=_principal_can_skip_vector_acl(access_resource_type, principal),
 		user_id=str(principal.user.id),
 		group_ids=principal.group_ids,
 		role_ids=principal.role_ids,

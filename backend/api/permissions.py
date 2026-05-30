@@ -100,6 +100,7 @@ class ActionPermission(StrEnum):
 	PROVIDERS_READ = "providers:read"
 	PROVIDERS_MANAGE = "providers:manage"
 	MCP_MANAGE = "mcp:manage"
+	USER_MCP_MANAGE = "user.mcp:manage"
 
 	# app access
 	FRONTEND_ACCESS = "frontend:access"

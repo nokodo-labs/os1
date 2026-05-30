@@ -205,6 +205,13 @@ class AIMemorySettings(BaseModel):
 		ge=1,
 		description="number of relevant memories to retrieve",
 	)
+	post_processing_turns: int = settings_field(
+		default=6,
+		ge=1,
+		description="number of recent conversation turns fed to the dedicated "
+		"memory maintenance agent that runs after each turn. a turn is a "
+		"contiguous block of user or assistant messages.",
+	)
 
 
 class AIChatContextSettings(BaseModel):
@@ -267,6 +274,14 @@ class AITaskSettings(BaseModel):
 		default=None,
 		description="model for native agentic web search",
 	)
+	asset_description_model_id: str | None = settings_field(
+		default=None,
+		description="model for asset summaries and non-text descriptions",
+	)
+	asset_text_extraction_model_id: str | None = settings_field(
+		default=None,
+		description="model for asset file, document, and media text extraction",
+	)
 	maintenance_max_chars_per_message: int | None = settings_field(
 		default=2000,
 		ge=1,
@@ -278,52 +293,56 @@ class AITaskSettings(BaseModel):
 
 
 class AIAttachmentSettings(BaseModel):
-	"""per-type decay thresholds for native attachments.
+	"""protection windows for native media fetched onto tool messages.
 
-	after N turns without interaction, an active attachment auto-decays
-	to reference state. a 'turn' is one user-assistant exchange.
+	native media only ever lives on tool messages (file_get fetches and
+	media generators). two tiers govern its lifetime, both measured in
+	iterations (one agent-loop restart within a single agent turn, i.e. one
+	per assistant message):
+
+	- hard window (always one iteration): the read iteration where the model
+	first sees the fresh bytes. media here is the output the model is reading
+	right now; compaction never cuts it. if the hard set alone busts budget,
+	compaction throws clearly.
+	- soft window (these settings): media stays native and hydrated for the
+	configured iterations within the same agent turn, but is NOT protected
+	from compaction. under budget pressure compaction may drop soft media (it
+	is recoverable via file_get), so the soft window can be cut short down to
+	the read iteration.
 	"""
 
-	image_decay_turns: int = settings_field(
-		default=4,
-		ge=1,
-		description="turns before image attachments decay to reference",
-	)
-	audio_decay_turns: int = settings_field(
+	image_decay_iterations: int = settings_field(
 		default=3,
 		ge=1,
-		description="turns before audio attachments decay to reference",
+		description="soft protection iterations for fetched image media",
 	)
-	video_decay_turns: int = settings_field(
-		default=2,
-		ge=1,
-		description="turns before video attachments decay to reference",
-	)
-	reveal_decay_turns: int = settings_field(
+	audio_decay_iterations: int = settings_field(
 		default=3,
 		ge=1,
-		description="turns before a revealed attachment decays again",
+		description="soft protection iterations for fetched audio media",
+	)
+	video_decay_iterations: int = settings_field(
+		default=1,
+		ge=1,
+		description="soft protection iterations for fetched video media (token-heavy)",
 	)
 
 
-class AIWindowingSettings(BaseModel):
-	"""context window management settings.
+class AIContextCompactionSettings(BaseModel):
+	"""context compaction settings.
 
-	controls token-aware windowing, summarization triggers, tool result
+	controls token-aware compaction, summarization triggers, tool result
 	truncation, and recursive summary condensation. all budget decisions
 	are based on estimated token weight, not naive message counts.
 	"""
 
 	enabled: bool = settings_field(
 		default=True,
-		description="enable context window management and summarization",
-	)
-	max_messages: int = settings_field(
-		default=50,
-		ge=1,
 		description=(
-			"secondary message count guard. even if tokens are within budget, "
-			"cap at this many unsummarized messages"
+			"enable token-aware context compaction before chat generation. when "
+			"enabled, the system preserves all messages that fit, compacts older "
+			"tool output and summarized spans when needed, and can schedule "
+			"background summaries for future runs"
 		),
 	)
 	trigger_ratio: float = settings_field(
@@ -331,30 +350,75 @@ class AIWindowingSettings(BaseModel):
 		ge=0.1,
 		le=0.95,
 		description=(
-			"start background summarization when unsummarized messages "
-			"consume this fraction of the available token budget"
+			"prompt pressure ratio that triggers background summarization while "
+			"the full raw conversation still fits. lower values create summaries "
+			"earlier and reduce future latency; higher values defer work until the "
+			"thread is closer to the model budget"
 		),
 	)
-	hard_ratio: float = settings_field(
-		default=0.90,
-		ge=0.5,
-		le=1.0,
+	recovery_target_ratio: float = settings_field(
+		default=0.55,
+		ge=0.05,
+		le=0.90,
 		description=(
-			"hard-truncate oldest messages when token usage exceeds this "
-			"fraction of the available budget (last resort if no summary is ready)"
+			"target prompt pressure after a summarization recovery pass. must be "
+			"lower than trigger_ratio so compaction has hysteresis and does not "
+			"immediately re-trigger after creating a summary"
 		),
 	)
-	summary_batch_size: int = settings_field(
-		default=20,
+	target_usage_cap_tokens: int | None = settings_field(
+		default=None,
 		ge=1,
-		description="number of oldest unsummarized messages per summary batch",
-	)
-	max_summaries_before_condense: int = settings_field(
-		default=4,
-		ge=2,
 		description=(
-			"condense existing summaries into one when this many window "
-			"summaries accumulate. enables truly unlimited threads"
+			"optional maximum context budget used for compaction before response "
+			"reserve and prompt overhead are subtracted. set this below a model's "
+			"advertised window to leave extra provider safety margin or to force "
+			"smaller prompts during testing"
+		),
+	)
+	summary_batch_min_tokens: int = settings_field(
+		default=512,
+		ge=1,
+		description=(
+			"minimum raw token span to include in a single summary job. prevents "
+			"tiny summaries whose marker and metadata would cost more than the "
+			"messages they replace"
+		),
+	)
+	summary_batch_max_tokens: int = settings_field(
+		default=16000,
+		ge=1,
+		description=(
+			"maximum raw token span to send to one summary job. caps summary "
+			"prompt size so very long threads are summarized in bounded batches "
+			"instead of one large provider request"
+		),
+	)
+	prompt_overhead_tokens: int = settings_field(
+		default=300,
+		ge=0,
+		description=(
+			"tokens reserved for provider framing, system wrappers, schema/tool "
+			"instructions, and other prompt bytes that are not represented by "
+			"stored chat messages. increasing this makes compaction more cautious"
+		),
+	)
+	blocking_summarization_enabled: bool = settings_field(
+		default=True,
+		description=(
+			"allow a last-resort inline summary during the user request when tool "
+			"compaction and ready summaries cannot fit the prompt. disabling this "
+			"avoids extra latency but may force older messages to be pruned sooner"
+		),
+	)
+	blocking_summarization_timeout_seconds: float = settings_field(
+		default=20.0,
+		ge=1.0,
+		le=120.0,
+		description=(
+			"maximum time to wait for an inline last-resort summary before giving "
+			"up and trying the next compaction tier. this bounds user-visible "
+			"latency when a provider is slow or rejects the summary request"
 		),
 	)
 	tool_result_max_share: float = settings_field(
@@ -362,39 +426,61 @@ class AIWindowingSettings(BaseModel):
 		ge=0.05,
 		le=0.75,
 		description=(
-			"maximum fraction of available budget that a single tool result "
-			"may consume. results exceeding this are truncated"
+			"maximum fraction of the available prompt budget that one tool result "
+			"may consume before it is compacted. lower values keep large search, "
+			"file, or code outputs from crowding out conversational context"
 		),
 	)
 	tool_result_hard_cap: int = settings_field(
 		default=100_000,
 		ge=1000,
-		description="absolute character ceiling per tool result",
+		description=(
+			"absolute character ceiling for a single tool result before token "
+			"estimation. this protects the compaction pipeline from extremely "
+			"large raw outputs even when the token budget is configured generously"
+		),
 	)
 	tool_results_combined_max_share: float = settings_field(
 		default=0.50,
 		ge=0.10,
 		le=0.95,
 		description=(
-			"maximum fraction of available budget for ALL tool results "
-			"combined. when total tool result tokens exceed this, the "
-			"oldest tool results are compacted first (Layer 2 guard)"
+			"maximum fraction of the available prompt budget that all tool "
+			"results combined may consume. when the combined total exceeds this, "
+			"older tool results are compacted first so tool-heavy runs do not "
+			"displace the rest of the conversation"
 		),
 	)
 	response_headroom: int = settings_field(
 		default=4096,
 		ge=256,
-		description="tokens reserved for the model's response",
+		description=(
+			"tokens reserved for the assistant response after prompt compaction. "
+			"larger values reduce prompt capacity but lower the chance that a "
+			"provider stops because there is too little room left to answer"
+		),
 	)
 	summarization_max_chars_per_message: int | None = settings_field(
 		default=2000,
 		ge=1,
 		description=(
-			"max characters per message in summarization transcripts. "
-			"keeps tokens manageable without losing essential context. "
-			"null for unlimited"
+			"maximum characters copied from each raw message into a summary "
+			"transcript. this limits single-message outliers before they reach "
+			"the summarization model; null keeps full message text"
 		),
 	)
+
+	@model_validator(mode="after")
+	def validate_thresholds(self) -> Self:
+		"""ensure proactive recovery has hysteresis."""
+		if self.recovery_target_ratio >= self.trigger_ratio:
+			raise ValueError("recovery_target_ratio must be less than trigger_ratio")
+		if self.summary_batch_min_tokens > self.summary_batch_max_tokens:
+			raise ValueError(
+				"summary_batch_min_tokens must be less than or equal to "
+				"summary_batch_max_tokens"
+			)
+		return self
 
 
 class E2bSettings(BaseModel):
@@ -451,6 +537,61 @@ class CodeInterpreterSettings(BaseModel):
 		default=50,
 		ge=5,
 		description="lines kept at head and tail when truncating output",
+	)
+
+
+AssetContentLoader = Literal["auto", "plain", "markitdown", "chatmodel"]
+AssetChunkingAlgorithm = Literal["auto", "recursive", "markdown"]
+
+
+class AssetContentVectorizationSettings(BaseModel):
+	"""asset content vectorization resource limits."""
+
+	loader: AssetContentLoader = settings_field(
+		default="auto",
+		description="asset content text loader",
+	)
+	chunking_algorithm: AssetChunkingAlgorithm = settings_field(
+		default="auto",
+		description="asset content chunking algorithm",
+	)
+	max_bytes: int | None = settings_field(
+		default=5 * 1024 * 1024,
+		ge=1,
+		description="maximum bytes read from an asset; null means unlimited",
+	)
+	target_tokens: int = settings_field(
+		default=700,
+		ge=50,
+		description="target token count per asset content chunk",
+	)
+	overlap_tokens: int = settings_field(
+		default=80,
+		ge=0,
+		description="token overlap between adjacent asset content chunks",
+	)
+	max_chunks: int | None = settings_field(
+		default=200,
+		ge=1,
+		description="maximum content chunks per asset; null means unlimited",
+	)
+
+
+class AssetDescriptionSettings(BaseModel):
+	"""asset description and summary limits."""
+
+	max_input_chars: int | None = settings_field(
+		default=24_000,
+		ge=100,
+		description=(
+			"maximum extracted text characters sent to the description model; "
+			"null means unlimited"
+		),
+	)
+	max_chars: int | None = settings_field(
+		default=1200,
+		ge=50,
+		description="maximum stored asset description characters; null means unlimited",
 	)
 
 
@@ -566,9 +707,9 @@ class AISettings(BaseModel):
 		default_factory=AIAttachmentSettings,
 		description="native attachment decay settings",
 	)
-	windowing: AIWindowingSettings = settings_field(
-		default_factory=AIWindowingSettings,
-		description="message window and summarization settings",
+	context_compaction: AIContextCompactionSettings = settings_field(
+		default_factory=AIContextCompactionSettings,
+		description="context compaction and summarization settings",
 	)
 	media: AIMediaSettings = settings_field(
 		default_factory=AIMediaSettings,
@@ -1107,6 +1248,14 @@ class AssetsSettings(BaseModel):
 		default_factory=StorageSettings,
 		description="file storage backend configuration",
 	)
+	content_vectorization: AssetContentVectorizationSettings = settings_field(
+		default_factory=AssetContentVectorizationSettings,
+		description="asset content vectorization resource limits",
+	)
+	descriptions: AssetDescriptionSettings = settings_field(
+		default_factory=AssetDescriptionSettings,
+		description="asset description and summary limits",
+	)
 
 
 class OIDCSettings(BaseModel):
@@ -1348,6 +1497,8 @@ class WebLoaderSettings(BaseModel):
 
 
 SearchEngine = Literal["perplexity", "searxng", "bing", "google"]
+MCPTransportSetting = Literal["streamable_http", "sse", "stdio"]
+MCPUserServerOriginMode = Literal["deny", "allow"]
 
 
 class SearchEngineSettings(BaseModel):
@@ -1527,9 +1678,117 @@ class OpenWebUIIntegrationSettings(BaseModel):
 		return deployments
 
 
+class MCPIntegrationSettings(BaseModel):
+	"""MCP integration policy."""
+
+	enabled: bool = settings_field(default=True, description="enable MCP integration")
+	startup_discovery_enabled: bool = settings_field(
+		default=False,
+		description="discover enabled global MCP servers during backend startup",
+	)
+	list_change_listening_enabled: bool = settings_field(
+		default=True,
+		description="listen for MCP server list-change notifications",
+	)
+	list_change_debounce_seconds: float = settings_field(
+		default=1.0,
+		ge=0.1,
+		le=30.0,
+		description="seconds to debounce MCP list-change refetches",
+	)
+	list_change_reconnect_max_delay_seconds: float = settings_field(
+		default=30.0,
+		ge=1.0,
+		le=300.0,
+		description="maximum delay between MCP list-change listener reconnects",
+	)
+	allowed_transports: list[MCPTransportSetting] = settings_field(
+		default_factory=lambda: ["streamable_http"],
+		min_length=1,
+		description="MCP transports admins may configure",
+	)
+	default_timeout_seconds: int = settings_field(
+		default=30,
+		ge=1,
+		le=300,
+		description="default MCP request timeout in seconds",
+	)
+	max_timeout_seconds: int = settings_field(
+		default=60,
+		ge=1,
+		le=600,
+		description="maximum MCP request timeout in seconds",
+	)
+	user_server_origin_mode: MCPUserServerOriginMode = settings_field(
+		default="deny",
+		description="how to apply user-managed MCP server origins",
+	)
+	user_server_origins: list[str] = settings_field(
+		default_factory=list,
+		description="origins used by the user-managed MCP server origin mode",
+	)
+	user_server_max_count: int = settings_field(
+		default=5,
+		ge=0,
+		le=100,
+		description="maximum user-owned MCP servers per user",
+	)
+	user_server_max_tools: int = settings_field(
+		default=50,
+		ge=0,
+		le=500,
+		description="maximum discovered tools per user-owned MCP server",
+	)
+	user_tool_definition_max_tokens: int = settings_field(
+		default=8192,
+		ge=256,
+		le=128000,
+		description="maximum estimated tokens for one user MCP tool definition",
+	)
+
+	@field_validator("allowed_transports")
+	@classmethod
+	def _dedupe_transports(
+		cls, transports: list[MCPTransportSetting]
+	) -> list[MCPTransportSetting]:
+		seen: set[MCPTransportSetting] = set()
+		unique: list[MCPTransportSetting] = []
+		for transport in transports:
+			if transport in seen:
+				continue
+			seen.add(transport)
+			unique.append(transport)
+		return unique
+
+	@field_validator("user_server_origins")
+	@classmethod
+	def _unique_mcp_origins(cls, origins: list[str]) -> list[str]:
+		seen: set[str] = set()
+		unique: list[str] = []
+		for origin in origins:
+			normalized = origin.rstrip("/").lower()
+			if not normalized or normalized in seen:
+				continue
+			seen.add(normalized)
+			unique.append(normalized)
+		return unique
+
+	@model_validator(mode="after")
+	def _validate_timeout_range(self) -> Self:
+		if self.default_timeout_seconds > self.max_timeout_seconds:
+			raise ValueError("default MCP timeout cannot exceed maximum MCP timeout")
+		if self.user_server_origin_mode == "allow" and not self.user_server_origins:
+			raise ValueError("MCP origin allow mode requires at least one origin")
+		return self
+
+
 class IntegrationsSettings(BaseModel):
 	"""third-party integration configuration."""
 
+	mcp: MCPIntegrationSettings = settings_field(
+		default_factory=MCPIntegrationSettings,
+		description="MCP integration",
+	)
 	open_webui: OpenWebUIIntegrationSettings = settings_field(
 		default_factory=OpenWebUIIntegrationSettings,
 		description="Open WebUI integration",
@@ -1636,14 +1895,24 @@ class CacheSettings(BaseModel):
 		description="TTL for scheduled items cache entries",
 	)
 	resource_payload_ttl_seconds: int = settings_field(
-		default=30,
+		default=60 * 60 * 8,
 		ge=1,
 		description="TTL for resource payload cache entries",
+	)
+	prompt_template_ttl_seconds: int = settings_field(
+		default=60 * 60 * 8,
+		ge=1,
+		description="TTL for prompt template cache entries",
 	)
 	accessible_users_ttl_seconds: int = settings_field(
 		default=60 * 60 * 24,
 		ge=1,
 		description="TTL for accessible user recipient cache entries",
+	)
+	mcp_snapshot_ttl_seconds: int = settings_field(
+		default=60 * 60 * 24,
+		ge=1,
+		description="TTL for MCP DB snapshot projection cache entries",
 	)
 
 

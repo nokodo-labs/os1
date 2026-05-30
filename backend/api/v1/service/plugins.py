@@ -7,8 +7,10 @@ from typing import Literal, overload
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from api.models.plugin import Plugin
+from api.permissions import ActionPermission
 from api.schemas.plugin import (
 	PluginCreate,
 	PluginInfo,
@@ -29,6 +31,10 @@ from api.v1.service.chat.hooks import (
 )
 from api.v1.service.chat.hooks import (
 	get_registered_names as get_hook_names,
+)
+from api.v1.service.chat.tools.external import (
+	get_external_tool_plugin,
+	list_external_tool_plugins,
 )
 from api.v1.service.chat.tools.registry import (
 	TOOL_REGISTRY,
@@ -64,7 +70,7 @@ def _build_native_info(
 		name=name,
 		description=description,
 		type=plugin_type,
-		is_native=True,
+		source="native",
 	)
 
 
@@ -120,8 +126,28 @@ def _db_plugin_to_info(plugin: Plugin) -> PluginInfo:
 		name=plugin.name,
 		description=plugin.description or "",
 		type=plugin.type.value,
-		is_native=False,
+		source="custom",
 	)
+
+
+def _apply_plugin_filters(stmt: Select, filters: PluginListFilters) -> Select:
+	"""apply plugin filters to a DB query."""
+	if filters.plugin_type is not None:
+		stmt = stmt.where(Plugin.type == filters.plugin_type)
+	return stmt
+
+
+def _apply_plugin_catalog_filters(
+	plugins: list[PluginInfo],
+	filters: PluginListFilters,
+) -> list[PluginInfo]:
+	"""apply plugin filters to in-memory catalog items."""
+	return [
+		plugin
+		for plugin in plugins
+		if (filters.source is None or plugin.source == filters.source)
+		and (filters.plugin_type is None or plugin.type == filters.plugin_type)
+	]
 
 
 async def _ensure_name_available(
@@ -204,29 +230,51 @@ async def list_plugins(
 	"""list plugins.
 
 	when include_native is False, returns only database Plugin ORM objects.
-	when include_native is True, returns a merged list of PluginInfo (native + db).
+	when include_native is True, returns PluginInfo catalog items from all sources.
 	"""
-	require_permission(principal, "plugins:read")
 	plugin_filters = filters or PluginListFilters()
+	can_read_full_catalog = principal.has_permission(ActionPermission.PLUGINS_READ)
+	can_read_user_mcp = principal.has_permission(ActionPermission.USER_MCP_MANAGE)
+	if not can_read_full_catalog and not can_read_user_mcp:
+		require_permission(principal, ActionPermission.PLUGINS_READ)
+	if not can_read_full_catalog:
+		if not include_native:
+			return []
+		if plugin_filters.plugin_type not in (None, "tool"):
+			return []
+		if plugin_filters.source not in (None, "external"):
+			return []
+		plugins = await list_external_tool_plugins(session, principal, "tool")
+		plugins = _apply_plugin_catalog_filters(plugins, plugin_filters)
+		plugins.sort(key=lambda p: p.name)
+		return plugins[skip : skip + limit]
 
 	if not include_native:
-		stmt = select(Plugin).order_by(Plugin.created_at.desc())
-		if plugin_filters.plugin_type is not None:
-			stmt = stmt.where(Plugin.type == plugin_filters.plugin_type)
+		if plugin_filters.source not in (None, "custom"):
+			return []
+		stmt = _apply_plugin_filters(
+			select(Plugin).order_by(Plugin.created_at.desc()), plugin_filters
+		)
 		result = await session.execute(stmt.offset(skip).limit(limit))
 		return list(result.scalars().all())
 
-	# merged mode: native + database as PluginInfo
-	plugins: list[PluginInfo] = _list_native(plugin_filters.plugin_type)
+	# Catalog mode: native + external runtime + database as PluginInfo.
+	plugins: list[PluginInfo] = []
+	if plugin_filters.source in (None, "native"):
+		plugins.extend(_list_native())
+	if plugin_filters.source in (None, "external"):
+		plugins.extend(await list_external_tool_plugins(session, principal, None))
 
-	stmt = select(Plugin).order_by(Plugin.created_at.desc())
-	if plugin_filters.plugin_type is not None:
-		stmt = stmt.where(Plugin.type == plugin_filters.plugin_type)
-	result = await session.execute(stmt)
+	if plugin_filters.source in (None, "custom"):
+		stmt = _apply_plugin_filters(
+			select(Plugin).order_by(Plugin.created_at.desc()), plugin_filters
+		)
+		result = await session.execute(stmt)
 
-	for db_plugin in result.scalars().all():
-		plugins.append(_db_plugin_to_info(db_plugin))
+		for db_plugin in result.scalars().all():
+			plugins.append(_db_plugin_to_info(db_plugin))
 
+	plugins = _apply_plugin_catalog_filters(plugins, plugin_filters)
 	plugins.sort(key=lambda p: p.name)
 	return plugins[skip : skip + limit]
 
@@ -262,12 +310,30 @@ async def get_plugin(
 	when include_native is False, looks up only database plugins and returns
 	the Plugin ORM object.
 	"""
-	require_permission(principal, "plugins:read")
+	can_read_full_catalog = principal.has_permission(ActionPermission.PLUGINS_READ)
+	can_read_user_mcp = principal.has_permission(ActionPermission.USER_MCP_MANAGE)
+	if not can_read_full_catalog and not can_read_user_mcp:
+		require_permission(principal, ActionPermission.PLUGINS_READ)
 
 	if include_native:
+		if not can_read_full_catalog:
+			external_plugin = await get_external_tool_plugin(
+				str(plugin_id), session, principal
+			)
+			if external_plugin is not None:
+				return external_plugin
+			raise HTTPException(
+				status_code=status.HTTP_404_NOT_FOUND,
+				detail="plugin not found",
+			)
 		native = _get_native(str(plugin_id))
 		if native:
 			return native
+		external_plugin = await get_external_tool_plugin(
+			str(plugin_id), session, principal
+		)
+		if external_plugin is not None:
+			return external_plugin
 		db_plugin = await _get_db_plugin(TypeID(plugin_id), session)
 		return _db_plugin_to_info(db_plugin)
 

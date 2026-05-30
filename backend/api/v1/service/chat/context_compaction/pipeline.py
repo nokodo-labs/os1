@@ -21,7 +21,8 @@ from api.v1.service.chat.context_compaction.budgets import (
 	tool_definition_tokens as estimate_tool_definition_tokens,
 )
 from api.v1.service.chat.context_compaction.protection import (
-	find_run_start_index,
+	find_media_protected_index,
+	protected_floor_index,
 )
 from api.v1.service.chat.context_compaction.pruning import prune_oldest_until
 from api.v1.service.chat.context_compaction.summarization import (
@@ -185,7 +186,7 @@ async def apply_context_compaction(
 		usable = summaries_for_branch(
 			summaries,
 			conversation_ids,
-			max_end_index=find_run_start_index(conversation_msgs, run_id),
+			max_end_index=protected_floor_index(conversation_msgs, run_id),
 		)
 		batch_messages, start_id, end_id = next_summarization_batch(
 			conversation_msgs,
@@ -281,11 +282,7 @@ async def apply_context_compaction(
 	compacted_tool_call_count += tool_call_count
 	compacted_tool_result_count += tool_result_count
 	compacted_tool_run_count += tool_run_count
-	if (
-		tool_call_count > 0
-		or tool_result_count > 0
-		or tool_run_count > 0
-	):
+	if tool_call_count > 0 or tool_result_count > 0 or tool_run_count > 0:
 		compaction_tier = "t1_tool_io"
 
 	if total_tokens > budget:
@@ -293,7 +290,7 @@ async def apply_context_compaction(
 		usable_summaries = summaries_for_branch(
 			summaries,
 			conversation_ids,
-			max_end_index=find_run_start_index(conversation_msgs, run_id),
+			max_end_index=protected_floor_index(conversation_msgs, run_id),
 		)
 	else:
 		usable_summaries = []
@@ -455,6 +452,12 @@ async def apply_context_compaction(
 			total_tokens = await apply_blocking_summarization(total_tokens)
 
 	if total_tokens > budget:
+		if find_media_protected_index(working_messages) is not None:
+			raise ContextCompactionError(
+				"unable to fit prompt: protected native media being read this turn "
+				"exceeds the model context window. fetch fewer files at once or use "
+				"a model with a larger context window."
+			)
 		raise ContextCompactionError(
 			"unable to fit prompt without dropping protected active-run context"
 		)

@@ -31,7 +31,7 @@ from api.v1.service.chat.message_metadata import (
 	NEXT_CITATION_INDEX_KEY,
 	get_message_id,
 )
-from api.v1.service.prompt_runtime import SENTINEL_CITATION_SOURCES
+from api.v1.service.prompts import SENTINEL_CITATION_SOURCES
 from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (

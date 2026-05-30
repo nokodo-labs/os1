@@ -26,10 +26,14 @@ from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import resource_access_predicate
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.filters import (
+	get_registered_names as get_filter_plugin_names,
+)
 from api.v1.service.chat.filters import resolve_filters
 from api.v1.service.chat.filters.citation_index import (
 	resolve_assistant_citations,
 )
+from api.v1.service.chat.hooks import get_registered_names as get_hook_plugin_names
 from api.v1.service.chat.hooks import resolve_hooks
 from api.v1.service.chat.message_metadata import (
 	MESSAGE_ID_KEY,
@@ -51,7 +55,10 @@ from api.v1.service.chat.steering import (
 	persist_steering_state,
 	prepare_steering,
 )
-from api.v1.service.chat.tools.registry import resolve_tools
+from api.v1.service.chat.tools.registry import (
+	get_registered_names as get_tool_plugin_names,
+)
+from api.v1.service.chat.tools.registry import resolve_extra_tools, resolve_tools
 from api.v1.service.chat.user_message import create_run_user_message, resolve_run_input
 from api.v1.service.embeddings import embed_text
 from api.v1.service.events import build_live_persisting_event_emitter
@@ -72,6 +79,13 @@ from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 logger = logging.getLogger(__name__)
+
+
+def _tool_candidate_plugin_ids(plugin_ids: list[str]) -> list[str]:
+	"""return plugin ids that should be resolved by the tool registry."""
+	tool_names = get_tool_plugin_names()
+	non_tool_names = (get_filter_plugin_names() | get_hook_plugin_names()) - tool_names
+	return [plugin_id for plugin_id in plugin_ids if plugin_id not in non_tool_names]
 
 
 class _PersistStop:
@@ -395,6 +409,7 @@ def build_agent(
 async def build_agent_from_orm(
 	agent_orm: AgentORM,
 	context: AppContext,
+	extra_plugins: list[str] | None = None,
 ) -> SDKAgent[AppContext]:
 	"""build an sdk Agent from an orm Agent instance.
 
@@ -428,9 +443,21 @@ async def build_agent_from_orm(
 
 	# resolve plugins from agent's plugin_ids
 	tools = await resolve_tools(
-		tool_ids=agent_orm.plugin_ids,
+		tool_ids=_tool_candidate_plugin_ids(agent_orm.plugin_ids),
 		app_context=context,
 	)
+	if extra_plugins:
+		extra_tools = await resolve_extra_tools(
+			tool_ids=extra_plugins,
+			app_context=context,
+			agent_config=agent_orm.parsed_config,
+		)
+		seen_tool_names = {tool.name for tool in tools}
+		for tool in extra_tools:
+			if tool.name in seen_tool_names:
+				continue
+			seen_tool_names.add(tool.name)
+			tools.append(tool)
 	filters = resolve_filters(agent_orm.plugin_ids)
 	hooks = resolve_hooks(agent_orm.plugin_ids)
 
@@ -458,6 +485,7 @@ async def run_agent(
 	origin_session_id: str | None = None,
 	persist: bool = True,
 	tool_choice: ToolChoice | None = None,
+	extra_plugins: list[str] | None = None,
 	run_id_override: TypeID | None = None,
 	ready_event: asyncio.Event | None = None,
 ) -> AsyncIterator[bytes]:
@@ -703,7 +731,7 @@ async def run_agent(
 		)
 
 		try:
-			sdk_agent = await build_agent_from_orm(agent, ctx)
+			sdk_agent = await build_agent_from_orm(agent, ctx, extra_plugins)
 		except Exception:
 			logger.exception("failed to build agent")
 			err = sse_event(
@@ -752,6 +780,38 @@ async def run_agent(
 
 		worker_task: asyncio.Task[object] | None = None
 		steering_subscriber: asyncio.Task[None] | None = None
+		persist_worker_stop_requested = False
+
+		async def _request_persist_worker_stop() -> None:
+			"""signal the persistence worker once so it can drain and exit."""
+			nonlocal persist_worker_stop_requested
+			if (
+				persist
+				and worker_task is not None
+				and not worker_task.done()
+				and not persist_worker_stop_requested
+			):
+				await message_queue.put(_PERSIST_STOP)
+				persist_worker_stop_requested = True
+
+		async def _drain_persist_worker(timeout: float, operation: str) -> None:
+			"""wait for queued streamed messages to finish persisting."""
+			if not persist or worker_task is None or worker_task.done():
+				return
+			await _request_persist_worker_stop()
+			try:
+				await asyncio.wait_for(asyncio.shield(worker_task), timeout=timeout)
+			except TimeoutError:
+				logger.warning(
+					"persist worker did not finish cleanly",
+					extra={"operation": operation, "run_id": str(run_id)},
+				)
+			except Exception:
+				logger.exception(
+					"persist worker failed during shutdown",
+					extra={"operation": operation, "run_id": str(run_id)},
+				)
+
 		try:
 			if persist:
 				worker_task = create_background_task(
@@ -950,6 +1010,7 @@ async def run_agent(
 					message_queue=message_queue,
 					partial_reason="cancelled",
 				)
+				await _drain_persist_worker(timeout=30, operation="cancel_cleanup")
 				await safe_rollback(session)
 				rs_terminated = await run_status_store.fail_run(
 					run_id, reason="cancelled"
@@ -971,6 +1032,7 @@ async def run_agent(
 				message_queue=message_queue,
 				partial_reason=exc.reason,
 			)
+			await _drain_persist_worker(timeout=30, operation="generation_error")
 			logger.warning(
 				"sdk generation error during agent streaming",
 				extra={
@@ -1005,6 +1067,7 @@ async def run_agent(
 				message_queue=message_queue,
 				partial_reason="generation_failed",
 			)
+			await _drain_persist_worker(timeout=30, operation="stream_error")
 			logger.exception("error during agent streaming")
 			await safe_rollback(session)
 			rs_terminated = await run_status_store.fail_run(
@@ -1021,20 +1084,13 @@ async def run_agent(
 			yield sse_event(event="done", data={})
 			return
 		finally:
-			if persist and worker_task is not None and not worker_task.done():
-				await message_queue.put(_PERSIST_STOP)
+			await _request_persist_worker_stop()
 			if steering_subscriber is not None and not steering_subscriber.done():
 				steering_subscriber.cancel()
 
 		if persist:
 			assert thread_id is not None  # persist=True requires a thread_id
-			if worker_task is not None:
-				try:
-					await asyncio.wait_for(asyncio.shield(worker_task), timeout=30)
-				except (TimeoutError, Exception):
-					logger.warning(
-						"persist worker did not finish cleanly before metadata gen"
-					)
+			await _drain_persist_worker(timeout=30, operation="normal_completion")
 			try:
 				async with async_session_local() as task_session:
 					await schedule_thread_inactivity_maintenance(

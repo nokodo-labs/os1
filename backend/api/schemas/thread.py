@@ -152,8 +152,7 @@ class ThreadSwitchResponse(ORMModel):
 	current_message_id: TypeID | None = None
 
 
-class ThreadMetadataGenerateRequest(ORMModel):
-	"""request body for generating thread metadata."""
+class ThreadMaintenanceRunRequest(ORMModel):
+	"""request body for running thread maintenance."""
 
-	replace: bool = False
-	model_id: TypeID | None = None
+	replace_metadata: bool = False

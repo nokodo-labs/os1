@@ -66,6 +66,7 @@ async def _run_producer(
 	client_context: ClientContext | None,
 	origin_session_id: str | None,
 	tool_choice: ToolChoice | None,
+	extra_plugins: list[str],
 	persist: bool,
 ) -> None:
 	"""drive ``run_agent`` to completion as a background task.
@@ -93,6 +94,7 @@ async def _run_producer(
 			origin_session_id=origin_session_id,
 			persist=persist,
 			tool_choice=tool_choice,
+			extra_plugins=extra_plugins,
 			run_id_override=run_id,
 			ready_event=ready_event,
 		):
@@ -174,6 +176,7 @@ async def _start_run(
 	client_context: ClientContext | None,
 	origin_session_id: str | None,
 	tool_choice: ToolChoice | None,
+	extra_plugins: list[str],
 	persist: bool = True,
 ) -> TypeID:
 	"""spawn the producer task and wait for the run to be registered.
@@ -198,6 +201,7 @@ async def _start_run(
 			client_context=client_context,
 			origin_session_id=origin_session_id,
 			tool_choice=tool_choice,
+			extra_plugins=extra_plugins,
 			persist=persist,
 		),
 		name=f"agent_run:{run_id}",
@@ -228,6 +232,7 @@ async def start_thread_run(
 	origin_session_id: str | None = None,
 	persist: bool = True,
 	tool_choice: ToolChoice | None = None,
+	extra_plugins: list[str] | None = None,
 ) -> AsyncIterator[bytes]:
 	"""validate access and return a streaming agent run on an existing thread.
 
@@ -257,6 +262,7 @@ async def start_thread_run(
 		client_context=client_context,
 		origin_session_id=origin_session_id,
 		tool_choice=tool_choice,
+		extra_plugins=extra_plugins or [],
 		persist=persist,
 	)
 	return subscribe_run_stream(run_id)
@@ -269,6 +275,7 @@ async def start_ephemeral_run(
 	client_context: ClientContext | None = None,
 	origin_session_id: str | None = None,
 	tool_choice: ToolChoice | None = None,
+	extra_plugins: list[str] | None = None,
 ) -> AsyncIterator[bytes]:
 	"""start a thread-less, non-persisted inference run.
 
@@ -290,6 +297,7 @@ async def start_ephemeral_run(
 		client_context=client_context,
 		origin_session_id=origin_session_id,
 		tool_choice=tool_choice,
+		extra_plugins=extra_plugins or [],
 		persist=False,
 	)
 	return subscribe_run_stream(run_id)
@@ -307,6 +315,7 @@ async def create_thread_and_run_stream(
 	client_context: ClientContext | None = None,
 	origin_session_id: str | None = None,
 	tool_choice: ToolChoice | None = None,
+	extra_plugins: list[str] | None = None,
 ) -> AsyncIterator[bytes]:
 	"""create a thread and return a streaming agent run.
 
@@ -377,6 +386,7 @@ async def create_thread_and_run_stream(
 			client_context=client_context,
 			origin_session_id=origin_session_id,
 			tool_choice=tool_choice,
+			extra_plugins=extra_plugins or [],
 			persist=True,
 		)
 		async for chunk in subscribe_run_stream(run_id):

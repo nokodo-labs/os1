@@ -8,10 +8,10 @@ fields are included.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Self
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from api.permissions import (
 	ActionPermission,
@@ -21,6 +21,8 @@ from api.schemas.common import MISSING, MissingType
 from api.schemas.preferences import BackgroundType
 from api.settings import (
 	CodeInterpreterEngine,
+	MCPTransportSetting,
+	MCPUserServerOriginMode,
 	PerplexityModel,
 	SearchAgent,
 	SearchContextUsage,
@@ -358,6 +360,10 @@ class AssetsSettingsPatch(BaseModel):
 	embeddings: EmbeddingsSettingsPatch | MissingType = MISSING
 	rerank: RerankSettingsPatch | MissingType = MISSING
 	storage: StorageSettingsPatch | MissingType = MISSING
+	content_vectorization: AssetContentVectorizationSettingsPatch | MissingType = (
+		MISSING
+	)
+	descriptions: AssetDescriptionSettingsPatch | MissingType = MISSING
 
 
 class BrandingSettingsPatch(BaseModel):
@@ -527,6 +533,12 @@ class AIMemorySettingsPatch(BaseModel):
 		ge=1,
 		description="number of relevant memories to retrieve",
 	)
+	post_processing_turns: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="number of recent conversation turns fed to the dedicated "
+		"memory maintenance agent",
+	)
 
 
 class AIChatContextSettingsPatch(BaseModel):
@@ -584,6 +596,14 @@ class AITaskSettingsPatch(BaseModel):
 		default=MISSING,
 		description="model for native agentic web search",
 	)
+	asset_description_model_id: str | None | MissingType = Field(
+		default=MISSING,
+		description="model for asset summaries and non-text descriptions",
+	)
+	asset_text_extraction_model_id: str | None | MissingType = Field(
+		default=MISSING,
+		description="model for asset file, document, and media text extraction",
+	)
 	maintenance_max_chars_per_message: int | None | MissingType = Field(
 		default=MISSING,
 		ge=100,
@@ -594,88 +614,158 @@ class AITaskSettingsPatch(BaseModel):
 class AIAttachmentSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
-	image_decay_turns: int | MissingType = Field(
+	image_decay_iterations: int | MissingType = Field(
 		default=MISSING,
 		ge=1,
-		description="turns before image attachments decay to reference",
+		description="protection iterations for fetched image media before release",
 	)
-	audio_decay_turns: int | MissingType = Field(
+	audio_decay_iterations: int | MissingType = Field(
 		default=MISSING,
 		ge=1,
-		description="turns before audio attachments decay to reference",
+		description="protection iterations for fetched audio media before release",
 	)
-	video_decay_turns: int | MissingType = Field(
+	video_decay_iterations: int | MissingType = Field(
 		default=MISSING,
 		ge=1,
-		description="turns before video attachments decay to reference",
-	)
-	reveal_decay_turns: int | MissingType = Field(
-		default=MISSING,
-		ge=1,
-		description="turns before a revealed attachment decays again",
+		description="protection iterations for fetched video media before release",
 	)
 
 
-class AIWindowingSettingsPatch(BaseModel):
+class AIContextCompactionSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
 	enabled: bool | MissingType = Field(
 		default=MISSING,
-		description="enable context window management and summarization",
-	)
-	max_messages: int | MissingType = Field(
-		default=MISSING,
-		ge=1,
-		description="secondary message count guard",
+		description=(
+			"enable token-aware context compaction before chat generation. when "
+			"enabled, the system preserves all messages that fit, compacts older "
+			"tool output and summarized spans when needed, and can schedule "
+			"background summaries for future runs"
+		),
 	)
 	trigger_ratio: float | MissingType = Field(
 		default=MISSING,
 		ge=0.1,
 		le=0.95,
-		description="fraction of token budget to trigger background summarization",
+		description=(
+			"prompt pressure ratio that triggers background summarization while "
+			"the full raw conversation still fits. lower values create summaries "
+			"earlier and reduce future latency; higher values defer work until the "
+			"thread is closer to the model budget"
+		),
 	)
-	hard_ratio: float | MissingType = Field(
+	recovery_target_ratio: float | MissingType = Field(
 		default=MISSING,
-		ge=0.5,
-		le=1.0,
-		description="fraction of token budget for hard truncation",
+		ge=0.05,
+		le=0.90,
+		description=(
+			"target prompt pressure after a summarization recovery pass. must be "
+			"lower than trigger_ratio so compaction has hysteresis and does not "
+			"immediately re-trigger after creating a summary"
+		),
 	)
-	summary_batch_size: int | MissingType = Field(
+	target_usage_cap_tokens: int | None | MissingType = Field(
 		default=MISSING,
 		ge=1,
-		description="number of oldest unsummarized messages per summary batch",
+		description=(
+			"optional maximum context budget used for compaction before response "
+			"reserve and prompt overhead are subtracted. set this below a model's "
+			"advertised window to leave extra provider safety margin or to force "
+			"smaller prompts during testing"
+		),
 	)
-	max_summaries_before_condense: int | MissingType = Field(
+	summary_batch_min_tokens: int | MissingType = Field(
 		default=MISSING,
-		ge=2,
-		description="condense summaries when this many accumulate",
+		ge=1,
+		description=(
+			"minimum raw token span to include in a single summary job. prevents "
+			"tiny summaries whose marker and metadata would cost more than the "
+			"messages they replace"
+		),
+	)
+	summary_batch_max_tokens: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description=(
+			"maximum raw token span to send to one summary job. caps summary "
+			"prompt size so very long threads are summarized in bounded batches "
+			"instead of one large provider request"
+		),
+	)
+	prompt_overhead_tokens: int | MissingType = Field(
+		default=MISSING,
+		ge=0,
+		description=(
+			"tokens reserved for provider framing, system wrappers, schema/tool "
+			"instructions, and other prompt bytes that are not represented by "
+			"stored chat messages. increasing this makes compaction more cautious"
+		),
+	)
+	blocking_summarization_enabled: bool | MissingType = Field(
+		default=MISSING,
+		description=(
+			"allow a last-resort inline summary during the user request when tool "
+			"compaction and ready summaries cannot fit the prompt. disabling this "
+			"avoids extra latency but may force older messages to be pruned sooner"
+		),
+	)
+	blocking_summarization_timeout_seconds: float | MissingType = Field(
+		default=MISSING,
+		ge=1.0,
+		le=120.0,
+		description=(
+			"maximum time to wait for an inline last-resort summary before giving "
+			"up and trying the next compaction tier. this bounds user-visible "
+			"latency when a provider is slow or rejects the summary request"
+		),
 	)
 	tool_result_max_share: float | MissingType = Field(
 		default=MISSING,
 		ge=0.05,
 		le=0.75,
-		description="max fraction of budget for a single tool result",
+		description=(
+			"maximum fraction of the available prompt budget that one tool result "
+			"may consume before it is compacted. lower values keep large search, "
+			"file, or code outputs from crowding out conversational context"
+		),
 	)
 	tool_result_hard_cap: int | MissingType = Field(
 		default=MISSING,
 		ge=1000,
-		description="absolute character ceiling per tool result",
+		description=(
+			"absolute character ceiling for a single tool result before token "
+			"estimation. this protects the compaction pipeline from extremely "
+			"large raw outputs even when the token budget is configured generously"
+		),
 	)
 	tool_results_combined_max_share: float | MissingType = Field(
 		default=MISSING,
 		ge=0.10,
 		le=0.95,
-		description="max fraction of budget for ALL tool results combined (Layer 2)",
+		description=(
+			"maximum fraction of the available prompt budget that all tool "
+			"results combined may consume. when the combined total exceeds this, "
+			"older tool results are compacted first so tool-heavy runs do not "
+			"displace the rest of the conversation"
+		),
 	)
 	response_headroom: int | MissingType = Field(
 		default=MISSING,
 		ge=256,
-		description="tokens reserved for the model's response",
+		description=(
+			"tokens reserved for the assistant response after prompt compaction. "
+			"larger values reduce prompt capacity but lower the chance that a "
+			"provider stops because there is too little room left to answer"
+		),
 	)
 	summarization_max_chars_per_message: int | None | MissingType = Field(
 		default=MISSING,
-		ge=100,
-		description="max characters per message in summarization transcripts",
+		ge=1,
+		description=(
+			"maximum characters copied from each raw message into a summary "
+			"transcript. this limits single-message outliers before they reach "
+			"the summarization model; null keeps full message text"
+		),
 	)
 
 
@@ -799,6 +889,57 @@ class CodeInterpreterSettingsPatch(BaseModel):
 	)
 
 
+class AssetContentVectorizationSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	loader: Literal["auto", "plain", "markitdown", "chatmodel"] | MissingType = Field(
+		default=MISSING,
+		description="asset content text loader",
+	)
+	chunking_algorithm: Literal["auto", "recursive", "markdown"] | MissingType = Field(
+		default=MISSING,
+		description="asset content chunking algorithm",
+	)
+	max_bytes: int | None | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="maximum bytes read from an asset; null means unlimited",
+	)
+	target_tokens: int | MissingType = Field(
+		default=MISSING,
+		ge=50,
+		description="target token count per asset content chunk",
+	)
+	overlap_tokens: int | MissingType = Field(
+		default=MISSING,
+		ge=0,
+		description="token overlap between adjacent asset content chunks",
+	)
+	max_chunks: int | None | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="maximum content chunks per asset; null means unlimited",
+	)
+
+
+class AssetDescriptionSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	max_input_chars: int | None | MissingType = Field(
+		default=MISSING,
+		ge=100,
+		description=(
+			"maximum extracted text characters sent to the description model; "
+			"null means unlimited"
+		),
+	)
+	max_chars: int | None | MissingType = Field(
+		default=MISSING,
+		ge=50,
+		description="maximum stored asset description characters; null means unlimited",
+	)
+
+
 class AISettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -819,7 +960,7 @@ class AISettingsPatch(BaseModel):
 	chat_context: AIChatContextSettingsPatch | MissingType = MISSING
 	tasks: AITaskSettingsPatch | MissingType = MISSING
 	attachments: AIAttachmentSettingsPatch | MissingType = MISSING
-	windowing: AIWindowingSettingsPatch | MissingType = MISSING
+	context_compaction: AIContextCompactionSettingsPatch | MissingType = MISSING
 	media: AIMediaSettingsPatch | MissingType = MISSING
 
 
@@ -1075,9 +1216,99 @@ class OpenWebUIIntegrationSettingsPatch(BaseModel):
 		return deployments
 
 
+class MCPIntegrationSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	enabled: bool | MissingType = MISSING
+	startup_discovery_enabled: bool | MissingType = MISSING
+	list_change_listening_enabled: bool | MissingType = MISSING
+	list_change_debounce_seconds: float | MissingType = Field(
+		default=MISSING,
+		ge=0.1,
+		le=30.0,
+		description="seconds to debounce MCP list-change refetches",
+	)
+	list_change_reconnect_max_delay_seconds: float | MissingType = Field(
+		default=MISSING,
+		ge=1.0,
+		le=300.0,
+		description="maximum delay between MCP list-change listener reconnects",
+	)
+	allowed_transports: list[MCPTransportSetting] | MissingType = Field(
+		default=MISSING,
+		min_length=1,
+	)
+	default_timeout_seconds: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		le=300,
+		description="default MCP request timeout in seconds",
+	)
+	max_timeout_seconds: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		le=600,
+		description="maximum MCP request timeout in seconds",
+	)
+	user_server_origin_mode: MCPUserServerOriginMode | MissingType = MISSING
+	user_server_origins: list[str] | MissingType = MISSING
+	user_server_max_count: int | MissingType = Field(
+		default=MISSING,
+		ge=0,
+		le=100,
+		description="maximum user-owned MCP servers per user",
+	)
+	user_server_max_tools: int | MissingType = Field(
+		default=MISSING,
+		ge=0,
+		le=500,
+		description="maximum discovered tools per user-owned MCP server",
+	)
+	user_tool_definition_max_tokens: int | MissingType = Field(
+		default=MISSING,
+		ge=256,
+		le=128000,
+		description="maximum estimated tokens for one user MCP tool definition",
+	)
+
+	@field_validator("allowed_transports")
+	@classmethod
+	def _dedupe_transports(
+		cls, transports: list[MCPTransportSetting]
+	) -> list[MCPTransportSetting]:
+		seen: set[MCPTransportSetting] = set()
+		unique: list[MCPTransportSetting] = []
+		for transport in transports:
+			if transport in seen:
+				continue
+			seen.add(transport)
+			unique.append(transport)
+		return unique
+
+	@field_validator("user_server_origins")
+	@classmethod
+	def _unique_mcp_origins(cls, origins: list[str]) -> list[str]:
+		seen: set[str] = set()
+		unique: list[str] = []
+		for origin in origins:
+			normalized = origin.rstrip("/").lower()
+			if not normalized or normalized in seen:
+				continue
+			seen.add(normalized)
+			unique.append(normalized)
+		return unique
+
+	@model_validator(mode="after")
+	def _validate_user_server_origins(self) -> Self:
+		if self.user_server_origin_mode == "allow" and self.user_server_origins == []:
+			raise ValueError("MCP origin allow mode requires at least one origin")
+		return self
+
+
 class IntegrationsSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
+	mcp: MCPIntegrationSettingsPatch | MissingType = MISSING
 	open_webui: OpenWebUIIntegrationSettingsPatch | MissingType = MISSING
 	perplexity: PerplexitySettingsPatch | MissingType = MISSING
 	searxng: SearxngSettingsPatch | MissingType = MISSING
@@ -1101,10 +1332,20 @@ class CacheSettingsPatch(BaseModel):
 		ge=1,
 		description="TTL for resource payload cache entries",
 	)
+	prompt_template_ttl_seconds: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="TTL for prompt template cache entries",
+	)
 	accessible_users_ttl_seconds: int | MissingType = Field(
 		default=MISSING,
 		ge=1,
 		description="TTL for accessible user recipient cache entries",
+	)
+	mcp_snapshot_ttl_seconds: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="TTL for MCP DB snapshot projection cache entries",
 	)
 
 

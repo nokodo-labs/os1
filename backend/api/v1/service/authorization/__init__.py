@@ -23,6 +23,9 @@ from api.v1.service.authorization.inheritance import (
 	load_parent_resource_refs,
 )
 from api.v1.service.authorization.metadata import (
+	ACL_SYNC_VECTOR_CHUNK_RESOURCE_TYPES,
+	VECTOR_CHUNK_ACCESS_RESOURCE_TYPES,
+	VECTOR_CHUNK_PARENT_RESOURCE_TYPES,
 	ACLPrincipalMetadata,
 	empty_acl_metadata,
 	fetch_acl_metadata,
@@ -48,8 +51,11 @@ from api.v1.service.authorization.resolve import (
 
 __all__ = [
 	"ACLPrincipalMetadata",
+	"ACL_SYNC_VECTOR_CHUNK_RESOURCE_TYPES",
 	"RESOURCE_CONFIG",
 	"ResourceConfig",
+	"VECTOR_CHUNK_PARENT_RESOURCE_TYPES",
+	"VECTOR_CHUNK_ACCESS_RESOURCE_TYPES",
 	"accessible_users_tag",
 	"allowed_levels",
 	"changed_default_access_resource_types",

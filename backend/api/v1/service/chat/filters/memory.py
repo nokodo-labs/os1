@@ -13,7 +13,7 @@ from api.schemas.preferences import AIPreferences
 from api.settings import settings as app_settings
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.memories import query_relevant_memories
-from api.v1.service.prompt_runtime import SENTINEL_USER_MEMORIES
+from api.v1.service.prompts import SENTINEL_USER_MEMORIES
 from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
 

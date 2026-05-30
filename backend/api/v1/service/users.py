@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import NoReturn
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, func, insert, or_, select
@@ -62,6 +63,30 @@ def _apply_admin_user_filters(stmt: Select, q: str | None) -> Select:
 			exact_typeid_filter(User.id, q, USER_TYPEID_PREFIX),
 		)
 	)
+
+
+def _raise_user_integrity_error(exc: IntegrityError) -> NoReturn:
+	"""
+	inspect IntegrityError for common user creation/update issues
+	and raise appropriate HTTP errors.
+	"""
+	msg = str(exc.orig).lower()
+	if "email" in msg and "unique" in msg:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="email already registered",
+		) from None
+	if "username" in msg and "unique" in msg:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="username already taken",
+		) from None
+	if "foreign key" in msg and "user_roles" in msg:
+		raise HTTPException(
+			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+			detail="invalid role reference in auto_signup_role_ids",
+		) from None
+	raise exc
 
 
 def _build_user_summary(
@@ -332,6 +357,14 @@ async def create_user(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail="email already registered",
 		)
+	result = await session.execute(
+		select(User).where(User.username == user_in.username)
+	)
+	if result.scalar_one_or_none():
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="username already taken",
+		)
 
 	user = User(
 		email=user_in.email,
@@ -342,40 +375,25 @@ async def create_user(
 		is_superuser=is_superuser,
 	)
 	session.add(user)
-	await session.flush()
-
-	if actor is None:
-		role_ids = settings.security.auto_signup_role_ids or []
-		if role_ids:
-			await session.execute(
-				insert(user_role_association),
-				[{"user_id": str(user.id), "role_id": str(rid)} for rid in role_ids],
-			)
-	else:
-		role_ids = []
-
+	role_ids: list[str] = []
 	try:
+		await session.flush()
+
+		if actor is None:
+			role_ids = settings.security.auto_signup_role_ids or []
+			if role_ids:
+				await session.execute(
+					insert(user_role_association),
+					[
+						{"user_id": str(user.id), "role_id": str(rid)}
+						for rid in role_ids
+					],
+				)
+
 		await session.commit()
 	except IntegrityError as exc:
 		await session.rollback()
-		msg = str(exc.orig).lower()
-		if "email" in msg and "unique" in msg:
-			raise HTTPException(
-				status_code=status.HTTP_400_BAD_REQUEST,
-				detail="email already registered",
-			) from None
-		elif "username" in msg and "unique" in msg:
-			raise HTTPException(
-				status_code=status.HTTP_400_BAD_REQUEST,
-				detail="username already taken",
-			) from None
-		elif "foreign key" in msg and "user_roles" in msg:
-			raise HTTPException(
-				status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-				detail="invalid role reference in auto_signup_role_ids",
-			) from None
-		else:
-			raise exc
+		_raise_user_integrity_error(exc)
 	await session.refresh(user)
 	# auto-signup roles may grant access to existing resources via
 	# AccessRule.subject_role_id; bust those caches so the new user
@@ -585,3 +603,50 @@ async def update_user(
 		)
 
 	return user
+
+
+async def delete_user(
+	user_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+) -> None:
+	"""delete a user and all their resources."""
+	if not principal.is_admin and not principal.has_permission(
+		str(ActionPermission.USERS_MANAGE)
+	):
+		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+
+	if str(user_id) == principal.user_id:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="cannot delete your own account",
+		)
+
+	result = await session.execute(select(User).where(User.id == user_id))
+	user = result.scalar_one_or_none()
+	if user is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="user not found",
+		)
+
+	if user.is_active and user.is_superuser:
+		active_superuser_count = await session.scalar(
+			select(func.count())
+			.select_from(User)
+			.where(
+				User.id != user.id,
+				User.is_active.is_(True),
+				User.is_superuser.is_(True),
+			)
+		)
+		if (active_superuser_count or 0) == 0:
+			raise HTTPException(
+				status_code=status.HTTP_400_BAD_REQUEST,
+				detail="cannot delete the last active superuser",
+			)
+
+	await invalidate_accessible_users_for_subject("user", user.id, session)
+	await invalidate_accessible_users_for_resource_types(list(ResourceType), session)
+	await session.delete(user)
+	await session.commit()

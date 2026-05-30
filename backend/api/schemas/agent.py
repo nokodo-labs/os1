@@ -21,10 +21,10 @@ type AgentSortBy = CommonSortBy | Literal["name"]
 
 DEFAULT_AGENT_PLUGIN_IDS: tuple[str, ...] = (
 	"chat_context",
-	"attachment_decay",
-	"file_resolve",
+	"attachments",
 	"citation_index",
 	"context_compaction",
+	"file_resolve",
 )
 
 
@@ -50,11 +50,19 @@ class SteeringFeature(BaseModel):
 	enabled: bool = True
 
 
+class UserMCPToolsFeature(BaseModel):
+	"""user-managed MCP tool toggle for an agent."""
+
+	model_config = ConfigDict(extra="allow")
+	enabled: bool = False
+
+
 class AgentFeatures(BaseModel):
 	"""per-agent feature toggles."""
 
 	model_config = ConfigDict(extra="allow")
 	steering: SteeringFeature = Field(default_factory=SteeringFeature)
+	user_mcp_tools: UserMCPToolsFeature = Field(default_factory=UserMCPToolsFeature)
 
 
 class AgentConfig(BaseModel):

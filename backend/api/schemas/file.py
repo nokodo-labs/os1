@@ -31,6 +31,7 @@ class FileListFilters(BaseModel):
 	project_id: TypeID | None = None
 	source: FileSource | None = None
 	category: FileCategoryFilter | None = None
+	include_deleted: bool = False
 
 
 class FileCounts(BaseModel):

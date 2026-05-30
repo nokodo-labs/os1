@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 	from api.v1.service.chat.context import AppContext
 
 RunActivityOutcome = Literal["success", "error", "cancelled"]
+
+EmitEvent = Callable[[Event], Awaitable[None]]
 
 _RESERVED_DATA_KEYS = frozenset(
 	{
@@ -49,7 +51,8 @@ def _merge_activity_data(
 class RunActivityEmitter:
 	"""emit lifecycle events for one run activity instance."""
 
-	app_context: AppContext
+	emit: EmitEvent
+	user_id: str | None
 	thread_id: TypeID
 	message_id: TypeID
 	run_id: TypeID
@@ -69,17 +72,17 @@ class RunActivityEmitter:
 		event_type: EventType,
 		data: dict[str, object],
 	) -> None:
-		"""emit one run activity event through the app event emitter."""
+		"""emit one run activity event through the event emitter."""
 		event = Event(
 			scope=EventScope.THREAD,
 			scope_id=str(self.thread_id),
 			type=event_type,
 			thread_id=str(self.thread_id),
 			message_id=str(self.message_id),
-			user_id=_string_or_none(self.app_context.user_id),
+			user_id=self.user_id,
 			data=data,
 		)
-		await self.app_context.event_emitter(event)
+		await self.emit(event)
 
 	async def started(
 		self,
@@ -156,10 +159,41 @@ async def start_run_activity(
 	if not activity_type:
 		raise ValueError("run activity type is required")
 	activity = RunActivityEmitter(
-		app_context=app_context,
+		emit=app_context.event_emitter,
+		user_id=_string_or_none(app_context.user_id),
 		thread_id=app_context.thread_id,
 		message_id=TypeID(str(message_id)),
 		run_id=app_context.run_id,
+		activity_id=TypeID(new_typeid("activity")),
+		activity_type=activity_type,
+	)
+	await activity.started(title=title, message=message, data=data)
+	return activity
+
+
+async def start_detached_run_activity(
+	emit: EmitEvent,
+	user_id: str | None,
+	thread_id: TypeID | str | None,
+	run_id: TypeID | str | None,
+	activity_type: str,
+	message_id: TypeID | str | None,
+	title: str | None = None,
+	message: str | None = None,
+	data: Mapping[str, object] | None = None,
+) -> RunActivityEmitter | None:
+	"""start a run activity outside an AppContext (e.g. a background task)."""
+	if thread_id is None or run_id is None or message_id is None:
+		return None
+	activity_type = activity_type.strip()
+	if not activity_type:
+		raise ValueError("run activity type is required")
+	activity = RunActivityEmitter(
+		emit=emit,
+		user_id=user_id,
+		thread_id=TypeID(str(thread_id)),
+		message_id=TypeID(str(message_id)),
+		run_id=TypeID(str(run_id)),
 		activity_id=TypeID(new_typeid("activity")),
 		activity_type=activity_type,
 	)

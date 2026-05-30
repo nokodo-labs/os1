@@ -18,13 +18,23 @@ from api.permissions import ResourceType
 from api.settings import settings
 from api.taskiq import broker, redis_schedule_source
 from api.v1.service.authorization import list_accessible_user_ids
-from api.v1.service.notifications import deliver_notification
+from api.v1.service.notifications import (
+	deliver_notification,
+	shortcut_notification_icon_url,
+)
 from api.v1.service.scheduling.recurrence import expand_occurrence_starts
 from nokodo_ai.types import JSONValue
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 type CalendarDeliveryKey = str
+
+
+def _calendar_notification_icon_url() -> str | None:
+	return shortcut_notification_icon_url(
+		settings.branding.pwa_assets.shortcut_calendar,
+		"calendar.png",
+	)
 
 
 def _calendar_schedule_id(calendar_event_id: TypeID) -> str:
@@ -443,6 +453,7 @@ async def dispatch_due_calendar_notifications() -> int:
 						)
 						notification_title = f"calendar: {title}"
 						notification_body = description or title
+						icon_url = _calendar_notification_icon_url()
 						event = Event(
 							id=new_typeid("event"),
 							scope=EventScope.USER,
@@ -451,6 +462,7 @@ async def dispatch_due_calendar_notifications() -> int:
 							data={
 								"title": notification_title,
 								"body": notification_body,
+								"icon_url": icon_url,
 								"calendar_event_id": str(calendar_event.id),
 								"calendar_id": str(calendar_event.calendar_id),
 								"original_occurrence_at": (
@@ -470,6 +482,7 @@ async def dispatch_due_calendar_notifications() -> int:
 							event_id=event.id,
 							title=notification_title,
 							body=notification_body,
+							icon_url=icon_url,
 							delivery_key=delivery_key,
 							notify_at=notify_at,
 						)
@@ -549,6 +562,7 @@ async def dispatch_calendar_event_notification(calendar_event_id: TypeID) -> int
 					)
 					notification_title = f"calendar: {title}"
 					notification_body = description or title
+					icon_url = _calendar_notification_icon_url()
 					event = Event(
 						id=new_typeid("event"),
 						scope=EventScope.USER,
@@ -557,6 +571,7 @@ async def dispatch_calendar_event_notification(calendar_event_id: TypeID) -> int
 						data={
 							"title": notification_title,
 							"body": notification_body,
+							"icon_url": icon_url,
 							"calendar_event_id": str(calendar_event.id),
 							"calendar_id": str(calendar_event.calendar_id),
 							"original_occurrence_at": (
@@ -576,6 +591,7 @@ async def dispatch_calendar_event_notification(calendar_event_id: TypeID) -> int
 						event_id=event.id,
 						title=notification_title,
 						body=notification_body,
+						icon_url=icon_url,
 						delivery_key=delivery_key,
 						notify_at=notify_at,
 					)

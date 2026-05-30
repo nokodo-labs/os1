@@ -15,12 +15,22 @@ from api.models.notification import Notification
 from api.models.reminder import Reminder, ReminderOverride, ReminderStatus
 from api.settings import settings
 from api.taskiq import broker, redis_schedule_source
-from api.v1.service.notifications import deliver_notification
+from api.v1.service.notifications import (
+	deliver_notification,
+	shortcut_notification_icon_url,
+)
 from api.v1.service.scheduling.recurrence import expand_occurrence_starts
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 type ReminderDeliveryKey = str
+
+
+def _reminder_notification_icon_url() -> str | None:
+	return shortcut_notification_icon_url(
+		settings.branding.pwa_assets.shortcut_reminders,
+		"reminders.png",
+	)
 
 
 def _reminder_schedule_id(reminder_id: TypeID) -> str:
@@ -309,6 +319,7 @@ async def dispatch_due_reminder_notifications() -> int:
 				)
 				title = f"reminder: {reminder.title}"
 				body = reminder.description or reminder.title
+				icon_url = _reminder_notification_icon_url()
 				event = Event(
 					id=new_typeid("event"),
 					scope=EventScope.USER,
@@ -317,6 +328,7 @@ async def dispatch_due_reminder_notifications() -> int:
 					data={
 						"title": title,
 						"body": body,
+						"icon_url": icon_url,
 						"reminder_id": str(reminder.id),
 						"original_occurrence_at": occurrence_remind_at.isoformat(),
 						"due_at": occurrence_due_at.isoformat()
@@ -334,6 +346,7 @@ async def dispatch_due_reminder_notifications() -> int:
 					event_id=event.id,
 					title=title,
 					body=body,
+					icon_url=icon_url,
 					delivery_key=delivery_key,
 					notify_at=occurrence_remind_at,
 				)
@@ -387,6 +400,7 @@ async def dispatch_reminder_notification(reminder_id: TypeID) -> int:
 			)
 			title = f"reminder: {reminder.title}"
 			body = reminder.description or reminder.title
+			icon_url = _reminder_notification_icon_url()
 			event = Event(
 				id=new_typeid("event"),
 				scope=EventScope.USER,
@@ -395,6 +409,7 @@ async def dispatch_reminder_notification(reminder_id: TypeID) -> int:
 				data={
 					"title": title,
 					"body": body,
+					"icon_url": icon_url,
 					"reminder_id": str(reminder.id),
 					"original_occurrence_at": occurrence_remind_at.isoformat(),
 					"due_at": occurrence_due_at.isoformat()
@@ -412,6 +427,7 @@ async def dispatch_reminder_notification(reminder_id: TypeID) -> int:
 				event_id=event.id,
 				title=title,
 				body=body,
+				icon_url=icon_url,
 				delivery_key=delivery_key,
 				notify_at=occurrence_remind_at,
 			)

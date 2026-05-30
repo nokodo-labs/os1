@@ -70,6 +70,7 @@ async def create_run(
 			origin_session_id=x_session_id,
 			persist=req.persist,
 			tool_choice=req.tool_choice,
+			extra_plugins=req.extra_plugins,
 		)
 		return sse_response(stream)
 
@@ -89,6 +90,7 @@ async def create_run(
 		client_context=req.client_context,
 		origin_session_id=x_session_id,
 		tool_choice=req.tool_choice,
+		extra_plugins=req.extra_plugins,
 	)
 	return sse_response(stream)
 

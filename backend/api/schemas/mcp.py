@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -30,6 +31,20 @@ class MCPSurfaceConfig(BaseModel):
 	resources: bool = False
 	prompts: bool = False
 	sampling: bool = False
+
+
+class MCPCapabilityType(StrEnum):
+	"""MCP snapshot capability family."""
+
+	TOOL = "tool"
+	RESOURCE = "resource"
+	PROMPT = "prompt"
+
+
+class MCPCapabilityUpdate(BaseModel):
+	"""payload for updating a discovered MCP capability."""
+
+	enabled: bool
 
 
 class MCPServerBase(MetadataModel):

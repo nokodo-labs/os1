@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_db
 from api.models.mcp import MCPServer
 from api.schemas.mcp import (
+	MCPCapabilityType,
+	MCPCapabilityUpdate,
 	MCPDiscoveredCapabilities,
 	MCPDiscoveryResult,
 	MCPServerCreate,
@@ -97,3 +99,26 @@ async def list_capabilities(
 ) -> MCPDiscoveredCapabilities:
 	"""list cached capabilities for a global MCP server."""
 	return await mcp_service.list_capabilities(server_id, db, principal=principal)
+
+
+@router.patch(
+	"/servers/{server_id}/capabilities/{capability_type}/{capability_id}",
+	response_model=MCPServerSchema,
+)
+async def update_capability(
+	server_id: TypeID,
+	capability_type: MCPCapabilityType,
+	capability_id: TypeID,
+	capability_in: MCPCapabilityUpdate,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> MCPServer:
+	"""update a discovered MCP capability snapshot."""
+	return await mcp_service.update_capability(
+		server_id,
+		capability_type,
+		capability_id,
+		capability_in,
+		db,
+		principal=principal,
+	)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from api.v1.service.chat.context import AppContext
-from api.v1.service.chat.filters.attachment_decay import AttachmentDecayFilter
+from api.v1.service.chat.filters.attachments import AttachmentsFilter
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.filters.chat_context import ChatContextFilter
 from api.v1.service.chat.filters.citation_index import CitationIndexFilter
@@ -22,7 +22,7 @@ type AppFilter = SDKFilter[AppContext]
 FILTER_REGISTRY: dict[str, AppFilter] = {
 	"memory_context": MemoryContextFilter(),
 	"chat_context": ChatContextFilter(),
-	"attachment_decay": AttachmentDecayFilter(),
+	"attachments": AttachmentsFilter(),
 	"user_message_timestamp": UserMessageTimestampFilter(),
 	"file_resolve": FileResolveFilter(),
 	"citation_index": CitationIndexFilter(),
@@ -47,7 +47,7 @@ def resolve_filters(filter_ids: list[str]) -> list[AppFilter]:
 
 
 __all__ = [
-	"AttachmentDecayFilter",
+	"AttachmentsFilter",
 	"ChatContextFilter",
 	"CitationIndexFilter",
 	"ContextCompactionFilter",

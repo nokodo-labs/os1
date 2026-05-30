@@ -11,13 +11,15 @@ from api.database import async_session_local
 from api.schemas.preferences import AIPreferences
 from api.settings import settings as app_settings
 from api.v1.service.chat.hooks.base import Hook
+from api.v1.service.chat.message_metadata import get_message_id
 from api.v1.service.chat.run_status import run_status_store
 from api.v1.tasks.threads import (
 	start_memory_post_processing_task,
 )
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext
-from nokodo_ai.messages import AssistantMessage
+from nokodo_ai.messages import AssistantMessage, UserMessage
+from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.threads import Thread as SDKThread
 
 
@@ -25,6 +27,50 @@ if TYPE_CHECKING:
 	from api.v1.service.chat.context import AppContext
 
 logger = logging.getLogger(__name__)
+
+
+def _latest_context_message_id(thread: SDKThread) -> str | None:
+	"""return the latest persisted non-system message id in the thread."""
+	for message in reversed(thread.messages):
+		if isinstance(message, SDKSystemMessage):
+			continue
+		message_id = get_message_id(message)
+		if message_id:
+			return message_id
+	return None
+
+
+def _recent_turn_snapshot(thread: SDKThread, k: int) -> str:
+	"""build a role-annotated, negative-indexed snapshot of recent turns.
+
+	a turn is a contiguous block of user or assistant messages. the most
+	recent turn is labeled -1, the one before it -2, and so on.
+	"""
+	turns: list[tuple[str, str]] = []
+	current_role: str | None = None
+	current_texts: list[str] = []
+	for msg in thread.messages:
+		if not isinstance(msg, (UserMessage, AssistantMessage)):
+			continue
+		role = msg.role
+		if role != current_role:
+			if current_texts:
+				turns.append((current_role or "", "\n".join(current_texts)))
+			current_role = role
+			current_texts = []
+		text = msg.text
+		if text:
+			current_texts.append(text)
+	if current_texts:
+		turns.append((current_role or "", "\n".join(current_texts)))
+
+	recent = turns[-k:] if k < len(turns) else turns
+	total = len(recent)
+	lines = [
+		f"{offset - total}. {role}: {text}"
+		for offset, (role, text) in enumerate(recent)
+	]
+	return "\n".join(lines)
 
 
 async def _is_final_assistant_iteration(
@@ -92,6 +138,16 @@ class MemoryPostProcessingHook(Hook):
 		if not query_text.strip():
 			return
 
+		conversation_snapshot = _recent_turn_snapshot(
+			thread,
+			app_settings.ai.memory.post_processing_turns,
+		)
+		anchor_message_id = _latest_context_message_id(thread)
+		thread_id = (
+			str(app_context.thread_id) if app_context.thread_id is not None else None
+		)
+		run_id = str(app_context.run_id) if app_context.run_id is not None else None
+
 		try:
 			async with async_session_local() as task_session:
 				await start_memory_post_processing_task(
@@ -99,6 +155,11 @@ class MemoryPostProcessingHook(Hook):
 					app_context.principal,
 					query_text=query_text,
 					max_related_memories=self.max_related_memories,
+					conversation_snapshot=conversation_snapshot or None,
+					thread_id=thread_id,
+					message_id=anchor_message_id,
+					run_id=run_id,
+					emit_activity=True,
 				)
 		except Exception:
 			logger.exception("failed to enqueue memory post-processing task")

@@ -26,7 +26,6 @@ from api.v1.service.chat.models import (
 from api.v1.service.threads import summaries as summary_service
 from api.v1.service.threads.core import update_thread
 from api.v1.service.threads.messages import get_current_branch, walk_message_branch
-from api.v1.service.threads.metadata import thread_metadata_missing
 from api.v1.service.threads.search import THREAD_SPEC
 from api.v1.service.vectorize import vectorize_resource
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
@@ -43,20 +42,16 @@ logger = logging.getLogger(__name__)
 
 
 _MAINTENANCE_PROMPT = """\
-given the active chat history, generate catalog metadata for finding and
+given the active chat history, generate compact catalog metadata for finding and
 recognizing this thread later.
 
-return:
-- a concise title, emoji followed by 1-3 lowercase words
-- 1-6 short lowercase tags
-- a high-level catalog summary of the active chat branch
-
-the summary should focus on what is unique about this chat: the user's request,
-the agent's concrete response or actions, decisions, artifacts, named entities,
-files, URLs, preferences, failures, and unresolved work. do not explain generic
-subject matter. for ordinary generated content, state what was requested and
-name the main topics or sections covered without re-teaching them. discard
-filler and raw tool output details.
+the summary is a search/catalog snippet, not a transcript recap. write 1-2
+sentences that synthesize the durable point of the chat: the user's intent, the
+final outcome or artifact, important decisions, named entities, files, URLs,
+failures that still matter, and unresolved follow-up. do not retell each turn,
+list tool calls, quote raw errors unless the error is the durable outcome, or
+repeat "user asked / assistant answered" for every exchange. if the chat is
+mostly exploratory, name the topic and conclusion instead of narrating steps.
 """
 
 
@@ -66,7 +61,7 @@ class _ThreadMaintenanceOut(BaseModel):
 	title: str = Field(
 		max_length=50,
 		description=(
-			"emoji plus 1-3 lowercase words that identify this exact chat; "
+			"1-3 lowercase words that identify this exact chat;"
 			"avoid generic topic titles when a more specific artifact or task exists"
 		),
 		examples=["login debug", "tunnel essay"],
@@ -83,18 +78,28 @@ class _ThreadMaintenanceOut(BaseModel):
 	summary: str = Field(
 		min_length=1,
 		description=(
-			"high-level catalog summary of what is unique about this active branch: "
-			"user requests, agent actions, artifacts, named entities, decisions, "
-			"failures, and unresolved work. do not re-teach generic subject matter"
+			"1-2 sentence catalog snippet, not a chronological recap. capture the "
+			"durable request, outcome/artifact, named entities, decisions, failures, "
+			"and unresolved work in a compact searchable form"
 		),
 		examples=[
 			(
-				"the user asked for help debugging an oauth login loop; the agent "
-				"identified the callback mismatch, suggested updating redirect URIs, "
-				"and left verification pending."
+				"debugged an oauth login loop caused by a callback mismatch; redirect "
+				"URI updates were identified and verification was left pending."
 			)
 		],
 	)
+	emoji: str = Field(
+		min_length=1,
+		max_length=16,
+		description="one emoji that visually identifies the thread",
+		examples=["🔐", "📝"],
+	)
+
+	def display_title(self) -> str:
+		title = self.title.strip().lower()
+		emoji = self.emoji.strip()
+		return f"{emoji} {title}".strip()
 
 
 def _thread_eligible_for_maintenance(thread: Thread) -> bool:
@@ -131,6 +136,11 @@ def _summary_covers_branch(
 	if latest_branch_update is not None and summary.created_at < latest_branch_update:
 		return False
 	return True
+
+
+def thread_metadata_missing(thread: Thread) -> bool:
+	"""whether mandatory thread title or tags still need to be generated."""
+	return (thread.title or "").strip() == "" or not thread.tags
 
 
 async def _thread_summary_stale(thread: Thread, session: AsyncSession) -> bool:
@@ -312,7 +322,7 @@ async def maintain_thread_metadata(
 	updated_metadata = False
 	if metadata_needed:
 		update_fields: dict[str, object] = {}
-		desired_title = out.title.strip().lower() or None
+		desired_title = out.display_title() or None
 		if (
 			(replace_metadata or (thread.title or "").strip() == "")
 			and desired_title is not None

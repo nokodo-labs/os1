@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_attribute
 
@@ -20,6 +22,8 @@ from api.models.mcp import (
 )
 from api.permissions import ActionPermission
 from api.schemas.mcp import (
+	MCPCapabilityType,
+	MCPCapabilityUpdate,
 	MCPDiscoveredCapabilities,
 	MCPDiscoveredPrompt,
 	MCPDiscoveredResource,
@@ -54,6 +58,7 @@ from api.v1.service.integrations.mcp.normalization import (
 )
 from nokodo_ai.types.json import JSONObject, JSONValue
 from nokodo_ai.utils.security import decrypt_string_with_fallback, encrypt_string
+from nokodo_ai.utils.tokens import estimate_tokens
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -67,6 +72,10 @@ MCP_PROMPT_TYPEID_PREFIX = "mcpprompt"
 
 def _require_read(principal: Principal) -> None:
 	_require_integration_enabled()
+	if _can_manage_global_mcp(principal):
+		return
+	if _can_manage_user_mcp(principal):
+		return
 	require_permission(principal, ActionPermission.MCP_MANAGE)
 
 
@@ -83,15 +92,47 @@ def _require_integration_enabled() -> None:
 		)
 
 
+def _can_manage_global_mcp(principal: Principal) -> bool:
+	return principal.has_permission(ActionPermission.MCP_MANAGE)
+
+
+def _can_manage_user_mcp(principal: Principal) -> bool:
+	return principal.has_permission(ActionPermission.USER_MCP_MANAGE)
+
+
+def _require_user_mcp_manage(principal: Principal) -> None:
+	_require_integration_enabled()
+	require_permission(principal, ActionPermission.USER_MCP_MANAGE)
+
+
 async def list_servers(
 	session: AsyncSession,
 	principal: Principal,
 ) -> list[MCPServer]:
-	"""list global MCP servers."""
+	"""list MCP servers visible to the principal."""
 	_require_read(principal)
+	stmt = select(MCPServer).order_by(MCPServer.created_at.desc())
+	if not _can_manage_global_mcp(principal):
+		stmt = stmt.where(
+			MCPServer.scope == MCPServerScope.USER,
+			MCPServer.owner_user_id == str(principal.user_id),
+		)
+	result = await session.execute(stmt)
+	return list(result.scalars().all())
+
+
+async def list_user_servers(
+	session: AsyncSession,
+	principal: Principal,
+) -> list[MCPServer]:
+	"""list the current user's MCP servers."""
+	_require_user_mcp_manage(principal)
 	result = await session.execute(
 		select(MCPServer)
-		.where(MCPServer.scope == MCPServerScope.GLOBAL)
+		.where(
+			MCPServer.scope == MCPServerScope.USER,
+			MCPServer.owner_user_id == str(principal.user_id),
+		)
 		.order_by(MCPServer.created_at.desc())
 	)
 	return list(result.scalars().all())
@@ -102,9 +143,11 @@ async def get_server(
 	session: AsyncSession,
 	principal: Principal,
 ) -> MCPServer:
-	"""get a global MCP server."""
+	"""get an MCP server visible to the principal."""
 	_require_read(principal)
-	return await _get_server(server_id, session)
+	server = await _get_server(server_id, session)
+	_require_server_read(server, principal)
+	return server
 
 
 async def create_server(
@@ -112,20 +155,28 @@ async def create_server(
 	session: AsyncSession,
 	principal: Principal,
 ) -> MCPServer:
-	"""create a global MCP server."""
-	_require_manage(principal)
-	if server_in.scope is not MCPServerScope.GLOBAL:
+	"""create an MCP server."""
+	if server_in.scope is MCPServerScope.GLOBAL:
+		_require_manage(principal)
+		_validate_server_payload(server_in)
+	elif server_in.scope is MCPServerScope.USER:
+		_require_user_mcp_manage(principal)
+		_validate_user_server_payload(server_in)
+		await _ensure_user_server_count_allowed(session, principal)
+	else:
 		raise HTTPException(
-			status_code=status.HTTP_400_BAD_REQUEST, detail="scope is not supported"
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="unsupported MCP server scope",
 		)
-	_validate_server_payload(server_in)
-	server = MCPServer(
-		**server_in.model_dump(
-			mode="json",
-			exclude={"access_token"},
-			by_alias=True,
-		)
+	data = server_in.model_dump(
+		mode="json",
+		exclude={"access_token"},
+		by_alias=True,
 	)
+	if server_in.scope is MCPServerScope.USER:
+		data["owner_user_id"] = str(principal.user_id)
+		data["capabilities"] = _user_mcp_surface().model_dump(mode="json")
+	server = MCPServer(**data)
 	if server_in.access_token:
 		server.encrypted_access_token = _encrypt_access_token(server_in.access_token)
 	session.add(server)
@@ -141,10 +192,13 @@ async def update_server(
 	session: AsyncSession,
 	principal: Principal,
 ) -> MCPServer:
-	"""update a global MCP server."""
-	_require_manage(principal)
+	"""update an MCP server."""
+	_require_integration_enabled()
 	server = await _get_server(server_id, session)
+	_require_server_manage(server, principal)
 	_validate_server_update(server, server_in)
+	if server.scope is MCPServerScope.USER:
+		_validate_user_server_update(server, server_in)
 	fields = server_in.model_fields_set
 	name_changed = False
 	if "name" in fields and isinstance(server_in.name, str):
@@ -202,9 +256,10 @@ async def delete_server(
 	session: AsyncSession,
 	principal: Principal,
 ) -> None:
-	"""delete a global MCP server."""
-	_require_manage(principal)
+	"""delete an MCP server."""
+	_require_integration_enabled()
 	server = await _get_server(server_id, session)
+	_require_server_manage(server, principal)
 	await session.delete(server)
 	await session.flush()
 	await invalidate_mcp_cache(session, server.id)
@@ -215,15 +270,50 @@ async def list_capabilities(
 	session: AsyncSession,
 	principal: Principal,
 ) -> MCPDiscoveredCapabilities:
-	"""list latest discovered capabilities for a global MCP server."""
+	"""list latest discovered capabilities for an MCP server."""
 	_require_read(principal)
-	cached = await get_cached_mcp_capabilities(session, str(server_id))
-	if cached is not None:
-		return cached
 	server = await _get_server(server_id, session)
+	_require_server_read(server, principal)
+	if server.scope is MCPServerScope.GLOBAL:
+		cached = await get_cached_mcp_capabilities(session, str(server_id))
+		if cached is not None:
+			return cached
 	capabilities = _capabilities_from_server(server)
-	await set_cached_mcp_capabilities(session, str(server.id), capabilities)
+	if server.scope is MCPServerScope.GLOBAL:
+		await set_cached_mcp_capabilities(session, str(server.id), capabilities)
 	return capabilities
+
+
+async def update_capability(
+	server_id: TypeID,
+	capability_type: MCPCapabilityType,
+	capability_id: TypeID,
+	capability_in: MCPCapabilityUpdate,
+	session: AsyncSession,
+	principal: Principal,
+) -> MCPServer:
+	"""update a discovered capability snapshot."""
+	_require_integration_enabled()
+	server = await _get_server(server_id, session)
+	_require_server_manage(server, principal)
+	capabilities = _capabilities_from_server(server)
+	updated = _set_capability_enabled(
+		capabilities,
+		capability_type,
+		capability_id,
+		capability_in.enabled,
+	)
+	if not updated:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="MCP capability not found",
+		)
+	_store_capabilities(server, capabilities)
+	session.add(server)
+	await session.flush()
+	await session.refresh(server)
+	await invalidate_mcp_cache(session, server.id)
+	return server
 
 
 async def discover_server(
@@ -231,9 +321,10 @@ async def discover_server(
 	session: AsyncSession,
 	principal: Principal,
 ) -> MCPDiscoveryResult:
-	"""discover and cache capabilities for a global MCP server."""
-	_require_manage(principal)
+	"""discover and cache capabilities for an MCP server."""
+	_require_integration_enabled()
 	server = await _get_server(server_id, session)
+	_require_server_manage(server, principal)
 	try:
 		capabilities = await discover_server_unchecked(server, session)
 	except (MCPDependencyError, MCPError, OSError, ValueError):
@@ -279,15 +370,22 @@ async def discover_server_unchecked(
 async def list_available_plugins(
 	session: AsyncSession,
 	plugin_type: PluginTypeFilter = None,
+	principal: Principal | None = None,
 ) -> list[PluginInfo]:
 	"""list MCP tools as available dynamic plugins."""
 	if not settings.integrations.mcp.enabled:
 		return []
 	if plugin_type is not None and plugin_type != "tool":
 		return []
+	if principal is not None and not principal.has_permission(
+		ActionPermission.PLUGINS_READ
+	):
+		if not _can_manage_user_mcp(principal):
+			return []
+		return await _list_user_available_plugins(session, principal)
 	cached = await get_cached_mcp_plugins(session)
 	if cached is not None:
-		return cached
+		return await _with_user_available_plugins(cached, session, principal)
 	servers = await _list_enabled_global_servers(session)
 	plugins: list[PluginInfo] = []
 	for server in servers:
@@ -305,18 +403,20 @@ async def list_available_plugins(
 			)
 		)
 		plugins.extend(_tool_plugin_info(server, tool) for tool in tools)
+	plugins.sort(key=lambda p: p.name)
 	await set_cached_mcp_plugins(session, plugins)
-	return plugins
+	return await _with_user_available_plugins(plugins, session, principal)
 
 
 async def get_available_plugin(
 	plugin_id: str,
 	session: AsyncSession,
+	principal: Principal | None = None,
 ) -> PluginInfo | None:
 	"""return MCP plugin metadata for one dynamic plugin id."""
 	if not settings.integrations.mcp.enabled:
 		return None
-	for plugin in await list_available_plugins(session, "tool"):
+	for plugin in await list_available_plugins(session, "tool", principal):
 		if plugin.id == plugin_id:
 			return plugin
 	return None
@@ -328,6 +428,7 @@ async def call_tool(
 	tool_name: str,
 	arguments: JSONObject,
 	session: AsyncSession,
+	principal: Principal | None = None,
 ) -> MCPToolCallResult:
 	"""call a tool on an MCP server."""
 	_require_integration_enabled()
@@ -336,6 +437,7 @@ async def call_tool(
 		tool_id,
 		tool_name,
 		session,
+		principal,
 	)
 	async with MCPClient(client_config(server)) as client:
 		return await client.call_tool(tool.name, arguments)
@@ -346,8 +448,11 @@ async def _get_enabled_tool(
 	tool_id: str,
 	tool_name: str,
 	session: AsyncSession,
+	principal: Principal | None = None,
 ) -> tuple[MCPServer, MCPDiscoveredTool]:
 	server = await _get_enabled_global_server(server_id, session)
+	if server is None and principal is not None:
+		server = await _get_enabled_user_server(server_id, session, principal)
 	if server is None:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND, detail="MCP tool not found"
@@ -362,11 +467,34 @@ async def _get_enabled_tool(
 
 async def _get_server(server_id: TypeID, session: AsyncSession) -> MCPServer:
 	server = await session.get(MCPServer, server_id)
-	if server is None or server.scope is not MCPServerScope.GLOBAL:
+	if server is None:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND, detail="MCP server not found"
 		)
 	return server
+
+
+def _require_server_read(server: MCPServer, principal: Principal) -> None:
+	if _can_manage_global_mcp(principal):
+		return
+	if server.scope is MCPServerScope.USER and server.owner_user_id == str(
+		principal.user_id
+	):
+		_require_user_mcp_manage(principal)
+		return
+	raise HTTPException(
+		status_code=status.HTTP_404_NOT_FOUND, detail="MCP server not found"
+	)
+
+
+def _require_server_manage(server: MCPServer, principal: Principal) -> None:
+	_require_server_read(server, principal)
+	if server.scope is MCPServerScope.USER and not _can_manage_global_mcp(principal):
+		_require_user_mcp_manage(principal)
+
+
+def _user_mcp_surface() -> MCPSurfaceConfig:
+	return MCPSurfaceConfig(tools=True, resources=False, prompts=False, sampling=False)
 
 
 async def _get_enabled_global_server(
@@ -383,6 +511,24 @@ async def _get_enabled_global_server(
 	return result.scalars().one_or_none()
 
 
+async def _get_enabled_user_server(
+	server_id: str,
+	session: AsyncSession,
+	principal: Principal,
+) -> MCPServer | None:
+	if not _can_manage_user_mcp(principal):
+		return None
+	result = await session.execute(
+		select(MCPServer).where(
+			MCPServer.id == server_id,
+			MCPServer.scope == MCPServerScope.USER,
+			MCPServer.owner_user_id == str(principal.user_id),
+			MCPServer.enabled.is_(True),
+		)
+	)
+	return result.scalars().one_or_none()
+
+
 async def _list_enabled_global_servers(session: AsyncSession) -> list[MCPServer]:
 	result = await session.execute(
 		select(MCPServer)
@@ -393,6 +539,68 @@ async def _list_enabled_global_servers(session: AsyncSession) -> list[MCPServer]
 		.order_by(MCPServer.name)
 	)
 	return list(result.scalars().all())
+
+
+async def _list_enabled_user_servers(
+	session: AsyncSession,
+	principal: Principal,
+) -> list[MCPServer]:
+	result = await session.execute(
+		select(MCPServer)
+		.where(
+			MCPServer.scope == MCPServerScope.USER,
+			MCPServer.owner_user_id == str(principal.user_id),
+			MCPServer.enabled.is_(True),
+		)
+		.order_by(MCPServer.name)
+	)
+	return list(result.scalars().all())
+
+
+async def _list_user_available_plugins(
+	session: AsyncSession,
+	principal: Principal,
+) -> list[PluginInfo]:
+	servers = await _list_enabled_user_servers(session, principal)
+	plugins: list[PluginInfo] = []
+	for server in servers:
+		plugins.extend(
+			_tool_plugin_info(server, tool) for tool in _enabled_tools(server)
+		)
+	plugins.sort(key=lambda p: p.name)
+	return plugins
+
+
+async def _with_user_available_plugins(
+	plugins: list[PluginInfo],
+	session: AsyncSession,
+	principal: Principal | None,
+) -> list[PluginInfo]:
+	if principal is None or not _can_manage_user_mcp(principal):
+		return plugins
+	combined = [*plugins, *(await _list_user_available_plugins(session, principal))]
+	combined.sort(key=lambda p: p.name)
+	return combined
+
+
+async def _ensure_user_server_count_allowed(
+	session: AsyncSession,
+	principal: Principal,
+) -> None:
+	max_count = settings.integrations.mcp.user_server_max_count
+	count = await session.scalar(
+		select(func.count())
+		.select_from(MCPServer)
+		.where(
+			MCPServer.scope == MCPServerScope.USER,
+			MCPServer.owner_user_id == str(principal.user_id),
+		)
+	)
+	if (count or 0) >= max_count:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="user-owned MCP server limit reached",
+		)
 
 
 def _capabilities_from_server(server: MCPServer) -> MCPDiscoveredCapabilities:
@@ -417,6 +625,31 @@ def _find_enabled_tool(
 		if str(tool.id) == tool_id:
 			return tool
 	return None
+
+
+def _set_capability_enabled(
+	capabilities: MCPDiscoveredCapabilities,
+	capability_type: MCPCapabilityType,
+	capability_id: TypeID,
+	enabled: bool,
+) -> bool:
+	if capability_type is MCPCapabilityType.TOOL:
+		for tool in capabilities.tools:
+			if tool.id == capability_id:
+				tool.enabled = enabled
+				return True
+		return False
+	if capability_type is MCPCapabilityType.RESOURCE:
+		for resource in capabilities.resources:
+			if resource.id == capability_id:
+				resource.enabled = enabled
+				return True
+		return False
+	for prompt in capabilities.prompts:
+		if prompt.id == capability_id:
+			prompt.enabled = enabled
+			return True
+	return False
 
 
 def _server_tools(server: MCPServer) -> list[MCPDiscoveredTool]:
@@ -484,8 +717,13 @@ def _replace_discovered_snapshot(
 			)
 		)
 
+	snapshot_resources = (
+		[] if server.scope is MCPServerScope.USER else snapshot.resources
+	)
+	snapshot_prompts = [] if server.scope is MCPServerScope.USER else snapshot.prompts
+
 	seen_resources: set[str] = set()
-	for resource in snapshot.resources:
+	for resource in snapshot_resources:
 		_assert_unique_snapshot_key("resource", resource.uri, seen_resources)
 		old_resource = old_resources.get(resource.uri)
 		resources.append(
@@ -507,7 +745,7 @@ def _replace_discovered_snapshot(
 		)
 
 	seen_prompts: set[str] = set()
-	for prompt in snapshot.prompts:
+	for prompt in snapshot_prompts:
 		_assert_unique_snapshot_key("prompt", prompt.name, seen_prompts)
 		old_prompt = old_prompts.get(prompt.name)
 		prompt_id = _snapshot_id(old_prompt, MCP_PROMPT_TYPEID_PREFIX, prompt_ids)
@@ -535,6 +773,8 @@ def _replace_discovered_snapshot(
 		resources=resources,
 		prompts=prompts,
 	)
+	if server.scope is MCPServerScope.USER:
+		_validate_user_snapshot_limits(capabilities.tools)
 	_store_capabilities(server, capabilities)
 	return capabilities
 
@@ -685,6 +925,19 @@ def _validate_server_payload(server_in: MCPServerCreate) -> None:
 	)
 
 
+def _validate_user_server_payload(server_in: MCPServerCreate) -> None:
+	_validate_server_payload(server_in)
+	_validate_user_server_surface(server_in.capabilities)
+	_validate_user_server_url(server_in.url)
+	_validate_user_server_connection(
+		server_in.transport,
+		server_in.auth_type,
+		server_in.command,
+		bool(server_in.args),
+		bool(server_in.env),
+	)
+
+
 def _validate_server_update(server: MCPServer, server_in: MCPServerUpdate) -> None:
 	transport = (
 		server_in.transport
@@ -713,6 +966,119 @@ def _validate_server_update(server: MCPServer, server_in: MCPServerUpdate) -> No
 	if "env" in server_in.model_fields_set and isinstance(env_value, dict):
 		env_present = bool(env_value)
 	_validate_transport_fields(transport, url, command, args_present, env_present)
+
+
+def _validate_user_server_update(server: MCPServer, server_in: MCPServerUpdate) -> None:
+	transport = (
+		server_in.transport
+		if isinstance(server_in.transport, MCPTransport)
+		else server.transport
+	)
+	auth_type = (
+		server_in.auth_type
+		if isinstance(server_in.auth_type, MCPAuthType)
+		else server.auth_type
+	)
+	command = server.command
+	url = server.url
+	if "url" in server_in.model_fields_set:
+		url = server_in.url if isinstance(server_in.url, str) else None
+	if "command" in server_in.model_fields_set:
+		command = server_in.command if isinstance(server_in.command, str) else None
+	args_present = bool(server.args)
+	if "args" in server_in.model_fields_set and isinstance(server_in.args, list):
+		args_present = bool(server_in.args)
+	env_present = bool(server.env)
+	if "env" in server_in.model_fields_set and isinstance(server_in.env, dict):
+		env_present = bool(server_in.env)
+	_validate_user_server_url(url)
+	_validate_user_server_connection(
+		transport,
+		auth_type,
+		command,
+		args_present,
+		env_present,
+	)
+	if "capabilities" in server_in.model_fields_set and isinstance(
+		server_in.capabilities, MCPSurfaceConfig
+	):
+		_validate_user_server_surface(server_in.capabilities)
+
+
+def _validate_user_server_surface(capabilities: MCPSurfaceConfig) -> None:
+	if capabilities != _user_mcp_surface():
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="user-owned MCP servers can only expose tools",
+		)
+
+
+def _validate_user_server_connection(
+	transport: MCPTransport,
+	auth_type: MCPAuthType,
+	command: str | None,
+	args_present: bool,
+	env_present: bool,
+) -> None:
+	if transport is not MCPTransport.STREAMABLE_HTTP:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="user-owned MCP servers only support streamable HTTP",
+		)
+	if auth_type is MCPAuthType.OAUTH_2_1:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="user-owned MCP servers do not support OAuth yet",
+		)
+	if command or args_present or env_present:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="user-owned MCP servers do not support command, args, or env",
+		)
+
+
+def _validate_user_server_url(url: str | None) -> None:
+	if url is None:
+		return
+	origin = _origin_from_url(url)
+	origin_mode = settings.integrations.mcp.user_server_origin_mode
+	origins = set(settings.integrations.mcp.user_server_origins)
+	if origin_mode == "deny" and origin in origins:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="MCP server origin is denied",
+		)
+	if origin_mode == "allow" and origin not in origins:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="MCP server origin is not allowed",
+		)
+
+
+def _origin_from_url(url: str) -> str:
+	parts = urlsplit(url.strip())
+	if not parts.scheme or not parts.netloc:
+		return url.rstrip("/").lower()
+	return f"{parts.scheme.lower()}://{parts.netloc.lower()}"
+
+
+def _validate_user_snapshot_limits(tools: list[MCPDiscoveredTool]) -> None:
+	max_tools = settings.integrations.mcp.user_server_max_tools
+	if len(tools) > max_tools:
+		raise ValueError("user-owned MCP server exposes too many tools")
+	max_tokens = settings.integrations.mcp.user_tool_definition_max_tokens
+	for tool in tools:
+		definition = json.dumps(
+			{
+				"name": tool.name,
+				"description": tool.description,
+				"parameters": tool.input_schema,
+			},
+			separators=(",", ":"),
+			sort_keys=True,
+		)
+		if estimate_tokens(definition) > max_tokens:
+			raise ValueError("user-owned MCP tool definition is too large")
 
 
 def _validate_transport(transport: MCPTransport) -> None:

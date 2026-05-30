@@ -136,12 +136,30 @@ async def update_note(
 @router.delete("/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_note(
 	note_id: TypeID,
+	permanent: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
 ) -> None:
 	"""delete a note."""
 	await note_service.delete_note(
+		note_id,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+		permanent=permanent,
+	)
+
+
+@router.post("/{note_id}/restore", response_model=NoteSchema)
+async def restore_note(
+	note_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
+) -> Note:
+	"""restore a soft-deleted note. admin only."""
+	return await note_service.restore_note(
 		note_id,
 		db,
 		principal=principal,

@@ -28,6 +28,7 @@ from api.v1.service.integrations.mcp.service import (
 	list_available_plugins,
 	list_capabilities,
 	list_servers,
+	update_capability,
 	update_server,
 )
 from api.v1.service.integrations.mcp.tools import (
@@ -64,5 +65,6 @@ __all__ = [
 	"resolve_mcp_tools",
 	"start_mcp_list_change_listeners",
 	"stop_mcp_list_change_listeners",
+	"update_capability",
 	"update_server",
 ]

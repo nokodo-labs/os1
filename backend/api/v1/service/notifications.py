@@ -21,7 +21,14 @@ from api.schemas.notification import (
 	NotificationPushSubscriptionCreate,
 	NotificationPushSubscriptionDelete,
 )
+from api.service.web_assets import (
+	STATIC_ASSET_PATH,
+	app_url,
+	cdn_asset_url,
+	resolve_asset_source,
+)
 from api.settings import settings
+from api.settings.settings import ManifestAssetSettings
 from api.v1.service.auth import Principal
 from api.v1.service.events import fanout_event
 from api.v1.service.web_push import schedule_notification_push
@@ -78,6 +85,29 @@ def _event_data(
 	if agent_id is not None:
 		event_data["agent_id"] = str(agent_id)
 	return event_data
+
+
+def shortcut_notification_icon_url(
+	asset: ManifestAssetSettings,
+	filename: str,
+) -> str | None:
+	"""resolve a PWA shortcut asset URL for notification payloads."""
+	frontend = (
+		str(settings.branding.public_frontend_origin).rstrip("/")
+		if settings.branding.public_frontend_origin
+		else ""
+	)
+	cdn = (
+		str(settings.branding.public_cdn_origin).rstrip("/")
+		if settings.branding.public_cdn_origin
+		else None
+	)
+	return resolve_asset_source(
+		asset.source,
+		asset.url,
+		app_url(frontend, f"/shortcuts/{filename}"),
+		cdn_asset_url(cdn, STATIC_ASSET_PATH, "shortcuts", filename) if cdn else None,
+	)
 
 
 def _notification_expires_at(now: datetime) -> datetime | None:

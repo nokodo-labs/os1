@@ -65,3 +65,6 @@ class SoftDeleteMixin:
 
 	def soft_delete(self) -> None:
 		self.deleted_at = datetime.now(UTC)
+
+	def restore(self) -> None:
+		self.deleted_at = None

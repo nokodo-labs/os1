@@ -25,7 +25,7 @@ from api.v1.service.chat.message_metadata import (
 	persisted_message_metadata,
 )
 from api.v1.service.events import fanout_live_payload
-from api.v1.service.prompt_runtime import render_agent_instructions
+from api.v1.service.prompts import render_agent_instructions
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.types.json import JSONValue

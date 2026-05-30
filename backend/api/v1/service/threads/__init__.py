@@ -14,6 +14,7 @@ from api.v1.service.threads.core import (
 from api.v1.service.threads.maintenance import (
 	list_threads_due_for_maintenance,
 	maintain_thread_metadata,
+	thread_metadata_missing,
 	thread_needs_deferred_maintenance,
 	thread_needs_maintenance,
 	thread_needs_mandatory_maintenance,
@@ -30,10 +31,6 @@ from api.v1.service.threads.messages import (
 	switch_branch,
 	update_user_message,
 	walk_message_branch,
-)
-from api.v1.service.threads.metadata import (
-	generate_thread_metadata,
-	thread_metadata_missing,
 )
 from api.v1.service.threads.participants import (
 	ensure_participant,
@@ -58,7 +55,6 @@ __all__ = [
 	"delete_thread",
 	"delete_user_message_turn",
 	"ensure_participant",
-	"generate_thread_metadata",
 	"get_current_branch",
 	"get_message",
 	"get_thread",

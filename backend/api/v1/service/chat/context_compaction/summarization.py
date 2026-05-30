@@ -19,14 +19,14 @@ from api.v1.service import threads as thread_service
 from api.v1.service.chat.context_compaction.budgets import (
 	estimate_compaction_message_tokens,
 )
-from api.v1.service.chat.context_compaction.protection import find_run_start_index
+from api.v1.service.chat.context_compaction.protection import protected_indices
 from api.v1.service.chat.message_metadata import persisted_message_metadata
 from api.v1.service.chat.models import (
 	is_context_pressure_generation_error,
 	resolve_task_chat_model,
 	run_chat_model_json_schema,
 )
-from api.v1.service.prompt_runtime import SENTINEL_CHAT_WINDOW_INFO
+from api.v1.service.prompts import SENTINEL_CHAT_WINDOW_INFO
 from api.v1.service.threads import summaries as summary_service
 from nokodo_ai.adapters.chat import GenerationBadRequestError
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
@@ -464,21 +464,34 @@ def next_summarization_batch(
 ) -> tuple[list[SDKMessage], TypeID | None, TypeID | None]:
 	"""choose the next old unsummarized batch for background or blocking work.
 
-	the batch starts just after the newest summary cutoff and ends before the
-	current run-start anchor. that keeps active-run context raw while still moving
-	the oldest compressible prefix forward in token-sized chunks.
+	the batch is the oldest contiguous run of compressible messages that does
+	not cross a protected index (run-start anchor or in-window native media).
+	protected positions act as island boundaries, so compressible gaps between
+	them are still recoverable instead of being walled off behind a single
+	floor.
 	"""
 	cutoff = find_summarized_cutoff(summaries, message_ids)
-	run_start_index = find_run_start_index(messages, run_id)
-	if run_start_index is None:
-		max_end_index = len(messages)
-	else:
-		max_end_index = run_start_index
-	if cutoff >= max_end_index:
+	protected = protected_indices(messages, run_id)
+
+	# oldest unprotected, unsummarized index at or after the cutoff
+	start_index = None
+	for index in range(cutoff, len(messages)):
+		if index in protected or message_ids[index] is None:
+			continue
+		start_index = index
+		break
+	if start_index is None:
 		return [], None, None
+
+	# extend to the next protected boundary
+	end_index = len(messages)
+	for index in range(start_index, len(messages)):
+		if index in protected:
+			end_index = index
+			break
 	return _summarization_batch(
-		messages[cutoff:max_end_index],
-		message_ids[cutoff:max_end_index],
+		messages[start_index:end_index],
+		message_ids[start_index:end_index],
 		token_limit,
 	)
 

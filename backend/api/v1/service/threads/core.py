@@ -496,6 +496,7 @@ async def delete_thread(
 		session,
 		principal,
 		required_level=AccessLevel.EDITOR,
+		include_hidden=permanent,
 	)
 
 	if not principal.is_admin and thread.owner_id != principal.user.id:
@@ -556,3 +557,55 @@ async def delete_thread(
 		THREAD_SPEC, resource_id=str(thread_id), session=session
 	)
 	await _invalidate_project_payload_caches(project_ids)
+
+
+async def restore_thread(
+	thread_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+	origin_session_id: str | None = None,
+) -> Thread:
+	if not principal.is_admin:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
+	thread = await _load_thread(
+		thread_id,
+		session,
+		principal,
+		required_level=AccessLevel.EDITOR,
+		include_hidden=True,
+	)
+	if thread.deleted_at is None:
+		return thread
+	project_ids = {project.id for project in thread.projects}
+	thread.restore()
+	await session.flush()
+	event = Event(
+		scope=EventScope.THREAD,
+		scope_id=str(thread_id),
+		type=EventType.THREAD_UPDATED,
+		data=ThreadOut.model_validate(thread).model_dump(mode="json"),
+		user_id=str(thread.owner_id),
+		thread_id=str(thread_id),
+	)
+	await event_service.persist_and_fanout_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+	)
+	await invalidate_resource_payload_cache(ResourceType.THREAD, thread_id)
+	await invalidate_accessible_users_for_resource(
+		ResourceType.THREAD, thread_id, session
+	)
+	await vectorize_resource(
+		spec=THREAD_SPEC,
+		resource=thread,
+		session=session,
+		extra_metadata=await fetch_acl_metadata(
+			str(thread.id), ResourceType.THREAD, session
+		),
+	)
+	await _invalidate_project_payload_caches(project_ids)
+	return thread

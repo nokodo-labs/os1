@@ -14,6 +14,7 @@ from api.v1.service.chat.tools.chats import ChatGetTool
 from api.v1.service.chat.tools.code_interpreter import CodeInterpreterTool
 from api.v1.service.chat.tools.external import (
 	has_external_tool_source,
+	resolve_external_extra_tools,
 	resolve_external_tools,
 )
 from api.v1.service.chat.tools.files import FileEditTool, FileGetTool
@@ -37,6 +38,7 @@ from nokodo_ai.tool import Tool
 
 
 if TYPE_CHECKING:
+	from api.schemas.agent import AgentConfig
 	from api.v1.service.chat.context import AppContext
 
 
@@ -100,8 +102,27 @@ async def resolve_tools(
 	return tools
 
 
+async def resolve_extra_tools(
+	tool_ids: list[str],
+	app_context: AppContext,
+	agent_config: AgentConfig,
+) -> list[Tool[AppContext]]:
+	"""resolve request-scoped extra tool plugin ids."""
+	external_tool_ids = [
+		tool_id for tool_id in tool_ids if has_external_tool_source(tool_id)
+	]
+	if not external_tool_ids:
+		return []
+	return await resolve_external_extra_tools(
+		external_tool_ids,
+		app_context,
+		agent_config,
+	)
+
+
 __all__ = [
 	"TOOL_REGISTRY",
 	"get_registered_names",
+	"resolve_extra_tools",
 	"resolve_tools",
 ]

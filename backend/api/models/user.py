@@ -50,7 +50,7 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	hashed_password: Mapped[str] = mapped_column(String(255))
 	is_active: Mapped[bool] = mapped_column(default=True)
 	is_superuser: Mapped[bool] = mapped_column(default=False)
-	find_by_email: Mapped[bool] = mapped_column(default=True, index=True)
+	find_by_email: Mapped[bool] = mapped_column(default=False, index=True)
 	privacy: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 	preferences: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 	integration_tokens: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)

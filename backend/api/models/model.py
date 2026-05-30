@@ -29,6 +29,7 @@ class InputModality(StrEnum):
 	"""Supported input modalities for models."""
 
 	TEXT = "text"
+	DOCUMENTS = "documents"
 	IMAGES = "images"
 	AUDIO = "audio"
 	VIDEO = "video"

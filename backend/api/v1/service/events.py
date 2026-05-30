@@ -133,6 +133,18 @@ _EVENT_ROUTING_TARGETS: dict[str, _EventResourceTarget] = {
 	EventType.RUN_STARTED: _event_target(ResourceType.THREAD, ("thread_id",)),
 	EventType.RUN_COMPLETED: _event_target(ResourceType.THREAD, ("thread_id",)),
 	EventType.RUN_ERROR: _event_target(ResourceType.THREAD, ("thread_id",)),
+	EventType.RUN_ACTIVITY_STARTED: _event_target(
+		ResourceType.THREAD,
+		("thread_id",),
+	),
+	EventType.RUN_ACTIVITY_PROGRESS: _event_target(
+		ResourceType.THREAD,
+		("thread_id",),
+	),
+	EventType.RUN_ACTIVITY_ENDED: _event_target(
+		ResourceType.THREAD,
+		("thread_id",),
+	),
 	EventType.RUN_STEERING_QUEUED: _event_target(
 		ResourceType.THREAD,
 		("thread_id",),

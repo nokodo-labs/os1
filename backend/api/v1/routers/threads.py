@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
 from api.database import get_db
+from api.models.access_rule import AccessLevel
 from api.models.event import Event
 from api.models.message import Message
 from api.models.thread import Thread
@@ -28,7 +29,7 @@ from api.schemas.thread import (
 from api.schemas.thread import (
 	ThreadCreate,
 	ThreadListFilters,
-	ThreadMetadataGenerateRequest,
+	ThreadMaintenanceRunRequest,
 	ThreadSortBy,
 	ThreadSwitchRequest,
 	ThreadSwitchResponse,
@@ -45,7 +46,7 @@ from api.v1.routers.thread_summaries import create_thread_summaries_router
 from api.v1.service import runs as runs_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
-from api.v1.service.authorization import require_admin
+from api.v1.service.authorization import require_admin, require_thread_access
 from api.v1.service.events import SessionId
 from api.v1.tasks.threads import run_thread_maintenance_backfill_sweep
 from nokodo_ai.types.json import JSONObject
@@ -128,6 +129,7 @@ async def create_and_run(
 		client_context=req.client_context,
 		origin_session_id=x_session_id,
 		tool_choice=req.tool_choice,
+		extra_plugins=req.extra_plugins,
 	)
 	return sse_response(stream)
 
@@ -270,27 +272,36 @@ async def update_thread(
 	)
 
 
-@router.post("/{thread_id}/metadata/generate", response_model=ThreadSchema)
-async def generate_thread_metadata(
+@router.post("/{thread_id}/maintenance/run", response_model=ThreadSchema)
+async def run_thread_maintenance(
 	thread_id: ThreadIDPath,
-	req: ThreadMetadataGenerateRequest | None = None,
+	req: ThreadMaintenanceRunRequest | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
 ) -> Thread:
-	"""generate thread title/tags using a chat model.
+	"""generate thread title, tags, and catalog summary using maintenance.
 
-	uses the task model configured in settings (ai.tasks).
-	when replace is false, only fills in missing metadata.
+	uses the thread maintenance task model configured in settings. when replace is
+	false, only fills in missing metadata, while still refreshing a stale or
+	missing catalog summary.
 	"""
-	request = req or ThreadMetadataGenerateRequest()
-	return await thread_service.generate_thread_metadata(
-		thread_id=thread_id,
+	request = req or ThreadMaintenanceRunRequest()
+	await require_thread_access(
+		thread_id,
+		db,
+		principal,
+		required_level=AccessLevel.ADMIN,
+	)
+	await thread_service.maintain_thread_metadata(
+		thread_id,
+		db,
 		principal=principal,
-		session=db,
-		replace=request.replace,
+		replace_metadata=request.replace_metadata,
 		origin_session_id=x_session_id,
 	)
+	await db.flush()
+	return await thread_service.get_thread(thread_id, db, principal=principal)
 
 
 @router.delete("/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -308,6 +319,22 @@ async def delete_thread(
 		principal=principal,
 		origin_session_id=x_session_id,
 		permanent=permanent,
+	)
+
+
+@router.post("/{thread_id}/restore", response_model=ThreadSchema)
+async def restore_thread(
+	thread_id: ThreadIDPath,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
+) -> Thread:
+	"""restore a soft-deleted thread. admin only."""
+	return await thread_service.restore_thread(
+		thread_id,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
 	)
 
 

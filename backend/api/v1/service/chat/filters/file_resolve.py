@@ -1,8 +1,9 @@
 """file content resolver filter.
 
 resolves native attachments (images, files) that carry a file_id in
-metadata but have no url or base64 data. this filter runs AFTER
-attachment_decay so that only active (non-decayed) parts are resolved.
+metadata but have no url or base64 data. this filter runs LAST, after the
+attachments filter and context compaction, so it only hydrates the media
+that actually survives into the model context (active tool-message media).
 
 delegates actual file data resolution to the file service.
 """
@@ -19,17 +20,11 @@ from api.v1.service.files import resolve_file_data
 from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
-	AssistantMessage as SDKAssistantMessage,
-)
-from nokodo_ai.messages import (
 	FileContent,
 	ImageContent,
 )
 from nokodo_ai.messages import (
 	ToolMessage as SDKToolMessage,
-)
-from nokodo_ai.messages import (
-	UserMessage as SDKUserMessage,
 )
 from nokodo_ai.utils.typeid import TypeID
 
@@ -68,8 +63,8 @@ class FileResolveFilter(Filter):
 	loads the file through the file service with normal access checks, and
 	populates the SDK content part with base64 data when available.
 
-	running this before citation indexing and context compaction lets later
-	filters see the same payload the model will receive.
+	running this after the attachments filter and context compaction lets it
+	hydrate only the media that survives into the model context.
 	"""
 
 	name: str = Field(default="file_resolve")
@@ -98,23 +93,10 @@ class FileResolveFilter(Filter):
 		changed = False
 
 		for msg_idx, msg in enumerate(new_messages):
-			if isinstance(msg, (SDKUserMessage, SDKAssistantMessage)):
-				new_parts = list(msg.content)
-				msg_changed = False
-
-				for part_idx, part in enumerate(new_parts):
-					resolved = await self._resolve_part(part, session, principal)
-					if resolved is not None:
-						new_parts[part_idx] = resolved
-						msg_changed = True
-
-				if msg_changed:
-					new_messages[msg_idx] = msg.model_copy(
-						update={"content": new_parts}
-					)
-					changed = True
-
-			elif isinstance(msg, SDKToolMessage):
+			# native bytes only ever live on tool messages. the attachments
+			# projection has already rewritten any user/assistant media to text
+			# references, so hydration is restricted to tool messages.
+			if isinstance(msg, SDKToolMessage):
 				new_atts = list(msg.attachments)
 				msg_changed = False
 

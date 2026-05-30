@@ -26,6 +26,7 @@ class NoteListFilters(BaseModel):
 
 	owner_id: TypeID | None = None
 	labels: list[str] | None = None
+	include_deleted: bool = False
 
 
 class NoteBase(MetadataModel):

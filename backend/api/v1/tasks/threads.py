@@ -41,6 +41,8 @@ from api.v1.service.chat.context_compaction.summarization import (
 	condense_summaries,
 	summarize_thread_message_range,
 )
+from api.v1.service.chat.run_activities import start_detached_run_activity
+from api.v1.service.events import build_live_persisting_event_emitter
 from nokodo_ai.types.json import JSONObject, JSONValue
 from nokodo_ai.utils.typeid import TypeID
 
@@ -220,11 +222,21 @@ async def start_memory_post_processing_task(
 	principal: Principal,
 	query_text: str,
 	max_related_memories: int,
+	conversation_snapshot: str | None = None,
+	thread_id: str | None = None,
+	message_id: str | None = None,
+	run_id: str | None = None,
+	emit_activity: bool = False,
 ) -> Task:
 	"""enqueue durable memory maintenance for a conversation query."""
 	runtime: JSONObject = {
 		"query_text": query_text,
 		"max_related_memories": max_related_memories,
+		"conversation_snapshot": conversation_snapshot,
+		"thread_id": thread_id,
+		"message_id": message_id,
+		"run_id": run_id,
+		"emit_activity": emit_activity,
 	}
 	return await task_service.start_task(
 		session,
@@ -554,6 +566,16 @@ async def run_memory_post_processing_task(
 	if not isinstance(max_related_memories, int) or max_related_memories <= 0:
 		max_related_memories = 10
 
+	snapshot = context.runtime.get("conversation_snapshot")
+	conversation_snapshot = snapshot if isinstance(snapshot, str) else None
+	thread_id_value = context.runtime.get("thread_id")
+	thread_id = thread_id_value if isinstance(thread_id_value, str) else None
+	message_id_value = context.runtime.get("message_id")
+	message_id = message_id_value if isinstance(message_id_value, str) else None
+	run_id_value = context.runtime.get("run_id")
+	run_id = run_id_value if isinstance(run_id_value, str) else None
+	emit_activity = context.runtime.get("emit_activity") is True
+
 	async def report_progress(progress: int, stage: str) -> None:
 		await context.update(progress=progress, stage=stage)
 
@@ -565,11 +587,66 @@ async def run_memory_post_processing_task(
 			session,
 			principal=principal,
 			max_related_memories=max_related_memories,
+			conversation_snapshot=conversation_snapshot,
 			progress_callback=report_progress,
 		)
 		await session.commit()
 	await context.update(progress=90, stage="finalizing")
+	if emit_activity:
+		await _emit_memory_maintenance_activity(
+			result,
+			user_id=str(context.user_id),
+			thread_id=thread_id,
+			message_id=message_id,
+			run_id=run_id,
+		)
 	return result
+
+
+def _activity_count(result: JSONObject, key: str) -> int:
+	"""read an integer count from a memory maintenance result."""
+	value = result.get(key)
+	return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+async def _emit_memory_maintenance_activity(
+	result: JSONObject,
+	user_id: str,
+	thread_id: str | None,
+	message_id: str | None,
+	run_id: str | None,
+) -> None:
+	"""emit a memory_maintenance run activity when memories were changed."""
+	created = _activity_count(result, "created")
+	updated = _activity_count(result, "updated")
+	deleted = _activity_count(result, "deleted")
+	if created + updated + deleted <= 0:
+		return
+	if thread_id is None or message_id is None or run_id is None:
+		return
+
+	emit = build_live_persisting_event_emitter()
+	activity = await start_detached_run_activity(
+		emit,
+		user_id=user_id,
+		thread_id=thread_id,
+		run_id=run_id,
+		activity_type="memory_maintenance",
+		message_id=message_id,
+		title="updating memory",
+	)
+	if activity is None:
+		return
+	summary = f"created {created}, updated {updated}, and deleted {deleted} memories"
+	await activity.ended(
+		outcome="success",
+		message=summary,
+		data={
+			"created": created,
+			"updated": updated,
+			"deleted": deleted,
+		},
+	)
 
 
 @task_service.register_task_runner(

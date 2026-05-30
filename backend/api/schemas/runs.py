@@ -187,7 +187,7 @@ class RunInput(BaseModel):
 
 
 # allowed tool_choice values - only specific tools can be forced by the client
-ToolChoice = Literal["web_search", "think", "generate_image"]
+ToolChoice = Literal["agentic_web_search", "think", "generate_image"]
 
 
 # base run fields shared across request types
@@ -206,6 +206,10 @@ class _RunBase(BaseModel):
 		default=None,
 		description="optional tool choice override for this run. "
 		"only specific tools can be forced.",
+	)
+	extra_plugins: list[str] = Field(
+		default_factory=list,
+		description="extra tool plugin ids to include for this run only.",
 	)
 	stream: bool = Field(
 		default=True,

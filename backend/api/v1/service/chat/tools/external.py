@@ -13,18 +13,24 @@ from nokodo_ai.tool import Tool
 
 
 if TYPE_CHECKING:
+	from api.schemas.agent import AgentConfig
+	from api.v1.service.auth import Principal
 	from api.v1.service.chat.context import AppContext
 
 type ResolveExternalTools = Callable[
 	[list[str], AppContext],
 	Awaitable[list[Tool[AppContext]]],
 ]
+type ResolveExternalExtraTools = Callable[
+	[list[str], AppContext, AgentConfig],
+	Awaitable[list[Tool[AppContext]]],
+]
 type ListExternalToolPlugins = Callable[
-	[AsyncSession, PluginTypeFilter],
+	[AsyncSession, PluginTypeFilter, Principal],
 	Awaitable[list[PluginInfo]],
 ]
 type GetExternalToolPlugin = Callable[
-	[str, AsyncSession],
+	[str, AsyncSession, Principal],
 	Awaitable[PluginInfo | None],
 ]
 
@@ -38,6 +44,7 @@ class ExternalToolSource:
 	resolve_tools: ResolveExternalTools
 	list_plugins: ListExternalToolPlugins
 	get_plugin: GetExternalToolPlugin
+	resolve_extra_tools: ResolveExternalExtraTools | None = None
 
 
 _SOURCES_BY_NAME: dict[str, ExternalToolSource] = {}
@@ -81,15 +88,37 @@ async def resolve_external_tools(
 	return tools
 
 
+async def resolve_external_extra_tools(
+	tool_ids: list[str],
+	app_context: AppContext,
+	agent_config: AgentConfig,
+) -> list[Tool[AppContext]]:
+	"""resolve per-run external tool ids through their registered source."""
+	tools: list[Tool[AppContext]] = []
+	for source in _sources():
+		if source.resolve_extra_tools is None:
+			continue
+		source_tool_ids = [
+			tool_id for tool_id in tool_ids if tool_id.startswith(source.prefix)
+		]
+		if not source_tool_ids:
+			continue
+		tools.extend(
+			await source.resolve_extra_tools(source_tool_ids, app_context, agent_config)
+		)
+	return tools
+
+
 async def list_external_tool_plugins(
 	session: AsyncSession,
+	principal: Principal,
 	plugin_type: PluginTypeFilter = None,
 ) -> list[PluginInfo]:
 	"""list plugin metadata from registered external tool sources."""
 	plugins: list[PluginInfo] = []
 	seen: set[str] = set()
 	for source in _sources():
-		source_plugins = await source.list_plugins(session, plugin_type)
+		source_plugins = await source.list_plugins(session, plugin_type, principal)
 		_validate_source_plugins(source, source_plugins)
 		for plugin in source_plugins:
 			if plugin.id in seen:
@@ -102,12 +131,13 @@ async def list_external_tool_plugins(
 async def get_external_tool_plugin(
 	plugin_id: str,
 	session: AsyncSession,
+	principal: Principal,
 ) -> PluginInfo | None:
 	"""look up one external tool plugin through its source prefix."""
 	for source in _sources():
 		if not plugin_id.startswith(source.prefix):
 			continue
-		plugin = await source.get_plugin(plugin_id, session)
+		plugin = await source.get_plugin(plugin_id, session, principal)
 		if plugin is not None:
 			_validate_source_plugins(source, [plugin])
 			return plugin
