@@ -78,6 +78,13 @@
 			],
 		},
 		{
+			title: 'MCP',
+			items: [
+				{ value: 'mcp:manage', label: 'manage all servers' },
+				{ value: 'user.mcp:manage', label: 'manage own user servers' },
+			],
+		},
+		{
 			title: 'prompts',
 			items: [
 				{ value: 'prompts:read', label: 'read' },

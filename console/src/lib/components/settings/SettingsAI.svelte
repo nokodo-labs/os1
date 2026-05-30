@@ -46,7 +46,6 @@
 		memoryEnable?: boolean
 		memorySimilarityThreshold?: string
 		memoryTopK?: string
-		memoryMessagesToConsider?: string
 		// chat context
 		chatContextEnabled?: boolean
 		chatContextMode?: ChatContextMode
@@ -76,14 +75,19 @@
 		// media - audio
 		mediaAudioEnabled?: boolean
 		// attachments
-		attachmentImageDecayTurns?: string
-		attachmentAudioDecayTurns?: string
-		attachmentVideoDecayTurns?: string
-		attachmentRevealDecayTurns?: string
+		attachmentImageDecayIterations?: string
+		attachmentAudioDecayIterations?: string
+		attachmentVideoDecayIterations?: string
 		// context compaction
 		contextCompactionEnabled?: boolean
 		contextCompactionTriggerRatio?: string
-		contextCompactionMaxSummariesBeforeCondense?: string
+		contextCompactionRecoveryTargetRatio?: string
+		contextCompactionTargetUsageCapTokens?: string
+		contextCompactionSummaryBatchMinTokens?: string
+		contextCompactionSummaryBatchMaxTokens?: string
+		contextCompactionPromptOverheadTokens?: string
+		contextCompactionBlockingSummarizationEnabled?: boolean
+		contextCompactionBlockingSummarizationTimeoutSeconds?: string
 		contextCompactionToolResultMaxShare?: string
 		contextCompactionToolResultHardCap?: string
 		contextCompactionToolResultsCombinedMaxShare?: string
@@ -104,7 +108,6 @@
 		memoryEnable = $bindable(false),
 		memorySimilarityThreshold = $bindable(''),
 		memoryTopK = $bindable(''),
-		memoryMessagesToConsider = $bindable(''),
 		chatContextEnabled = $bindable(true),
 		chatContextMode = $bindable('recent'),
 		chatContextTopK = $bindable(''),
@@ -127,13 +130,18 @@
 		mediaImagesMaxN = $bindable(''),
 		mediaVideosEnabled = $bindable(false),
 		mediaAudioEnabled = $bindable(false),
-		attachmentImageDecayTurns = $bindable(''),
-		attachmentAudioDecayTurns = $bindable(''),
-		attachmentVideoDecayTurns = $bindable(''),
-		attachmentRevealDecayTurns = $bindable(''),
+		attachmentImageDecayIterations = $bindable(''),
+		attachmentAudioDecayIterations = $bindable(''),
+		attachmentVideoDecayIterations = $bindable(''),
 		contextCompactionEnabled = $bindable(true),
 		contextCompactionTriggerRatio = $bindable(''),
-		contextCompactionMaxSummariesBeforeCondense = $bindable(''),
+		contextCompactionRecoveryTargetRatio = $bindable(''),
+		contextCompactionTargetUsageCapTokens = $bindable(''),
+		contextCompactionSummaryBatchMinTokens = $bindable(''),
+		contextCompactionSummaryBatchMaxTokens = $bindable(''),
+		contextCompactionPromptOverheadTokens = $bindable(''),
+		contextCompactionBlockingSummarizationEnabled = $bindable(true),
+		contextCompactionBlockingSummarizationTimeoutSeconds = $bindable(''),
 		contextCompactionToolResultMaxShare = $bindable(''),
 		contextCompactionToolResultHardCap = $bindable(''),
 		contextCompactionToolResultsCombinedMaxShare = $bindable(''),
@@ -299,20 +307,6 @@
 							min="1"
 							placeholder="15"
 							bind:value={memoryTopK}
-							class="rounded-xl"
-						/>
-					</div>
-					<div class="space-y-2">
-						<Label for="ai_messages">messages to consider</Label>
-						<p class="text-xs text-zinc-500">
-							recent messages scanned when retrieving or consolidating memories.
-						</p>
-						<Input
-							id="ai_messages"
-							type="number"
-							min="1"
-							placeholder="20"
-							bind:value={memoryMessagesToConsider}
 							class="rounded-xl"
 						/>
 					</div>
@@ -603,54 +597,41 @@
 		<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
 			<p class="mb-1 text-sm font-medium">attachment decay</p>
 			<p class="mb-4 text-xs text-zinc-500">
-				turns after the last interaction before an active attachment auto-decays to
-				reference state.
+				iterations the model keeps native attachment bytes before they decay to a
+				reference. an iteration is one agent-loop step (one per assistant message)
+				within the same agent turn.
 			</p>
 			<div class="grid gap-4 md:grid-cols-2">
 				<div class="space-y-2">
-					<Label for="attach_image_decay">image decay turns</Label>
+					<Label for="attach_image_decay">image decay iterations</Label>
 					<Input
 						id="attach_image_decay"
 						type="number"
 						min="1"
-						placeholder="4"
-						bind:value={attachmentImageDecayTurns}
+						placeholder="3"
+						bind:value={attachmentImageDecayIterations}
 						class="rounded-xl"
 					/>
 				</div>
 				<div class="space-y-2">
-					<Label for="attach_audio_decay">audio decay turns</Label>
+					<Label for="attach_audio_decay">audio decay iterations</Label>
 					<Input
 						id="attach_audio_decay"
 						type="number"
 						min="1"
 						placeholder="3"
-						bind:value={attachmentAudioDecayTurns}
+						bind:value={attachmentAudioDecayIterations}
 						class="rounded-xl"
 					/>
 				</div>
 				<div class="space-y-2">
-					<Label for="attach_video_decay">video decay turns</Label>
+					<Label for="attach_video_decay">video decay iterations</Label>
 					<Input
 						id="attach_video_decay"
 						type="number"
 						min="1"
-						placeholder="2"
-						bind:value={attachmentVideoDecayTurns}
-						class="rounded-xl"
-					/>
-				</div>
-				<div class="space-y-2">
-					<Label for="attach_reveal_decay">reveal decay turns</Label>
-					<p class="text-xs text-zinc-500">
-						turns before a manually revealed attachment decays again.
-					</p>
-					<Input
-						id="attach_reveal_decay"
-						type="number"
-						min="1"
-						placeholder="3"
-						bind:value={attachmentRevealDecayTurns}
+						placeholder="1"
+						bind:value={attachmentVideoDecayIterations}
 						class="rounded-xl"
 					/>
 				</div>
@@ -676,10 +657,11 @@
 			{#if contextCompactionEnabled}
 				<div class="grid gap-4 md:grid-cols-2">
 					<div class="space-y-2">
-						<Label for="context_compaction_trigger_ratio">trigger ratio</Label>
+						<Label for="context_compaction_trigger_ratio">soft threshold</Label>
 						<p class="text-xs text-zinc-500">
-							fraction of token budget that triggers background summarization
-							(0.1–0.95).
+							prompt pressure that starts background summarization while the raw
+							conversation still fits. lower values summarize earlier; higher values
+							wait until the thread is closer to budget.
 						</p>
 						<Input
 							id="context_compaction_trigger_ratio"
@@ -693,18 +675,72 @@
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="context_compaction_max_summaries"
-							>max summaries before condense</Label
+						<Label for="context_compaction_recovery_target_ratio">recovery target</Label
 						>
 						<p class="text-xs text-zinc-500">
-							condense accumulated summaries when this count is reached.
+							target pressure after a recovery summary. must stay below the soft
+							threshold so compaction has hysteresis and does not immediately
+							re-trigger.
 						</p>
 						<Input
-							id="context_compaction_max_summaries"
+							id="context_compaction_recovery_target_ratio"
 							type="number"
-							min="2"
-							placeholder="4"
-							bind:value={contextCompactionMaxSummariesBeforeCondense}
+							step="0.01"
+							min="0.05"
+							max="0.90"
+							placeholder="0.55"
+							bind:value={contextCompactionRecoveryTargetRatio}
+							class="rounded-xl"
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="context_compaction_target_usage_cap_tokens"
+							>target usage cap (tokens)</Label
+						>
+						<p class="text-xs text-zinc-500">
+							optional budget cap before response reserve and prompt overhead are
+							subtracted. use it to leave extra safety margin below a model's window.
+						</p>
+						<Input
+							id="context_compaction_target_usage_cap_tokens"
+							type="number"
+							min="1"
+							placeholder="model context"
+							bind:value={contextCompactionTargetUsageCapTokens}
+							class="rounded-xl"
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="context_compaction_summary_batch_min_tokens"
+							>summary batch min tokens</Label
+						>
+						<p class="text-xs text-zinc-500">
+							minimum raw span for one summary job. prevents tiny summaries whose
+							marker and metadata cost more than the messages they replace.
+						</p>
+						<Input
+							id="context_compaction_summary_batch_min_tokens"
+							type="number"
+							min="1"
+							placeholder="512"
+							bind:value={contextCompactionSummaryBatchMinTokens}
+							class="rounded-xl"
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="context_compaction_summary_batch_max_tokens"
+							>summary batch max tokens</Label
+						>
+						<p class="text-xs text-zinc-500">
+							maximum raw span for one summary job. keeps long threads in bounded
+							batches instead of sending one oversized summary request.
+						</p>
+						<Input
+							id="context_compaction_summary_batch_max_tokens"
+							type="number"
+							min="1"
+							placeholder="16000"
+							bind:value={contextCompactionSummaryBatchMaxTokens}
 							class="rounded-xl"
 						/>
 					</div>
@@ -712,7 +748,10 @@
 						<Label for="context_compaction_response_headroom"
 							>response headroom (tokens)</Label
 						>
-						<p class="text-xs text-zinc-500">tokens reserved for the model's reply.</p>
+						<p class="text-xs text-zinc-500">
+							reserved answer space after prompt compaction. larger values reduce
+							prompt capacity but lower the chance that generation runs out of room.
+						</p>
 						<Input
 							id="context_compaction_response_headroom"
 							type="number"
@@ -723,9 +762,66 @@
 						/>
 					</div>
 					<div class="space-y-2">
+						<Label for="context_compaction_prompt_overhead_tokens"
+							>prompt overhead (tokens)</Label
+						>
+						<p class="text-xs text-zinc-500">
+							reserved for provider framing, system wrappers, schema/tool
+							instructions, and other prompt bytes not represented by stored messages.
+						</p>
+						<Input
+							id="context_compaction_prompt_overhead_tokens"
+							type="number"
+							min="0"
+							placeholder="300"
+							bind:value={contextCompactionPromptOverheadTokens}
+							class="rounded-xl"
+						/>
+					</div>
+					<div class="space-y-2">
+						<div
+							class="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2"
+						>
+							<div>
+								<p class="text-sm">blocking summarization</p>
+								<p class="text-xs text-zinc-500">
+									allow a last-resort inline summary during the request before
+									older messages are pruned. disabling this lowers latency but
+									prunes sooner.
+								</p>
+							</div>
+							<Switch
+								id="context_compaction_blocking_summarization_enabled"
+								checked={contextCompactionBlockingSummarizationEnabled}
+								onCheckedChange={(v: boolean) =>
+									(contextCompactionBlockingSummarizationEnabled = v)}
+							/>
+						</div>
+					</div>
+					<div class="space-y-2">
+						<Label for="context_compaction_blocking_timeout_seconds"
+							>blocking timeout (seconds)</Label
+						>
+						<p class="text-xs text-zinc-500">
+							maximum wait for inline summarization before falling back to the next
+							compaction tier. bounds user-visible latency when a provider is slow.
+						</p>
+						<Input
+							id="context_compaction_blocking_timeout_seconds"
+							type="number"
+							step="0.5"
+							min="1"
+							max="120"
+							placeholder="20"
+							bind:value={contextCompactionBlockingSummarizationTimeoutSeconds}
+							class="rounded-xl"
+						/>
+					</div>
+					<div class="space-y-2">
 						<Label for="context_compaction_tool_max_share">tool result max share</Label>
 						<p class="text-xs text-zinc-500">
-							max fraction of budget a single tool result may use (0.05–0.75).
+							maximum budget share for one tool result before compaction. lower values
+							keep large search, file, or code outputs from crowding out chat context.
 						</p>
 						<Input
 							id="context_compaction_tool_max_share"
@@ -743,7 +839,8 @@
 							>tool result hard cap (chars)</Label
 						>
 						<p class="text-xs text-zinc-500">
-							absolute character ceiling per tool result.
+							absolute character ceiling for one tool result before token estimation.
+							protects the pipeline from extremely large raw tool outputs.
 						</p>
 						<Input
 							id="context_compaction_tool_hard_cap"
@@ -759,7 +856,9 @@
 							>tool results combined max share</Label
 						>
 						<p class="text-xs text-zinc-500">
-							max fraction of budget for all tool results combined (0.10–0.95).
+							maximum combined budget share for all tool results. when exceeded, older
+							tool results are compacted first so tool-heavy runs leave room for
+							conversation.
 						</p>
 						<Input
 							id="context_compaction_tools_combined_share"
@@ -777,8 +876,9 @@
 							>summarization transcript max chars</Label
 						>
 						<p class="text-xs text-zinc-500">
-							max characters per message in summarization transcripts. leave empty for
-							unlimited.
+							maximum characters copied from each raw message into summary
+							transcripts. limits single-message outliers; leave empty to keep full
+							message text.
 						</p>
 						<Input
 							id="context_compaction_summarization_max_chars"

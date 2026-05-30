@@ -320,7 +320,7 @@
 			id: 'section-ai',
 			label: 'AI',
 			keywords:
-				'agents default memory retrieval consolidation similarity threshold top-k chat context recent relevant pinned past chats context window mode turns pre-build embed filters task models thread metadata titles tags autocomplete summarization memory post-processing deduplication attachment decay image audio video reveal context compaction token-aware truncation model limits max messages trigger ratio token budget summary batch size headroom tool result media generation image model steps video audio',
+				'agents default memory retrieval consolidation similarity threshold top-k chat context recent relevant pinned past chats context window mode turns pre-build embed filters task models thread metadata titles tags autocomplete summarization memory post-processing deduplication attachment decay image audio video iterations context compaction token-aware truncation model limits max messages trigger ratio token budget summary batch size headroom tool result media generation image model steps video audio',
 			icon: Brain,
 			color: 'text-indigo-400',
 			activeBg: 'bg-indigo-500/10',
@@ -428,7 +428,7 @@
 			id: 'section-integrations',
 			label: 'integrations',
 			keywords:
-				'Open WebUI import deployments jwt chats memories enable allowed deployment name description origin url external services connections',
+				'Open WebUI import deployments jwt chats memories enable allowed deployment name description origin url external services connections MCP servers tools discovery startup user limits allowed denied origins timeout',
 			icon: Plug,
 			color: 'text-purple-400',
 			activeBg: 'bg-purple-500/10',
@@ -531,15 +531,20 @@
 	let aiMediaAudioEnabled = $state(false)
 
 	// attachment decay
-	let aiAttachmentImageDecayTurns = $state<string>('')
-	let aiAttachmentAudioDecayTurns = $state<string>('')
-	let aiAttachmentVideoDecayTurns = $state<string>('')
-	let aiAttachmentRevealDecayTurns = $state<string>('')
+	let aiAttachmentImageDecayIterations = $state<string>('')
+	let aiAttachmentAudioDecayIterations = $state<string>('')
+	let aiAttachmentVideoDecayIterations = $state<string>('')
 
 	// context compaction
 	let aiContextCompactionEnabled = $state(true)
 	let aiContextCompactionTriggerRatio = $state<string>('')
-	let aiContextCompactionMaxSummariesBeforeCondense = $state<string>('')
+	let aiContextCompactionRecoveryTargetRatio = $state<string>('')
+	let aiContextCompactionTargetUsageCapTokens = $state<string>('')
+	let aiContextCompactionSummaryBatchMinTokens = $state<string>('')
+	let aiContextCompactionSummaryBatchMaxTokens = $state<string>('')
+	let aiContextCompactionPromptOverheadTokens = $state<string>('')
+	let aiContextCompactionBlockingSummarizationEnabled = $state(true)
+	let aiContextCompactionBlockingSummarizationTimeoutSeconds = $state<string>('')
 	let aiContextCompactionToolResultMaxShare = $state<string>('')
 	let aiContextCompactionToolResultHardCap = $state<string>('')
 	let aiContextCompactionToolResultsCombinedMaxShare = $state<string>('')
@@ -738,13 +743,18 @@
 		aiMediaImagesMaxN: '',
 		aiMediaVideosEnabled: false,
 		aiMediaAudioEnabled: false,
-		aiAttachmentImageDecayTurns: '',
-		aiAttachmentAudioDecayTurns: '',
-		aiAttachmentVideoDecayTurns: '',
-		aiAttachmentRevealDecayTurns: '',
+		aiAttachmentImageDecayIterations: '',
+		aiAttachmentAudioDecayIterations: '',
+		aiAttachmentVideoDecayIterations: '',
 		aiContextCompactionEnabled: true,
 		aiContextCompactionTriggerRatio: '',
-		aiContextCompactionMaxSummariesBeforeCondense: '',
+		aiContextCompactionRecoveryTargetRatio: '',
+		aiContextCompactionTargetUsageCapTokens: '',
+		aiContextCompactionSummaryBatchMinTokens: '',
+		aiContextCompactionSummaryBatchMaxTokens: '',
+		aiContextCompactionPromptOverheadTokens: '',
+		aiContextCompactionBlockingSummarizationEnabled: true,
+		aiContextCompactionBlockingSummarizationTimeoutSeconds: '',
 		aiContextCompactionToolResultMaxShare: '',
 		aiContextCompactionToolResultHardCap: '',
 		aiContextCompactionToolResultsCombinedMaxShare: '',
@@ -912,14 +922,25 @@
 			aiTaskMemoryPostProcessingModelId !== original.aiTaskMemoryPostProcessingModelId ||
 			aiTaskWebSearchModelId !== original.aiTaskWebSearchModelId ||
 			aiTaskMaintenanceMaxCharsPerMessage !== original.aiTaskMaintenanceMaxCharsPerMessage ||
-			aiAttachmentImageDecayTurns !== original.aiAttachmentImageDecayTurns ||
-			aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns ||
-			aiAttachmentVideoDecayTurns !== original.aiAttachmentVideoDecayTurns ||
-			aiAttachmentRevealDecayTurns !== original.aiAttachmentRevealDecayTurns ||
+			aiAttachmentImageDecayIterations !== original.aiAttachmentImageDecayIterations ||
+			aiAttachmentAudioDecayIterations !== original.aiAttachmentAudioDecayIterations ||
+			aiAttachmentVideoDecayIterations !== original.aiAttachmentVideoDecayIterations ||
 			aiContextCompactionEnabled !== original.aiContextCompactionEnabled ||
 			aiContextCompactionTriggerRatio !== original.aiContextCompactionTriggerRatio ||
-			aiContextCompactionMaxSummariesBeforeCondense !==
-				original.aiContextCompactionMaxSummariesBeforeCondense ||
+			aiContextCompactionRecoveryTargetRatio !==
+				original.aiContextCompactionRecoveryTargetRatio ||
+			aiContextCompactionTargetUsageCapTokens !==
+				original.aiContextCompactionTargetUsageCapTokens ||
+			aiContextCompactionSummaryBatchMinTokens !==
+				original.aiContextCompactionSummaryBatchMinTokens ||
+			aiContextCompactionSummaryBatchMaxTokens !==
+				original.aiContextCompactionSummaryBatchMaxTokens ||
+			aiContextCompactionPromptOverheadTokens !==
+				original.aiContextCompactionPromptOverheadTokens ||
+			aiContextCompactionBlockingSummarizationEnabled !==
+				original.aiContextCompactionBlockingSummarizationEnabled ||
+			aiContextCompactionBlockingSummarizationTimeoutSeconds !==
+				original.aiContextCompactionBlockingSummarizationTimeoutSeconds ||
 			aiContextCompactionToolResultMaxShare !==
 				original.aiContextCompactionToolResultMaxShare ||
 			aiContextCompactionToolResultHardCap !==
@@ -1172,16 +1193,32 @@
 		)
 
 		const attachments = ai?.attachments
-		aiAttachmentImageDecayTurns = toStringOrEmpty(attachments?.image_decay_turns)
-		aiAttachmentAudioDecayTurns = toStringOrEmpty(attachments?.audio_decay_turns)
-		aiAttachmentVideoDecayTurns = toStringOrEmpty(attachments?.video_decay_turns)
-		aiAttachmentRevealDecayTurns = toStringOrEmpty(attachments?.reveal_decay_turns)
+		aiAttachmentImageDecayIterations = toStringOrEmpty(attachments?.image_decay_iterations)
+		aiAttachmentAudioDecayIterations = toStringOrEmpty(attachments?.audio_decay_iterations)
+		aiAttachmentVideoDecayIterations = toStringOrEmpty(attachments?.video_decay_iterations)
 
 		const contextCompaction = ai?.context_compaction
 		aiContextCompactionEnabled = contextCompaction?.enabled ?? true
 		aiContextCompactionTriggerRatio = toStringOrEmpty(contextCompaction?.trigger_ratio)
-		aiContextCompactionMaxSummariesBeforeCondense = toStringOrEmpty(
-			contextCompaction?.max_summaries_before_condense
+		aiContextCompactionRecoveryTargetRatio = toStringOrEmpty(
+			contextCompaction?.recovery_target_ratio
+		)
+		aiContextCompactionTargetUsageCapTokens = toStringOrEmpty(
+			contextCompaction?.target_usage_cap_tokens
+		)
+		aiContextCompactionSummaryBatchMinTokens = toStringOrEmpty(
+			contextCompaction?.summary_batch_min_tokens
+		)
+		aiContextCompactionSummaryBatchMaxTokens = toStringOrEmpty(
+			contextCompaction?.summary_batch_max_tokens
+		)
+		aiContextCompactionPromptOverheadTokens = toStringOrEmpty(
+			contextCompaction?.prompt_overhead_tokens
+		)
+		aiContextCompactionBlockingSummarizationEnabled =
+			contextCompaction?.blocking_summarization_enabled ?? true
+		aiContextCompactionBlockingSummarizationTimeoutSeconds = toStringOrEmpty(
+			contextCompaction?.blocking_summarization_timeout_seconds
 		)
 		aiContextCompactionToolResultMaxShare = toStringOrEmpty(
 			contextCompaction?.tool_result_max_share
@@ -1455,13 +1492,18 @@
 			aiTaskMemoryPostProcessingModelId,
 			aiTaskWebSearchModelId,
 			aiTaskMaintenanceMaxCharsPerMessage,
-			aiAttachmentImageDecayTurns,
-			aiAttachmentAudioDecayTurns,
-			aiAttachmentVideoDecayTurns,
-			aiAttachmentRevealDecayTurns,
+			aiAttachmentImageDecayIterations,
+			aiAttachmentAudioDecayIterations,
+			aiAttachmentVideoDecayIterations,
 			aiContextCompactionEnabled,
 			aiContextCompactionTriggerRatio,
-			aiContextCompactionMaxSummariesBeforeCondense,
+			aiContextCompactionRecoveryTargetRatio,
+			aiContextCompactionTargetUsageCapTokens,
+			aiContextCompactionSummaryBatchMinTokens,
+			aiContextCompactionSummaryBatchMaxTokens,
+			aiContextCompactionPromptOverheadTokens,
+			aiContextCompactionBlockingSummarizationEnabled,
+			aiContextCompactionBlockingSummarizationTimeoutSeconds,
 			aiContextCompactionToolResultMaxShare,
 			aiContextCompactionToolResultHardCap,
 			aiContextCompactionToolResultsCombinedMaxShare,
@@ -1678,14 +1720,20 @@
 		aiTaskMemoryPostProcessingModelId = original.aiTaskMemoryPostProcessingModelId
 		aiTaskWebSearchModelId = original.aiTaskWebSearchModelId
 		aiTaskMaintenanceMaxCharsPerMessage = original.aiTaskMaintenanceMaxCharsPerMessage
-		aiAttachmentImageDecayTurns = original.aiAttachmentImageDecayTurns
-		aiAttachmentAudioDecayTurns = original.aiAttachmentAudioDecayTurns
-		aiAttachmentVideoDecayTurns = original.aiAttachmentVideoDecayTurns
-		aiAttachmentRevealDecayTurns = original.aiAttachmentRevealDecayTurns
+		aiAttachmentImageDecayIterations = original.aiAttachmentImageDecayIterations
+		aiAttachmentAudioDecayIterations = original.aiAttachmentAudioDecayIterations
+		aiAttachmentVideoDecayIterations = original.aiAttachmentVideoDecayIterations
 		aiContextCompactionEnabled = original.aiContextCompactionEnabled
 		aiContextCompactionTriggerRatio = original.aiContextCompactionTriggerRatio
-		aiContextCompactionMaxSummariesBeforeCondense =
-			original.aiContextCompactionMaxSummariesBeforeCondense
+		aiContextCompactionRecoveryTargetRatio = original.aiContextCompactionRecoveryTargetRatio
+		aiContextCompactionTargetUsageCapTokens = original.aiContextCompactionTargetUsageCapTokens
+		aiContextCompactionSummaryBatchMinTokens = original.aiContextCompactionSummaryBatchMinTokens
+		aiContextCompactionSummaryBatchMaxTokens = original.aiContextCompactionSummaryBatchMaxTokens
+		aiContextCompactionPromptOverheadTokens = original.aiContextCompactionPromptOverheadTokens
+		aiContextCompactionBlockingSummarizationEnabled =
+			original.aiContextCompactionBlockingSummarizationEnabled
+		aiContextCompactionBlockingSummarizationTimeoutSeconds =
+			original.aiContextCompactionBlockingSummarizationTimeoutSeconds
 		aiContextCompactionToolResultMaxShare = original.aiContextCompactionToolResultMaxShare
 		aiContextCompactionToolResultHardCap = original.aiContextCompactionToolResultHardCap
 		aiContextCompactionToolResultsCombinedMaxShare =
@@ -1887,14 +1935,25 @@
 			aiTaskMemoryPostProcessingModelId !== original.aiTaskMemoryPostProcessingModelId ||
 			aiTaskWebSearchModelId !== original.aiTaskWebSearchModelId ||
 			aiTaskMaintenanceMaxCharsPerMessage !== original.aiTaskMaintenanceMaxCharsPerMessage ||
-			aiAttachmentImageDecayTurns !== original.aiAttachmentImageDecayTurns ||
-			aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns ||
-			aiAttachmentVideoDecayTurns !== original.aiAttachmentVideoDecayTurns ||
-			aiAttachmentRevealDecayTurns !== original.aiAttachmentRevealDecayTurns ||
+			aiAttachmentImageDecayIterations !== original.aiAttachmentImageDecayIterations ||
+			aiAttachmentAudioDecayIterations !== original.aiAttachmentAudioDecayIterations ||
+			aiAttachmentVideoDecayIterations !== original.aiAttachmentVideoDecayIterations ||
 			aiContextCompactionEnabled !== original.aiContextCompactionEnabled ||
 			aiContextCompactionTriggerRatio !== original.aiContextCompactionTriggerRatio ||
-			aiContextCompactionMaxSummariesBeforeCondense !==
-				original.aiContextCompactionMaxSummariesBeforeCondense ||
+			aiContextCompactionRecoveryTargetRatio !==
+				original.aiContextCompactionRecoveryTargetRatio ||
+			aiContextCompactionTargetUsageCapTokens !==
+				original.aiContextCompactionTargetUsageCapTokens ||
+			aiContextCompactionSummaryBatchMinTokens !==
+				original.aiContextCompactionSummaryBatchMinTokens ||
+			aiContextCompactionSummaryBatchMaxTokens !==
+				original.aiContextCompactionSummaryBatchMaxTokens ||
+			aiContextCompactionPromptOverheadTokens !==
+				original.aiContextCompactionPromptOverheadTokens ||
+			aiContextCompactionBlockingSummarizationEnabled !==
+				original.aiContextCompactionBlockingSummarizationEnabled ||
+			aiContextCompactionBlockingSummarizationTimeoutSeconds !==
+				original.aiContextCompactionBlockingSummarizationTimeoutSeconds ||
 			aiContextCompactionToolResultMaxShare !==
 				original.aiContextCompactionToolResultMaxShare ||
 			aiContextCompactionToolResultHardCap !==
@@ -2008,35 +2067,40 @@
 			}
 
 			if (
-				aiAttachmentImageDecayTurns !== original.aiAttachmentImageDecayTurns ||
-				aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns ||
-				aiAttachmentVideoDecayTurns !== original.aiAttachmentVideoDecayTurns ||
-				aiAttachmentRevealDecayTurns !== original.aiAttachmentRevealDecayTurns
+				aiAttachmentImageDecayIterations !== original.aiAttachmentImageDecayIterations ||
+				aiAttachmentAudioDecayIterations !== original.aiAttachmentAudioDecayIterations ||
+				aiAttachmentVideoDecayIterations !== original.aiAttachmentVideoDecayIterations
 			) {
 				aiPatch.attachments = {}
-				if (aiAttachmentImageDecayTurns !== original.aiAttachmentImageDecayTurns)
-					aiPatch.attachments.image_decay_turns = asNumberOrUndefined(
-						aiAttachmentImageDecayTurns
+				if (aiAttachmentImageDecayIterations !== original.aiAttachmentImageDecayIterations)
+					aiPatch.attachments.image_decay_iterations = asNumberOrUndefined(
+						aiAttachmentImageDecayIterations
 					)
-				if (aiAttachmentAudioDecayTurns !== original.aiAttachmentAudioDecayTurns)
-					aiPatch.attachments.audio_decay_turns = asNumberOrUndefined(
-						aiAttachmentAudioDecayTurns
+				if (aiAttachmentAudioDecayIterations !== original.aiAttachmentAudioDecayIterations)
+					aiPatch.attachments.audio_decay_iterations = asNumberOrUndefined(
+						aiAttachmentAudioDecayIterations
 					)
-				if (aiAttachmentVideoDecayTurns !== original.aiAttachmentVideoDecayTurns)
-					aiPatch.attachments.video_decay_turns = asNumberOrUndefined(
-						aiAttachmentVideoDecayTurns
-					)
-				if (aiAttachmentRevealDecayTurns !== original.aiAttachmentRevealDecayTurns)
-					aiPatch.attachments.reveal_decay_turns = asNumberOrUndefined(
-						aiAttachmentRevealDecayTurns
+				if (aiAttachmentVideoDecayIterations !== original.aiAttachmentVideoDecayIterations)
+					aiPatch.attachments.video_decay_iterations = asNumberOrUndefined(
+						aiAttachmentVideoDecayIterations
 					)
 			}
 
 			if (
 				aiContextCompactionEnabled !== original.aiContextCompactionEnabled ||
 				aiContextCompactionTriggerRatio !== original.aiContextCompactionTriggerRatio ||
-				aiContextCompactionMaxSummariesBeforeCondense !==
-					original.aiContextCompactionMaxSummariesBeforeCondense ||
+				aiContextCompactionRecoveryTargetRatio !==
+					original.aiContextCompactionRecoveryTargetRatio ||
+				aiContextCompactionSummaryBatchMinTokens !==
+					original.aiContextCompactionSummaryBatchMinTokens ||
+				aiContextCompactionSummaryBatchMaxTokens !==
+					original.aiContextCompactionSummaryBatchMaxTokens ||
+				aiContextCompactionPromptOverheadTokens !==
+					original.aiContextCompactionPromptOverheadTokens ||
+				aiContextCompactionBlockingSummarizationEnabled !==
+					original.aiContextCompactionBlockingSummarizationEnabled ||
+				aiContextCompactionBlockingSummarizationTimeoutSeconds !==
+					original.aiContextCompactionBlockingSummarizationTimeoutSeconds ||
 				aiContextCompactionToolResultMaxShare !==
 					original.aiContextCompactionToolResultMaxShare ||
 				aiContextCompactionToolResultHardCap !==
@@ -2056,12 +2120,56 @@
 						aiContextCompactionTriggerRatio
 					)
 				if (
-					aiContextCompactionMaxSummariesBeforeCondense !==
-					original.aiContextCompactionMaxSummariesBeforeCondense
+					aiContextCompactionRecoveryTargetRatio !==
+					original.aiContextCompactionRecoveryTargetRatio
 				)
-					aiPatch.context_compaction.max_summaries_before_condense = asNumberOrUndefined(
-						aiContextCompactionMaxSummariesBeforeCondense
+					aiPatch.context_compaction.recovery_target_ratio = asNumberOrUndefined(
+						aiContextCompactionRecoveryTargetRatio
 					)
+				if (
+					aiContextCompactionTargetUsageCapTokens !==
+					original.aiContextCompactionTargetUsageCapTokens
+				) {
+					aiPatch.context_compaction.target_usage_cap_tokens = asNumberOrNull(
+						aiContextCompactionTargetUsageCapTokens
+					)
+				}
+				if (
+					aiContextCompactionSummaryBatchMinTokens !==
+					original.aiContextCompactionSummaryBatchMinTokens
+				)
+					aiPatch.context_compaction.summary_batch_min_tokens = asNumberOrUndefined(
+						aiContextCompactionSummaryBatchMinTokens
+					)
+				if (
+					aiContextCompactionSummaryBatchMaxTokens !==
+					original.aiContextCompactionSummaryBatchMaxTokens
+				)
+					aiPatch.context_compaction.summary_batch_max_tokens = asNumberOrUndefined(
+						aiContextCompactionSummaryBatchMaxTokens
+					)
+				if (
+					aiContextCompactionPromptOverheadTokens !==
+					original.aiContextCompactionPromptOverheadTokens
+				) {
+					aiPatch.context_compaction.prompt_overhead_tokens = asNumberOrUndefined(
+						aiContextCompactionPromptOverheadTokens
+					)
+				}
+				if (
+					aiContextCompactionBlockingSummarizationEnabled !==
+					original.aiContextCompactionBlockingSummarizationEnabled
+				) {
+					aiPatch.context_compaction.blocking_summarization_enabled =
+						aiContextCompactionBlockingSummarizationEnabled
+				}
+				if (
+					aiContextCompactionBlockingSummarizationTimeoutSeconds !==
+					original.aiContextCompactionBlockingSummarizationTimeoutSeconds
+				) {
+					aiPatch.context_compaction.blocking_summarization_timeout_seconds =
+						asNumberOrUndefined(aiContextCompactionBlockingSummarizationTimeoutSeconds)
+				}
 				if (
 					aiContextCompactionToolResultMaxShare !==
 					original.aiContextCompactionToolResultMaxShare
@@ -3236,18 +3344,33 @@
 										bind:mediaImagesMaxN={aiMediaImagesMaxN}
 										bind:mediaVideosEnabled={aiMediaVideosEnabled}
 										bind:mediaAudioEnabled={aiMediaAudioEnabled}
-										bind:attachmentImageDecayTurns={aiAttachmentImageDecayTurns}
-										bind:attachmentAudioDecayTurns={aiAttachmentAudioDecayTurns}
-										bind:attachmentVideoDecayTurns={aiAttachmentVideoDecayTurns}
-										bind:attachmentRevealDecayTurns={
-											aiAttachmentRevealDecayTurns
-										}
+										bind:attachmentImageDecayIterations={aiAttachmentImageDecayIterations}
+										bind:attachmentAudioDecayIterations={aiAttachmentAudioDecayIterations}
+										bind:attachmentVideoDecayIterations={aiAttachmentVideoDecayIterations}
 										bind:contextCompactionEnabled={aiContextCompactionEnabled}
 										bind:contextCompactionTriggerRatio={
 											aiContextCompactionTriggerRatio
 										}
-										bind:contextCompactionMaxSummariesBeforeCondense={
-											aiContextCompactionMaxSummariesBeforeCondense
+										bind:contextCompactionRecoveryTargetRatio={
+											aiContextCompactionRecoveryTargetRatio
+										}
+										bind:contextCompactionTargetUsageCapTokens={
+											aiContextCompactionTargetUsageCapTokens
+										}
+										bind:contextCompactionSummaryBatchMinTokens={
+											aiContextCompactionSummaryBatchMinTokens
+										}
+										bind:contextCompactionSummaryBatchMaxTokens={
+											aiContextCompactionSummaryBatchMaxTokens
+										}
+										bind:contextCompactionPromptOverheadTokens={
+											aiContextCompactionPromptOverheadTokens
+										}
+										bind:contextCompactionBlockingSummarizationEnabled={
+											aiContextCompactionBlockingSummarizationEnabled
+										}
+										bind:contextCompactionBlockingSummarizationTimeoutSeconds={
+											aiContextCompactionBlockingSummarizationTimeoutSeconds
 										}
 										bind:contextCompactionToolResultMaxShare={
 											aiContextCompactionToolResultMaxShare

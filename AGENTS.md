@@ -15,6 +15,9 @@ AI platform with agentic coding support, beautiful UI, and comprehensive tooling
 
 when interacting with the user and working, always **keep comms efficient** and concise.
 
+never end a working session unless the user explicitly says to end, stop, or finalize the session.
+before stopping, ALWAYS use the questions tool and continue unless the user explicitly says to end.
+
 as an AI, your context is limited, thus overly verbose responses will directly affect how your performance degrades over time.
 **less is more** - focus on addressing the user's needs never create extra files or documentation to report changes unless explicitly asked.
 

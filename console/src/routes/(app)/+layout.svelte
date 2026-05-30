@@ -52,6 +52,7 @@
 		| '/models'
 		| '/agents'
 		| '/plugins'
+		| '/mcp'
 		| '/playground'
 		| '/prompts'
 		| '/threads'
@@ -119,6 +120,14 @@
 			icon: Plug,
 			color: 'text-violet-400',
 			activeBg: 'bg-violet-500/15',
+		},
+		{
+			href: resolve('/mcp'),
+			match: '/mcp',
+			label: 'MCP',
+			icon: Network,
+			color: 'text-emerald-300',
+			activeBg: 'bg-emerald-400/15',
 		},
 		{
 			href: resolve('/playground'),
@@ -261,12 +270,12 @@
 
 	<!-- Sidebar -->
 	<aside
-		class="fixed inset-y-0 left-0 z-50 flex h-full w-64 flex-col border-r border-zinc-800 bg-zinc-950 transition-transform duration-300 ease-in-out md:relative md:translate-x-0 {sidebarOpen
+		class="fixed inset-y-0 left-0 z-50 flex h-full w-64 flex-col border-r border-zinc-800 bg-zinc-950 py-6 transition-transform duration-300 ease-in-out md:relative md:translate-x-0 {sidebarOpen
 			? 'translate-x-0'
-			: '-translate-x-full md:translate-x-0'} p-6"
+			: '-translate-x-full md:translate-x-0'}"
 	>
 		<!-- sidebar header -->
-		<div class="mb-8 flex shrink-0 items-start justify-between">
+		<div class="mb-6 flex shrink-0 items-start justify-between px-6">
 			<div>
 				<img
 					src="https://nokodo.net/static/os1/sidebar-logo.svg"
@@ -286,23 +295,25 @@
 		</div>
 
 		<!-- scrollable nav -->
-		<nav class="-mr-2 flex-1 space-y-1 overflow-y-auto pr-2">
-			{#each navItems as item (item.href)}
-				{@const active = isActive(item)}
-				<a
-					href={resolve(item.match)}
-					class="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors {active
-						? `${item.activeBg} text-white`
-						: 'text-zinc-300 hover:bg-zinc-900'}"
-				>
-					<item.icon class="h-4 w-4 shrink-0 {item.color}" />
-					{item.label}
-				</a>
-			{/each}
+		<nav class="min-h-0 flex-1 overflow-y-auto">
+			<div class="space-y-1 px-6">
+				{#each navItems as item (item.href)}
+					{@const active = isActive(item)}
+					<a
+						href={resolve(item.match)}
+						class="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors {active
+							? `${item.activeBg} text-white`
+							: 'text-zinc-300 hover:bg-zinc-900'}"
+					>
+						<item.icon class="h-4 w-4 shrink-0 {item.color}" />
+						{item.label}
+					</a>
+				{/each}
+			</div>
 		</nav>
 
 		<button
-			class="mt-auto text-left text-sm text-zinc-400 hover:text-zinc-100"
+			class="mx-6 mt-6 text-left text-sm text-zinc-400 hover:text-zinc-100"
 			onclick={() => auth.logout()}
 		>
 			sign out

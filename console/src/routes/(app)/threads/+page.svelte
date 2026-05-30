@@ -124,6 +124,15 @@
 		isThreadDetailsOpen = true
 	}
 
+	function handleThreadUpdated(thread: Thread) {
+		threads = threads.map((current) => (current.id === thread.id ? thread : current))
+	}
+
+	function handleThreadDeleted(threadId: string) {
+		threads = threads.filter((thread) => thread.id !== threadId)
+		if (selectedThreadId === threadId) selectedThreadId = null
+	}
+
 	function refresh() {
 		refreshToken += 1
 	}
@@ -506,4 +515,9 @@
 
 <UserDetailsModal bind:open={isUserDetailsOpen} userId={selectedUserId} />
 
-<ThreadDetailsModal bind:open={isThreadDetailsOpen} threadId={selectedThreadId} />
+<ThreadDetailsModal
+	bind:open={isThreadDetailsOpen}
+	threadId={selectedThreadId}
+	onUpdated={handleThreadUpdated}
+	onDeleted={handleThreadDeleted}
+/>

@@ -100,6 +100,7 @@
 
 	function handleUserDeleted(userId: string) {
 		users = users.filter((user) => user.id !== userId)
+		if (selectedUserId === userId) selectedUserId = null
 	}
 
 	function replaceUrl(target: string) {

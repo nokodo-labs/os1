@@ -13,6 +13,7 @@
 		FileText,
 		Hash,
 		Pencil,
+		RotateCcw,
 		Save,
 		Tag,
 		Trash2,
@@ -38,13 +39,16 @@
 	let isSaving = $state(false)
 	let saveError = $state<string | null>(null)
 	let isDeleting = $state(false)
+	let isRestoring = $state(false)
 	let deleteError = $state<string | null>(null)
 	let confirmDelete = $state(false)
+	let confirmPermanentDelete = $state(false)
 
 	function close() {
 		open = false
 		isEditing = false
 		confirmDelete = false
+		confirmPermanentDelete = false
 		saveError = null
 		deleteError = null
 	}
@@ -106,6 +110,43 @@
 			isDeleting = false
 		}
 	}
+
+	async function permanentlyDeleteNote() {
+		if (!note) return
+		isDeleting = true
+		deleteError = null
+		try {
+			const r = await api.DELETE('/v1/notes/{note_id}', {
+				params: { path: { note_id: note.id }, query: { permanent: true } },
+			})
+			unwrap(r)
+			onDeleted?.(note.id)
+			close()
+		} catch (e) {
+			deleteError = e instanceof Error ? e.message : 'failed to delete'
+		} finally {
+			isDeleting = false
+		}
+	}
+
+	async function restoreNote() {
+		if (!note) return
+		isRestoring = true
+		deleteError = null
+		try {
+			const updated = unwrap(
+				await api.POST('/v1/notes/{note_id}/restore', {
+					params: { path: { note_id: note.id } },
+				})
+			)
+			note = updated
+			onUpdated?.(updated)
+		} catch (e) {
+			deleteError = e instanceof Error ? e.message : 'failed to restore'
+		} finally {
+			isRestoring = false
+		}
+	}
 </script>
 
 <Dialog.Root
@@ -117,6 +158,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] min-w-80 -translate-x-1/2 -translate-y-1/2 flex-col overflow-auto rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
 		>
 			<div
@@ -130,8 +172,8 @@
 						>note details</Dialog.Description
 					>
 				</div>
-				<div class="flex shrink-0 items-center gap-1">
-					{#if note && !isEditing}
+				<div class="flex shrink-0 flex-wrap items-center justify-end gap-1">
+					{#if note && !isEditing && !note.deleted_at}
 						<Button
 							variant="ghost"
 							size="sm"
@@ -141,17 +183,32 @@
 							<Pencil class="mr-1 h-3 w-3" />
 							edit
 						</Button>
-						{#if !confirmDelete}
+						{#if !confirmDelete && !confirmPermanentDelete}
 							<Button
 								variant="ghost"
 								size="sm"
 								class="h-7 rounded-lg px-2 text-xs text-red-400 hover:text-red-300"
-								onclick={() => (confirmDelete = true)}
+								onclick={() => {
+									confirmDelete = true
+									confirmPermanentDelete = false
+								}}
 							>
 								<Trash2 class="mr-1 h-3 w-3" />
 								delete
 							</Button>
-						{:else}
+							<Button
+								variant="ghost"
+								size="sm"
+								class="h-7 rounded-lg px-2 text-xs text-red-400 hover:text-red-300"
+								onclick={() => {
+									confirmPermanentDelete = true
+									confirmDelete = false
+								}}
+							>
+								<Trash2 class="mr-1 h-3 w-3" />
+								full wipe
+							</Button>
+						{:else if confirmDelete}
 							<Button
 								variant="ghost"
 								size="sm"
@@ -166,6 +223,66 @@
 								size="sm"
 								class="h-7 rounded-lg px-2 text-xs text-zinc-400"
 								onclick={() => (confirmDelete = false)}
+							>
+								<X class="mr-1 h-3 w-3" />
+								cancel
+							</Button>
+						{:else if confirmPermanentDelete}
+							<Button
+								variant="ghost"
+								size="sm"
+								class="h-7 rounded-lg px-2 text-xs text-red-400 hover:text-red-300"
+								onclick={permanentlyDeleteNote}
+								disabled={isDeleting}
+							>
+								{isDeleting ? 'wiping...' : 'confirm wipe?'}
+							</Button>
+							<Button
+								variant="ghost"
+								size="sm"
+								class="h-7 rounded-lg px-2 text-xs text-zinc-400"
+								onclick={() => (confirmPermanentDelete = false)}
+							>
+								<X class="mr-1 h-3 w-3" />
+								cancel
+							</Button>
+						{/if}
+					{:else if note && !isEditing}
+						<Button
+							variant="ghost"
+							size="sm"
+							class="h-7 rounded-lg px-2 text-xs text-emerald-400 hover:text-emerald-300"
+							onclick={restoreNote}
+							disabled={isRestoring}
+						>
+							<RotateCcw class="mr-1 h-3 w-3" />
+							{isRestoring ? 'restoring…' : 'restore'}
+						</Button>
+						{#if !confirmPermanentDelete}
+							<Button
+								variant="ghost"
+								size="sm"
+								class="h-7 rounded-lg px-2 text-xs text-red-400 hover:text-red-300"
+								onclick={() => (confirmPermanentDelete = true)}
+							>
+								<Trash2 class="mr-1 h-3 w-3" />
+								perma delete
+							</Button>
+						{:else}
+							<Button
+								variant="ghost"
+								size="sm"
+								class="h-7 rounded-lg px-2 text-xs text-red-400 hover:text-red-300"
+								onclick={permanentlyDeleteNote}
+								disabled={isDeleting}
+							>
+								{isDeleting ? 'deleting…' : 'confirm?'}
+							</Button>
+							<Button
+								variant="ghost"
+								size="sm"
+								class="h-7 rounded-lg px-2 text-xs text-zinc-400"
+								onclick={() => (confirmPermanentDelete = false)}
 							>
 								<X class="mr-1 h-3 w-3" />
 								cancel
@@ -210,7 +327,7 @@
 									<button
 										type="button"
 										class="min-w-0 truncate font-mono text-xs text-zinc-300 underline underline-offset-4 hover:text-zinc-100"
-										onclick={() => onViewUser?.(note.user_id)}
+										onclick={() => onViewUser?.((note as Note).user_id)}
 										>{note.user_id}</button
 									>
 								{:else}

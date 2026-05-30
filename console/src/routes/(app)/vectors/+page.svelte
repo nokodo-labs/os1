@@ -472,6 +472,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-xl sm:p-6"
 		>
 			<div class="mb-4 flex items-center justify-between">
@@ -579,6 +580,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] w-full max-w-3xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-xl"
 		>
 			<div
@@ -728,6 +730,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] w-full max-w-sm -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-xl sm:p-6"
 		>
 			<Dialog.Title class="text-lg font-semibold">delete collection</Dialog.Title>
@@ -757,6 +760,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] w-full max-w-sm -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-xl sm:p-6"
 		>
 			<Dialog.Title class="text-lg font-semibold">wipe all collections</Dialog.Title>

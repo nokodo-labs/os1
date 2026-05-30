@@ -72,6 +72,11 @@
 		files = files.filter((f) => f.id !== fileId)
 	}
 
+	function handleUpdateFromModal(file: File) {
+		files = files.map((current) => (current.id === file.id ? file : current))
+		selectedFile = file
+	}
+
 	$effect(() => {
 		if (!browser) return
 
@@ -93,6 +98,7 @@
 				query: {
 					skip,
 					limit,
+					include_deleted: true,
 					sort_by: sortKey,
 					sort_dir: sortDir,
 					...(ownerIdFilter ? { owner_id: ownerIdFilter } : {}),
@@ -380,4 +386,9 @@
 	</div>
 </div>
 
-<FileDetailsModal bind:open={detailOpen} file={selectedFile} onDeleted={handleDeleteFromModal} />
+<FileDetailsModal
+	bind:open={detailOpen}
+	file={selectedFile}
+	onUpdated={handleUpdateFromModal}
+	onDeleted={handleDeleteFromModal}
+/>

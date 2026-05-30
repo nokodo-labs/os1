@@ -73,13 +73,13 @@ These settings are write-locked because API, worker, and scheduler processes mus
 
 These settings are write-locked because API, worker, and scheduler processes must agree on them at startup.
 
-| Variable                                    | Type   | Default                      | Flags        | Description                                        |
-| ------------------------------------------- | ------ | ---------------------------- | ------------ | -------------------------------------------------- |
-| `NOKODO__TASKS__TASKIQ__QUEUE_NAME`         | string | `nokodo-ai:taskiq:queue`     | write-locked | TaskIQ queue shared by API, worker, and scheduler. |
-| `NOKODO__TASKS__TASKIQ__RESULT_TTL_SECONDS` | int    | `86400`                      | write-locked | Seconds to retain TaskIQ result backend entries.   |
-| `NOKODO__TASKS__TASKIQ__MAX_CONNECTIONS`    | int    | `32`                         | write-locked | Maximum Redis connections used by TaskIQ.          |
+| Variable                                    | Type   | Default                      | Flags        | Description                                         |
+| ------------------------------------------- | ------ | ---------------------------- | ------------ | --------------------------------------------------- |
+| `NOKODO__TASKS__TASKIQ__QUEUE_NAME`         | string | `nokodo-ai:taskiq:queue`     | write-locked | TaskIQ queue shared by API, worker, and scheduler.  |
+| `NOKODO__TASKS__TASKIQ__RESULT_TTL_SECONDS` | int    | `86400`                      | write-locked | Seconds to retain TaskIQ result backend entries.    |
+| `NOKODO__TASKS__TASKIQ__MAX_CONNECTIONS`    | int    | `32`                         | write-locked | Maximum Redis connections used by TaskIQ.           |
 | `NOKODO__TASKS__TASKIQ__AUTO_WORKERS_MAX`   | int    | unset                        | write-locked | Optional max worker processes for `--workers auto`. |
-| `NOKODO__TASKS__TASKIQ__SCHEDULE_PREFIX`    | string | `nokodo-ai:taskiq:schedules` | write-locked | Redis key prefix for dynamic TaskIQ schedules.     |
+| `NOKODO__TASKS__TASKIQ__SCHEDULE_PREFIX`    | string | `nokodo-ai:taskiq:schedules` | write-locked | Redis key prefix for dynamic TaskIQ schedules.      |
 
 ---
 
@@ -118,20 +118,20 @@ These settings are write-locked because API, worker, and scheduler processes mus
 
 ### Branding (`NOKODO__BRANDING__*`)
 
-| Variable                                   | Type   | Default   | Flags                 | Description                                                                        |
-| ------------------------------------------ | ------ | --------- | --------------------- | ---------------------------------------------------------------------------------- |
-| `NOKODO__BRANDING__SITE_NAME`              | string | `nokodo`  |                       | Display name for the application.                                                  |
-| `NOKODO__BRANDING__APP_VERSION`            | string | `0.1.0`   | write-locked          | Backend version string. Set by CI/CD.                                              |
-| `NOKODO__BRANDING__PRIMARY_COLOR`          | string | `#6366f1` |                       | Primary brand color (hex).                                                         |
-| `NOKODO__BRANDING__LOGO_URL`               | URL    | `null`    |                       | Logo URL.                                                                          |
-| `NOKODO__BRANDING__FAVICON_URL`            | URL    | `null`    |                       | Favicon URL.                                                                       |
-| `NOKODO__BRANDING__SUPPORT_EMAIL`          | string | `null`    |                       | Support email shown to users awaiting account approval.                            |
-| `NOKODO__BRANDING__ADMIN_EMAIL`            | string | `null`    |                       | Internal/escalation admin email.                                                   |
+| Variable                                   | Type   | Default   | Flags                 | Description                                                                                                                                                                                                                                                      |
+| ------------------------------------------ | ------ | --------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NOKODO__BRANDING__SITE_NAME`              | string | `nokodo`  |                       | Display name for the application.                                                                                                                                                                                                                                |
+| `NOKODO__BRANDING__APP_VERSION`            | string | `0.1.0`   | write-locked          | Backend version string. Set by CI/CD.                                                                                                                                                                                                                            |
+| `NOKODO__BRANDING__PRIMARY_COLOR`          | string | `#6366f1` |                       | Primary brand color (hex).                                                                                                                                                                                                                                       |
+| `NOKODO__BRANDING__LOGO_URL`               | URL    | `null`    |                       | Logo URL.                                                                                                                                                                                                                                                        |
+| `NOKODO__BRANDING__FAVICON_URL`            | URL    | `null`    |                       | Favicon URL.                                                                                                                                                                                                                                                     |
+| `NOKODO__BRANDING__SUPPORT_EMAIL`          | string | `null`    |                       | Support email shown to users awaiting account approval.                                                                                                                                                                                                          |
+| `NOKODO__BRANDING__ADMIN_EMAIL`            | string | `null`    |                       | Internal/escalation admin email.                                                                                                                                                                                                                                 |
 | `NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN` | URL    | `null`    |                       | Public frontend origin (e.g. `https://app.example.com`). Used for link generation. Blank falls back to the request origin host with the default frontend port `888`; if no request origin is available, the API origin is assumed to be `http://localhost:1383`. |
-| `NOKODO__BRANDING__PUBLIC_CDN_ORIGIN`      | URL    | `null`    |                       | Public CDN origin used by assets whose source is `cdn`.                            |
-| `NOKODO__BRANDING__PUBLIC_CONSOLE_ORIGIN`  | URL    | `null`    |                       | Public admin console origin.                                                       |
-| `NOKODO__BRANDING__PWA_MANIFEST_URL`       | URL    | `null`    |                       | External PWA manifest.json URL.                                                    |
-| `NOKODO__BRANDING__ANALYTICS_KEY`          | string | `null`    | private, write-locked | Analytics provider key (env-only, never returned to clients).                      |
+| `NOKODO__BRANDING__PUBLIC_CDN_ORIGIN`      | URL    | `null`    |                       | Public CDN origin used by assets whose source is `cdn`.                                                                                                                                                                                                          |
+| `NOKODO__BRANDING__PUBLIC_CONSOLE_ORIGIN`  | URL    | `null`    |                       | Public admin console origin.                                                                                                                                                                                                                                     |
+| `NOKODO__BRANDING__PWA_MANIFEST_URL`       | URL    | `null`    |                       | External PWA manifest.json URL.                                                                                                                                                                                                                                  |
+| `NOKODO__BRANDING__ANALYTICS_KEY`          | string | `null`    | private, write-locked | Analytics provider key (env-only, never returned to clients).                                                                                                                                                                                                    |
 
 Generated manifest asset controls live under `NOKODO__BRANDING__PWA_ASSETS__*`.
 Each asset has `SOURCE` (`default`, `cdn`, `custom`, or `disabled`) and `URL`
@@ -147,16 +147,16 @@ or `custom`) and `URL` (full custom URL override). `cdn` uses
 `NOKODO__BRANDING__PUBLIC_CDN_ORIGIN` plus the well-known path documented in
 [pwa-cdn-setup.md](pwa-cdn-setup.md).
 
-| Variable | Type | Default | Description |
-| -------- | ---- | ------- | ----------- |
-| `NOKODO__MEDIA__FAVICON__SOURCE` | enum | `default` | Browser tab favicon source. |
-| `NOKODO__MEDIA__FAVICON__URL` | URL | `null` | Custom browser tab favicon URL. |
-| `NOKODO__MEDIA__APPLE_TOUCH_ICON__SOURCE` | enum | `default` | iOS home-screen icon source. |
-| `NOKODO__MEDIA__APPLE_TOUCH_ICON__URL` | URL | `null` | Custom iOS home-screen icon URL. |
-| `NOKODO__MEDIA__SIDEBAR_LOGO__SOURCE` | enum | `default` | Sidebar logo source. |
-| `NOKODO__MEDIA__SIDEBAR_LOGO__URL` | URL | `null` | Custom sidebar logo URL. |
-| `NOKODO__MEDIA__SPLASH_LOGO__SOURCE` | enum | `default` | Splash logo source. |
-| `NOKODO__MEDIA__SPLASH_LOGO__URL` | URL | `null` | Custom splash logo URL. |
+| Variable                                  | Type | Default   | Description                      |
+| ----------------------------------------- | ---- | --------- | -------------------------------- |
+| `NOKODO__MEDIA__FAVICON__SOURCE`          | enum | `default` | Browser tab favicon source.      |
+| `NOKODO__MEDIA__FAVICON__URL`             | URL  | `null`    | Custom browser tab favicon URL.  |
+| `NOKODO__MEDIA__APPLE_TOUCH_ICON__SOURCE` | enum | `default` | iOS home-screen icon source.     |
+| `NOKODO__MEDIA__APPLE_TOUCH_ICON__URL`    | URL  | `null`    | Custom iOS home-screen icon URL. |
+| `NOKODO__MEDIA__SIDEBAR_LOGO__SOURCE`     | enum | `default` | Sidebar logo source.             |
+| `NOKODO__MEDIA__SIDEBAR_LOGO__URL`        | URL  | `null`    | Custom sidebar logo URL.         |
+| `NOKODO__MEDIA__SPLASH_LOGO__SOURCE`      | enum | `default` | Splash logo source.              |
+| `NOKODO__MEDIA__SPLASH_LOGO__URL`         | URL  | `null`    | Custom splash logo URL.          |
 
 ---
 
@@ -217,26 +217,27 @@ or `custom`) and `URL` (full custom URL override). `cdn` uses
 
 #### Attachment decay (`NOKODO__AI__ATTACHMENTS__*`)
 
-| Variable                                      | Type | Default | Description                                                    |
-| --------------------------------------------- | ---- | ------- | -------------------------------------------------------------- |
-| `NOKODO__AI__ATTACHMENTS__IMAGE_DECAY_TURNS`  | int  | `4`     | Turns before image attachments decay from active to reference. |
-| `NOKODO__AI__ATTACHMENTS__AUDIO_DECAY_TURNS`  | int  | `3`     | Turns before audio attachments decay.                          |
-| `NOKODO__AI__ATTACHMENTS__VIDEO_DECAY_TURNS`  | int  | `2`     | Turns before video attachments decay.                          |
-| `NOKODO__AI__ATTACHMENTS__REVEAL_DECAY_TURNS` | int  | `3`     | Turns before a re-revealed attachment decays again.            |
+Decay is measured in iterations (one agent-loop step, i.e. one assistant
+message, within the same agent turn), not turns.
 
-#### Message windowing (`NOKODO__AI__WINDOWING__*`)
+| Variable                                          | Type | Default | Description                                                         |
+| ------------------------------------------------- | ---- | ------- | ------------------------------------------------------------------- |
+| `NOKODO__AI__ATTACHMENTS__IMAGE_DECAY_ITERATIONS` | int  | `3`     | Iterations before image attachments decay from native to reference. |
+| `NOKODO__AI__ATTACHMENTS__AUDIO_DECAY_ITERATIONS` | int  | `3`     | Iterations before audio attachments decay.                          |
+| `NOKODO__AI__ATTACHMENTS__VIDEO_DECAY_ITERATIONS` | int  | `1`     | Iterations before video attachments decay.                          |
 
-| Variable                                               | Type  | Default  | Description                                                      |
-| ------------------------------------------------------ | ----- | -------- | ---------------------------------------------------------------- |
-| `NOKODO__AI__WINDOWING__ENABLED`                       | bool  | `false`  | Enable context window management and summarization.              |
-| `NOKODO__AI__WINDOWING__MAX_MESSAGES`                  | int   | `50`     | Secondary message count guard (even if tokens fit, cap at this). |
-| `NOKODO__AI__WINDOWING__TRIGGER_RATIO`                 | float | `0.70`   | Token budget fraction at which background summarization starts.  |
-| `NOKODO__AI__WINDOWING__HARD_RATIO`                    | float | `0.90`   | Token budget fraction for hard truncation (last resort).         |
-| `NOKODO__AI__WINDOWING__SUMMARY_BATCH_SIZE`            | int   | `20`     | Oldest unsummarized messages per summary batch.                  |
-| `NOKODO__AI__WINDOWING__MAX_SUMMARIES_BEFORE_CONDENSE` | int   | `4`      | Condense existing summaries into one when this many accumulate.  |
-| `NOKODO__AI__WINDOWING__TOOL_RESULT_MAX_SHARE`         | float | `0.25`   | Max fraction of budget a single tool result may consume.         |
-| `NOKODO__AI__WINDOWING__TOOL_RESULT_HARD_CAP`          | int   | `100000` | Absolute character ceiling per tool result.                      |
-| `NOKODO__AI__WINDOWING__RESPONSE_HEADROOM`             | int   | `4096`   | Tokens reserved for the model's response.                        |
+#### Context compaction (`NOKODO__AI__CONTEXT_COMPACTION__*`)
+
+| Variable                                                          | Type  | Default  | Description                                                     |
+| ----------------------------------------------------------------- | ----- | -------- | --------------------------------------------------------------- |
+| `NOKODO__AI__CONTEXT_COMPACTION__ENABLED`                         | bool  | `true`   | Enable token-aware context compaction and summarization.        |
+| `NOKODO__AI__CONTEXT_COMPACTION__TRIGGER_RATIO`                   | float | `0.70`   | Token budget fraction at which background summarization starts. |
+| `NOKODO__AI__CONTEXT_COMPACTION__MAX_SUMMARIES_BEFORE_CONDENSE`   | int   | `4`      | Condense existing summaries into one when this many accumulate. |
+| `NOKODO__AI__CONTEXT_COMPACTION__PROMPT_OVERHEAD_TOKENS`          | int   | `300`    | Prompt framing and provider overhead budget.                    |
+| `NOKODO__AI__CONTEXT_COMPACTION__TOOL_RESULT_MAX_SHARE`           | float | `0.25`   | Max fraction of budget a single tool result may consume.        |
+| `NOKODO__AI__CONTEXT_COMPACTION__TOOL_RESULT_HARD_CAP`            | int   | `100000` | Absolute character ceiling per tool result.                     |
+| `NOKODO__AI__CONTEXT_COMPACTION__TOOL_RESULTS_COMBINED_MAX_SHARE` | float | `0.50`   | Max fraction of budget for all tool results combined.           |
+| `NOKODO__AI__CONTEXT_COMPACTION__RESPONSE_HEADROOM`               | int   | `4096`   | Tokens reserved for the model's response.                       |
 
 ---
 
@@ -272,12 +273,12 @@ or `custom`) and `URL` (full custom URL override). `cdn` uses
 
 #### Vector search tuning (`NOKODO__ASSETS__VECTOR__*`)
 
-| Variable                                         | Type            | Default        | Description                                                                               |
-| ------------------------------------------------ | --------------- | -------------- | ----------------------------------------------------------------------------------------- |
+| Variable                                         | Type            | Default                   | Description                                                                               |
+| ------------------------------------------------ | --------------- | ------------------------- | ----------------------------------------------------------------------------------------- |
 | `NOKODO__ASSETS__VECTOR__COLLECTION_TEMPLATE`    | string          | `nokodo-ai__{model}_bm25` | Collection name template. `{model}` is replaced with the slugified embedding model name.  |
-| `NOKODO__ASSETS__VECTOR__SPARSE_VECTORS_ENABLED` | bool            | `true`         | Enable BM25 sparse vectors for hybrid search.                                             |
-| `NOKODO__ASSETS__VECTOR__FUSION_ALGORITHM`       | `rrf` \| `dbsf` | `rrf`          | Score fusion: `rrf` (reciprocal rank fusion) or `dbsf` (distribution-based score fusion). |
-| `NOKODO__ASSETS__VECTOR__NORMALIZE_SCORES`       | bool            | `true`         | Normalize fused scores to 0-1 range.                                                      |
+| `NOKODO__ASSETS__VECTOR__SPARSE_VECTORS_ENABLED` | bool            | `true`                    | Enable BM25 sparse vectors for hybrid search.                                             |
+| `NOKODO__ASSETS__VECTOR__FUSION_ALGORITHM`       | `rrf` \| `dbsf` | `rrf`                     | Score fusion: `rrf` (reciprocal rank fusion) or `dbsf` (distribution-based score fusion). |
+| `NOKODO__ASSETS__VECTOR__NORMALIZE_SCORES`       | bool            | `true`                    | Normalize fused scores to 0-1 range.                                                      |
 
 #### Embeddings (`NOKODO__ASSETS__EMBEDDINGS__*`)
 

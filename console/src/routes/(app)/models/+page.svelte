@@ -14,17 +14,7 @@
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'
-	import {
-		ArrowDown,
-		ArrowUp,
-		Cpu,
-		Pencil,
-		Plus,
-		RefreshCw,
-		Search,
-		Trash2,
-		X,
-	} from '@lucide/svelte'
+	import { ArrowDown, ArrowUp, Cpu, Plus, RefreshCw, Search, Trash2, X } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
 
@@ -43,11 +33,11 @@
 	let modelSortKey = $state<ModelSortKey>('name')
 	let modelSortDir = $state<SortDir>('asc')
 
-	const ALL_MODALITIES = ['text', 'images', 'audio', 'video'] as const
+	const ALL_MODALITIES = ['text', 'documents', 'images', 'audio', 'video'] as const
 	type InputModality = (typeof ALL_MODALITIES)[number]
 
 	const DEFAULT_MODALITIES: Record<string, InputModality[]> = {
-		chat_model: ['text', 'images'],
+		chat_model: ['text', 'documents', 'images'],
 		embedding: ['text'],
 		image: ['text', 'images'],
 		audio: ['text', 'audio'],
@@ -529,7 +519,16 @@
 			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 				{#each filteredModels as model (model.id)}
 					<Card
-						class="flex shrink-0 flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
+						class="flex shrink-0 cursor-pointer flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
+						onclick={() => openEditModal(model)}
+						onkeydown={(event) => {
+							if (event.key === 'Enter' || event.key === ' ') {
+								event.preventDefault()
+								openEditModal(model)
+							}
+						}}
+						role="button"
+						tabindex={0}
 					>
 						<CardHeader class="border-b border-zinc-800/50 px-4 py-4">
 							<div class="flex items-start justify-between gap-4">
@@ -560,16 +559,11 @@
 									<Button
 										variant="ghost"
 										size="icon"
-										class="h-7 w-7 text-zinc-500 hover:text-zinc-300"
-										onclick={() => openEditModal(model)}
-									>
-										<Pencil class="h-3.5 w-3.5" />
-									</Button>
-									<Button
-										variant="ghost"
-										size="icon"
 										class="h-7 w-7 text-zinc-500 hover:text-red-400"
-										onclick={() => handleDelete(model.id)}
+										onclick={(event) => {
+											event.stopPropagation()
+											handleDelete(model.id)
+										}}
 									>
 										<Trash2 class="h-3.5 w-3.5" />
 									</Button>
@@ -624,6 +618,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[min(512px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
 		>
 			<div

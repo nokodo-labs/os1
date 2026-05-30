@@ -3,10 +3,12 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { api, unwrap, type Schemas } from '$lib/api'
+	import { auth } from '$lib/auth.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
+	import { Switch } from '$lib/components/ui/switch'
 	import { Textarea } from '$lib/components/ui/textarea'
 	import {
 		Ban,
@@ -35,7 +37,6 @@
 		Trash2,
 		User as UserIcon,
 		Users,
-		UserX,
 		X,
 	} from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
@@ -59,7 +60,14 @@
 		onDeleted?: (userId: string) => void
 	}
 
-	type SectionKey = 'overview' | 'profile' | 'clients' | 'social' | 'permissions' | 'preferences'
+	type SectionKey =
+		| 'overview'
+		| 'profile'
+		| 'account'
+		| 'clients'
+		| 'social'
+		| 'permissions'
+		| 'preferences'
 	type ResourceRoute =
 		| '/threads'
 		| '/memories'
@@ -124,7 +132,7 @@
 	let editAvatarUrl = $state('')
 	let editIsActive = $state(true)
 	let editIsSuperuser = $state(false)
-	let editFindByEmail = $state(true)
+	let editFindByEmail = $state(false)
 	let isSaving = $state(false)
 	let saveError = $state<string | null>(null)
 	let saveSuccess = $state(false)
@@ -158,13 +166,18 @@
 	let isSavingPrivacy = $state(false)
 	let privacyError = $state<string | null>(null)
 	let privacySaveSuccess = $state(false)
-	let isDeactivating = $state(false)
-	let deactivateError = $state<string | null>(null)
-	let confirmDeactivate = $state(false)
+	let isSavingAccount = $state(false)
+	let accountError = $state<string | null>(null)
+	let accountSaveSuccess = $state(false)
+	let isDeletingUser = $state(false)
+	let deleteUserError = $state<string | null>(null)
+	let confirmDeleteUser = $state(false)
+	const isViewingSelf = $derived(Boolean(user && auth.user?.id === user.id))
 
 	const sections: Array<{ key: SectionKey; label: string; icon: typeof UserIcon }> = [
 		{ key: 'overview', label: 'overview', icon: UserIcon },
 		{ key: 'profile', label: 'profile', icon: Pencil },
+		{ key: 'account', label: 'account', icon: LockKeyhole },
 		{ key: 'clients', label: 'clients', icon: Smartphone },
 		{ key: 'social', label: 'social', icon: Users },
 		{ key: 'permissions', label: 'permissions', icon: KeyRound },
@@ -260,6 +273,10 @@
 		saveError = null
 		clientError = null
 		socialError = null
+		accountError = null
+		accountSaveSuccess = false
+		deleteUserError = null
+		confirmDeleteUser = false
 		onClose?.()
 	}
 
@@ -322,6 +339,12 @@
 		privacyBirthDate = normalized.birth_date
 		privacyAllowDms = normalized.allow_dms
 		privacyAllowFriendRequests = normalized.allow_friend_requests
+	}
+
+	function syncAccountForm(value: User) {
+		editIsActive = value.is_active !== false
+		editIsSuperuser = value.is_superuser
+		editFindByEmail = value.find_by_email
 	}
 
 	function currentPrivacy(): UserPrivacy {
@@ -428,9 +451,6 @@
 		editEmail = user.email
 		editBio = user.bio ?? ''
 		editAvatarUrl = user.avatar_url ?? ''
-		editIsActive = user.is_active !== false
-		editIsSuperuser = user.is_superuser
-		editFindByEmail = user.find_by_email
 		isEditing = true
 		saveError = null
 	}
@@ -454,13 +474,11 @@
 					email: editEmail.trim() || undefined,
 					bio: editBio.trim() || null,
 					avatar_url: editAvatarUrl.trim() || null,
-					is_active: editIsActive,
-					is_superuser: editIsSuperuser,
-					find_by_email: editFindByEmail,
 				},
 			})
 			const updated = unwrap(r)
 			user = updated
+			syncAccountForm(updated)
 			isEditing = false
 			saveSuccess = true
 			onUpdated?.(updated)
@@ -472,24 +490,47 @@
 		}
 	}
 
-	async function toggleActive() {
+	async function saveAccount() {
 		if (!user) return
-		isDeactivating = true
-		deactivateError = null
+		isSavingAccount = true
+		accountError = null
+		accountSaveSuccess = false
 		try {
 			const r = await api.PATCH('/v1/users/{user_id}', {
 				params: { path: { user_id: user.id } },
-				body: { is_active: !user.is_active },
+				body: {
+					is_active: editIsActive,
+					is_superuser: editIsSuperuser,
+				},
 			})
 			const updated = unwrap(r)
 			user = updated
-			confirmDeactivate = false
+			syncAccountForm(updated)
+			accountSaveSuccess = true
 			onUpdated?.(updated)
-			if (!updated.is_active) onDeleted?.(updated.id)
+			setTimeout(() => (accountSaveSuccess = false), 2000)
 		} catch (e) {
-			deactivateError = e instanceof Error ? e.message : 'failed to update account'
+			accountError = e instanceof Error ? e.message : 'failed to save account'
 		} finally {
-			isDeactivating = false
+			isSavingAccount = false
+		}
+	}
+
+	async function deleteCurrentUser() {
+		if (!user || isViewingSelf) return
+		isDeletingUser = true
+		deleteUserError = null
+		try {
+			const r = await api.DELETE('/v1/users/{user_id}', {
+				params: { path: { user_id: user.id } },
+			})
+			unwrap(r)
+			onDeleted?.(user.id)
+			close()
+		} catch (e) {
+			deleteUserError = e instanceof Error ? e.message : 'failed to delete user'
+		} finally {
+			isDeletingUser = false
 		}
 	}
 
@@ -537,11 +578,12 @@
 		try {
 			const r = await api.PATCH('/v1/users/{user_id}', {
 				params: { path: { user_id: user.id } },
-				body: { privacy: currentPrivacy() },
+				body: { privacy: currentPrivacy(), find_by_email: editFindByEmail },
 			})
 			const updated = unwrap(r)
 			user = updated
 			syncPrivacyForm(updated.privacy)
+			syncAccountForm(updated)
 			privacySaveSuccess = true
 			onUpdated?.(updated)
 			setTimeout(() => (privacySaveSuccess = false), 2000)
@@ -648,6 +690,7 @@
 		const loadedUser = unwrap(userResult)
 		user = loadedUser
 		syncPrivacyForm(loadedUser.privacy)
+		syncAccountForm(loadedUser)
 		permissions = permissionsResult.data ?? null
 	}
 
@@ -748,6 +791,10 @@
 		if (!user) return
 		socialBusyId = id
 		socialError = null
+		accountError = null
+		accountSaveSuccess = false
+		deleteUserError = null
+		confirmDeleteUser = false
 		try {
 			await action()
 			await loadSocial(user.id)
@@ -872,6 +919,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] w-[min(96vw,76rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-xl"
 		>
 			<div
@@ -1188,29 +1236,6 @@
 													class="rounded-xl border-zinc-700 bg-zinc-900 text-sm"
 												/>
 											</div>
-											<div class="grid gap-3 sm:grid-cols-3">
-												<label
-													class="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm"
-													><input
-														type="checkbox"
-														bind:checked={editIsActive}
-													/>active</label
-												>
-												<label
-													class="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm"
-													><input
-														type="checkbox"
-														bind:checked={editIsSuperuser}
-													/>superuser</label
-												>
-												<label
-													class="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm"
-													><input
-														type="checkbox"
-														bind:checked={editFindByEmail}
-													/>find by email</label
-												>
-											</div>
 											{#if saveError}<div
 													class="rounded-lg border border-red-900/50 bg-red-900/10 px-3 py-2 text-xs text-red-300"
 												>
@@ -1281,34 +1306,97 @@
 										</div>
 									</div>
 								{/if}
+							</div>
+						{:else if activeSection === 'account'}
+							<div class="space-y-5">
+								<div class="flex items-center justify-between">
+									<p
+										class="inline-flex items-center gap-2 text-xs font-medium tracking-wider text-zinc-500 uppercase"
+									>
+										<LockKeyhole class="h-3.5 w-3.5" />account
+									</p>
+									<Button
+										variant="outline"
+										size="sm"
+										class="rounded-xl"
+										onclick={saveAccount}
+										disabled={isSavingAccount}
+									>
+										<Save class="mr-1.5 h-3.5 w-3.5" />{isSavingAccount
+											? 'saving...'
+											: 'save account'}
+									</Button>
+								</div>
+
+								<div class="grid gap-3 md:grid-cols-2">
+									<div
+										class="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm"
+									>
+										<div class="min-w-0">
+											<div class="text-zinc-100">account enabled</div>
+											<div class="text-xs text-zinc-500">can sign in</div>
+										</div>
+										<Switch bind:checked={editIsActive} />
+									</div>
+									<div
+										class="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm"
+									>
+										<div class="min-w-0">
+											<div class="text-zinc-100">superuser</div>
+											<div class="text-xs text-zinc-500">admin access</div>
+										</div>
+										<Switch bind:checked={editIsSuperuser} />
+									</div>
+								</div>
+
+								{#if accountError}<div
+										class="rounded-lg border border-red-900/50 bg-red-900/10 px-3 py-2 text-xs text-red-300"
+									>
+										{accountError}
+									</div>{/if}
+								{#if accountSaveSuccess}<div
+										class="rounded-lg border border-emerald-900/50 bg-emerald-900/10 px-3 py-2 text-xs text-emerald-300"
+									>
+										saved
+									</div>{/if}
+
 								<div class="rounded-xl border border-red-900/30 bg-red-950/10 p-4">
-									<p class="text-xs font-medium text-red-400">danger zone</p>
-									{#if deactivateError}<div
+									<p class="text-xs font-medium text-red-400">delete user</p>
+									<p class="mt-2 text-xs text-zinc-400">
+										permanently removes this account and owned resources.
+									</p>
+									{#if deleteUserError}<div
 											class="mt-3 rounded-lg border border-red-900/50 bg-red-900/10 px-3 py-2 text-xs text-red-300"
 										>
-											{deactivateError}
+											{deleteUserError}
 										</div>{/if}
-									{#if confirmDeactivate}
+									{#if isViewingSelf}
+										<div
+											class="mt-3 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400"
+										>
+											you cannot delete your own account from here.
+										</div>
+									{:else if confirmDeleteUser}
 										<p class="mt-3 text-xs text-zinc-400">
-											{user.is_active !== false
-												? 'deactivate this account? they will no longer be able to sign in.'
-												: 'reactivate this account?'}
+											delete this user permanently? this cannot be undone.
 										</p>
 										<div class="mt-3 flex gap-2">
 											<Button
 												variant="outline"
 												size="sm"
 												class="rounded-xl border-red-800 text-red-400 hover:bg-red-950"
-												onclick={toggleActive}
-												disabled={isDeactivating}
-												><UserX class="mr-1.5 h-3.5 w-3.5" />{isDeactivating
-													? 'saving...'
-													: 'confirm'}</Button
+												onclick={deleteCurrentUser}
+												disabled={isDeletingUser}
+												><Trash2
+													class="mr-1.5 h-3.5 w-3.5"
+												/>{isDeletingUser
+													? 'deleting...'
+													: 'delete user'}</Button
 											><Button
 												variant="ghost"
 												size="sm"
 												class="rounded-xl"
-												onclick={() => (confirmDeactivate = false)}
+												onclick={() => (confirmDeleteUser = false)}
 												>cancel</Button
 											>
 										</div>
@@ -1317,11 +1405,8 @@
 											variant="outline"
 											size="sm"
 											class="mt-3 rounded-xl border-red-800 text-red-400 hover:bg-red-950"
-											onclick={() => (confirmDeactivate = true)}
-											><UserX class="mr-1.5 h-3.5 w-3.5" />{user.is_active !==
-											false
-												? 'deactivate account'
-												: 'reactivate account'}</Button
+											onclick={() => (confirmDeleteUser = true)}
+											><Trash2 class="mr-1.5 h-3.5 w-3.5" />delete user</Button
 										>
 									{/if}
 								</div>
@@ -1582,6 +1667,17 @@
 												? 'saving...'
 												: 'save privacy'}
 										</Button>
+									</div>
+									<div
+										class="mt-4 flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm"
+									>
+										<div class="min-w-0">
+											<div class="text-zinc-100">email discovery</div>
+											<div class="text-xs text-zinc-500">
+												can be found by email search
+											</div>
+										</div>
+										<Switch bind:checked={editFindByEmail} />
 									</div>
 									<div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
 										{#each privacyFields as field (field.key)}

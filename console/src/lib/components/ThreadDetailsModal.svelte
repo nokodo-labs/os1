@@ -25,6 +25,7 @@
 		GitBranch,
 		LoaderCircle,
 		Pencil,
+		RotateCcw,
 		Save,
 		Trash2,
 		TriangleAlert,
@@ -39,9 +40,11 @@
 		open: boolean
 		threadId: string | null
 		onClose?: () => void
+		onUpdated?: (thread: Thread) => void
+		onDeleted?: (threadId: string) => void
 	}
 
-	let { open = $bindable(false), threadId, onClose }: Props = $props()
+	let { open = $bindable(false), threadId, onClose, onUpdated, onDeleted }: Props = $props()
 
 	let thread = $state<Thread | null>(null)
 	let isLoading = $state(false)
@@ -66,9 +69,14 @@
 	let threadTasks = $state<Task[]>([])
 	let isLoadingTasks = $state(false)
 	let tasksError = $state<string | null>(null)
+	let isDeleteConfirming = $state(false)
+	let isDeleting = $state(false)
+	let deleteError = $state<string | null>(null)
 	let isWipeConfirming = $state(false)
 	let isWiping = $state(false)
 	let wipeError = $state<string | null>(null)
+	let isRestoring = $state(false)
+	let restoreError = $state<string | null>(null)
 	let showAclModal = $state(false)
 
 	const messagePageSize = 60
@@ -102,8 +110,47 @@
 	}
 
 	function close() {
+		isDeleteConfirming = false
+		isWipeConfirming = false
+		deleteError = null
+		wipeError = null
+		restoreError = null
 		open = false
 		onClose?.()
+	}
+
+	async function deleteThread() {
+		if (!threadId) return
+		isDeleting = true
+		deleteError = null
+		try {
+			unwrap(
+				await api.DELETE('/v1/threads/{thread_id}', {
+					params: { path: { thread_id: threadId } },
+				})
+			)
+			const updated = unwrap(
+				await api.GET('/v1/threads/{thread_id}', {
+					params: {
+						path: { thread_id: threadId },
+						query: { include_hidden: true },
+					},
+				})
+			)
+			thread = updated
+			onUpdated?.(updated)
+			isDeleteConfirming = false
+		} catch (e: unknown) {
+			const message = errorMessage(e)
+			if (message?.includes('not found')) {
+				onDeleted?.(threadId)
+				close()
+				return
+			}
+			deleteError = message || 'delete failed'
+		} finally {
+			isDeleting = false
+		}
 	}
 
 	async function wipeThread() {
@@ -116,12 +163,32 @@
 					params: { path: { thread_id: threadId }, query: { permanent: true } },
 				})
 			)
+			onDeleted?.(threadId)
+			isWipeConfirming = false
 			close()
 		} catch (e: unknown) {
 			wipeError = errorMessage(e) || 'wipe failed'
 		} finally {
 			isWiping = false
-			isWipeConfirming = false
+		}
+	}
+
+	async function restoreThread() {
+		if (!threadId) return
+		isRestoring = true
+		restoreError = null
+		try {
+			const updated = unwrap(
+				await api.POST('/v1/threads/{thread_id}/restore', {
+					params: { path: { thread_id: threadId } },
+				})
+			)
+			thread = updated
+			onUpdated?.(updated)
+		} catch (e: unknown) {
+			restoreError = errorMessage(e) || 'restore failed'
+		} finally {
+			isRestoring = false
 		}
 	}
 
@@ -595,6 +662,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] w-auto max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
 		>
 			<div
@@ -686,13 +754,69 @@
 								class="rounded-xl border border-red-900/40 bg-red-950/20 p-3 text-sm"
 							>
 								<div class="mb-2 font-medium text-red-300">danger zone</div>
+								{#if deletedAt(thread)}
+									<div class="mb-3">
+										<button
+											class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-800 bg-emerald-900/20 px-3 py-1.5 text-xs text-emerald-300 transition-colors hover:bg-emerald-900/40 hover:text-emerald-100 disabled:opacity-50"
+											disabled={isRestoring || isWiping}
+											onclick={restoreThread}
+										>
+											<RotateCcw class="h-3.5 w-3.5" />
+											{isRestoring ? 'restoring...' : 'restore thread'}
+										</button>
+										{#if restoreError}
+											<p class="mt-2 text-xs text-red-400">{restoreError}</p>
+										{/if}
+									</div>
+								{/if}
+								{#if !deletedAt(thread)}
+									<div class="mb-3">
+										{#if !isDeleteConfirming}
+											<button
+												class="inline-flex items-center gap-1.5 rounded-lg border border-red-800/70 bg-red-900/20 px-3 py-1.5 text-xs text-red-300 transition-colors hover:bg-red-900/40 hover:text-red-100"
+												onclick={() => (isDeleteConfirming = true)}
+											>
+												<Trash2 class="h-3.5 w-3.5" />
+												delete thread
+											</button>
+										{:else}
+											<p class="mb-2 text-xs text-red-300">
+												This soft-deletes the thread.
+											</p>
+											{#if deleteError}
+												<p class="mb-2 text-xs text-red-400">
+													{deleteError}
+												</p>
+											{/if}
+											<div class="flex gap-2">
+												<button
+													class="inline-flex items-center gap-1.5 rounded-lg border border-red-700 bg-red-800/40 px-3 py-1.5 text-xs text-red-200 transition-colors hover:bg-red-700/60 disabled:opacity-50"
+													disabled={isDeleting}
+													onclick={deleteThread}
+												>
+													{isDeleting ? 'deleting...' : 'confirm delete'}
+												</button>
+												<button
+													class="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 transition-colors hover:bg-zinc-800"
+													disabled={isDeleting}
+													onclick={() => {
+														isDeleteConfirming = false
+														deleteError = null
+													}}
+												>
+													cancel
+												</button>
+											</div>
+										{/if}
+									</div>
+								{/if}
 								{#if !isWipeConfirming}
 									<button
 										class="inline-flex items-center gap-1.5 rounded-lg border border-red-800 bg-red-900/30 px-3 py-1.5 text-xs text-red-300 transition-colors hover:bg-red-900/60 hover:text-red-100"
 										onclick={() => (isWipeConfirming = true)}
 									>
 										<Trash2 class="h-3.5 w-3.5" />
-										wipe thread
+										full wipe
 									</button>
 								{:else}
 									<p class="mb-2 text-xs text-red-300">

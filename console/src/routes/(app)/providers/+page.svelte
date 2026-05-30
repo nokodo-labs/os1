@@ -23,15 +23,14 @@
 	import {
 		Bot,
 		Cpu,
-		Pencil,
 		Plus,
+		RefreshCw,
 		Search,
+		Server,
 		Settings2,
 		Sparkles,
 		Trash2,
 		X,
-		RefreshCw,
-		Server,
 	} from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
@@ -320,7 +319,16 @@
 			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 				{#each filteredProviders as provider (provider.id)}
 					<Card
-						class="flex shrink-0 flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
+						class="flex shrink-0 cursor-pointer flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
+						onclick={() => openEditModal(provider)}
+						onkeydown={(event) => {
+							if (event.key === 'Enter' || event.key === ' ') {
+								event.preventDefault()
+								openEditModal(provider)
+							}
+						}}
+						role="button"
+						tabindex={0}
 					>
 						<CardHeader class="border-b border-zinc-800/50 px-4 py-4">
 							<div class="flex items-start justify-between gap-4">
@@ -339,14 +347,6 @@
 										>
 									</div>
 								</div>
-								<Button
-									variant="ghost"
-									size="icon"
-									class="h-7 w-7 shrink-0 text-zinc-500 hover:text-zinc-300"
-									onclick={() => openEditModal(provider)}
-								>
-									<Pencil class="h-3.5 w-3.5" />
-								</Button>
 							</div>
 						</CardHeader>
 						<CardContent class="flex flex-1 flex-col justify-end px-4 py-4">
@@ -415,6 +415,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[min(512px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
 		>
 			<div
@@ -556,12 +557,13 @@
 							/>
 						</div>
 						<div class="space-y-2">
-							<Label for="key">API key</Label>
+							<Label for="key">API key (secret)</Label>
 							<Input
 								id="key"
 								type="password"
 								bind:value={formState.api_key}
 								placeholder={modalMode === 'edit' ? '(unchanged)' : 'sk-...'}
+								autocomplete="off"
 								class="rounded-xl"
 							/>
 						</div>
@@ -585,15 +587,28 @@
 							{:else}
 								<div class="space-y-2">
 									{#each headerEntries as entry, i (i)}
-										<div class="flex gap-2">
+										<div
+											class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+										>
+											<Label class="sr-only" for={`header-key-${i}`}
+												>header key</Label
+											>
 											<Input
-												placeholder="Key"
+												id={`header-key-${i}`}
+												placeholder="key"
 												bind:value={entry.key}
+												autocomplete="off"
 												class="h-8 rounded-lg text-xs"
 											/>
+											<Label class="sr-only" for={`header-value-${i}`}
+												>header value (secret)</Label
+											>
 											<Input
-												placeholder="Value"
+												id={`header-value-${i}`}
+												type="password"
+												placeholder="value"
 												bind:value={entry.value}
+												autocomplete="off"
 												class="h-8 rounded-lg text-xs"
 											/>
 											<Button

@@ -131,6 +131,7 @@ options:
 - `--output path/to/file.py` - custom output path
 - `--upgrade-revision <rev>` - revision to apply before autogenerate (default: head)
 - `--keep-database` - do not drop the temp database after running
+- `--check` - check for drift only; doesn't require a message
 
 ### other alembic commands
 

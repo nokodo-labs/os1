@@ -46,7 +46,6 @@
 		Image as ImageIcon,
 		MessageSquare,
 		Paperclip,
-		Pencil,
 		Plus,
 		RefreshCw,
 		Save,
@@ -117,6 +116,7 @@ user: {{ user_name }}.
 	let formProfileImageValue = $state('')
 	let configParams = $state<Record<string, unknown>>({})
 	let formSteeringEnabled = $state(true)
+	let formUserMcpToolsEnabled = $state(false)
 	// preserve feature keys this ui does not edit yet.
 	let originalFeatures = $state<Record<string, unknown>>({})
 
@@ -578,17 +578,17 @@ user: {{ user_name }}.
 				api.GET('/v1/models').then((r) => unwrap(r)),
 				api.GET('/v1/providers').then((r) => unwrap(r)),
 				api
-					.GET('/v1/plugins/available', {
+					.GET('/v1/plugins', {
 						params: { query: { plugin_type: 'tool' } },
 					})
 					.then((r) => unwrap(r)),
 				api
-					.GET('/v1/plugins/available', {
+					.GET('/v1/plugins', {
 						params: { query: { plugin_type: 'filter' } },
 					})
 					.then((r) => unwrap(r)),
 				api
-					.GET('/v1/plugins/available', {
+					.GET('/v1/plugins', {
 						params: { query: { plugin_type: 'hook' } },
 					})
 					.then((r) => unwrap(r)),
@@ -626,6 +626,7 @@ user: {{ user_name }}.
 		formProfileImageValue = ''
 		configParams = {}
 		formSteeringEnabled = true
+		formUserMcpToolsEnabled = false
 		originalFeatures = {}
 		submitError = null
 		activeSection = 'overview'
@@ -647,8 +648,10 @@ user: {{ user_name }}.
 		configParams = (agentConfig[mt] ?? {}) as Record<string, unknown>
 		const features = (agentConfig.features ?? {}) as Record<string, unknown> & {
 			steering?: { enabled?: boolean }
+			user_mcp_tools?: { enabled?: boolean }
 		}
 		formSteeringEnabled = features.steering?.enabled ?? true
+		formUserMcpToolsEnabled = features.user_mcp_tools?.enabled ?? false
 		originalFeatures = { ...features }
 		submitError = null
 		activeSection = 'overview'
@@ -746,6 +749,7 @@ user: {{ user_name }}.
 		config.features = {
 			...originalFeatures,
 			steering: { enabled: formSteeringEnabled },
+			user_mcp_tools: { enabled: formUserMcpToolsEnabled },
 		}
 		return config
 	}
@@ -921,7 +925,16 @@ user: {{ user_name }}.
 			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 				{#each visibleAgents as agent (agent.id)}
 					<Card
-						class="flex shrink-0 flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
+						class="flex shrink-0 cursor-pointer flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
+						onclick={() => openEditModal(agent)}
+						onkeydown={(event) => {
+							if (event.key === 'Enter' || event.key === ' ') {
+								event.preventDefault()
+								openEditModal(agent)
+							}
+						}}
+						role="button"
+						tabindex={0}
 					>
 						<CardHeader class="border-b border-zinc-800/50 px-4 py-4">
 							<div class="flex items-start justify-between gap-4">
@@ -947,17 +960,11 @@ user: {{ user_name }}.
 										variant="ghost"
 										size="icon"
 										class="h-7 w-7 text-zinc-500 hover:text-zinc-300"
-										onclick={() => openAclModal(agent.id)}
+										onclick={(event) => {
+											event.stopPropagation()
+											openAclModal(agent.id)
+										}}
 									/>
-									<Button
-										variant="ghost"
-										size="icon"
-										class="h-7 w-7 text-zinc-500 hover:text-zinc-300"
-										onclick={() => openEditModal(agent)}
-										title="edit agent"
-									>
-										<Pencil class="h-3.5 w-3.5" />
-									</Button>
 								</div>
 							</div>
 						</CardHeader>
@@ -1011,6 +1018,7 @@ user: {{ user_name }}.
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex h-[min(760px,calc(100vh-2rem))] w-[min(960px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
 		>
 			<div
@@ -1266,7 +1274,7 @@ user: {{ user_name }}.
 																>
 																	{pluginDisplayName(plugin)}
 																</div>
-																{#if plugin.is_native}
+																{#if plugin.source === 'native'}
 																	<span
 																		class="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400"
 																	>
@@ -1324,6 +1332,23 @@ user: {{ user_name }}.
 										<Switch
 											id="steering-toggle"
 											bind:checked={formSteeringEnabled}
+										/>
+									</div>
+								</div>
+								<div class="rounded-xl border border-zinc-800 bg-zinc-950/40 p-3">
+									<div class="flex items-start justify-between gap-4">
+										<div class="space-y-1">
+											<Label for="user-mcp-tools-toggle">user MCP tools</Label
+											>
+											<p class="text-xs text-zinc-500">
+												allow users to choose tools from their own MCP
+												servers for a single run. selected tools are added
+												only for that request.
+											</p>
+										</div>
+										<Switch
+											id="user-mcp-tools-toggle"
+											bind:checked={formUserMcpToolsEnabled}
 										/>
 									</div>
 								</div>

@@ -19,6 +19,7 @@
 		MessageSquare,
 		Package,
 		Pencil,
+		RotateCcw,
 		Server,
 		Trash2,
 		User,
@@ -29,15 +30,18 @@
 	type Props = {
 		open: boolean
 		file: File | null
+		onUpdated?: (file: File) => void
 		onDeleted?: (fileId: string) => void
 	}
 
-	let { open = $bindable(false), file, onDeleted }: Props = $props()
+	let { open = $bindable(false), file, onUpdated, onDeleted }: Props = $props()
 
 	let isDownloading = $state(false)
 	let downloadError = $state<string | null>(null)
 	let confirmDelete = $state(false)
+	let confirmWipe = $state(false)
 	let isDeleting = $state(false)
+	let isRestoring = $state(false)
 	let deleteError = $state<string | null>(null)
 	let showAclModal = $state(false)
 	let isPreviewLoading = $state(false)
@@ -50,6 +54,7 @@
 	function close() {
 		open = false
 		confirmDelete = false
+		confirmWipe = false
 		downloadError = null
 		deleteError = null
 		clearPreview()
@@ -190,13 +195,16 @@
 		}
 	}
 
-	async function deleteFile() {
+	async function deleteFile(permanent = false) {
 		if (!file) return
 		isDeleting = true
 		deleteError = null
 		try {
 			const r = await api.DELETE('/v1/files/{file_id}', {
-				params: { path: { file_id: file.id } },
+				params: {
+					path: { file_id: file.id },
+					query: permanent ? { permanent: true } : undefined,
+				},
 			})
 			if (r.error) {
 				const detail = r.error?.detail
@@ -209,6 +217,25 @@
 			deleteError = e instanceof Error ? e.message : 'failed to delete file'
 		} finally {
 			isDeleting = false
+		}
+	}
+
+	async function restoreFile() {
+		if (!file) return
+		isRestoring = true
+		deleteError = null
+		try {
+			const updated = unwrap(
+				await api.POST('/v1/files/{file_id}/restore', {
+					params: { path: { file_id: file.id } },
+				})
+			)
+			file = updated
+			onUpdated?.(updated)
+		} catch (e) {
+			deleteError = e instanceof Error ? e.message : 'failed to restore file'
+		} finally {
+			isRestoring = false
 		}
 	}
 
@@ -270,6 +297,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] min-w-80 -translate-x-1/2 -translate-y-1/2 flex-col overflow-auto rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-xl"
 		>
 			<div
@@ -617,17 +645,61 @@
 								{deleteError}
 							</div>
 						{/if}
-						{#if confirmDelete}
-							<div class="flex items-center gap-3">
-								<span class="text-sm text-zinc-300"
-									>permanently delete this file?</span
+						{#if file.deleted_at}
+							<div class="flex flex-wrap items-center gap-2">
+								<Button
+									variant="outline"
+									size="sm"
+									class="rounded-xl border-emerald-900/40 text-emerald-400 hover:bg-emerald-900/20 hover:text-emerald-300"
+									disabled={isRestoring || isDeleting}
+									onclick={restoreFile}
 								>
+									<RotateCcw class="mr-1.5 h-3.5 w-3.5" />
+									{isRestoring ? 'restoring...' : 'restore file'}
+								</Button>
+								{#if confirmWipe}
+									<span class="text-sm text-zinc-300"
+										>permanently delete this file?</span
+									>
+									<Button
+										variant="destructive"
+										size="sm"
+										class="rounded-lg"
+										disabled={isDeleting}
+										onclick={() => deleteFile(true)}
+									>
+										{isDeleting ? 'deleting...' : 'yes, delete'}
+									</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										class="rounded-lg"
+										onclick={() => (confirmWipe = false)}
+									>
+										<X class="mr-1.5 h-4 w-4" />
+										cancel
+									</Button>
+								{:else}
+									<Button
+										variant="outline"
+										size="sm"
+										class="rounded-xl border-red-900/40 text-red-400 hover:bg-red-900/20 hover:text-red-300"
+										onclick={() => (confirmWipe = true)}
+									>
+										<Trash2 class="mr-1.5 h-3.5 w-3.5" />
+										perma delete
+									</Button>
+								{/if}
+							</div>
+						{:else if confirmDelete}
+							<div class="flex items-center gap-3">
+								<span class="text-sm text-zinc-300">delete this file?</span>
 								<Button
 									variant="destructive"
 									size="sm"
 									class="rounded-lg"
 									disabled={isDeleting}
-									onclick={deleteFile}
+									onclick={() => deleteFile(false)}
 								>
 									{isDeleting ? 'deleting...' : 'yes, delete'}
 								</Button>
@@ -641,16 +713,57 @@
 									cancel
 								</Button>
 							</div>
+						{:else if confirmWipe}
+							<div class="flex items-center gap-3">
+								<span class="text-sm text-zinc-300"
+									>permanently delete this file?</span
+								>
+								<Button
+									variant="destructive"
+									size="sm"
+									class="rounded-lg"
+									disabled={isDeleting}
+									onclick={() => deleteFile(true)}
+								>
+									{isDeleting ? 'wiping...' : 'yes, wipe'}
+								</Button>
+								<Button
+									variant="outline"
+									size="sm"
+									class="rounded-lg"
+									onclick={() => (confirmWipe = false)}
+								>
+									<X class="mr-1.5 h-4 w-4" />
+									cancel
+								</Button>
+							</div>
 						{:else}
-							<Button
-								variant="outline"
-								size="sm"
-								class="rounded-xl border-red-900/40 text-red-400 hover:bg-red-900/20 hover:text-red-300"
-								onclick={() => (confirmDelete = true)}
-							>
-								<Trash2 class="mr-1.5 h-3.5 w-3.5" />
-								delete file
-							</Button>
+							<div class="flex flex-wrap gap-2">
+								<Button
+									variant="outline"
+									size="sm"
+									class="rounded-xl border-red-900/40 text-red-400 hover:bg-red-900/20 hover:text-red-300"
+									onclick={() => {
+										confirmDelete = true
+										confirmWipe = false
+									}}
+								>
+									<Trash2 class="mr-1.5 h-3.5 w-3.5" />
+									delete file
+								</Button>
+								<Button
+									variant="outline"
+									size="sm"
+									class="rounded-xl border-red-900/40 text-red-400 hover:bg-red-900/20 hover:text-red-300"
+									onclick={() => {
+										confirmWipe = true
+										confirmDelete = false
+									}}
+								>
+									<Trash2 class="mr-1.5 h-3.5 w-3.5" />
+									full wipe
+								</Button>
+							</div>
 						{/if}
 					</div>
 				</div>

@@ -184,6 +184,7 @@
 			params: {
 				query: {
 					owner_id: ownerIdFilter ?? undefined,
+					include_deleted: true,
 					skip,
 					limit,
 					sort_by: sortKey,
