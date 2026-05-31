@@ -4,10 +4,10 @@ version = "1.0.0-rc.1"
 description = "Core library for nokodo AI"
 requires-python = ">=3.13"
 dependencies = [ # library-only dependencies
-    "anthropic>=0.102.0",
-    "google-genai>=2.4.0",
-    "openai>=2.37.0",
-    "pycrdt>=0.13.0",
+    "anthropic>=0.105.2",
+    "google-genai>=2.7.0",
+    "openai>=2.38.0",
+    "pycrdt>=0.13.1",
     "pydantic[email]>=2.13.4",
     "qdrant-client>=1.18.0",
 ]
@@ -15,15 +15,15 @@ dependencies = [ # library-only dependencies
 [project.optional-dependencies]
 api = [
     # Extra deps needed to run the FastAPI app
-    "e2b-code-interpreter>=2.6.2",
-    "fastapi>=0.136.1",
-    "uvicorn[standard]>=0.47.0",
+    "e2b-code-interpreter>=2.7.0",
+    "fastapi>=0.136.3",
+    "uvicorn[standard]>=0.48.0",
     "pydantic-settings>=2.14.1",
-    "sqlalchemy>=2.0.35",
+    "sqlalchemy>=2.0.50",
     "alembic>=1.13.3",
     "psycopg[binary]>=3.3.4",
     "python-multipart>=0.0.29",
-    "joserfc>=1.6.5",
+    "joserfc>=1.6.8",
     "argon2-cffi>=23.1.0",
     "python-dotenv>=1.0.1",
     "jinja2>=3.1.4",
@@ -32,7 +32,7 @@ api = [
     "redis>=6.4.0",
     "taskiq>=0.12.4",
     "taskiq-redis>=1.2.2",
-    "perplexityai>=0.34.0",
+    "perplexityai>=0.36.0",
     "python-dateutil>=2.9.0.post0",
     "pywebpush>=2.3.0",
 ]
@@ -40,12 +40,12 @@ api = [
 dev = [
     "pytest>=8.3.3",
     "pytest-sugar>=1.1.1",
-    "pytest-asyncio>=0.24.0",
+    "pytest-asyncio>=1.4.0",
     "pytest-cov>=5.0.0",
     "pytest-xdist>=3.5.0",
     "httpx>=0.27.2",
-    "ruff>=0.15.13",
-    "types-python-dateutil>=2.9.0.20260508",
+    "ruff>=0.15.15",
+    "types-python-dateutil>=2.9.0.20260518",
     "types-aiobotocore[s3]>=3.7.0",
 ]
 
@@ -120,5 +120,5 @@ directory = "data/htmlcov"
 
 [dependency-groups]
 dev = [
-    "ty>=0.0.34",
+    "ty>=0.0.40",
 ]
