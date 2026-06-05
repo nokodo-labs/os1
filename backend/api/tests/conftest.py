@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import atexit
 import os
 import shutil
@@ -13,10 +12,12 @@ from collections.abc import AsyncGenerator, Generator
 from contextlib import contextmanager
 from pathlib import Path
 from threading import Lock
+from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+import redis
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL, Connection, make_url
@@ -121,6 +122,23 @@ def _api_test_stub_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
 	monkeypatch.setattr(vectorstores_service, "upsert_chunks", _noop_upsert)
 	monkeypatch.setattr(vectorstores_service, "delete", _noop_delete)
 	monkeypatch.setattr(vectorstores_service, "search", _noop_search)
+
+
+@pytest.fixture(autouse=True)
+def _api_test_neutralize_durable_tasks(monkeypatch: pytest.MonkeyPatch) -> None:
+	"""prevent durable task enqueues from hitting the (unstarted) Redis broker.
+
+	unit tests never run a TaskIQ worker, so the global broker is never started.
+	stubbing kick lets service primitives (e.g. store_file) enqueue background
+	work without TESTING-only branches in production code. test_tasks.py rebinds
+	its own InMemoryBroker, so this global stub does not affect it.
+	"""
+	from api.taskiq import broker
+
+	async def _noop_kick(*args: object, **kwargs: object) -> None:
+		pass
+
+	monkeypatch.setattr(broker, "kick", _noop_kick)
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -350,6 +368,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 	if _is_ci_run():
 		return
 	_cleanup_leftover_test_databases()
+	_flush_isolated_test_redis()
 
 
 def _find_available_port() -> int:
@@ -811,27 +830,59 @@ async def _create_async_engine_with_fallback(url: URL) -> AsyncEngine:
 	) from (errors[-1] if errors else None)
 
 
-@pytest.fixture(scope="session")
-def event_loop() -> Generator[asyncio.AbstractEventLoop]:
-	loop = asyncio.get_event_loop_policy().new_event_loop()
-	yield loop
-	loop.close()
+def _isolated_test_redis_url() -> str:
+	"""Return ``REDIS_URL`` repointed at the isolated test logical DB.
+
+	The dev/prod redis DB (the path in ``settings.cache.redis.url``) is left
+	untouched; tests use ``TEST_REDIS_DB`` (default ``15``) so their pub/sub
+	and task-bus writes can never collide with live redis state.
+	"""
+	test_db = int(os.getenv("TEST_REDIS_DB", "15"))
+	parts = urlsplit(settings.cache.redis.url)
+	return urlunsplit(parts._replace(path=f"/{test_db}"))
+
+
+def _flush_isolated_test_redis() -> None:
+	"""Best-effort flush of the isolated test redis DB after a run.
+
+	Equivalent to dropping the per-test Postgres databases: it clears the
+	dedicated test namespace so leftover keys never accumulate. Failures
+	(e.g. redis unavailable at teardown) are ignored so they cannot fail the
+	run.
+	"""
+	try:
+		client = redis.from_url(_isolated_test_redis_url())
+		try:
+			client.flushdb()
+		finally:
+			client.close()
+	except (OSError, redis.exceptions.RedisError):
+		return
 
 
 @pytest_asyncio.fixture(scope="function", loop_scope="function", autouse=True)
 async def _api_test_redis_lifecycle() -> AsyncGenerator[None]:
-	"""Connect the singleton redis client for each test.
+	"""Connect the singleton redis client to an isolated test DB per test.
 
-	Uses function scope so every test runs against a redis client whose
-	connection pool is bound to that test's running loop. Tests use the
-	same redis (valkey) instance the dev stack starts on ``REDIS_URL``
-	(default ``redis://127.0.0.1:6380/0``). CI ensures a valkey container
-	is available. There is no in-process fallback - if connection fails,
-	tests fail fast.
+	Mirrors the per-test Postgres isolation: real functionality lives on the
+	dev/prod redis logical DB (the one in ``REDIS_URL``, default ``0``) while
+	tests run against a dedicated logical DB (``TEST_REDIS_DB``, default
+	``15``). Task-bus and run-bus writes made by service primitives therefore
+	land in a namespace that real redis features never read, so the suite can
+	never clobber or be clobbered by live redis state. TaskIQ stays isolated
+	separately because ``broker.kick`` is stubbed (durable enqueues no-op).
+
+	Function scope binds the connection pool to each test's running loop, and
+	the teardown closes it on that same loop. Tests use the same valkey
+	instance the dev stack starts on ``REDIS_URL``; CI ensures a valkey
+	container is available. There is no in-process fallback - if connection
+	fails, tests fail fast.
 	"""
 	from api.redis import redis_client
 
-	await redis_client.connect()
+	# connect() is idempotent and the prior test's teardown already closed the
+	# singleton, so this opens a fresh pool bound to the current test loop.
+	await redis_client.connect(url=_isolated_test_redis_url())
 	try:
 		yield
 	finally:
@@ -955,7 +1006,7 @@ async def user_auth(
 	assert isinstance(headers, dict)
 	user_resp = await client.post(
 		"/v1/users",
-		headers=headers,
+		headers={str(k): str(v) for k, v in headers.items()},
 		json={
 			"email": email,
 			"username": username,

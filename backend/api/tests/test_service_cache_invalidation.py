@@ -44,6 +44,7 @@ from api.schemas.scheduled_item import (
 	ReminderSeriesEdit,
 )
 from api.schemas.user import UserUpdate
+from api.storage import get_storage_backend
 from api.v1.service import agents as agent_service
 from api.v1.service import files as file_service
 from api.v1.service import notes as note_service
@@ -450,7 +451,7 @@ async def test_cached_resource_write_paths_invalidate_payloads(
 		record_resource,
 	)
 	monkeypatch.setattr(
-		file_service,
+		file_service.service,
 		"invalidate_resource_payload_cache",
 		record_resource,
 	)
@@ -465,7 +466,7 @@ async def test_cached_resource_write_paths_invalidate_payloads(
 		record_resource,
 	)
 	monkeypatch.setattr(
-		prompt_service,
+		prompt_service.service,
 		"invalidate_resource_payload_cache",
 		record_resource,
 	)
@@ -502,6 +503,11 @@ async def test_cached_resource_write_paths_invalidate_payloads(
 	db_session.add(file)
 	await db_session.flush()
 	await db_session.refresh(file)
+	await get_storage_backend("local").put(
+		"cache-invalidation-file",
+		b"before",
+		"text/plain",
+	)
 	await file_service.update_file(
 		file.id,
 		FileUpdate(filename="after.txt"),

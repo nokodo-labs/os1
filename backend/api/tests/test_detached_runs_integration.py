@@ -172,6 +172,7 @@ async def test_run_outlives_subscriber_disconnect(
 		client_context=None,
 		origin_session_id=None,
 		tool_choice=None,
+		extra_plugins=[],
 	)
 
 	# first subscriber gets the initial frame, then disconnects
@@ -225,6 +226,7 @@ async def test_multiple_concurrent_subscribers_get_same_frames(
 		client_context=None,
 		origin_session_id=None,
 		tool_choice=None,
+		extra_plugins=[],
 	)
 
 	stream_a = runs_service.subscribe_run_stream(run_id)
@@ -268,6 +270,7 @@ async def test_cancel_run_terminates_producer_and_unblocks_subscribers(
 		client_context=None,
 		origin_session_id=None,
 		tool_choice=None,
+		extra_plugins=[],
 	)
 
 	stream = runs_service.subscribe_run_stream(run_id)
@@ -323,6 +326,7 @@ async def test_late_subscriber_after_eviction_raises_unknown_run(
 		client_context=None,
 		origin_session_id=None,
 		tool_choice=None,
+		extra_plugins=[],
 	)
 
 	# finish immediately and wait for store to clear
@@ -368,6 +372,7 @@ async def test_state_is_running_while_first_subscriber_attached(
 		client_context=None,
 		origin_session_id=None,
 		tool_choice=None,
+		extra_plugins=[],
 	)
 	rs = await run_status_store.get_run(run_id)
 	assert rs is not None
@@ -445,6 +450,7 @@ async def test_producer_startup_crash_broadcasts_run_error(
 		client_context=None,
 		origin_session_id=None,
 		tool_choice=None,
+		extra_plugins=[],
 	)
 
 	for _attempt in range(50):

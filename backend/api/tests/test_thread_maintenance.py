@@ -128,6 +128,7 @@ async def test_thread_maintenance_generates_metadata_and_summary_once(
 			"title": "Project Status",
 			"tags": ["planning", "tasks"],
 			"summary": "The active branch decided to ship task maintenance.",
+			"emoji": "📝",
 		}
 
 	monkeypatch.setattr(
@@ -170,7 +171,7 @@ async def test_thread_maintenance_generates_metadata_and_summary_once(
 	assert len(calls) == 1
 	assert result["metadata_updated"] is True
 	assert result["summary_updated"] is True
-	assert thread.title == "project status"
+	assert thread.title == "📝 project status"
 	assert thread.tags == ["planning", "tasks"]
 	assert len(summaries) == 1
 	assert summaries[0].purpose == SummaryPurpose.CATALOG
@@ -238,6 +239,7 @@ async def test_thread_maintenance_regenerates_summary_after_message_edit(
 			"title": "ready",
 			"tags": ["chat"],
 			"summary": "new summary",
+			"emoji": "💬",
 		}
 
 	monkeypatch.setattr(

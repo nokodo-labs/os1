@@ -20,7 +20,7 @@ from api.permissions import AccessLevel, ResourceType
 from api.schemas.event import EventCreate, EventListFilters
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
-from api.v1.service.chat import run_helpers
+from api.v1.service.chat import run_status
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -662,12 +662,12 @@ async def test_broadcast_run_event_uses_live_payload_fanout(
 		stream_payloads.append((stream_payload, recipient_ids))
 
 	monkeypatch.setattr(
-		run_helpers,
+		run_status,
 		"fanout_live_payload",
 		fake_fanout_live_payload,
 	)
 
-	await run_helpers.broadcast_run_event(
+	await run_status.broadcast_run_event(
 		thread_id=thread_id,
 		agent_id=new_typeid("agent"),
 		run_id=new_typeid("run"),

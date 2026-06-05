@@ -413,15 +413,16 @@ class TestStoreFile:
 		assert file.status == FileStatus.AVAILABLE
 		assert file.size_bytes == len(b"chunk1chunk2")
 
-	async def test_store_without_event(
+	async def test_store_is_side_effect_free(
 		self, db_session: AsyncSession, admin_auth: dict
 	) -> None:
+		# store_file is a pure persistence primitive: it writes bytes and the
+		# File row without emitting events or enqueuing processing.
 		owner_id = admin_auth["user"]["id"]
 		file = await store_file(
 			db_session,
 			data=b"silent",
 			owner_id=owner_id,
-			create_event=False,
 		)
 		assert file.status == FileStatus.AVAILABLE
 

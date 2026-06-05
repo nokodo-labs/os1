@@ -19,7 +19,14 @@ from api.v1.service.threads.core import create_thread, update_thread
 from nokodo_ai.agents import AgentIterationSnapshot, AgentIterationState
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.context import AgentContext
-from nokodo_ai.messages import AssistantMessage, ToolCall, UserMessage
+from nokodo_ai.messages import (
+	AssistantMessage,
+	FileContent,
+	TextContent,
+	ToolCall,
+	ToolMessage,
+	UserMessage,
+)
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
@@ -34,8 +41,10 @@ def _agent_context() -> AgentContext:
 	)
 
 
-def _hook_state(thread: SDKThread) -> AgentIterationSnapshot[AppContext]:
-	return AgentIterationState[AppContext](thread=thread, tools=[]).snapshot()
+def _hook_state(
+	thread: SDKThread, final: bool = False
+) -> AgentIterationSnapshot[AppContext]:
+	return AgentIterationState[AppContext](thread=thread, tools=[]).snapshot(final=final)
 
 
 @pytest.mark.asyncio
@@ -115,11 +124,11 @@ def test_thread_update_rejects_null_tags() -> None:
 
 
 @pytest.mark.asyncio
-async def test_memory_post_processing_hook_skips_tool_iterations(
+async def test_memory_post_processing_hook_defers_to_chat_runner(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	"""memory maintenance waits until the agent has a final assistant response."""
+	"""the SDK hook never schedules before the API runner has the message id."""
 	calls: list[str] = []
 
 	async def fake_start_memory_post_processing_task(
@@ -130,6 +139,7 @@ async def test_memory_post_processing_hook_skips_tool_iterations(
 		conversation_snapshot: str | None = None,
 		thread_id: str | None = None,
 		message_id: str | None = None,
+		message_ref: str | None = None,
 		run_id: str | None = None,
 		emit_activity: bool = False,
 	) -> None:
@@ -140,6 +150,7 @@ async def test_memory_post_processing_hook_skips_tool_iterations(
 			conversation_snapshot,
 			thread_id,
 			message_id,
+			message_ref,
 			run_id,
 			emit_activity,
 		)
@@ -163,14 +174,13 @@ async def test_memory_post_processing_hook_skips_tool_iterations(
 	app_context = AppContext(
 		session=db_session,
 		principal=principal,
+		thread_id=TypeID("thread_memory_hook_defer"),
 		event_emitter=_noop_event_emitter,
 		retrieval=RetrievalContext(query_text="remember this"),
 	)
 	thread = SDKThread()
 	thread.add(UserMessage.from_text("remember this"))
-	thread.add(
-		AssistantMessage(tool_calls=[ToolCall(id="tc1", name="lookup", arguments={})])
-	)
+	thread.add(AssistantMessage.from_text("done"))
 
 	await MemoryPostProcessingHook().execute(
 		_hook_state(thread), _agent_context(), app_context
@@ -195,6 +205,7 @@ async def test_memory_post_processing_hook_skips_when_messages_are_queued(
 		conversation_snapshot: str | None = None,
 		thread_id: str | None = None,
 		message_id: str | None = None,
+		message_ref: str | None = None,
 		run_id: str | None = None,
 		emit_activity: bool = False,
 	) -> None:
@@ -205,6 +216,7 @@ async def test_memory_post_processing_hook_skips_when_messages_are_queued(
 			conversation_snapshot,
 			thread_id,
 			message_id,
+			message_ref,
 			run_id,
 			emit_activity,
 		)
@@ -229,6 +241,7 @@ async def test_memory_post_processing_hook_skips_when_messages_are_queued(
 		session=db_session,
 		principal=principal,
 		run_id=TypeID("run_memory_hook_queued"),
+		thread_id=TypeID("thread_memory_hook_queued"),
 		event_emitter=_noop_event_emitter,
 		retrieval=RetrievalContext(query_text="remember this"),
 	)
@@ -247,10 +260,10 @@ async def test_memory_post_processing_hook_skips_when_messages_are_queued(
 	thread.add(UserMessage.from_text("remember this"))
 	thread.add(AssistantMessage.from_text("done"))
 
-	await MemoryPostProcessingHook().execute(
-		_hook_state(thread),
-		_agent_context(),
+	await memory_hook_module.schedule_memory_post_processing(
+		thread,
 		app_context,
+		"msg_final",
 	)
 
 	assert calls == []
@@ -263,7 +276,7 @@ async def test_memory_post_processing_hook_schedules_after_final_assistant(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	"""memory maintenance schedules once the final assistant answer is present."""
-	calls: list[tuple[str, int, str | None, bool]] = []
+	calls: list[dict[str, object]] = []
 
 	async def fake_start_memory_post_processing_task(
 		task_session: AsyncSession,
@@ -273,17 +286,22 @@ async def test_memory_post_processing_hook_schedules_after_final_assistant(
 		conversation_snapshot: str | None = None,
 		thread_id: str | None = None,
 		message_id: str | None = None,
+		message_ref: str | None = None,
 		run_id: str | None = None,
 		emit_activity: bool = False,
 	) -> None:
-		_ = (task_session, principal, thread_id, message_id, run_id)
+		_ = (task_session, principal)
 		calls.append(
-			(
-				query_text,
-				max_related_memories,
-				conversation_snapshot,
-				emit_activity,
-			)
+			{
+				"query_text": query_text,
+				"max_related_memories": max_related_memories,
+				"conversation_snapshot": conversation_snapshot,
+				"thread_id": thread_id,
+				"message_id": message_id,
+				"message_ref": message_ref,
+				"run_id": run_id,
+				"emit_activity": emit_activity,
+			}
 		)
 
 	monkeypatch.setattr(
@@ -304,25 +322,87 @@ async def test_memory_post_processing_hook_schedules_after_final_assistant(
 	app_context = AppContext(
 		session=db_session,
 		principal=principal,
+		run_id=TypeID("run_memory_hook_final"),
+		thread_id=TypeID("thread_memory_hook_final"),
+		final_assistant_message_ref="msg_ref_memory_hook_final",
 		event_emitter=_noop_event_emitter,
 		retrieval=RetrievalContext(query_text="remember this"),
 	)
 	thread = SDKThread()
-	thread.add(UserMessage.from_text("remember this"))
+	thread.add(
+		UserMessage(
+			content=[
+				FileContent(
+					filename="profile.pdf",
+					media_type="application/pdf",
+					base64="raw bytes must not leak",
+					metadata={
+						"file_id": "file_123",
+						"description": "likes chocolate",
+						"url": "https://private.example/file",
+					},
+				),
+				TextContent(text="remember this"),
+			]
+		)
+	)
+	thread.add(
+		AssistantMessage(
+			content=[TextContent(text="checking")],
+			tool_calls=[
+				ToolCall(
+					id="tc1",
+					name="lookup",
+					arguments={"dump": "tool call dump"},
+				)
+			],
+		)
+	)
+	thread.add(
+		ToolMessage(
+			tool_call_id="tc1",
+			tool_output="tool message dump",
+			attachments=[
+				FileContent(
+					filename="tool-output.csv",
+					media_type="text/csv",
+					metadata={"description": "tool attachment"},
+				)
+			],
+		)
+	)
 	thread.add(AssistantMessage.from_text("done"))
 
 	await MemoryPostProcessingHook().execute(
-		_hook_state(thread), _agent_context(), app_context
+		_hook_state(thread, final=True),
+		_agent_context(),
+		app_context,
 	)
 
-	assert calls == [
-		(
-			"remember this",
-			10,
-			"-2. user: remember this\n-1. assistant: done",
-			True,
-		)
-	]
+	assert len(calls) == 1
+	call = calls[0]
+	assert call["query_text"] == "remember this"
+	assert call["max_related_memories"] == 10
+	assert call["thread_id"] == "thread_memory_hook_final"
+	assert call["message_id"] is None
+	assert call["message_ref"] == "msg_ref_memory_hook_final"
+	assert call["run_id"] == "run_memory_hook_final"
+	assert call["emit_activity"] is True
+	snapshot = call["conversation_snapshot"]
+	assert isinstance(snapshot, str)
+	assert "remember this" in snapshot
+	assert "checking" in snapshot
+	assert "done" in snapshot
+	assert "name=profile.pdf" in snapshot
+	assert "media_type=application/pdf" in snapshot
+	assert "file_id=file_123" in snapshot
+	assert "description=likes chocolate" in snapshot
+	assert "lookup" not in snapshot
+	assert "tool call dump" not in snapshot
+	assert "tool message dump" not in snapshot
+	assert "tool-output.csv" not in snapshot
+	assert "raw bytes must not leak" not in snapshot
+	assert "private.example" not in snapshot
 
 
 @pytest.mark.asyncio

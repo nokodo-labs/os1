@@ -213,6 +213,8 @@ class TestActionPermission:
 			"plugins",
 			"prompts",
 			"files",
+			"mcp",
+			"user.mcp",
 			"console",
 			"frontend",
 		}

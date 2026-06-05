@@ -10,16 +10,14 @@ import pytest
 from api.models.message import MessageType
 from api.models.project import Project as ProjectModel
 from api.models.thread import Thread as ThreadModel
-from api.schemas.content import TextContent
 from api.schemas.event import Event as EventSchema
 from api.schemas.message import Message as MessageSchema
-from api.schemas.message import MessageCreate, public_message_metadata
+from api.schemas.message import MessageCreate, TextContent, public_message_metadata
 from api.schemas.project import Project as ProjectSchema
 from api.schemas.prompt import PromptCreate, PromptUpdate
 from api.schemas.runs import RunInput, RunRequest, ThreadCreateAndRunRequest
 from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadSummary
-from api.v1.service.chat.run_helpers import message_to_sse_data
 from nokodo_ai.utils.typeid import new_typeid
 
 
@@ -167,28 +165,6 @@ def test_message_schema_serializes_public_tool_metadata() -> None:
 	payload = message.model_dump(mode="json", by_alias=True)
 
 	assert payload["metadata_"] == {"run_id": "run_123"}
-
-
-def test_message_to_sse_data_serializes_public_tool_metadata() -> None:
-	now = datetime.now(tz=UTC)
-	message = SimpleNamespace(
-		id=new_typeid("msg"),
-		thread_id=new_typeid("thread"),
-		parent_id=None,
-		type=MessageType.TOOL,
-		content=[],
-		metadata_={
-			"run_id": "run_123",
-			"_message_id": "msg_internal",
-			"_provider_data": {"provider": {"tool_call_id": "call_secret"}},
-			"_web_search": {"engine": "perplexity"},
-		},
-		sender_agent_id=None,
-		sender_user_id=None,
-		created_at=now,
-	)
-
-	assert message_to_sse_data(message)["metadata_"] == {"run_id": "run_123"}
 
 
 def test_prompt_schema_validates_and_normalizes() -> None:

@@ -1,19 +1,16 @@
 from __future__ import annotations
 
-import json
-
 from api.settings.settings import AIAttachmentSettings
 from api.v1.service.chat.context_compaction.media import (
+	_DECAY_MARKER,
 	MEDIA_PROTECTED_METADATA_KEY,
 	_MediaOccurrence,
-	_reference_text,
-	classify_media,
 	compute_iteration_indices,
 	compute_turn_indices,
-	modality_supported,
-	project_media,
+	project_attachments,
 )
 from api.v1.service.chat.message_metadata import SENDER_USER_ID_KEY
+from api.v1.service.files.modalities import classify_media, modality_supported
 from nokodo_ai.messages import (
 	AssistantMessage,
 	FileContent,
@@ -42,33 +39,8 @@ def _occ(**kwargs: object) -> _MediaOccurrence:
 	return _MediaOccurrence(**defaults)  # type: ignore[arg-type]
 
 
-def test_reference_text_includes_id_and_name() -> None:
-	occ = _occ(filename="auth.png", description="diagram of the auth flow")
-
-	result = _reference_text(occ)
-	payload = json.loads(result.removeprefix("attachment_ref "))
-
-	assert payload == {
-		"id": "file_123",
-		"name": "auth.png",
-		"summary": "diagram of the auth flow",
-	}
-
-
-def test_reference_text_without_description() -> None:
-	occ = _occ(filename="auth.png")
-
-	result = _reference_text(occ)
-
-	assert result == 'attachment_ref {"id":"file_123","name":"auth.png"}'
-
-
-def test_reference_text_collapses_whitespace_in_summary() -> None:
-	occ = _occ(filename="auth.png", description="quote ' ] } and newline\ninside")
-
-	payload = json.loads(_reference_text(occ).removeprefix("attachment_ref "))
-
-	assert payload["summary"] == "quote ' ] } and newline inside"
+def test_decay_marker_is_payload_free() -> None:
+	assert _DECAY_MARKER == "[native media attachment unloaded]"
 
 
 def test_classify_media() -> None:
@@ -102,12 +74,15 @@ def test_project_media_renders_user_media_as_reference() -> None:
 		]
 	)
 
-	projection = project_media([user], {"images"}, {}, AIAttachmentSettings())
+	projection = project_attachments([user], {"images"}, AIAttachmentSettings())
 
 	new_user = projection.messages[0]
 	assert isinstance(new_user.content[0], TextContent)
-	assert new_user.content[0].text.startswith("attachment_ref ")
-	assert new_user.content[0].metadata == {"attachment_ref": "file_abc"}
+	# natively attached media is released to an id-bearing marker: nothing else
+	# in the thread names it, so the marker carries the file id.
+	marker = new_user.content[0].text
+	assert marker.startswith("[native media attachment unloaded")
+	assert "file_abc" in marker
 
 
 def test_project_media_protects_active_tool_media() -> None:
@@ -123,7 +98,7 @@ def test_project_media_protects_active_tool_media() -> None:
 		],
 	)
 
-	projection = project_media([tool], {"images"}, {}, AIAttachmentSettings())
+	projection = project_attachments([tool], {"images"}, AIAttachmentSettings())
 
 	new_tool = projection.messages[0]
 	assert new_tool.metadata is not None
@@ -158,8 +133,8 @@ def test_project_media_hard_protects_media_at_the_consuming_call() -> None:
 		),
 	]
 
-	projection = project_media(
-		consuming_call_thread, {"images"}, {}, AIAttachmentSettings()
+	projection = project_attachments(
+		consuming_call_thread, {"images"}, AIAttachmentSettings()
 	)
 
 	tool_msg = projection.messages[2]
@@ -188,7 +163,7 @@ def test_project_media_soft_media_stays_native_but_unmarked() -> None:
 		_tool_with(_img("file_new"), call_id="call_new"),  # turn 1, iteration 2
 	]
 
-	projection = project_media(messages, {"images"}, {}, AIAttachmentSettings())
+	projection = project_attachments(messages, {"images"}, AIAttachmentSettings())
 
 	soft = projection.messages[2]
 	hard = projection.messages[4]
@@ -213,7 +188,9 @@ def test_project_media_keeps_distinct_renditions_of_mutable_file() -> None:
 		attachments=[_img("file_x", updated_at="2026-02-01T00:00:00+00:00")],
 	)
 
-	projection = project_media([first, second], {"images"}, {}, AIAttachmentSettings())
+	projection = project_attachments(
+		[first, second], {"images"}, AIAttachmentSettings()
+	)
 
 	assert len(projection.messages[0].attachments) == 1
 	assert len(projection.messages[1].attachments) == 1
@@ -232,7 +209,9 @@ def test_project_media_drops_superseded_same_version_copy() -> None:
 		attachments=[_img("file_y", updated_at="2026-01-01T00:00:00+00:00")],
 	)
 
-	projection = project_media([first, second], {"images"}, {}, AIAttachmentSettings())
+	projection = project_attachments(
+		[first, second], {"images"}, AIAttachmentSettings()
+	)
 
 	assert len(projection.messages[0].attachments) == 0
 	assert len(projection.messages[1].attachments) == 1
@@ -265,27 +244,20 @@ def _tool_with(*attachments: object, call_id: str = "call") -> ToolMessage:
 	)
 
 
-def _manifest_entries(projection: object) -> list[dict[str, object]]:
-	manifest: str = projection.manifest  # type: ignore[attr-defined]
-	if "```json" not in manifest:
-		return []
-	body = manifest.split("```json", 1)[1].split("```", 1)[0].strip()
-	parsed = json.loads(body)
-	assert isinstance(parsed, list)
-	return parsed
-
-
-def _status_for(entries: list[dict[str, object]], file_id: str) -> str | None:
-	for entry in entries:
-		if entry.get("id") == file_id:
-			return entry.get("status")  # type: ignore[return-value]
-	return None
+def _has_decay_marker(message: object) -> bool:
+	"""check whether a message carries the inline decay marker."""
+	if isinstance(message, ToolMessage):
+		return _DECAY_MARKER in message.tool_output
+	for part in getattr(message, "content", []):
+		if isinstance(part, TextContent) and _DECAY_MARKER in part.text:
+			return True
+	return False
 
 
 def test_project_media_releases_media_past_soft_window() -> None:
 	# media fetched in an earlier agent turn is released regardless of iteration
 	# count: protection only lives inside the current agent turn. bytes are
-	# stripped and the manifest marks the file released (recoverable via
+	# stripped and an inline decay marker is prepended (recoverable via
 	# file_get).
 	messages = [
 		_turn_user("t0"),  # turn 0
@@ -295,37 +267,24 @@ def test_project_media_releases_media_past_soft_window() -> None:
 		_turn_assistant("a1"),  # turn 3 (a new agent turn)
 	]
 
-	projection = project_media(messages, {"images"}, {}, AIAttachmentSettings())
+	projection = project_attachments(messages, {"images"}, AIAttachmentSettings())
 
 	assert len(projection.messages[2].attachments) == 0
 	assert TypeID("file_old") in projection.newly_released
-	assert _status_for(_manifest_entries(projection), "file_old") == "released"
+	assert _has_decay_marker(projection.messages[2])
 
 
 def test_project_media_releases_modality_unsupported() -> None:
 	# the model has no image modality: even in the hard window the image cannot
-	# be shown natively, so it is released to a reference, unmarked.
+	# be shown natively, so it is released to an unload marker, unmarked.
 	tool = _tool_with(_img("file_img"))
 
-	projection = project_media([tool], {"text"}, {}, AIAttachmentSettings())
+	projection = project_attachments([tool], {"text"}, AIAttachmentSettings())
 
 	new_tool = projection.messages[0]
 	assert len(new_tool.attachments) == 0
 	assert not (new_tool.metadata or {}).get(MEDIA_PROTECTED_METADATA_KEY)
-	assert _status_for(_manifest_entries(projection), "file_img") == "released"
-
-
-def test_project_media_respects_user_release_event() -> None:
-	# user explicitly released the file: even in the hard window it drops to a
-	# reference. since the user already released it, it is not "newly" released.
-	tool = _tool_with(_img("file_done"))
-
-	projection = project_media(
-		[tool], {"images"}, {TypeID("file_done"): "reference"}, AIAttachmentSettings()
-	)
-
-	assert len(projection.messages[0].attachments) == 0
-	assert TypeID("file_done") not in projection.newly_released
+	assert _has_decay_marker(new_tool)
 
 
 def test_project_media_video_window_shorter_than_image() -> None:
@@ -339,8 +298,8 @@ def test_project_media_video_window_shorter_than_image() -> None:
 		_turn_assistant("analysis"),  # turn 1, iteration 2
 	]
 
-	projection = project_media(
-		messages, {"images", "video"}, {}, AIAttachmentSettings()
+	projection = project_attachments(
+		messages, {"images", "video"}, AIAttachmentSettings()
 	)
 
 	tool = projection.messages[2]
@@ -365,24 +324,26 @@ def test_project_media_manifest_marks_active_soft_and_released() -> None:
 		_tool_with(_img("file_hard"), call_id="c2"),  # turn 3, iteration 2
 	]
 
-	projection = project_media(messages, {"images"}, {}, AIAttachmentSettings())
-	entries = _manifest_entries(projection)
+	projection = project_attachments(messages, {"images"}, AIAttachmentSettings())
 
-	# file_aged was fetched in a previous agent turn -> released
-	assert _status_for(entries, "file_aged") == "released"
+	# file_aged was fetched in a previous agent turn -> released to a marker
+	assert len(projection.messages[2].attachments) == 0
+	assert _has_decay_marker(projection.messages[2])
+	assert TypeID("file_aged") in projection.newly_released
 	# file_soft is in the current turn, one iteration back -> still native
-	assert _status_for(entries, "file_soft") == "active"
-	# file_hard is the read iteration of the current turn -> native + marked
-	assert _status_for(entries, "file_hard") == "active"
+	assert len(projection.messages[6].attachments) == 1
+	assert TypeID("file_soft") not in projection.newly_released
+	# file_hard is the read iteration of the current turn -> native
+	assert len(projection.messages[8].attachments) == 1
+	assert TypeID("file_hard") not in projection.newly_released
 	# the soft (earlier-iteration) message must NOT carry the protection marker
 	assert not (projection.messages[6].metadata or {}).get(MEDIA_PROTECTED_METADATA_KEY)
 	# only the hard (read-iteration) message carries the protection marker
 	assert (projection.messages[8].metadata or {}).get(MEDIA_PROTECTED_METADATA_KEY)
 
 
-def test_project_media_paginates_large_inventory() -> None:
-	# 60 user-attached images become references but stay in the inventory as
-	# "available". the manifest caps entries and reports the omitted remainder.
+def test_project_media_renders_many_user_attachments_as_markers() -> None:
+	# all user-attached images become inline decay markers, none stay native.
 	content: list[object] = []
 	for i in range(60):
 		content.append(
@@ -394,11 +355,15 @@ def test_project_media_paginates_large_inventory() -> None:
 		)
 	user = UserMessage(content=content)  # type: ignore[arg-type]
 
-	projection = project_media([user], {"images"}, {}, AIAttachmentSettings())
-	entries = _manifest_entries(projection)
+	projection = project_attachments([user], {"images"}, AIAttachmentSettings())
 
-	assert len(entries) <= 50
-	assert "omitted" in projection.manifest
+	new_user = projection.messages[0]
+	# every user-attached image becomes an inline id-bearing marker, none native.
+	assert len(new_user.content) == 60
+	assert all(isinstance(part, TextContent) for part in new_user.content)
+	for i, part in enumerate(new_user.content):
+		assert isinstance(part, TextContent)
+		assert f"file_{i}" in part.text
 
 
 def test_project_media_releases_in_turn_image_past_soft_window() -> None:
@@ -414,13 +379,13 @@ def test_project_media_releases_in_turn_image_past_soft_window() -> None:
 		_turn_assistant("step 4"),  # turn 1, iteration 4 (distance 3)
 	]
 
-	projection = project_media(messages, {"images"}, {}, AIAttachmentSettings())
+	projection = project_attachments(messages, {"images"}, AIAttachmentSettings())
 
 	tool = projection.messages[2]
 	# distance 3 == image window 3 -> aged out, bytes stripped and released
 	assert len(tool.attachments) == 0
 	assert TypeID("file_i") in projection.newly_released
-	assert _status_for(_manifest_entries(projection), "file_i") == "released"
+	assert _has_decay_marker(tool)
 
 
 def test_project_media_keeps_in_turn_image_at_window_edge() -> None:
@@ -433,7 +398,7 @@ def test_project_media_keeps_in_turn_image_at_window_edge() -> None:
 		_turn_assistant("step 3"),  # turn 1, iteration 3 (distance 2)
 	]
 
-	projection = project_media(messages, {"images"}, {}, AIAttachmentSettings())
+	projection = project_attachments(messages, {"images"}, AIAttachmentSettings())
 
 	tool = projection.messages[2]
 	assert len(tool.attachments) == 1

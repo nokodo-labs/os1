@@ -23,7 +23,7 @@ from __future__ import annotations
 from api.settings.settings import AIAttachmentSettings
 from api.v1.service.chat.context_compaction.budgets import sum_message_tokens
 from api.v1.service.chat.context_compaction.media import (
-	project_media,
+	project_attachments,
 )
 from api.v1.service.chat.context_compaction.protection import (
 	find_media_protected_index,
@@ -178,8 +178,8 @@ class _ChatSim:
 	def compact(self) -> None:
 		# 1. project media before any budget work (this marks hard media and
 		# releases aged-out media to references).
-		projection = project_media(
-			self.messages, _SUPPORTED, {}, AIAttachmentSettings()
+		projection = project_attachments(
+			self.messages, _SUPPORTED, AIAttachmentSettings()
 		)
 		self.messages = list(projection.messages)
 		self.released_seen.update(str(fid) for fid in projection.newly_released)
@@ -328,7 +328,7 @@ def test_hard_media_that_busts_budget_reaches_terminal_condition() -> None:
 	# hard-protected tool message, so that one message alone exceeds the budget.
 	sim.fetch(*attachments, call_id="c_batch", output=huge)
 
-	projection = project_media(sim.messages, _SUPPORTED, {}, AIAttachmentSettings())
+	projection = project_attachments(sim.messages, _SUPPORTED, AIAttachmentSettings())
 	sim.messages = list(projection.messages)
 
 	# compress everything that is legally compressible.

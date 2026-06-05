@@ -1162,6 +1162,135 @@ async def test_run_agent_schedules_new_thread_maintenance_before_done(
 
 
 @pytest.mark.asyncio
+async def test_run_agent_resolves_final_assistant_reference_after_persist(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""the final assistant reference resolves to the persisted message id."""
+	user = await user_service.create_user(
+		UserCreate(
+			email="thread-run-memory-reference@example.com",
+			username="thread_run_memory_reference",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	thread_id = TypeID(new_typeid("thread"))
+	thread = Thread(id=thread_id, owner_id=user.id, title=None, tags=[])
+	db_session.add(thread)
+	agent = await agent_service.create_agent(
+		AgentCreate(
+			name=f"thread-run-memory-{new_typeid('agent')[-12:]}",
+			plugin_ids=["memory_post_processing"],
+			config=AgentConfig(),
+		),
+		db_session,
+		principal=principal,
+	)
+	await db_session.commit()
+
+	fake_run_agent = _FakeCompletedRunAgent()
+	resolved_refs: list[tuple[str, TypeID | str]] = []
+	rejected_refs: list[tuple[str, str]] = []
+	terminal_order: list[str] = []
+
+	async def fake_load_agent(
+		*_args: object,
+		**_kwargs: object,
+	) -> object:
+		return agent
+
+	async def fake_build_agent_from_orm(
+		*_args: object,
+		**_kwargs: object,
+	) -> _FakeCompletedRunAgent:
+		return fake_run_agent
+
+	async def fake_prepare_steering(
+		**kwargs: object,
+	) -> tuple[_FakeCompletedRunAgent, None]:
+		assert kwargs["sdk_agent"] is fake_run_agent
+		return fake_run_agent, None
+
+	async def fake_broadcast_run_event(
+		*_args: object,
+		**_kwargs: object,
+	) -> None:
+		return None
+
+	async def fake_resolve_message_reference(
+		reference_id: str,
+		message_id: str | TypeID,
+	) -> bool:
+		terminal_order.append("resolve")
+		resolved_refs.append((reference_id, message_id))
+		return True
+
+	async def fake_reject_message_reference(reference_id: str, reason: str) -> bool:
+		rejected_refs.append((reference_id, reason))
+		return True
+
+	async def fake_schedule_thread_inactivity(
+		scheduled_thread_id: TypeID,
+		task_session: AsyncSession | None = None,
+	) -> bool:
+		_ = scheduled_thread_id, task_session
+		terminal_order.append("maintenance")
+		return True
+
+	monkeypatch.setattr(chat_agents, "_load_agent", fake_load_agent)
+	monkeypatch.setattr(
+		chat_agents,
+		"build_agent_from_orm",
+		fake_build_agent_from_orm,
+	)
+	monkeypatch.setattr(chat_agents, "prepare_steering", fake_prepare_steering)
+	monkeypatch.setattr(chat_agents, "broadcast_run_event", fake_broadcast_run_event)
+	monkeypatch.setattr(
+		chat_agents,
+		"new_message_reference",
+		lambda: "msg_ref_thread_run_memory",
+	)
+	monkeypatch.setattr(
+		chat_agents,
+		"resolve_message_reference",
+		fake_resolve_message_reference,
+	)
+	monkeypatch.setattr(
+		chat_agents,
+		"reject_message_reference",
+		fake_reject_message_reference,
+	)
+	monkeypatch.setattr(
+		chat_agents,
+		"schedule_thread_inactivity_maintenance",
+		fake_schedule_thread_inactivity,
+	)
+
+	frames: list[bytes] = []
+	async for frame in chat_agents.run_agent(
+		thread_id,
+		TypeID(agent.id),
+		principal,
+		input=RunInput(text="hello"),
+		persist=True,
+	):
+		frames.append(frame)
+		if b"event: done" in frame:
+			break
+
+	await db_session.refresh(thread)
+	assert any(b"event: done" in frame for frame in frames)
+	assert [
+		(reference_id, str(message_id)) for reference_id, message_id in resolved_refs
+	] == [("msg_ref_thread_run_memory", str(thread.current_message_id))]
+	assert rejected_refs == []
+	assert terminal_order == ["resolve", "maintenance"]
+
+
+@pytest.mark.asyncio
 async def test_run_agent_schedules_regenerated_thread_maintenance(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
@@ -1497,6 +1626,7 @@ async def test_thread_maintenance_runner_commits_summary_rows(
 			"title": "project notes",
 			"tags": ["project"],
 			"summary": "The user started a project thread.",
+			"emoji": "📝",
 		}
 
 	monkeypatch.setattr(
@@ -1568,11 +1698,12 @@ async def test_taskiq_worker_lifecycle_connects_process_redis(
 
 	calls: list[str] = []
 
-	async def fake_connect() -> None:
-		calls.append("connect")
+	class _FakeRedisClient:
+		async def connect(self) -> None:
+			calls.append("connect")
 
-	async def fake_aclose() -> None:
-		calls.append("aclose")
+		async def aclose(self) -> None:
+			calls.append("aclose")
 
 	async def fake_start_process_status(role: taskiq.TaskiqProcessRole) -> None:
 		calls.append(f"start:{role}")
@@ -1580,8 +1711,9 @@ async def test_taskiq_worker_lifecycle_connects_process_redis(
 	async def fake_stop_process_status(role: taskiq.TaskiqProcessRole) -> None:
 		calls.append(f"stop:{role}")
 
-	monkeypatch.setattr(taskiq.redis_client, "connect", fake_connect)
-	monkeypatch.setattr(taskiq.redis_client, "aclose", fake_aclose)
+	# swap the whole client reference instead of mutating the shared singleton's
+	# methods, so the autouse redis fixture still owns and closes the real pool.
+	monkeypatch.setattr(taskiq, "redis_client", _FakeRedisClient())
 	monkeypatch.setattr(taskiq, "_start_process_status", fake_start_process_status)
 	monkeypatch.setattr(taskiq, "_stop_process_status", fake_stop_process_status)
 
@@ -1600,11 +1732,12 @@ async def test_taskiq_worker_lifecycle_failure_aborts_startup(
 
 	calls: list[str] = []
 
-	async def fake_connect() -> None:
-		calls.append("connect")
+	class _FakeRedisClient:
+		async def connect(self) -> None:
+			calls.append("connect")
 
-	async def fake_aclose() -> None:
-		calls.append("aclose")
+		async def aclose(self) -> None:
+			calls.append("aclose")
 
 	async def fake_start_process_status(role: taskiq.TaskiqProcessRole) -> None:
 		calls.append(f"start:{role}")
@@ -1613,8 +1746,9 @@ async def test_taskiq_worker_lifecycle_failure_aborts_startup(
 	async def fake_stop_process_status(role: taskiq.TaskiqProcessRole) -> None:
 		calls.append(f"stop:{role}")
 
-	monkeypatch.setattr(taskiq.redis_client, "connect", fake_connect)
-	monkeypatch.setattr(taskiq.redis_client, "aclose", fake_aclose)
+	# swap the whole client reference instead of mutating the shared singleton's
+	# methods, so the autouse redis fixture still owns and closes the real pool.
+	monkeypatch.setattr(taskiq, "redis_client", _FakeRedisClient())
 	monkeypatch.setattr(taskiq, "_start_process_status", fake_start_process_status)
 	monkeypatch.setattr(taskiq, "_stop_process_status", fake_stop_process_status)
 

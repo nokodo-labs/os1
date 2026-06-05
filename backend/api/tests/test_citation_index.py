@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from api.schemas.citations import Citation, CitationSource
+from api.schemas.message import Citation, CitationSource
 from api.v1.service.chat.filters.citation_index import (
 	CitationIndexFilter,
 	_find_nci_in_window,
@@ -499,7 +499,7 @@ class TestAssignNewCitations:
 				_tool_msg(
 					output="content",
 					citable_sources=[
-						{"source_type": "tool_result"},
+						{"source_type": "calendar_event"},
 					],
 				),
 			]
@@ -507,7 +507,7 @@ class TestAssignNewCitations:
 		f._assign_new_citations(thread, entries, 0)
 		msg = thread.messages[0]
 		assert isinstance(msg, ToolMessage)
-		assert "[1] tool_result" in msg.tool_output
+		assert "[1] calendar_event" in msg.tool_output
 
 	def test_marks_tool_message_as_assigned(self) -> None:
 		f = self._make_filter()
@@ -688,13 +688,13 @@ class TestAssignNewCitations:
 				_tool_msg(
 					output="result 1",
 					citable_sources=[
-						{"source_type": "tool_result"},
+						{"source_type": "calendar_event"},
 					],
 				),
 				_tool_msg(
 					output="result 2",
 					citable_sources=[
-						{"source_type": "tool_result"},
+						{"source_type": "calendar_event"},
 					],
 				),
 			]

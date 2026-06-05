@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from api.schemas.runs import RunInput
-from api.v1.service.chat.user_message import validate_run_input
+from api.v1.service.chat.messages import validate_run_input
 
 
 def test_validate_run_input_rejects_invisible_payload_text() -> None:

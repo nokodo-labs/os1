@@ -41,6 +41,7 @@ from api.v1.service.authorization import require_thread_access
 from api.v1.service.chat import agents as chat_runner
 from api.v1.service.chat import models as chat_service
 from api.v1.service.chat.tools import external as external_tools
+from api.v1.service.plugins import ResolvedPlugins
 from api.v1.service.prompts import external as prompt_external
 from api.v1.service.prompts import runtime as prompt_runtime
 from api.v1.service.prompts import service as prompt_service
@@ -787,17 +788,17 @@ async def test_build_agent_from_orm_uses_chat_model_config(
 		"max_iterations": 7,
 	}
 
-	async def _resolve_tools(
-		tool_ids: list[str],
-		app_context: object | None = None,
-	) -> list[object]:
-		_ = app_context
-		assert tool_ids == []
-		return []
+	async def _resolve_plugins(
+		plugin_ids: list[str],
+		app_context: object,
+		agent_config: object,
+		extra_plugins: list[str] | None = None,
+	) -> ResolvedPlugins:
+		_ = (app_context, agent_config, extra_plugins)
+		assert plugin_ids == []
+		return ResolvedPlugins(tools=[], filters=[], hooks=[])
 
-	monkeypatch.setattr(chat_runner, "resolve_tools", _resolve_tools)
-	monkeypatch.setattr(chat_runner, "resolve_filters", lambda _tool_ids: [])
-	monkeypatch.setattr(chat_runner, "resolve_hooks", lambda _tool_ids: [])
+	monkeypatch.setattr(chat_runner, "resolve_plugins", _resolve_plugins)
 
 	sdk_agent = await chat_runner.build_agent_from_orm(
 		agent_orm,
@@ -863,7 +864,6 @@ def test_chat_service_orm_to_sdk_variants() -> None:
 	assistant_sdk = assistant_orm.to_sdk()
 	tool_sdk = tool_orm.to_sdk()
 	tool_sdk_empty = tool_orm_empty.to_sdk()
-	fallback_sdk = unknown_orm.to_sdk()
 
 	assert user_sdk.role == "user"
 	assert system_sdk.role == "system"
@@ -873,7 +873,8 @@ def test_chat_service_orm_to_sdk_variants() -> None:
 	assert tool_sdk_empty.tool_output == ""
 	assert tool_sdk_empty.tool_call_id == "tc_empty"
 	assert tool_sdk_empty.is_error is False
-	assert fallback_sdk.role == "user"
+	with pytest.raises(ValueError, match="unsupported message type"):
+		unknown_orm.to_sdk()
 
 	# test converting branch messages using to_sdk method
 	branch_msgs = [user_orm.to_sdk(), system_orm.to_sdk()]

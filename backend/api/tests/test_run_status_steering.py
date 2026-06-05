@@ -17,6 +17,7 @@ from api.v1.service.chat import steering as steering_service
 from api.v1.service.chat.message_metadata import CLIENT_STEERING_ID_KEY
 from api.v1.service.chat.run_status import RunStatusStore, run_status_store
 from nokodo_ai.messages import TextContent
+from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -50,6 +51,7 @@ async def test_enqueue_run_steering_accepts_before_subscriber_starts(
 	agent_id = TypeID("agent_direct_steer")
 	user_id = TypeID("user_direct_steer")
 	message_id = TypeID("msg_direct_steer")
+	persisted_message_id = message_id
 	publish_called = False
 
 	async def fake_enabled(_agent_id: TypeID, _db: object) -> bool:
@@ -58,34 +60,47 @@ async def test_enqueue_run_steering_accepts_before_subscriber_starts(
 	async def fake_require_access(*_args: object, **_kwargs: object) -> None:
 		return None
 
-	async def fake_resolve_input(
-		_run_input: RunInput, _db: object
-	) -> list[TextContent]:
-		return [TextContent(text="early steer")]
-
-	async def fake_create_user_message(
-		_thread_id: TypeID,
-		_db: object,
+	async def fake_persist_sdk_message(
+		thread_id: TypeID,
+		sdk_msg: object,
+		session: object,
 		principal: Principal,
-		resolved_input: list[TextContent],
-		parent_id: TypeID | None,
+		sender_agent_id: TypeID | None,
 		run_id: TypeID,
+		citations: list[object],
+		model_id: str | None,
+		message_id: TypeID | None,
+		parent_id: TypeID | None,
 		origin_session_id: str | None = None,
-		attachment_actions: object | None = None,
-		extra_metadata: dict[str, object] | None = None,
 	) -> object:
+		assert session is not None
+		assert isinstance(sdk_msg, SDKUserMessage)
+		assert thread_id is not None
 		assert principal.user.id == user_id
-		assert resolved_input == [TextContent(text="early steer")]
+		assert sdk_msg.content == [TextContent(text="early steer")]
+		assert sender_agent_id is None
+		assert citations == []
+		assert model_id is None
+		assert message_id is None
 		assert parent_id is None
 		assert str(run_id) == "run_direct_steer"
 		assert origin_session_id is None
-		assert attachment_actions is None
-		assert extra_metadata is not None
-		assert extra_metadata[CLIENT_STEERING_ID_KEY] == "local-steering-1"
+		assert sdk_msg.metadata is not None
+		assert sdk_msg.metadata[CLIENT_STEERING_ID_KEY] == "local-steering-1"
+
+		class _FakePersistedMessage:
+			id = persisted_message_id
+			created_at = datetime(2026, 5, 16, 12, 0, tzinfo=UTC)
+			attachments: list[dict[str, object]] = []
+
+			def to_sdk(self) -> SDKUserMessage:
+				return SDKUserMessage(content=[TextContent(text="early steer")])
+
 		return SimpleNamespace(
-			id=message_id,
-			created_at=datetime(2026, 5, 16, 12, 0, tzinfo=UTC),
-			metadata_=extra_metadata,
+			id=_FakePersistedMessage.id,
+			created_at=_FakePersistedMessage.created_at,
+			attachments=_FakePersistedMessage.attachments,
+			to_sdk=_FakePersistedMessage().to_sdk,
 		)
 
 	async def fake_publish_steer(*_args: object, **_kwargs: object) -> int:
@@ -95,9 +110,8 @@ async def test_enqueue_run_steering_accepts_before_subscriber_starts(
 
 	monkeypatch.setattr(steering_service, "_is_steering_enabled", fake_enabled)
 	monkeypatch.setattr(steering_service, "require_thread_access", fake_require_access)
-	monkeypatch.setattr(steering_service, "resolve_run_input", fake_resolve_input)
 	monkeypatch.setattr(
-		steering_service, "create_run_user_message", fake_create_user_message
+		steering_service, "persist_sdk_message", fake_persist_sdk_message
 	)
 	monkeypatch.setattr(steering_service, "publish_steer", fake_publish_steer)
 	# prevent fire-and-forget broadcast tasks from outliving the test

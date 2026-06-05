@@ -17,8 +17,7 @@ from api.models.project import Project
 from api.models.thread import Thread
 from api.models.thread_summary import SummaryPurpose, ThreadSummary
 from api.models.user import User
-from api.schemas.content import TextContent
-from api.schemas.message import MessageCreate
+from api.schemas.message import MessageCreate, TextContent
 from api.schemas.thread import ThreadCreate, ThreadListFilters, ThreadUpdate
 from api.settings import settings
 from api.v1.service import threads as thread_service
@@ -59,6 +58,7 @@ def test_message_event_data_uses_public_metadata_alias() -> None:
 		usage=None,
 		read_by=[],
 		citations=[],
+		attachments=[],
 		metadata_={"run_id": run_id},
 		created_at=now,
 		updated_at=now,
