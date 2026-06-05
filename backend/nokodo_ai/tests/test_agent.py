@@ -438,7 +438,8 @@ async def test_agent_sync_applies_filters_and_hooks() -> None:
 			app_context: None,
 		) -> None:
 			_ = (agent_context, app_context)
-			seen.append(f"hook:{state.iteration}")
+			phase = "final" if state.final else "hook"
+			seen.append(f"{phase}:{state.iteration}")
 
 	adapter = _QueuedChatAdapter(sync_responses=[AssistantMessage.from_text("ok")])
 	chat_model = _make_chat_model(adapter)
@@ -453,7 +454,7 @@ async def test_agent_sync_applies_filters_and_hooks() -> None:
 	assert len(result) == 1
 	assert isinstance(result[0], AssistantMessage)
 	assert result[0].text == "ok"
-	assert seen == ["filter:0", "hook:0", "filter:1"]
+	assert seen == ["filter:0", "hook:0", "filter:1", "final:1"]
 	call_messages = adapter.calls[-1]["messages"]
 	assert isinstance(call_messages, list)
 	assert any(
@@ -547,6 +548,121 @@ async def test_agent_sync_filter_can_change_iteration_tools_and_choice() -> None
 
 
 @pytest.mark.asyncio
+async def test_agent_sync_forced_tool_choice_only_applies_to_first_iteration() -> None:
+	"""a run-level forced tool_choice forces only the first model call."""
+	adapter = _QueuedChatAdapter(
+		sync_responses=[
+			AssistantMessage(
+				tool_calls=[ToolCall(id="tc1", name="echo", arguments={"text": "hi"})]
+			),
+			AssistantMessage.from_text("final"),
+		]
+	)
+	chat_model = _make_chat_model(adapter)
+	tools: list[Tool[None]] = [_EchoTool(name="echo", description="echo")]
+	agent = Agent(chat_model=chat_model, tools=tools)
+	thread = Thread()
+	thread.add(UserMessage.from_text("start"))
+
+	await agent.run(thread, tool_choice="echo")
+
+	assert len(adapter.calls) == 2
+	first_params = adapter.calls[0]["params"]
+	second_params = adapter.calls[1]["params"]
+	assert isinstance(first_params, ChatGenerationParams)
+	assert isinstance(second_params, ChatGenerationParams)
+	assert first_params.tool_choice == "echo"
+	assert second_params.tool_choice == "auto"
+
+
+@pytest.mark.asyncio
+async def test_agent_stream_forced_tool_choice_only_applies_to_first_iteration() -> (
+	None
+):
+	"""streaming: a run-level forced tool_choice forces only the first call."""
+	adapter = _QueuedChatAdapter(
+		stream_responses=[
+			[
+				AssistantMessage(
+					tool_calls=[
+						ToolCall(id="tc1", name="echo", arguments={"text": "hi"})
+					]
+				)
+			],
+			[AssistantMessage.from_text("final")],
+		]
+	)
+	chat_model = _make_chat_model(adapter)
+	tools: list[Tool[None]] = [_EchoTool(name="echo", description="echo")]
+	agent = Agent(chat_model=chat_model, tools=tools)
+	thread = Thread()
+	thread.add(UserMessage.from_text("start"))
+
+	stream = await agent.run(thread, stream=True, tool_choice="echo")
+	_ = [delta async for delta in stream]
+
+	assert len(adapter.calls) == 2
+	first_params = adapter.calls[0]["params"]
+	second_params = adapter.calls[1]["params"]
+	assert isinstance(first_params, ChatGenerationParams)
+	assert isinstance(second_params, ChatGenerationParams)
+	assert first_params.tool_choice == "echo"
+	assert second_params.tool_choice == "auto"
+
+
+@pytest.mark.asyncio
+async def test_agent_sync_filter_can_reforce_tool_choice_each_iteration() -> None:
+	"""a filter re-setting tool_choice every iteration keeps forcing it."""
+
+	class _ForceEchoFilter(Filter[None]):
+		name: str = "force_echo"
+		description: str = "force echo"
+
+		async def process(
+			self,
+			state: AgentIterationState[None],
+			agent_context: AgentContext,
+			app_context: None,
+		) -> AgentIterationState[None]:
+			_ = (agent_context, app_context)
+			state.tool_choice = "echo"
+			return state
+
+	adapter = _QueuedChatAdapter(
+		sync_responses=[
+			AssistantMessage(
+				tool_calls=[ToolCall(id="tc1", name="echo", arguments={"text": "a"})]
+			),
+			AssistantMessage(
+				tool_calls=[ToolCall(id="tc2", name="echo", arguments={"text": "b"})]
+			),
+			AssistantMessage.from_text("final"),
+		]
+	)
+	chat_model = _make_chat_model(adapter)
+	tools: list[Tool[None]] = [_EchoTool(name="echo", description="echo")]
+	filters: list[Filter[None]] = [_ForceEchoFilter()]
+	agent = Agent(
+		chat_model=chat_model,
+		tools=tools,
+		filters=filters,
+		max_iterations=2,
+	)
+	thread = Thread()
+	thread.add(UserMessage.from_text("start"))
+
+	await agent.run(thread)
+
+	# two forced iterations, then the tools-disabled final call
+	choices: list[object] = []
+	for call in adapter.calls:
+		params = call["params"]
+		assert isinstance(params, ChatGenerationParams)
+		choices.append(params.tool_choice)
+	assert choices == ["echo", "echo", "none"]
+
+
+@pytest.mark.asyncio
 async def test_agent_sync_max_iterations_final_call_disables_tools() -> None:
 	adapter = _QueuedChatAdapter(
 		sync_responses=[
@@ -588,7 +704,9 @@ async def test_agent_sync_runs_hooks_after_each_assistant_response() -> None:
 			app_context: None,
 		) -> None:
 			_ = (agent_context, app_context)
-			seen.append([message.role for message in state.thread.messages])
+			seen.append(
+				[str(state.final), *[message.role for message in state.thread.messages]]
+			)
 
 	adapter = _QueuedChatAdapter(
 		sync_responses=[
@@ -612,8 +730,9 @@ async def test_agent_sync_runs_hooks_after_each_assistant_response() -> None:
 	await agent.run(thread)
 
 	assert seen == [
-		["user", "assistant"],
-		["user", "assistant", "tool", "assistant"],
+		["False", "user", "assistant"],
+		["False", "user", "assistant", "tool", "assistant"],
+		["True", "user", "assistant", "tool", "assistant"],
 	]
 
 
@@ -723,7 +842,8 @@ async def test_agent_streaming_applies_filters_and_hooks() -> None:
 			app_context: None,
 		) -> None:
 			_ = (agent_context, app_context)
-			seen.append(f"hook:{state.iteration}")
+			phase = "final" if state.final else "hook"
+			seen.append(f"{phase}:{state.iteration}")
 
 	adapter = _QueuedChatAdapter(stream_responses=[[AssistantMessage.from_text("ok")]])
 	chat_model = _make_chat_model(adapter)
@@ -737,7 +857,7 @@ async def test_agent_streaming_applies_filters_and_hooks() -> None:
 	deltas = [d async for d in stream]
 
 	assert deltas[-1].done is True
-	assert seen == ["filter:0", "hook:0", "filter:1"]
+	assert seen == ["filter:0", "hook:0", "filter:1", "final:1"]
 	call_messages = adapter.calls[-1]["messages"]
 	assert isinstance(call_messages, list)
 	assert any(
@@ -812,7 +932,9 @@ async def test_agent_streaming_runs_hooks_after_each_assistant_response() -> Non
 			app_context: None,
 		) -> None:
 			_ = (agent_context, app_context)
-			seen.append([message.role for message in state.thread.messages])
+			seen.append(
+				[str(state.final), *[message.role for message in state.thread.messages]]
+			)
 
 	adapter = _QueuedChatAdapter(
 		stream_responses=[
@@ -841,8 +963,9 @@ async def test_agent_streaming_runs_hooks_after_each_assistant_response() -> Non
 	_ = [delta async for delta in stream]
 
 	assert seen == [
-		["user", "assistant"],
-		["user", "assistant", "tool", "assistant"],
+		["False", "user", "assistant"],
+		["False", "user", "assistant", "tool", "assistant"],
+		["True", "user", "assistant", "tool", "assistant"],
 	]
 
 

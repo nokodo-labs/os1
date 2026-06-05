@@ -1561,6 +1561,94 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 	assert "a" in seen_text2
 
 
+async def test_anthropic_streaming_emits_usage(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	# message_start carries prompt-side usage; message_delta finalizes
+	# output usage. the merged stream must surface real token counts so
+	# persistence can record them.
+	class _StartUsage:
+		input_tokens = 42
+		cache_creation_input_tokens = 5
+		cache_read_input_tokens = 7
+
+	class _StartMessage:
+		id = "msg_stream_1"
+		usage = _StartUsage()
+
+	class _MessageStartEvent:
+		def __init__(self) -> None:
+			self.message = _StartMessage()
+
+	class _DeltaUsage:
+		output_tokens = 13
+
+	class _MessageDeltaEvent:
+		def __init__(self) -> None:
+			self.usage = _DeltaUsage()
+
+	class _TextBlock:
+		def __init__(self, text: str):
+			self.text = text
+
+	class _TextDelta:
+		def __init__(self, text: str):
+			self.text = text
+
+	class _StartEvent:
+		def __init__(self, index: int, block: Any):
+			self.index = index
+			self.content_block = block
+
+	class _DeltaEvent:
+		def __init__(self, index: int, delta: Any):
+			self.index = index
+			self.delta = delta
+
+	monkeypatch.setattr(am, "AnthropicRawMessageStartEvent", _MessageStartEvent)
+	monkeypatch.setattr(am, "AnthropicRawMessageDeltaEvent", _MessageDeltaEvent)
+	monkeypatch.setattr(am, "AnthropicTextBlock", _TextBlock)
+	monkeypatch.setattr(am, "AnthropicRawContentBlockStartEvent", _StartEvent)
+	monkeypatch.setattr(am, "AnthropicRawContentBlockDeltaEvent", _DeltaEvent)
+	monkeypatch.setattr(am, "AnthropicTextDelta", _TextDelta)
+
+	class _DummyStreamClient:
+		def __init__(self) -> None:
+			async def _create(**kwargs: Any) -> Any:
+				_ = kwargs
+				return _DummyAsyncIterator(
+					[
+						_MessageStartEvent(),
+						_DeltaEvent(0, _TextDelta("hi")),
+						_MessageDeltaEvent(),
+					]
+				)
+
+			self.messages = SimpleNamespace(create=_create)
+
+	monkeypatch.setattr(
+		am.BaseAnthropicAdapter,
+		"_get_client",
+		lambda self: _DummyStreamClient(),
+	)
+	adapter = AnthropicMessagesAdapter()
+	merged = AssistantMessage()
+	async for delta in adapter.generate(
+		[UserMessage.from_text("u")],
+		model="claude",
+		stream=True,
+	):
+		merged = merged.merge(delta)
+	assert merged.text == "hi"
+	assert merged.usage == Usage(
+		input_tokens=42,
+		output_tokens=13,
+		total_tokens=55,
+		cache_creation_input_tokens=5,
+		cache_read_input_tokens=7,
+	)
+
+
 def test_anthropic_messages_to_anthropic_json_and_tool_result_blocks() -> None:
 	assistant = AssistantMessage(content=[JsonContent(data={"x": 1})])
 	assert assistant.text == ""

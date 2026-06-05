@@ -12,7 +12,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.mcp import MCPClient, MCPClientConfig, MCPListChangedEvent
+from api.mcp import MCPClient, MCPClientConfig, MCPError, MCPListChangedEvent
 from api.mcp.types import (
 	MCPCapabilitySnapshot,
 	MCPPromptSpec,
@@ -209,6 +209,7 @@ async def test_mcp_remote_tool_calls_service_with_json_arguments() -> None:
 		description="demo lookup",
 		parameters={"type": "object", "properties": {}},
 		server_id=server_id,
+		mcp_server_name="Demo Server",
 		mcp_tool_id=tool_id,
 		mcp_tool_name="lookup",
 	)
@@ -241,6 +242,9 @@ async def test_mcp_remote_tool_calls_service_with_json_arguments() -> None:
 		"text": "done",
 		"structured_content": {"ok": True},
 	}
+	assert message.metadata is not None
+	assert message.metadata["mcp_server_name"] == "Demo Server"
+	assert message.metadata["mcp_tool_name"] == "lookup"
 	call_tool.assert_awaited_once_with(
 		server_id,
 		tool_id,
@@ -702,6 +706,66 @@ async def test_mcp_client_streams_normalized_list_changed_events(
 	await client.disconnect()
 
 	assert event == MCPListChangedEvent(kind="tools")
+
+
+@pytest.mark.asyncio
+async def test_mcp_client_connect_failure_raises_adapter_error(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""connect failures surface as a normalized MCPError and clean up state."""
+
+	class _Transport:
+		"""fake streamable HTTP transport context manager."""
+
+		async def __aenter__(self) -> tuple[object, object, object]:
+			return object(), object(), object()
+
+		async def __aexit__(
+			self,
+			exc_type: object,
+			exc: object,
+			tb: object,
+		) -> None:
+			return None
+
+	class _Session:
+		"""fake MCP session that fails during initialization."""
+
+		def __init__(
+			self,
+			read_stream: object,
+			write_stream: object,
+			message_handler: object = None,
+		) -> None:
+			_ = read_stream, write_stream, message_handler
+
+		async def __aenter__(self) -> _Session:
+			return self
+
+		async def __aexit__(
+			self,
+			exc_type: object,
+			exc: object,
+			tb: object,
+		) -> None:
+			return None
+
+		async def initialize(self) -> object:
+			raise OSError("handshake rejected")
+
+	def streamable_http_client(url: str, **kwargs: object) -> _Transport:
+		_ = url, kwargs
+		return _Transport()
+
+	monkeypatch.setattr("api.mcp.client.streamablehttp_client", streamable_http_client)
+	monkeypatch.setattr("api.mcp.client.ClientSession", _Session)
+
+	client = MCPClient(MCPClientConfig(url="https://example.test/mcp"))
+	with pytest.raises(MCPError, match="handshake rejected"):
+		await client.connect()
+
+	assert client._session is None
+	assert client._worker is None
 
 
 @pytest.mark.asyncio

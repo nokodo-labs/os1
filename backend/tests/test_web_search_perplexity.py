@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.event import Event
 from api.models.user import User
 from api.perplexity import _parse_images
-from api.schemas.citations import Citation, CitationSource
+from api.schemas.message import Citation, CitationSource
 from api.v1.schemas.web_search import (
 	AgenticWebSearchResult,
 	WebSearchImage,
