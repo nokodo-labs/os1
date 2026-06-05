@@ -10,7 +10,7 @@ from api.v1.service.chat.filters.attachments import (
 
 
 def test_resolution_tool_covers_all_ref_types() -> None:
-	"""every attachment ref type maps to a resolution tool, so none is silently unresolvable."""
+	"""every attachment ref type maps to a resolution tool."""
 	for ref_type in get_args(AttachmentRefType):
 		assert ref_type in _RESOLUTION_TOOL
 
