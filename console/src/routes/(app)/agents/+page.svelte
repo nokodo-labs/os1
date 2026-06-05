@@ -52,6 +52,7 @@
 		Search,
 		Sparkles,
 		Trash2,
+		TriangleAlert,
 		Wrench,
 		X,
 	} from '@lucide/svelte'
@@ -154,12 +155,47 @@ user: {{ user_name }}.
 		{ value: 'plugins', label: 'plugins' },
 		{ value: 'config', label: 'config' },
 	]
+	// keep in sync with backend DEFAULT_AGENT_PLUGIN_IDS (schemas/agent.py).
 	const defaultAgentPluginIds = [
 		'chat_context',
-		'file_resolve',
+		'attachments',
 		'citation_index',
 		'context_compaction',
+		'file_resolve',
 	]
+
+	// MCP plugin id helpers. keep in sync with backend ids.py.
+	const MCP_TOOL_PREFIX = 'mcp:tool:'
+	const MCP_SERVER_TOOLS_PREFIX = 'mcp:server:'
+	const MCP_SERVER_TOOLS_SUFFIX = ':tools'
+
+	function mcpToolServerId(pluginId: string): string | null {
+		if (!pluginId.startsWith(MCP_TOOL_PREFIX)) return null
+		const rest = pluginId.slice(MCP_TOOL_PREFIX.length)
+		const sep = rest.indexOf(':')
+		if (sep <= 0) return null
+		const serverId = rest.slice(0, sep)
+		const toolId = rest.slice(sep + 1)
+		return serverId && toolId ? serverId : null
+	}
+
+	function mcpServerToolsServerId(pluginId: string): string | null {
+		if (!pluginId.startsWith(MCP_SERVER_TOOLS_PREFIX)) return null
+		if (!pluginId.endsWith(MCP_SERVER_TOOLS_SUFFIX)) return null
+		const serverId = pluginId.slice(
+			MCP_SERVER_TOOLS_PREFIX.length,
+			-MCP_SERVER_TOOLS_SUFFIX.length
+		)
+		return serverId || null
+	}
+
+	function mcpPluginServerId(pluginId: string): string | null {
+		return mcpToolServerId(pluginId) ?? mcpServerToolsServerId(pluginId)
+	}
+
+	function isMcpToolPlugin(plugin: PluginInfo): boolean {
+		return mcpPluginServerId(plugin.id) !== null
+	}
 
 	function pluginMetadataKey(
 		pluginType: PluginInfo['type'],
@@ -179,11 +215,20 @@ user: {{ user_name }}.
 			},
 		],
 		[
+			pluginMetadataKey('filter', 'attachments'),
+			{
+				label: 'resolve attachments',
+				description:
+					'renders user and tool attachments. shows references the agent can open on demand when a matching read tool is enabled, and inlines the rest. required for attachments to reach the model.',
+				icon: 'attachment',
+			},
+		],
+		[
 			pluginMetadataKey('filter', 'file_resolve'),
 			{
 				label: 'resolve files',
 				description:
-					'loads attached file data from file ids so the model can see the actual image or file.',
+					'loads attached file data from file ids so the model can see the actual image, file, or media. without it the model only sees references.',
 				icon: 'file',
 			},
 		],
@@ -409,25 +454,128 @@ user: {{ user_name }}.
 	})
 
 	const chatModels = $derived(models.filter((m) => m.model_type === 'chat_model'))
-	const pluginGroups = $derived.by(() =>
-		[
-			{
+
+	// server_id -> display name, taken from the aggregate "<server> tools" plugin
+	// (exact), falling back to the "<server>: <tool>" prefix on individual tools.
+	const mcpServerNames = $derived.by(() => {
+		const names: Record<string, string> = {}
+		for (const plugin of availableToolPlugins) {
+			const serverId = mcpServerToolsServerId(plugin.id)
+			if (serverId && plugin.name.endsWith(' tools')) {
+				names[serverId] = plugin.name.slice(0, -' tools'.length)
+			}
+		}
+		for (const plugin of availableToolPlugins) {
+			const serverId = mcpToolServerId(plugin.id)
+			if (!serverId || serverId in names) continue
+			const sep = plugin.name.indexOf(': ')
+			names[serverId] = sep > 0 ? plugin.name.slice(0, sep) : 'MCP server'
+		}
+		return names
+	})
+
+	const nativeToolPlugins = $derived(
+		availableToolPlugins.filter((plugin) => !isMcpToolPlugin(plugin))
+	)
+
+	const mcpToolGroups = $derived.by(() => {
+		const grouped: Record<string, PluginInfo[]> = {}
+		for (const plugin of availableToolPlugins) {
+			const serverId = mcpPluginServerId(plugin.id)
+			if (serverId === null) continue
+			const list = grouped[serverId] ?? []
+			list.push(plugin)
+			grouped[serverId] = list
+		}
+		return Object.entries(grouped)
+			.map(([serverId, plugins]) => ({
+				serverId,
+				serverName: mcpServerNames[serverId] ?? 'MCP server',
+				plugins: [...plugins].sort((left, right) => {
+					const leftAll = mcpServerToolsServerId(left.id) !== null
+					const rightAll = mcpServerToolsServerId(right.id) !== null
+					if (leftAll !== rightAll) return leftAll ? -1 : 1
+					return pluginDisplayName(left).localeCompare(pluginDisplayName(right))
+				}),
+			}))
+			.sort((left, right) => left.serverName.localeCompare(right.serverName))
+	})
+
+	const pluginSections = $derived.by(() => {
+		const sections: Array<{
+			key: string
+			label: string
+			description: string
+			plugins: PluginInfo[]
+			mcp: boolean
+		}> = []
+		if (nativeToolPlugins.length > 0) {
+			sections.push({
+				key: 'tools',
 				label: 'tools',
 				description: 'actions an agent can call while it is working.',
-				plugins: availableToolPlugins,
-			},
-			{
+				plugins: nativeToolPlugins,
+				mcp: false,
+			})
+		}
+		for (const group of mcpToolGroups) {
+			sections.push({
+				key: `mcp:${group.serverId}`,
+				label: group.serverName,
+				description: 'tools exposed by this MCP server.',
+				plugins: group.plugins,
+				mcp: true,
+			})
+		}
+		if (availableFilterPlugins.length > 0) {
+			sections.push({
+				key: 'filters',
 				label: 'filters',
 				description: 'context processors that shape messages before the model runs.',
 				plugins: orderedPlugins(availableFilterPlugins),
-			},
-			{
+				mcp: false,
+			})
+		}
+		if (availableHookPlugins.length > 0) {
+			sections.push({
+				key: 'hooks',
 				label: 'hooks',
 				description: 'post-processing hooks that run around agent activity.',
 				plugins: availableHookPlugins,
-			},
-		].filter((group) => group.plugins.length > 0)
-	)
+				mcp: false,
+			})
+		}
+		return sections
+	})
+
+	// tools whose attachments only reach the model through the attachment filters.
+	const attachmentDependentToolIds = [
+		'generate_image',
+		'generate_video',
+		'generate_audio',
+		'code_interpreter',
+		'file_get',
+	]
+
+	const attachmentFilterWarnings = $derived.by(() => {
+		const selected = new Set(formPluginIds)
+		const warnings: string[] = []
+		if (!selected.has('attachments')) {
+			warnings.push(
+				'the "resolve attachments" filter is off. attachments sent by users will not be shown to the model, and media produced by tools will never decay out of context.'
+			)
+		}
+		if (!selected.has('file_resolve')) {
+			const affected = attachmentDependentToolIds
+				.filter((id) => selected.has(id))
+				.map((id) => pluginLabelById(id))
+			const suffix = affected.length > 0 ? ` affected tools: ${affected.join(', ')}.` : ''
+			warnings.push(
+				`the "resolve files" filter is off. the model cannot see image, file, or media bytes, only text references.${suffix}`
+			)
+		}
+		return warnings
+	})
 
 	const profileImagePreviewSrc = $derived.by(() => {
 		const value = formProfileImageValue.trim()
@@ -502,12 +650,34 @@ user: {{ user_name }}.
 	function pluginDisplayName(plugin: PluginInfo): string {
 		const nativeInfo = pluginMetadata(plugin)
 		if (nativeInfo) return nativeInfo.label
+		if (mcpServerToolsServerId(plugin.id) !== null) return 'all tools'
+		const toolServerId = mcpToolServerId(plugin.id)
+		if (toolServerId !== null) {
+			const serverName = mcpServerNames[toolServerId]
+			if (serverName && plugin.name.startsWith(`${serverName}: `)) {
+				return plugin.name.slice(serverName.length + 2)
+			}
+			const sep = plugin.name.indexOf(': ')
+			if (sep > 0) return plugin.name.slice(sep + 2)
+		}
 		return (plugin.name || plugin.id).replaceAll('_', ' ')
+	}
+
+	function pluginLabelById(pluginId: string): string {
+		const all = [...availableToolPlugins, ...availableFilterPlugins, ...availableHookPlugins]
+		const plugin = all.find((p) => p.id === pluginId)
+		return plugin ? pluginDisplayName(plugin) : pluginId.replaceAll('_', ' ')
 	}
 
 	function pluginDescription(plugin: PluginInfo): string {
 		const nativeInfo = pluginMetadata(plugin)
 		if (nativeInfo) return nativeInfo.description
+		if (mcpServerToolsServerId(plugin.id) !== null) {
+			return 'enable every tool this MCP server exposes.'
+		}
+		if (mcpToolServerId(plugin.id) !== null) {
+			return plugin.description?.trim() || 'a tool exposed by this MCP server.'
+		}
 		if (plugin.type === 'tool') return 'lets the agent call an action during a run.'
 		const description = plugin.description?.trim()
 		if (description) return description
@@ -812,6 +982,89 @@ user: {{ user_name }}.
 		}
 	}
 </script>
+
+{#snippet pluginCard(plugin: PluginInfo)}
+	{@const iconKind = pluginIconKind(plugin)}
+	<div
+		class="rounded-xl border p-4 transition-colors {formPluginIds.includes(plugin.id)
+			? 'border-violet-500/50 bg-violet-500/10'
+			: 'border-zinc-800 bg-zinc-950/40'}"
+	>
+		<div class="flex items-start justify-between gap-3">
+			<div class="flex min-w-0 gap-3">
+				<div
+					class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-zinc-300"
+				>
+					{#if iconKind === 'memory'}
+						<Brain class="h-4 w-4" />
+					{:else if iconKind === 'note'}
+						<FileText class="h-4 w-4" />
+					{:else if iconKind === 'reminder'}
+						<Bell class="h-4 w-4" />
+					{:else if iconKind === 'calendar'}
+						<CalendarDays class="h-4 w-4" />
+					{:else if iconKind === 'file'}
+						<FolderOpen class="h-4 w-4" />
+					{:else if iconKind === 'web'}
+						<Earth class="h-4 w-4" />
+					{:else if iconKind === 'search'}
+						<Search class="h-4 w-4" />
+					{:else if iconKind === 'image'}
+						<ImageIcon class="h-4 w-4" />
+					{:else if iconKind === 'code'}
+						<CodeXml class="h-4 w-4" />
+					{:else if iconKind === 'reveal'}
+						<Eye class="h-4 w-4" />
+					{:else if iconKind === 'attachment'}
+						<Paperclip class="h-4 w-4" />
+					{:else if iconKind === 'notification'}
+						<Bell class="h-4 w-4" />
+					{:else if iconKind === 'think'}
+						<Brain class="h-4 w-4" />
+					{:else if iconKind === 'chat'}
+						<MessageSquare class="h-4 w-4" />
+					{:else if iconKind === 'time'}
+						<CalendarDays class="h-4 w-4" />
+					{:else if iconKind === 'filter'}
+						<FilterIcon class="h-4 w-4" />
+					{:else if iconKind === 'hook'}
+						<Sparkles class="h-4 w-4" />
+					{:else}
+						<Wrench class="h-4 w-4" />
+					{/if}
+				</div>
+				<div class="min-w-0 space-y-1">
+					<div class="flex flex-wrap items-center gap-2">
+						<div class="text-sm font-medium wrap-anywhere text-zinc-100">
+							{pluginDisplayName(plugin)}
+						</div>
+						{#if plugin.source === 'native'}
+							<span
+								class="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400"
+							>
+								native
+							</span>
+						{/if}
+						{#if isDefaultAgentPlugin(plugin.id)}
+							<span
+								class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300"
+							>
+								default
+							</span>
+						{/if}
+					</div>
+					<p class="text-xs leading-5 wrap-anywhere text-zinc-500">
+						{pluginDescription(plugin)}
+					</p>
+				</div>
+			</div>
+			<Switch
+				checked={formPluginIds.includes(plugin.id)}
+				onCheckedChange={() => togglePlugin(plugin.id)}
+			/>
+		</div>
+	</div>
+{/snippet}
 
 <div class="flex flex-col gap-6">
 	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -1204,111 +1457,49 @@ user: {{ user_name }}.
 								></textarea>
 							</div>
 						{:else if activeSection === 'plugins'}
-							{#each pluginGroups as group (group.label)}
+							{#if attachmentFilterWarnings.length > 0}
+								<div
+									class="space-y-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4"
+								>
+									<div
+										class="flex items-center gap-2 text-sm font-medium text-amber-300"
+									>
+										<TriangleAlert class="h-4 w-4" />
+										attachment handling is incomplete
+									</div>
+									<ul class="space-y-1 text-xs leading-5 text-amber-200/80">
+										{#each attachmentFilterWarnings as warning (warning)}
+											<li>{warning}</li>
+										{/each}
+									</ul>
+								</div>
+							{/if}
+							{#each pluginSections as section (section.key)}
 								<section class="space-y-3">
 									<header class="space-y-1">
-										<h3 class="text-xs font-semibold text-zinc-500">
-											{group.label}
-										</h3>
-										<p class="text-xs text-zinc-500">{group.description}</p>
+										<div class="flex items-center gap-2">
+											<h3 class="text-xs font-semibold text-zinc-500">
+												{section.label}
+											</h3>
+											{#if section.mcp}
+												<span
+													class="rounded-full bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-300"
+												>
+													MCP
+												</span>
+											{/if}
+										</div>
+										<p class="text-xs text-zinc-500">{section.description}</p>
 									</header>
 									<div class="grid gap-3 lg:grid-cols-2">
-										{#each group.plugins as plugin (plugin.id)}
-											{@const iconKind = pluginIconKind(plugin)}
-											<div
-												class="rounded-xl border p-4 transition-colors {formPluginIds.includes(
-													plugin.id
-												)
-													? 'border-violet-500/50 bg-violet-500/10'
-													: 'border-zinc-800 bg-zinc-950/40'}"
-											>
-												<div class="flex items-start justify-between gap-3">
-													<div class="flex min-w-0 gap-3">
-														<div
-															class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-zinc-300"
-														>
-															{#if iconKind === 'memory'}
-																<Brain class="h-4 w-4" />
-															{:else if iconKind === 'note'}
-																<FileText class="h-4 w-4" />
-															{:else if iconKind === 'reminder'}
-																<Bell class="h-4 w-4" />
-															{:else if iconKind === 'calendar'}
-																<CalendarDays class="h-4 w-4" />
-															{:else if iconKind === 'file'}
-																<FolderOpen class="h-4 w-4" />
-															{:else if iconKind === 'web'}
-																<Earth class="h-4 w-4" />
-															{:else if iconKind === 'search'}
-																<Search class="h-4 w-4" />
-															{:else if iconKind === 'image'}
-																<ImageIcon class="h-4 w-4" />
-															{:else if iconKind === 'code'}
-																<CodeXml class="h-4 w-4" />
-															{:else if iconKind === 'reveal'}
-																<Eye class="h-4 w-4" />
-															{:else if iconKind === 'attachment'}
-																<Paperclip class="h-4 w-4" />
-															{:else if iconKind === 'notification'}
-																<Bell class="h-4 w-4" />
-															{:else if iconKind === 'think'}
-																<Brain class="h-4 w-4" />
-															{:else if iconKind === 'chat'}
-																<MessageSquare class="h-4 w-4" />
-															{:else if iconKind === 'time'}
-																<CalendarDays class="h-4 w-4" />
-															{:else if iconKind === 'filter'}
-																<FilterIcon class="h-4 w-4" />
-															{:else if iconKind === 'hook'}
-																<Sparkles class="h-4 w-4" />
-															{:else}
-																<Wrench class="h-4 w-4" />
-															{/if}
-														</div>
-														<div class="min-w-0 space-y-1">
-															<div
-																class="flex flex-wrap items-center gap-2"
-															>
-																<div
-																	class="text-sm font-medium wrap-anywhere text-zinc-100"
-																>
-																	{pluginDisplayName(plugin)}
-																</div>
-																{#if plugin.source === 'native'}
-																	<span
-																		class="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400"
-																	>
-																		native
-																	</span>
-																{/if}
-																{#if isDefaultAgentPlugin(plugin.id)}
-																	<span
-																		class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300"
-																	>
-																		default
-																	</span>
-																{/if}
-															</div>
-															<p
-																class="text-xs leading-5 wrap-anywhere text-zinc-500"
-															>
-																{pluginDescription(plugin)}
-															</p>
-														</div>
-													</div>
-													<Switch
-														checked={formPluginIds.includes(plugin.id)}
-														onCheckedChange={() =>
-															togglePlugin(plugin.id)}
-													/>
-												</div>
-											</div>
+										{#each section.plugins as plugin (plugin.id)}
+											{@render pluginCard(plugin)}
 										{/each}
 									</div>
 								</section>
 							{/each}
 
-							{#if pluginGroups.length === 0}
+							{#if pluginSections.length === 0}
 								<p class="text-xs text-zinc-500">no plugins are registered.</p>
 							{/if}
 						{:else if activeSection === 'config'}

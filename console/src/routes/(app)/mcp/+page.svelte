@@ -263,6 +263,10 @@
 				})
 			)
 			replaceServer(result.server)
+			if (result.server.status === 'error') {
+				submitError =
+					result.server.last_error ?? 'discovery failed: the server could not be reached'
+			}
 		} catch (err) {
 			console.error('failed to discover MCP server', err)
 			submitError = err instanceof Error ? err.message : 'failed to discover MCP server'
@@ -590,6 +594,18 @@
 									class="grid gap-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-3 text-xs text-zinc-500 sm:grid-cols-3"
 								>
 									<div>
+										<div class="font-medium text-zinc-600">status</div>
+										<div class="mt-1">
+											<span
+												class="rounded-full px-2 py-0.5 text-[11px] {statusClass(
+													selectedServer
+												)}"
+											>
+												{selectedServer.status}
+											</span>
+										</div>
+									</div>
+									<div>
 										<div class="font-medium text-zinc-600">scope</div>
 										<div class="mt-1 text-zinc-300">{selectedServer.scope}</div>
 									</div>
@@ -606,6 +622,16 @@
 										</div>
 									</div>
 								</div>
+								{#if selectedServer.status === 'error' && selectedServer.last_error}
+									<div
+										class="rounded-xl border border-red-900/40 bg-red-900/20 p-3 text-xs text-red-300"
+									>
+										<div class="font-medium text-red-400">last error</div>
+										<div class="mt-1 wrap-break-word">
+											{selectedServer.last_error}
+										</div>
+									</div>
+								{/if}
 							{/if}
 
 							<div class="space-y-2">

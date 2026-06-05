@@ -597,9 +597,9 @@
 		<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
 			<p class="mb-1 text-sm font-medium">attachment decay</p>
 			<p class="mb-4 text-xs text-zinc-500">
-				iterations the model keeps native attachment bytes before they decay to a
-				reference. an iteration is one agent-loop step (one per assistant message)
-				within the same agent turn.
+				iterations the model keeps native attachment bytes before they decay to a reference.
+				an iteration is one agent-loop step (one per assistant message) within the same
+				agent turn.
 			</p>
 			<div class="grid gap-4 md:grid-cols-2">
 				<div class="space-y-2">

@@ -4143,28 +4143,39 @@ export interface components {
     schemas: {
         /**
          * AIAttachmentSettings
-         * @description per-type decay windows for native attachments.
+         * @description protection windows for native media fetched onto tool messages.
          *
-         *     after N iterations within the same agent turn, an active attachment
-         *     auto-decays to reference state. an 'iteration' is one agent-loop
-         *     restart within a turn (one per assistant message).
+         *     native media only ever lives on tool messages (file_get fetches and
+         *     media generators). two tiers govern its lifetime, both measured in
+         *     iterations (one agent-loop restart within a single agent turn, i.e. one
+         *     per assistant message):
+         *
+         *     - hard window (always one iteration): the read iteration where the model
+         *     first sees the fresh bytes. media here is the output the model is reading
+         *     right now; compaction never cuts it. if the hard set alone busts budget,
+         *     compaction throws clearly.
+         *     - soft window (these settings): media stays native and hydrated for the
+         *     configured iterations within the same agent turn, but is NOT protected
+         *     from compaction. under budget pressure compaction may drop soft media (it
+         *     is recoverable via file_get), so the soft window can be cut short down to
+         *     the read iteration.
          */
         AIAttachmentSettings: {
             /**
              * Image Decay Iterations
-             * @description iterations before image attachments decay to reference
+             * @description soft protection iterations for fetched image media
              * @default 3
              */
             image_decay_iterations: number;
             /**
              * Audio Decay Iterations
-             * @description iterations before audio attachments decay to reference
+             * @description soft protection iterations for fetched audio media
              * @default 3
              */
             audio_decay_iterations: number;
             /**
              * Video Decay Iterations
-             * @description iterations before video attachments decay to reference
+             * @description soft protection iterations for fetched video media (token-heavy)
              * @default 1
              */
             video_decay_iterations: number;
@@ -4173,17 +4184,17 @@ export interface components {
         AIAttachmentSettingsPatch: {
             /**
              * Image Decay Iterations
-             * @description iterations before image attachments decay to reference
+             * @description protection iterations for fetched image media before release
              */
             image_decay_iterations?: number;
             /**
              * Audio Decay Iterations
-             * @description iterations before audio attachments decay to reference
+             * @description protection iterations for fetched audio media before release
              */
             audio_decay_iterations?: number;
             /**
              * Video Decay Iterations
-             * @description iterations before video attachments decay to reference
+             * @description protection iterations for fetched video media before release
              */
             video_decay_iterations?: number;
         };
@@ -4445,6 +4456,12 @@ export interface components {
              * @default 15
              */
             top_k: number;
+            /**
+             * Post Processing Turns
+             * @description number of recent conversation turns fed to the dedicated memory maintenance agent that runs after each turn. a turn is a contiguous block of user or assistant messages.
+             * @default 6
+             */
+            post_processing_turns: number;
         };
         /** AIMemorySettingsPatch */
         AIMemorySettingsPatch: {
@@ -4463,6 +4480,11 @@ export interface components {
              * @description number of relevant memories to retrieve
              */
             top_k?: number;
+            /**
+             * Post Processing Turns
+             * @description number of recent conversation turns fed to the dedicated memory maintenance agent
+             */
+            post_processing_turns?: number;
         };
         /**
          * AIPreferences
@@ -5938,9 +5960,11 @@ export interface components {
          * Citation
          * @description a single citation reference within a message.
          *
-         *     ``index`` is the branch-cumulative number used as the [n] marker.
-         *     ``source_type`` discriminates the resource kind.
-         *     ``source_id`` is the source-specific value (URL, TypeID string, etc.).
+         *     citations are reference-based: markers like [n] live in the message text,
+         *     and full citation data lives in message.citations[]. ``index`` is the
+         *     branch-cumulative number used as the [n] marker. ``source_type``
+         *     discriminates the resource kind. ``source_id`` is the source-specific value
+         *     (URL, TypeID string, etc.).
          */
         Citation: {
             /**
@@ -5962,7 +5986,7 @@ export interface components {
          * @description what kind of resource a citation points to.
          * @enum {string}
          */
-        CitationSource: "url" | "file" | "note" | "memory" | "thread" | "tool_result";
+        CitationSource: "url" | "file" | "note" | "thread" | "project" | "reminder" | "reminder_list" | "calendar" | "calendar_event";
         /**
          * ClientContext
          * @description optional runtime context sent by the client with each agent run.
@@ -6502,6 +6526,8 @@ export interface components {
             status: components["schemas"]["FileStatus"];
             /** Message Id */
             message_id?: string | null;
+            /** Origin Thread Id */
+            origin_thread_id?: string | null;
             /** Deleted At */
             deleted_at?: string | null;
         };
@@ -6509,11 +6535,7 @@ export interface components {
         FileCategoryFilter: "image" | "audio" | "video" | "file";
         /**
          * FileContent
-         * @description file attachment content.
-         *
-         *     for ORM storage: metadata["file_id"] is set, url/base64 may be null
-         *     for SDK execution: url or base64 must be populated (resolved from file_id)
-         *     for external files: url is set, no file_id in metadata
+         * @description file content; carries a file_id in metadata or an external url.
          */
         FileContent: {
             /** Metadata */
@@ -6863,9 +6885,7 @@ export interface components {
         };
         /**
          * ImageContent
-         * @description image content part.
-         *
-         *     this mirrors FileContent fields but uses a distinct content type.
+         * @description image content; mirrors FileContent with a distinct type.
          */
         ImageContent: {
             /** Metadata */
@@ -7004,7 +7024,7 @@ export interface components {
         } | components["schemas"]["JSONValue-Output"][] | null;
         /**
          * JsonContent
-         * @description structured JSON content (for structured outputs).
+         * @description structured json content (for structured outputs).
          */
         JsonContent: {
             /** Metadata */
@@ -7764,14 +7784,12 @@ export interface components {
             tool_calls?: {
                 [key: string]: unknown;
             }[];
-            /** Usage */
-            usage?: {
-                [key: string]: unknown;
-            } | null;
             /** Read By */
             read_by?: string[];
             /** Citations */
             citations?: components["schemas"]["Citation"][];
+            /** Attachments */
+            attachments?: components["schemas"]["ResourceAttachment"][];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -7824,6 +7842,8 @@ export interface components {
             read_by?: string[];
             /** Citations */
             citations?: components["schemas"]["Citation"][];
+            /** Attachments */
+            attachments?: components["schemas"]["ResourceAttachment"][];
             /** Parent Id */
             parent_id?: string | null;
             /** Task Id */
@@ -9517,7 +9537,7 @@ export interface components {
         };
         /**
          * RefusalContent
-         * @description refusal content (when model refuses to respond).
+         * @description refusal content (when the model refuses to respond).
          */
         RefusalContent: {
             /** Metadata */
@@ -9942,6 +9962,22 @@ export interface components {
             top_k?: number;
         };
         /**
+         * ResourceAttachment
+         * @description reference to an attached resource.
+         */
+        ResourceAttachment: {
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "file" | "note" | "thread" | "project" | "reminder" | "calendar_event";
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+        };
+        /**
          * ResourceType
          * @description supported resource types for access control.
          * @enum {string}
@@ -10028,7 +10064,7 @@ export interface components {
          * RunInput
          * @description structured input for an agent run.
          *
-         *     supports plain text, file attachments via IDs, or both.
+         *     supports plain text, resource attachments, or both.
          */
         RunInput: {
             /**
@@ -10037,17 +10073,10 @@ export interface components {
              */
             text?: string | null;
             /**
-             * Attachment Ids
-             * @description file IDs to include as content parts in the message. each ID is resolved server-side to an image or file content part.
+             * Attachments
+             * @description resource references to attach to the message.
              */
-            attachment_ids?: string[];
-            /**
-             * Attachment Actions
-             * @description one-off user attachment actions. keys are file_ids, values are 'reveal' (make active) or 'reference' (force decay). persisted as events and applied by the decay filter.
-             */
-            attachment_actions?: {
-                [key: string]: "reveal" | "reference";
-            } | null;
+            attachments?: components["schemas"]["ResourceAttachment"][];
         };
         /**
          * RunRequest
@@ -10327,6 +10356,12 @@ export interface components {
          */
         SearchMode: "hybrid" | "dense" | "sparse" | "autocomplete" | "full";
         /**
+         * SearchResourceReferenceType
+         * @description known resource types that can be referenced by search result context.
+         * @enum {string}
+         */
+        SearchResourceReferenceType: "thread" | "note" | "reminder" | "reminder_list" | "project" | "file" | "calendar_event" | "calendar";
+        /**
          * SearchResultItem
          * @description a single search result across any searchable entity.
          */
@@ -10343,6 +10378,7 @@ export interface components {
             preview?: string | null;
             /** Score */
             score?: number | null;
+            parent?: components["schemas"]["SearchResultParent"] | null;
             metadata?: components["schemas"]["JSONObject-Output"];
             /**
              * Created At
@@ -10354,6 +10390,18 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * SearchResultParent
+         * @description immediate parent resource needed to display or route a nested result.
+         */
+        SearchResultParent: {
+            type: components["schemas"]["SearchResourceReferenceType"];
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
         };
         /**
          * SearchResultType
@@ -29958,6 +30006,7 @@ export interface operations {
                 limit?: number;
                 sort_by?: components["schemas"]["CommonSortBy"] | ("filename" | "size_bytes");
                 sort_dir?: "asc" | "desc";
+                resolve_origin?: boolean;
                 owner_id?: string | null;
                 project_id?: string | null;
                 source?: components["schemas"]["FileSource"] | null;
@@ -30540,7 +30589,9 @@ export interface operations {
     };
     get_file_v1_files__file_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                resolve_origin?: boolean;
+            };
             header?: never;
             path: {
                 file_id: string;

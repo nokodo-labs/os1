@@ -3344,9 +3344,15 @@
 										bind:mediaImagesMaxN={aiMediaImagesMaxN}
 										bind:mediaVideosEnabled={aiMediaVideosEnabled}
 										bind:mediaAudioEnabled={aiMediaAudioEnabled}
-										bind:attachmentImageDecayIterations={aiAttachmentImageDecayIterations}
-										bind:attachmentAudioDecayIterations={aiAttachmentAudioDecayIterations}
-										bind:attachmentVideoDecayIterations={aiAttachmentVideoDecayIterations}
+										bind:attachmentImageDecayIterations={
+											aiAttachmentImageDecayIterations
+										}
+										bind:attachmentAudioDecayIterations={
+											aiAttachmentAudioDecayIterations
+										}
+										bind:attachmentVideoDecayIterations={
+											aiAttachmentVideoDecayIterations
+										}
 										bind:contextCompactionEnabled={aiContextCompactionEnabled}
 										bind:contextCompactionTriggerRatio={
 											aiContextCompactionTriggerRatio
