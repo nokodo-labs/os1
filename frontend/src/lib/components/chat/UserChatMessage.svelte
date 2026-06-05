@@ -6,18 +6,20 @@
 		type FileContentPart,
 		type MediaContentPart,
 	} from '$lib/chat/helpers'
-	import type { ApiMessage } from '$lib/chat/types'
+	import type { ApiMessage, ResourceAttachment } from '$lib/chat/types'
+	import AttachmentRefs from '$lib/components/chat/AttachmentRefs.svelte'
 	import MediaAttachments from '$lib/components/chat/MediaAttachments.svelte'
 	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
+	import ArrowUpCircle from '$lib/components/icons/ArrowUpCircle.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
 	import Clock from '$lib/components/icons/Clock.svelte'
-	import ArrowUpCircle from '$lib/components/icons/ArrowUpCircle.svelte'
 	import FloppyDisk from '$lib/components/icons/FloppyDisk.svelte'
 	import Pencil from '$lib/components/icons/Pencil.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
+	import { device } from '$lib/stores/device.svelte'
 	import type { BubbleTailStyle } from '$lib/stores/preferences.svelte'
 	import type { Snippet } from 'svelte'
 	import { onMount, tick } from 'svelte'
@@ -26,6 +28,7 @@
 	interface Props {
 		content: string
 		contentParts?: ApiMessage['content']
+		attachmentRefs?: ResourceAttachment[]
 		optimisticMediaParts?: MediaContentPart[]
 		optimisticFileParts?: FileContentPart[]
 		timestamp?: Date
@@ -46,6 +49,7 @@
 	let {
 		content,
 		contentParts,
+		attachmentRefs,
 		optimisticMediaParts,
 		optimisticFileParts,
 		timestamp,
@@ -71,6 +75,7 @@
 		contentParts ? extractFileParts(contentParts, apiBase) : (optimisticFileParts ?? [])
 	)
 	const hasMedia = $derived(mediaParts.length > 0 || fileParts.length > 0)
+	const refs = $derived(attachmentRefs ?? [])
 
 	let showActions = $state(false)
 	let isHovered = $state(false)
@@ -234,8 +239,10 @@
 		void tick().then(() => {
 			el.style.height = ''
 			el.style.height = `${el.scrollHeight}px`
-			el.focus()
-			el.setSelectionRange(el.value.length, el.value.length)
+			if (!device.isMobile) {
+				el.focus()
+				el.setSelectionRange(el.value.length, el.value.length)
+			}
 		})
 	})
 
@@ -276,16 +283,21 @@
 		</div>
 	{/if}
 
+	<!-- attachment resource refs (user-attached files/resources) -->
+	{#if refs.length > 0 && !isEditing}
+		<div class="max-w-sm space-y-1.5">
+			<AttachmentRefs {refs} />
+		</div>
+	{/if}
+
 	<!-- text bubble (only shown when there is text content or editing) -->
 	{#if content.trim().length > 0 || isEditing}
-		<div
-			class="flex items-center gap-2"
-			class:flex-row-reverse={align === 'right' && !isEditing && !sending}
-			class:w-full={isEditing}
-		>
+		<div class="relative flex items-center" class:w-full={isEditing}>
 			{#if sending && !isEditing}
 				<div
-					class="text-foreground/55 flex size-4 shrink-0 items-center justify-center"
+					class="text-foreground/55 pointer-events-none absolute top-1/2 flex size-4 -translate-y-1/2 items-center justify-center"
+					class:-left-6={align === 'right'}
+					class:-right-6={align === 'left'}
 					aria-label="sending"
 				>
 					<span class="sending-clock-tick flex size-4 items-center justify-center">

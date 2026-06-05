@@ -13,6 +13,7 @@
 	interface Props {
 		activity: RunActivityState
 		icon?: IconComponent
+		iconClass?: string
 		getActiveLabel: ActiveLabel
 		getSuccessLabel: TerminalLabel
 		getErrorLabel: TerminalLabel
@@ -22,6 +23,7 @@
 	let {
 		activity,
 		icon: Icon = ArchiveBox,
+		iconClass = 'text-foreground/45 h-3.5 w-3.5',
 		getActiveLabel,
 		getSuccessLabel,
 		getErrorLabel,
@@ -76,7 +78,7 @@
 
 <div class="flex items-start gap-2.5 py-1" in:fade={{ duration: 120 }}>
 	<div class="relative mt-px flex h-5 w-6 shrink-0 items-center justify-center">
-		<Icon class="text-foreground/45 h-3.5 w-3.5" />
+		<Icon class={iconClass} />
 	</div>
 
 	<div class="min-w-0 flex-1 text-sm">

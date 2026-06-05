@@ -9,7 +9,7 @@ import { resolveResourceAccessLevels } from '$lib/stores/resourceAccess.svelte'
 import { session } from '$lib/stores/session.svelte'
 import { parseToolCalls, parseToolEvent, parseToolResult } from '$lib/tools'
 import { tick } from 'svelte'
-import { getMessageCreatedAt, type ApiMessage } from './helpers'
+import { extractAttachmentRefs, getMessageCreatedAt, type ApiMessage } from './helpers'
 import { parseRunActivityEvent } from './runActivities'
 import { getMessageSteeringRunId, getMessageSteeringState } from './steering'
 import type { ChatContext } from './types'
@@ -57,17 +57,6 @@ function replayEvents(events: ApiEvent[], ctx: ChatContext): void {
 		if (activityEv) {
 			ctx.processRunActivityEvent(activityEv)
 			continue
-		}
-
-		if (ev.type.startsWith('attachment.')) {
-			const evData = (ev.data ?? {}) as Record<string, unknown>
-			const fileId = evData.file_id as string | undefined
-			if (!fileId) continue
-			if (ev.type === 'attachment.decayed') {
-				ctx.attachmentStates.set(fileId, 'reference')
-			} else if (ev.type === 'attachment.revealed') {
-				ctx.attachmentStates.set(fileId, 'active')
-			}
 		}
 	}
 }
@@ -167,7 +156,11 @@ export function ingestMessages(msgs: ApiMessage[], ctx: ChatContext): void {
 		}
 		if (msg.type === 'tool') {
 			const result = parseToolResult(msg)
-			if (result) ctx.toolTracker.registerResult(result)
+			if (result) {
+				const refs = extractAttachmentRefs(msg)
+				if (refs.length > 0) result.attachmentRefs = refs
+				ctx.toolTracker.registerResult(result)
+			}
 		}
 	}
 }

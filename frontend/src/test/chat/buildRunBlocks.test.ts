@@ -256,6 +256,76 @@ describe('buildRunBlocks', () => {
 		expect(result.blocks[0].agentId).toBe(agentId)
 	})
 
+	it('places late memory activity on its older anchor turn', () => {
+		const firstUser = message({
+			id: 'u1',
+			type: 'user',
+			parent_id: null,
+			sender_user_id: userId,
+			metadata_: { run_id: 'run_1' },
+			created_at: at(1),
+		})
+		const firstAssistant = message({
+			id: 'a1',
+			type: 'assistant',
+			parent_id: 'u1',
+			sender_user_id: null,
+			sender_agent_id: agentId,
+			metadata_: { run_id: 'run_1' },
+			content: [{ type: 'text', text: 'first done' }],
+			created_at: at(2),
+		})
+		const secondUser = message({
+			id: 'u2',
+			type: 'user',
+			parent_id: 'a1',
+			sender_user_id: userId,
+			metadata_: { run_id: 'run_2' },
+			created_at: at(3),
+		})
+		const secondAssistant = message({
+			id: 'a2',
+			type: 'assistant',
+			parent_id: 'u2',
+			sender_user_id: null,
+			sender_agent_id: agentId,
+			metadata_: { run_id: 'run_2' },
+			content: [{ type: 'text', text: 'second done' }],
+			created_at: at(4),
+		})
+		const activity: RunActivityState = {
+			key: 'memory_activity_1',
+			id: 'event_1',
+			eventIds: ['event_1'],
+			messageId: 'u1',
+			runId: 'run_1',
+			activityId: 'memory_activity_1',
+			activityType: 'memory_maintenance',
+			status: 'success',
+			message: 'memory updated',
+			updatedAt: new Date(at(5)),
+			startedAt: new Date(at(5)),
+			endedAt: new Date(at(5)),
+		}
+
+		const result = buildRunBlocks({
+			messages: [firstUser, firstAssistant, secondUser, secondAssistant],
+			userId,
+			streamingAssistant: null,
+			optimisticUserMessage: null,
+			viewingStreamingBranch: true,
+			runActivities: [activity],
+		})
+
+		expect(result.blocks).toHaveLength(2)
+		expect(result.blocks[0].items.map((item) => item.kind)).toEqual([
+			'user',
+			'run_activity',
+			'assistant',
+		])
+		expect(result.blocks[1].items.map((item) => item.kind)).toEqual(['user', 'assistant'])
+	})
+
 	it('splits consecutive assistant and tool messages when the run id changes', () => {
 		const firstUser = message({
 			id: 'u1',
@@ -381,7 +451,7 @@ describe('buildRunBlocks', () => {
 			streamingAssistant: {
 				runId,
 				messageId: 'streaming_1',
-				content: '',
+				content: 'searching',
 				timestamp: new Date(at(3)),
 				senderAgentId: agentId,
 				toolCalls: [{ id: 'tc_live', name: 'agentic_web_search', arguments: {} }],
@@ -397,6 +467,49 @@ describe('buildRunBlocks', () => {
 			'user',
 			'assistant',
 			'streaming_assistant',
+			'streaming_tool',
+		])
+	})
+
+	it('does not render an empty text placeholder before active streaming tools', () => {
+		const firstUser = message({
+			id: 'u1',
+			type: 'user',
+			parent_id: null,
+			sender_user_id: userId,
+			created_at: at(1),
+		})
+		const firstAssistant = message({
+			id: 'a1',
+			type: 'assistant',
+			parent_id: 'u1',
+			sender_user_id: null,
+			sender_agent_id: agentId,
+			content: [{ type: 'text', text: 'checking' }],
+			created_at: at(2),
+		})
+
+		const result = buildRunBlocks({
+			messages: [firstUser, firstAssistant],
+			userId,
+			streamingAssistant: {
+				runId,
+				messageId: 'streaming_1',
+				content: '',
+				timestamp: new Date(at(3)),
+				senderAgentId: agentId,
+				toolCalls: [{ id: 'tc_live', name: 'agentic_web_search', arguments: {} }],
+				isError: false,
+				errorMessage: null,
+			},
+			optimisticUserMessage: null,
+			viewingStreamingBranch: true,
+		})
+
+		expect(result.blocks).toHaveLength(1)
+		expect(result.blocks[0].items.map((item) => item.kind)).toEqual([
+			'user',
+			'assistant',
 			'streaming_tool',
 		])
 	})

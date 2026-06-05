@@ -153,14 +153,6 @@
 	<a href={resolve('/reminders/lists/[listId]', { listId: reminderListId })} class={linkClass}>
 		{@render resourceContent()}
 	</a>
-{:else if resourceType === 'reminder'}
-	<a href={resolve('/reminders')} class={linkClass}>
-		{@render resourceContent()}
-	</a>
-{:else if resourceType === 'calendar_event'}
-	<a href={resolve('/calendar')} class={linkClass}>
-		{@render resourceContent()}
-	</a>
 {:else if resourceType === 'project'}
 	<a href={resolve('/projects/[id]', { id: resourceId })} class={linkClass}>
 		{@render resourceContent()}

@@ -12,7 +12,7 @@
 	import Tag from '$lib/components/icons/Tag.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
-	import { Switch } from '$lib/components/primitives'
+	import { DropdownSelect, Switch } from '$lib/components/primitives'
 	import NotificationOffsetsEditor from '$lib/components/scheduling/NotificationOffsetsEditor.svelte'
 	import RecurrenceEditor from '$lib/components/scheduling/RecurrenceEditor.svelte'
 	import {
@@ -95,6 +95,9 @@
 	let saving = $state(false)
 
 	const availableCalendars = $derived(calendars.all)
+	const calendarOptions = $derived(
+		availableCalendars.map((calendar) => ({ value: calendar.id, label: calendar.name }))
+	)
 	const selectedCalendar = $derived(
 		availableCalendars.find((calendar) => calendar.id === selectedCalendarId) ?? null
 	)
@@ -475,16 +478,15 @@
 			<div class="{fieldClass} {showTimezone ? '' : 'col-span-full'}">
 				<Calendar class={fieldIconClass} />
 				<label class={fieldLabelClass} for="calendar-event-calendar">calendar</label>
-				<select
-					id="calendar-event-calendar"
-					bind:value={selectedCalendarId}
-					class="{inputClass} col-span-full"
+				<DropdownSelect
+					options={calendarOptions}
+					value={selectedCalendarId}
+					onchange={(value) => (selectedCalendarId = value)}
 					disabled={saving || isExisting || availableCalendars.length === 0}
-				>
-					{#each availableCalendars as calendar (calendar.id)}
-						<option value={calendar.id}>{calendar.name}</option>
-					{/each}
-				</select>
+					ariaLabel="calendar"
+					class="col-span-full"
+					buttonClass="rounded-xl px-3"
+				/>
 			</div>
 			{#if showTimezone}
 				<div class={fieldClass}>

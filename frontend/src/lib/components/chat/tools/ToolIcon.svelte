@@ -6,6 +6,7 @@
 	import CalendarIcon from '$lib/components/icons/Calendar.svelte'
 	import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
 	import CommandLine from '$lib/components/icons/CommandLine.svelte'
+	import Component from '$lib/components/icons/Component.svelte'
 	import Document from '$lib/components/icons/Document.svelte'
 	import Eye from '$lib/components/icons/Eye.svelte'
 	import Film from '$lib/components/icons/Film.svelte'
@@ -17,7 +18,7 @@
 	import Photo from '$lib/components/icons/Photo.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
-	import { getNativeToolDefinition } from '$lib/tools'
+	import { getNativeToolDefinition, isMcpToolName } from '$lib/tools'
 
 	interface Props {
 		toolName: string
@@ -25,7 +26,9 @@
 	}
 
 	let { toolName, isFailed }: Props = $props()
-	let icon = $derived(getNativeToolDefinition(toolName)?.icon ?? 'sparkles')
+	let icon = $derived(
+		isMcpToolName(toolName) ? 'mcp' : (getNativeToolDefinition(toolName)?.icon ?? 'sparkles')
+	)
 	let iconClass = $derived(`h-4.5 w-4.5 ${isFailed ? 'text-destructive' : 'text-foreground/80'}`)
 </script>
 
@@ -59,6 +62,8 @@
 	<CommandLine class={iconClass} />
 {:else if icon === 'eye'}
 	<Eye class={iconClass} />
+{:else if icon === 'mcp'}
+	<Component class={iconClass} />
 {:else}
 	<Sparkles class={iconClass} />
 {/if}

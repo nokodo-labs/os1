@@ -4,6 +4,7 @@
 	import User from '$lib/components/icons/User.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { resourceAccentStyle, resourceVisual } from '$lib/resources/resourceVisuals'
+	import { resourceSharing } from '$lib/utils/resourceSharing.svelte'
 	import ResourcePreview from './ResourcePreview.svelte'
 	import type { ResourceItem } from './types'
 
@@ -18,9 +19,8 @@
 
 	const labels = $derived((resource.meta?.labels as string[]) ?? [])
 	const wordCount = $derived((resource.meta?.word_count as number) ?? 0)
-	const isShared = $derived(Boolean(resource.meta?.shared))
-	const authorLabel = $derived((resource.meta?.author_label as string | null) ?? null)
-	const authorMeta = $derived(isShared ? authorLabel : null)
+	const sharing = resourceSharing(() => resource)
+	const authorMeta = $derived(sharing.authorMeta)
 	const strippedPreview = $derived(resource.preview ? stripMarkdown(resource.preview) : '')
 	const noteVisual = resourceVisual('note')
 	const NoteIcon = noteVisual.icon
@@ -43,7 +43,7 @@
 </script>
 
 <a
-	href={resolve(`/notes/${resource.id}`)}
+	href={onclick ? undefined : resolve(`/notes/${resource.id}`)}
 	onclick={handleClick}
 	class="group liquid-glass liquid-glass--frosted block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'

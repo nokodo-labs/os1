@@ -1,9 +1,13 @@
 <script lang="ts">
 	import { resolve } from '$app/paths'
 	import { searchStream, type SearchResultType } from '$lib/api/streaming/searchStream'
+	import EmptyState from '$lib/components/EmptyState.svelte'
+	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import Grid from '$lib/components/icons/Grid.svelte'
+	import Plus from '$lib/components/icons/Plus.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ResourcesView from '$lib/components/ResourcesView.svelte'
 	import { type ResourceFilterMode, type ResourceItem } from '$lib/components/widgets/types'
 	import {
@@ -12,13 +16,22 @@
 		type ResourceIconComponent,
 	} from '$lib/resources/resourceVisuals'
 	import { searchResultToResource } from '$lib/resources/searchResults'
-	import { calendars, type Calendar as CalendarRecord } from '$lib/stores/calendars.svelte'
+	import {
+		calendarEvents,
+		calendars,
+		type CalendarEvent,
+		type Calendar as CalendarRecord,
+	} from '$lib/stores/calendars.svelte'
 	import type { Thread } from '$lib/stores/chat.svelte'
 	import { chat } from '$lib/stores/chat.svelte'
 	import { apiFileToResource, files } from '$lib/stores/files.svelte'
 	import { notes, type Note } from '$lib/stores/notes.svelte'
 	import { projects, type Project } from '$lib/stores/projects.svelte'
-	import { reminders, type ReminderListWithCounts } from '$lib/stores/reminders.svelte'
+	import {
+		reminders,
+		type ReminderListWithCounts,
+		type ReminderWithSubtasks,
+	} from '$lib/stores/reminders.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { SvelteSet } from 'svelte/reactivity'
 
@@ -50,11 +63,19 @@
 	let abortController: AbortController | null = null
 	const currentUserId = $derived(session.currentUserId)
 
+	// container drill-down: clicking a container (reminder list / calendar) reveals its
+	// detail items inside the picker, paginated client-side with most-useful-first sorting.
+	const DRILL_PAGE_SIZE = 24
+	let drillTarget = $state<ResourceItem | null>(null)
+	let drillItems = $state<ResourceItem[]>([])
+	let drillVisibleCount = $state(DRILL_PAGE_SIZE)
+	let drillLoading = $state(false)
+
 	type FilterOption = {
 		value: ResourceFilterMode
 		label: string
 		icon: ResourceIconComponent
-		resourceType?: ResourceItem['type']
+		resourceTypes?: ResourceItem['type'][]
 	}
 
 	const allFilterOptions: FilterOption[] = [
@@ -63,37 +84,37 @@
 			value: 'threads',
 			label: resourceVisual('thread').pluralLabel,
 			icon: resourceVisual('thread').icon,
-			resourceType: 'thread',
+			resourceTypes: ['thread'],
 		},
 		{
 			value: 'notes',
 			label: resourceVisual('note').pluralLabel,
 			icon: resourceVisual('note').icon,
-			resourceType: 'note',
+			resourceTypes: ['note'],
 		},
 		{
 			value: 'reminders',
-			label: resourceVisual('reminder_list').pluralLabel,
-			icon: resourceVisual('reminder_list').icon,
-			resourceType: 'reminder_list',
+			label: resourceVisual('reminder').pluralLabel,
+			icon: resourceVisual('reminder').icon,
+			resourceTypes: ['reminder', 'reminder_list'],
 		},
 		{
 			value: 'files',
 			label: resourceVisual('file').pluralLabel,
 			icon: resourceVisual('file').icon,
-			resourceType: 'file',
+			resourceTypes: ['file'],
 		},
 		{
 			value: 'projects',
 			label: resourceVisual('project').pluralLabel,
 			icon: resourceVisual('project').icon,
-			resourceType: 'project',
+			resourceTypes: ['project'],
 		},
 		{
 			value: 'calendars',
-			label: resourceVisual('calendar').pluralLabel,
-			icon: resourceVisual('calendar').icon,
-			resourceType: 'calendar',
+			label: 'calendar',
+			icon: resourceVisual('calendar_event').icon,
+			resourceTypes: ['calendar_event', 'calendar'],
 		},
 	]
 	const allowedTypeSet = $derived(
@@ -102,7 +123,9 @@
 	const filterOptions = $derived(
 		allFilterOptions.filter(
 			(option) =>
-				!option.resourceType || !allowedTypeSet || allowedTypeSet.has(option.resourceType)
+				!option.resourceTypes ||
+				!allowedTypeSet ||
+				option.resourceTypes.some((type) => allowedTypeSet.has(type))
 		)
 	)
 	const canLoadMoreLocal = $derived(
@@ -198,6 +221,83 @@
 		}
 	}
 
+	function reminderToResource(reminder: ReminderWithSubtasks): ResourceItem {
+		const completed = reminder.status === 'completed'
+		const list = reminders.lists.find((entry) => entry.id === reminder.list_id) ?? null
+		return {
+			id: reminder.id,
+			type: 'reminder',
+			title: reminder.title || 'untitled reminder',
+			subtitle: reminder.description ?? undefined,
+			parent: { type: 'reminder_list', id: reminder.list_id },
+			href: resolve(`/reminders/lists/${reminder.list_id}`),
+			updatedAt: new Date(reminder.updated_at).getTime(),
+			createdAt: new Date(reminder.created_at).getTime(),
+			meta: {
+				status: completed ? 'completed' : null,
+				due_at: reminder.due_at ?? null,
+				remind_at: reminder.remind_at ?? null,
+				owner_id: reminder.owner_id,
+				parent_label: list?.name ?? null,
+				parent_icon: list?.icon ?? null,
+				parent_color: list?.color ?? null,
+			},
+		}
+	}
+
+	function calendarEventToResource(event: CalendarEvent): ResourceItem {
+		const calendar = calendars.all.find((entry) => entry.id === event.calendar_id) ?? null
+		const calendarColor = calendar?.color ?? null
+		return {
+			id: event.id,
+			type: 'calendar_event',
+			title: event.title || 'untitled event',
+			subtitle: event.description ?? undefined,
+			parent: { type: 'calendar', id: event.calendar_id },
+			href: resolve('/calendar'),
+			updatedAt: new Date(event.updated_at).getTime(),
+			createdAt: new Date(event.created_at).getTime(),
+			meta: {
+				color: calendarColor,
+				start_at: event.start_at,
+				end_at: event.end_at,
+				owner_id: event.owner_id,
+				parent_label: calendar?.name ?? null,
+				parent_color: calendarColor,
+			},
+		}
+	}
+
+	// incomplete reminders first (soonest due, overdue included; no-due last), then completed by recency.
+	function sortRemindersForPicker(items: ReminderWithSubtasks[]): ReminderWithSubtasks[] {
+		const dueValue = (reminder: ReminderWithSubtasks): number =>
+			reminder.due_at ? new Date(reminder.due_at).getTime() : Number.POSITIVE_INFINITY
+		const completedValue = (reminder: ReminderWithSubtasks): number =>
+			reminder.completed_at ? new Date(reminder.completed_at).getTime() : 0
+		return items.toSorted((a, b) => {
+			const aDone = a.status === 'completed'
+			const bDone = b.status === 'completed'
+			if (aDone !== bDone) return aDone ? 1 : -1
+			if (aDone) return completedValue(b) - completedValue(a)
+			const dueDiff = dueValue(a) - dueValue(b)
+			if (dueDiff !== 0) return dueDiff
+			return a.position - b.position
+		})
+	}
+
+	// upcoming events first (soonest start), then past events most-recent-first.
+	function sortEventsForPicker(items: CalendarEvent[]): CalendarEvent[] {
+		const now = Date.now()
+		return items.toSorted((a, b) => {
+			const aStart = new Date(a.start_at).getTime()
+			const bStart = new Date(b.start_at).getTime()
+			const aUpcoming = aStart >= now
+			const bUpcoming = bStart >= now
+			if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1
+			return aUpcoming ? aStart - bStart : bStart - aStart
+		})
+	}
+
 	async function loadFileResources(): Promise<ResourceItem[]> {
 		const allFiles = await files.load()
 		const resources = allFiles.filter((f) => !excludeIds.has(f.id)).map(apiFileToResource)
@@ -260,7 +360,12 @@
 		loading = true
 		abortController = new AbortController()
 
-		if (activeFilter === 'projects' || activeFilter === 'calendars') {
+		const localOnlySearch =
+			activeFilter === 'projects' ||
+			(activeFilter === 'reminders' && !isAllowedType('reminder')) ||
+			(activeFilter === 'calendars' && !isAllowedType('calendar_event'))
+
+		if (localOnlySearch) {
 			const fileItems = await buildLocalResultsWithFiles()
 			const lowerQ = query.toLowerCase()
 			searchResults = fileItems.filter((f) => f.title.toLowerCase().includes(lowerQ))
@@ -269,13 +374,20 @@
 		}
 
 		const typeMap: Record<string, SearchResultType[]> = {
-			all: ['thread', 'note', 'reminder', 'file'],
+			all: ['thread', 'note', 'reminder', 'calendar_event', 'file'],
 			threads: ['thread'],
 			notes: ['note'],
 			reminders: ['reminder'],
+			calendars: ['calendar_event'],
 			files: ['file'],
 		}
-		const types = typeMap[activeFilter] ?? ['thread', 'note', 'reminder', 'file']
+		const types = typeMap[activeFilter] ?? [
+			'thread',
+			'note',
+			'reminder',
+			'calendar_event',
+			'file',
+		]
 
 		const seen = new SvelteSet<string>()
 		const results: ResourceItem[] = []
@@ -304,6 +416,7 @@
 
 	function handleSearchInput(value: string) {
 		searchQuery = value
+		if (value.trim() && drillTarget) exitDrill()
 		if (searchDebounce) clearTimeout(searchDebounce)
 		searchDebounce = setTimeout(() => {
 			void runSearch(value)
@@ -338,6 +451,30 @@
 		return localResults.filter((resource) => isAllowedType(resource.type))
 	})
 
+	const showingDrill = $derived(drillTarget !== null && !searchQuery.trim())
+	const drillDisplayItems = $derived(drillItems.slice(0, drillVisibleCount))
+	const drillHasMore = $derived(!drillLoading && drillVisibleCount < drillItems.length)
+	const viewResources = $derived(showingDrill ? drillDisplayItems : displayResults)
+	const viewLoading = $derived(showingDrill ? drillLoading : loading)
+	const viewHasMore = $derived(showingDrill ? drillHasMore : canLoadMoreLocal)
+	const viewLoadingMore = $derived(showingDrill ? false : isLoadingMoreLocal)
+	const viewEmptyMessage = $derived.by((): string => {
+		if (showingDrill) {
+			return drillTarget?.type === 'calendar'
+				? 'no events in this calendar'
+				: 'no reminders in this list'
+		}
+		return searchQuery.trim() ? 'no matching resources found' : 'no resources available'
+	})
+
+	function handleViewLoadMore() {
+		if (showingDrill) {
+			loadMoreDrill()
+		} else {
+			void loadMoreLocal()
+		}
+	}
+
 	$effect(() => {
 		if (!filterOptions.some((option) => option.value === activeFilter)) {
 			activeFilter = 'all'
@@ -359,6 +496,68 @@
 
 	function handleSelect(resource: ResourceItem) {
 		onSelect(resource)
+	}
+
+	function detailTypeForContainer(item: ResourceItem): ResourceItem['type'] | null {
+		if (item.type === 'reminder_list') return 'reminder'
+		if (item.type === 'calendar') return 'calendar_event'
+		return null
+	}
+
+	function isDrillable(item: ResourceItem): boolean {
+		const detailType = detailTypeForContainer(item)
+		return detailType !== null && isAllowedType(detailType)
+	}
+
+	function handleItemClick(item: ResourceItem) {
+		if (isDrillable(item)) {
+			void drillInto(item)
+			return
+		}
+		handleSelect(item)
+	}
+
+	function exitDrill() {
+		drillTarget = null
+		drillItems = []
+		drillVisibleCount = DRILL_PAGE_SIZE
+		drillLoading = false
+	}
+
+	async function drillInto(container: ResourceItem) {
+		drillTarget = container
+		drillItems = []
+		drillVisibleCount = DRILL_PAGE_SIZE
+		drillLoading = true
+		try {
+			if (container.type === 'reminder_list') {
+				const records = await reminders.loadReminders(container.id)
+				if (drillTarget !== container) return
+				drillItems = sortRemindersForPicker(records)
+					.filter((reminder) => !excludeIds.has(reminder.id))
+					.map(reminderToResource)
+			} else if (container.type === 'calendar') {
+				const now = Date.now()
+				const dayMs = 86_400_000
+				const startAt = new Date(now - 30 * dayMs).toISOString()
+				const endAt = new Date(now + 365 * dayMs).toISOString()
+				await calendarEvents.load({ calendarId: container.id, startAt, endAt })
+				if (drillTarget !== container) return
+				const own = calendarEvents.all.filter((event) => event.calendar_id === container.id)
+				drillItems = sortEventsForPicker(own)
+					.filter((event) => !excludeIds.has(event.id))
+					.map(calendarEventToResource)
+			}
+		} catch {
+			if (drillTarget === container) drillItems = []
+		} finally {
+			if (drillTarget === container) drillLoading = false
+		}
+	}
+
+	function loadMoreDrill() {
+		if (drillLoading || drillVisibleCount >= drillItems.length) return
+		drillVisibleCount = Math.min(drillVisibleCount + DRILL_PAGE_SIZE, drillItems.length)
 	}
 
 	async function loadLocal() {
@@ -402,6 +601,7 @@
 			searchQuery = ''
 			activeFilter = 'all'
 			searchResults = []
+			exitDrill()
 			void loadLocal()
 		} else {
 			abortController?.abort()
@@ -442,58 +642,91 @@
 			/>
 		</div>
 
-		<!-- filter tabs -->
-		<div class="flex items-center gap-2">
-			<div class="flex flex-1 scrollbar-none gap-1 overflow-x-auto">
-				{#each filterOptions as opt (opt.value)}
-					{@const Icon = opt.icon}
-					{@const optionStyle = opt.resourceType
-						? resourceAccentStyle(opt.resourceType)
-						: ''}
-					<button
-						type="button"
-						style={optionStyle}
-						class="rounded-pill flex shrink-0 cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs font-semibold transition-colors duration-150 {activeFilter ===
-						opt.value
-							? opt.resourceType
-								? 'border-[color-mix(in_oklch,var(--resource-accent)_32%,transparent)] bg-[color-mix(in_oklch,var(--resource-accent)_14%,transparent)] text-(--accent-primary)'
-								: 'border-foreground/20 bg-foreground/12 text-foreground/90'
-							: opt.resourceType
-								? 'border-[color-mix(in_oklch,var(--resource-accent)_18%,transparent)] bg-[color-mix(in_oklch,var(--resource-accent)_8%,transparent)] text-(--accent-primary) hover:bg-[color-mix(in_oklch,var(--resource-accent)_12%,transparent)]'
-								: 'border-foreground/8 text-foreground/50 hover:bg-foreground/5 hover:text-foreground/70 bg-transparent'}"
-						onclick={() => {
-							activeFilter = opt.value
-							if (searchQuery.trim()) void runSearch(searchQuery)
-						}}
-					>
-						<Icon class="size-3.5 shrink-0" />
-						{opt.label}
-					</button>
-				{/each}
+		{#if drillTarget && !searchQuery.trim()}
+			{@const container = drillTarget}
+			<!-- container drill-down header -->
+			<div class="flex items-center gap-2">
+				<button
+					type="button"
+					onclick={exitDrill}
+					class="rounded-pill border-foreground/10 text-foreground/60 hover:bg-foreground/5 hover:text-foreground/90 flex shrink-0 cursor-pointer items-center gap-1 border px-2.5 py-1.5 text-xs font-semibold transition-colors"
+				>
+					<ChevronLeft class="size-3.5" />
+					back
+				</button>
+				<span class="text-foreground/90 min-w-0 flex-1 truncate text-sm font-semibold"
+					>{container.title}</span
+				>
+				<button
+					type="button"
+					onclick={() => handleSelect(container)}
+					class="rounded-pill border-foreground/15 bg-foreground/10 text-foreground/90 hover:bg-foreground/15 flex shrink-0 cursor-pointer items-center gap-1 border px-3 py-1.5 text-xs font-semibold transition-colors"
+				>
+					<Plus class="size-3.5 shrink-0" />
+					attach {container.type === 'calendar' ? 'calendar' : 'list'}
+				</button>
 			</div>
-		</div>
+		{:else}
+			<!-- filter tabs -->
+			<div class="flex items-center gap-2">
+				<div class="flex flex-1 scrollbar-none gap-1 overflow-x-auto">
+					{#each filterOptions as opt (opt.value)}
+						{@const Icon = opt.icon}
+						{@const styleType = opt.resourceTypes?.[0]}
+						{@const optionStyle = styleType ? resourceAccentStyle(styleType) : ''}
+						<button
+							type="button"
+							style={optionStyle}
+							class="rounded-pill flex shrink-0 cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs font-semibold transition-colors duration-150 {activeFilter ===
+							opt.value
+								? styleType
+									? 'border-[color-mix(in_oklch,var(--resource-accent)_32%,transparent)] bg-[color-mix(in_oklch,var(--resource-accent)_14%,transparent)] text-(--accent-primary)'
+									: 'border-foreground/20 bg-foreground/12 text-foreground/90'
+								: styleType
+									? 'border-[color-mix(in_oklch,var(--resource-accent)_18%,transparent)] bg-[color-mix(in_oklch,var(--resource-accent)_8%,transparent)] text-(--accent-primary) hover:bg-[color-mix(in_oklch,var(--resource-accent)_12%,transparent)]'
+									: 'border-foreground/8 text-foreground/50 hover:bg-foreground/5 hover:text-foreground/70 bg-transparent'}"
+							onclick={() => {
+								activeFilter = opt.value
+								if (searchQuery.trim()) void runSearch(searchQuery)
+							}}
+						>
+							<Icon class="size-3.5 shrink-0" />
+							{opt.label}
+						</button>
+					{/each}
+				</div>
+			</div>
+		{/if}
 
 		<!-- results list -->
-		<div class="h-[min(34rem,68dvh)] min-h-[min(18rem,52dvh)]">
-			<ResourcesView
-				resources={displayResults}
-				{loading}
-				layout="pill"
-				sort="none"
-				showLayoutToggle={false}
-				showPagination={false}
-				showOwnershipSections={false}
-				showScrollTopButton={false}
-				{currentUserId}
-				onLoadMore={loadMoreLocal}
-				hasMore={canLoadMoreLocal}
-				loadingMore={isLoadingMoreLocal}
-				emptyMessage={searchQuery.trim()
-					? 'no matching resources found'
-					: 'no resources available'}
-				onItemClick={handleSelect}
-				class="h-full overflow-y-auto pr-1"
-			/>
+		<div class="flex h-[min(34rem,68dvh)] min-h-[min(18rem,52dvh)] flex-col">
+			{#if viewLoading}
+				<div class="flex flex-1 items-center justify-center">
+					<NokodoLoader />
+				</div>
+			{:else if viewResources.length === 0}
+				<div class="flex flex-1 items-center justify-center">
+					<EmptyState label={viewEmptyMessage} />
+				</div>
+			{:else}
+				<ResourcesView
+					resources={viewResources}
+					loading={false}
+					layout="pill"
+					sort="none"
+					showLayoutToggle={false}
+					showPagination={false}
+					showOwnershipSections={false}
+					showScrollTopButton={false}
+					{currentUserId}
+					onLoadMore={handleViewLoadMore}
+					hasMore={viewHasMore}
+					loadingMore={viewLoadingMore}
+					emptyMessage={viewEmptyMessage}
+					onItemClick={handleItemClick}
+					class="min-h-0 flex-1 overflow-y-auto pr-1"
+				/>
+			{/if}
 		</div>
 	</div>
 </BaseModal>

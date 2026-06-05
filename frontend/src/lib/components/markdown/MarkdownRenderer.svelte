@@ -79,10 +79,30 @@
 
 	const defaultOrigin = browser ? window.location.origin : undefined
 
-	// Allow all http/https links, plus relative links via defaultOrigin.
-	// Streamdown's wildcard intentionally blocks non-http(s) schemes.
-	const allowedLinkPrefixes = ['*']
-	const allowedImagePrefixes = ['https://', 'http://', '/', 'data:image/']
+	// Allow links/images generated from OS1 data and app-relative URLs.
+	const allowedLinkPrefixes = [
+		'*',
+		'https://',
+		'http://',
+		'/',
+		'./',
+		'../',
+		'#',
+		'mailto:',
+		'tel:',
+		'data:',
+		'blob:',
+	]
+	const allowedImagePrefixes = [
+		'*',
+		'https://',
+		'http://',
+		'/',
+		'./',
+		'../',
+		'data:image/',
+		'blob:',
+	]
 
 	// Standard markdown-ish collapsible blocks, without enabling raw HTML.
 	// Syntax:

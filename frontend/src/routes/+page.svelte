@@ -233,10 +233,14 @@
 		// build RunInput shape
 		const runInput: RunInput = { text: content || null }
 		if (modifiers?.attachments && modifiers.attachments.length > 0) {
-			runInput.attachment_ids = modifiers.attachments.map((a) => a.fileId)
+			runInput.attachments = modifiers.attachments.map((a) => ({
+				type: a.resourceType,
+				id: a.fileId,
+			}))
 		}
 
 		const toolChoice = modifiers ? deriveToolChoice(modifiers) : null
+		const extraPlugins = modifiers?.extraPlugins ?? []
 
 		const controller = new AbortController()
 		createAndRunAbort = controller
@@ -264,6 +268,7 @@
 				threadId,
 				isTemporary: isTemporaryChatMode,
 				toolChoice,
+				extraPlugins,
 				signal: controller.signal,
 			})
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { components } from '$lib/api/types'
 	import { getSourceConfig } from '$lib/citations/config'
-	import type { ResourceItem, ResourceType } from './types'
+	import type { ResourceItem } from './types'
 
 	type Citation = components['schemas']['Citation']
 
@@ -17,7 +17,7 @@
 
 	const resource: ResourceItem = $derived({
 		id: citation.source_id,
-		type: cfg.resourceType as ResourceType,
+		type: cfg.resourceType,
 		title: citation.title ?? '',
 		href: cfg.href(citation.source_id),
 		updatedAt: Date.now(),

@@ -16,9 +16,11 @@ export type AppVisualId = AppId | 'library'
 export type ResourceVisualType =
 	| 'thread'
 	| 'note'
+	| 'reminder'
 	| 'reminder_list'
 	| 'project'
 	| 'file'
+	| 'calendar_event'
 	| 'calendar'
 	| 'messages'
 	| 'group'
@@ -70,6 +72,14 @@ export const resourceVisuals = {
 		accent: 'reminders',
 		tone: 'rose',
 	},
+	reminder: {
+		type: 'reminder',
+		label: 'reminder',
+		pluralLabel: 'reminders',
+		icon: CheckBox,
+		accent: 'reminders',
+		tone: 'rose',
+	},
 	project: {
 		type: 'project',
 		label: 'project',
@@ -90,6 +100,14 @@ export const resourceVisuals = {
 		type: 'calendar',
 		label: 'calendar',
 		pluralLabel: 'calendars',
+		icon: Calendar,
+		accent: 'calendar',
+		tone: 'emerald',
+	},
+	calendar_event: {
+		type: 'calendar_event',
+		label: 'calendar event',
+		pluralLabel: 'calendar events',
 		icon: Calendar,
 		accent: 'calendar',
 		tone: 'emerald',

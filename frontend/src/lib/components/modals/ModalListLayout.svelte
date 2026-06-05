@@ -1,10 +1,10 @@
 <script lang="ts">
 	import EmptyState from '$lib/components/EmptyState.svelte'
-	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import SortIcon from '$lib/components/icons/SortIcon.svelte'
 	import LoadingMoreIndicator from '$lib/components/LoadingMoreIndicator.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import { DropdownSelect } from '$lib/components/primitives'
 	import type { Snippet } from 'svelte'
 
 	type SortOption = {
@@ -53,6 +53,9 @@
 	}: ModalListLayoutProps = $props()
 
 	let scrollerEl: HTMLDivElement | null = $state(null)
+	const sortSelectOptions = $derived(
+		sortOptions.map((option, index) => ({ value: String(index), label: option.label }))
+	)
 
 	function maybeLoadMore(el: HTMLDivElement | null): void {
 		if (!el || loading || loadingMore || !hasMore || isEmpty) return
@@ -91,17 +94,13 @@
 			<SortIcon
 				class="text-foreground/45 pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2"
 			/>
-			<select
-				class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/70 focus:border-foreground/20 [&>option]:text-foreground/90 min-w-40 appearance-none border py-2 pr-8 pl-9 text-sm transition-colors outline-none [&>option]:bg-neutral-900"
-				value={sortIndex}
-				onchange={(e) => onSortChange(Number(e.currentTarget.value))}
-			>
-				{#each sortOptions as opt, i (opt.value)}
-					<option value={i}>{opt.label}</option>
-				{/each}
-			</select>
-			<ChevronDown
-				class="text-foreground/45 pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2"
+			<DropdownSelect
+				options={sortSelectOptions}
+				value={String(sortIndex)}
+				onchange={(value) => onSortChange(Number(value))}
+				ariaLabel="sort list"
+				class="min-w-40"
+				buttonClass="py-2 pl-9 text-foreground/70"
 			/>
 		</div>
 	</div>

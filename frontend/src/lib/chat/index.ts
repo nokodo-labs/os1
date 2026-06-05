@@ -5,7 +5,6 @@ export { createChatState } from './createChatState.svelte'
 
 // types
 export type {
-	AttachmentStatus,
 	ChatContext,
 	ChatState,
 	OptimisticUserMessage,
@@ -17,7 +16,6 @@ export type {
 	RunActivityStatus,
 	SteeringState,
 	StreamDeltaContext,
-	ThreadAttachment,
 } from './types'
 
 // helpers (pure functions + types)
@@ -29,8 +27,8 @@ export {
 	buildRunBlocks,
 	computeBlockCitations,
 	computeIsAtBottom,
-	computeThreadAttachments,
 	contentPartsToText,
+	extractAttachmentRefs,
 	extractFileParts,
 	extractMediaParts,
 	getBlockFirstAssistant,
@@ -61,8 +59,8 @@ export { consumeStream, processDelta, resumeCreateAndRun, runThreadStream } from
 export {
 	parseRunActivityEvent,
 	reduceRunActivityEvent,
-	runActivityKey,
 	RUN_ACTIVITY_EVENT_PREFIX,
+	runActivityKey,
 } from './runActivities'
 
 // tree navigation

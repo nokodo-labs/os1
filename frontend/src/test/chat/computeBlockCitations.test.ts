@@ -278,28 +278,28 @@ describe('computeBlockCitations', () => {
 	})
 
 	describe('source type variety', () => {
-		it('handles mixed source types (url, note, tool_result)', () => {
+		it('handles mixed source types (url, note, calendar_event)', () => {
 			const cUrl = makeCitation(1, 'url', 'https://example.com')
 			const cNote = makeCitation(2, 'note', 'note_abc')
-			const cTool = makeCitation(3, 'tool_result', 'tool_xyz')
+			const cEvent = makeCitation(3, 'calendar_event', 'calev_xyz')
 			const msg = makeAssistantMessage('msg_1', 'from [1], [2], and [3]')
 			const items = [{ kind: 'assistant' as const, message: msg }]
-			const map = new Map([['msg_1', [cUrl, cNote, cTool]]])
+			const map = new Map([['msg_1', [cUrl, cNote, cEvent]]])
 
 			const result = computeBlockCitations(items, null, map)
-			expect(result).toEqual([cUrl, cNote, cTool])
+			expect(result).toEqual([cUrl, cNote, cEvent])
 			expect(result[0].source_type).toBe('url')
 			expect(result[1].source_type).toBe('note')
-			expect(result[2].source_type).toBe('tool_result')
+			expect(result[2].source_type).toBe('calendar_event')
 		})
 
 		it('selectively cites from mixed source types', () => {
 			const cUrl = makeCitation(1, 'url', 'https://example.com')
 			const cNote = makeCitation(2, 'note', 'note_abc')
-			const cTool = makeCitation(3, 'tool_result', 'tool_xyz')
+			const cEvent = makeCitation(3, 'calendar_event', 'calev_xyz')
 			const msg = makeAssistantMessage('msg_1', 'only the note [2]')
 			const items = [{ kind: 'assistant' as const, message: msg }]
-			const map = new Map([['msg_1', [cUrl, cNote, cTool]]])
+			const map = new Map([['msg_1', [cUrl, cNote, cEvent]]])
 
 			expect(computeBlockCitations(items, null, map)).toEqual([cNote])
 		})

@@ -2,7 +2,7 @@
 	import { api } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
 	import Lock from '$lib/components/icons/Lock.svelte'
-	import { Switch } from '$lib/components/primitives'
+	import { DropdownSelect, Switch } from '$lib/components/primitives'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { clearGeolocation, requestGeolocation } from '$lib/stores/device.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
@@ -163,17 +163,14 @@
 							<div class="text-foreground/70 text-sm">{field.label}</div>
 							<div class="text-foreground/50 text-xs">{field.description}</div>
 						</div>
-						<select
-							class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/80 focus:border-foreground/20 w-32 shrink-0 cursor-pointer appearance-none border px-3 py-1.5 text-xs scheme-dark transition-colors outline-none"
+						<DropdownSelect
+							options={visibilityOptions}
 							value={getVisibility(field.key)}
-							onchange={(e) =>
-								void setVisibility(field.key, e.currentTarget.value as Visibility)}
-						>
-							{#each visibilityOptions as opt (opt.value)}
-								<option value={opt.value} class="bg-neutral-900">{opt.label}</option
-								>
-							{/each}
-						</select>
+							onchange={(value) => void setVisibility(field.key, value as Visibility)}
+							ariaLabel={`${field.label} visibility`}
+							class="w-36 shrink-0"
+							buttonClass="px-3 py-1.5 text-xs"
+						/>
 					</div>
 				{/each}
 			</div>

@@ -3,6 +3,7 @@
 	import ImageLightbox from '$lib/components/chat/ImageLightbox.svelte'
 	import Film from '$lib/components/icons/Film.svelte'
 	import Headphone from '$lib/components/icons/Headphone.svelte'
+	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import MimeIcon from '$lib/components/icons/MimeIcon.svelte'
 	import { fetchAuthenticatedBlob } from '$lib/stores/files.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
@@ -15,6 +16,11 @@
 	}
 
 	let { mediaParts = [], fileParts = [] }: Props = $props()
+
+	/** open the file details modal for a previewed media file. */
+	function openDetails(fileId?: string): void {
+		if (fileId) modals.open('file-details', { fileId })
+	}
 
 	const images = $derived(mediaParts.filter((p) => p.type === 'image'))
 	const audioFiles = $derived(mediaParts.filter((p) => p.type === 'audio'))
@@ -120,9 +126,32 @@
 					</div>
 				{/if}
 				{#if video.filename}
-					<div class="text-foreground/50 mt-1 flex items-center gap-1.5 truncate text-xs">
+					<div class="text-foreground/50 mt-1 flex items-center gap-1.5 text-xs">
 						<Film class="h-3.5 w-3.5 shrink-0" />
-						{video.filename}
+						<span class="min-w-0 flex-1 truncate">{video.filename}</span>
+						{#if video.fileId}
+							<button
+								type="button"
+								class="text-foreground/40 hover:text-foreground/70 shrink-0 cursor-pointer transition-colors"
+								aria-label="open file details"
+								title="file details"
+								onclick={() => openDetails(video.fileId)}
+							>
+								<InfoCircle class="h-3.5 w-3.5" />
+							</button>
+						{/if}
+					</div>
+				{:else if video.fileId}
+					<div class="mt-1 flex justify-end">
+						<button
+							type="button"
+							class="text-foreground/40 hover:text-foreground/70 flex cursor-pointer items-center gap-1 text-xs transition-colors"
+							aria-label="open file details"
+							title="file details"
+							onclick={() => openDetails(video.fileId)}
+						>
+							<InfoCircle class="h-3.5 w-3.5" />
+						</button>
 					</div>
 				{/if}
 			</div>
@@ -145,9 +174,20 @@
 					<track kind="captions" />
 				</audio>
 				{#if audio.filename}
-					<span class="text-foreground/50 shrink-0 truncate text-xs">
+					<span class="text-foreground/50 min-w-0 shrink truncate text-xs">
 						{audio.filename}
 					</span>
+				{/if}
+				{#if audio.fileId}
+					<button
+						type="button"
+						class="text-foreground/40 hover:text-foreground/70 shrink-0 cursor-pointer transition-colors"
+						aria-label="open file details"
+						title="file details"
+						onclick={() => openDetails(audio.fileId)}
+					>
+						<InfoCircle class="h-4 w-4" />
+					</button>
 				{/if}
 			</div>
 		{/each}

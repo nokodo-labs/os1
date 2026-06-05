@@ -46,9 +46,26 @@ const nativeTools = new Map<string, NativeToolDefinition>([
 	['reveal_attachment', { displayName: 'show attachment', icon: 'eye', inline: true }],
 ])
 
+/**
+ * tools that resolve an existing resource ref into inline content (file
+ * readers). their content parts duplicate a resource ref rendered at its
+ * origin, so the chat UI ignores their inline attachments.
+ */
+const resolverToolNames = new Set<string>(['file_get', 'reveal_attachment'])
+
+/** returns true when a tool merely resolves an existing resource ref. */
+export function isResolverTool(toolName: string): boolean {
+	return resolverToolNames.has(toolName)
+}
+
 /** returns true when a tool has native display metadata. */
 export function isNativeTool(toolName: string): boolean {
 	return nativeTools.has(toolName)
+}
+
+/** returns true when a tool is backed by a remote MCP server. */
+export function isMcpToolName(toolName: string): boolean {
+	return toolName.startsWith('mcp_')
 }
 
 /** returns native display metadata for a tool, when registered. */

@@ -26,9 +26,9 @@
 	const options: SearchTypeOption[] = [
 		{ type: 'thread', label: 'chats', visualType: 'thread' },
 		{ type: 'note', label: 'notes', visualType: 'note' },
-		{ type: 'reminder', label: 'reminders', visualType: 'reminder_list' },
-		{ type: 'calendar_event', label: 'calendar', visualType: 'calendar' },
-		{ type: 'project', label: 'projects', visualType: 'project' },
+		{ type: 'reminder', label: 'reminders', visualType: 'reminder' },
+		{ type: 'calendar_event', label: 'calendar', visualType: 'calendar_event' },
+		{ type: 'file', label: 'files', visualType: 'file' },
 	]
 
 	const normalizedSelectedTypes = $derived.by(() => {

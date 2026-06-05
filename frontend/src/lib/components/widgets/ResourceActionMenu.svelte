@@ -12,6 +12,7 @@
 		canEditAccessLevel,
 		readAccessLevel,
 		resourceAccess,
+		type AccessControlledResourceType,
 	} from '$lib/stores/resourceAccess.svelte'
 	import type { ResourceProjectOption } from './ResourceProjectsMenu.svelte'
 	import ResourceProjectsMenu from './ResourceProjectsMenu.svelte'
@@ -47,8 +48,24 @@
 	const ownerId = $derived(
 		typeof resource.meta?.owner_id === 'string' ? resource.meta.owner_id : null
 	)
+	/** return the access-controlled container type for a menu resource. */
+	function accessResourceType(type: ResourceItem['type']): AccessControlledResourceType | null {
+		switch (type) {
+			case 'thread':
+			case 'note':
+			case 'reminder_list':
+			case 'calendar':
+			case 'file':
+			case 'project':
+				return type
+			case 'reminder':
+			case 'calendar_event':
+				return null
+		}
+	}
+	const accessType = $derived(accessResourceType(resource.type))
 	const accessLevel = $derived(
-		resourceAccess.level(resource.type, resource.id, ownerId) ??
+		(accessType ? resourceAccess.level(accessType, resource.id, ownerId) : null) ??
 			readAccessLevel(resource.meta?.access_level)
 	)
 	const canEdit = $derived(canEditAccessLevel(accessLevel))

@@ -14,6 +14,7 @@
 	 * - children: snippet for the detail/content area
 	 * - masterWidthClass: tailwind width class for the master sidebar (default: 'w-[clamp(280px,30vw,520px)]')
 	 * - ariaLabel: accessibility label for the master sidebar
+	 * - detailBottomPaddingClass: tailwind bottom padding class for the detail/content area
 	 */
 	interface Props {
 		/** master sidebar content (rendered on desktop, or as full page on mobile) */
@@ -24,6 +25,8 @@
 		masterWidthClass?: string
 		/** accessibility label for the master sidebar */
 		ariaLabel?: string
+		/** tailwind bottom padding class for the detail/content area */
+		detailBottomPaddingClass?: string
 		/** remove page padding for mobile master/sidebar pages */
 		mobileFullBleed?: boolean
 	}
@@ -33,6 +36,7 @@
 		children,
 		masterWidthClass = 'w-[clamp(280px,30vw,520px)]',
 		ariaLabel = 'sidebar',
+		detailBottomPaddingClass = 'pb-10',
 		mobileFullBleed = false,
 	}: Props = $props()
 
@@ -88,7 +92,7 @@
 	<div
 		class="flex min-w-0 flex-1 flex-col {device.isMobile && mobileFullBleed
 			? 'h-full min-h-0'
-			: 'min-h-full pb-10'}"
+			: `min-h-full ${detailBottomPaddingClass}`}"
 		style={device.isMobile && mobileFullBleed
 			? 'padding-left: 0; padding-right: 0;'
 			: 'padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);'}

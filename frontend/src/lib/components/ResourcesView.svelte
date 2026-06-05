@@ -3,6 +3,10 @@
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import FloatingScrollTopButton from '$lib/components/FloatingScrollTopButton.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
+	import {
+		resourceAccess,
+		type AccessControlledResourceType,
+	} from '$lib/stores/resourceAccess.svelte'
 	import Grid from '$lib/components/icons/Grid.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
 	import LoadingMoreIndicator from '$lib/components/LoadingMoreIndicator.svelte'
@@ -20,7 +24,6 @@
 		ResourceLayoutMode,
 		ResourceSortMode,
 	} from '$lib/components/widgets/types'
-	import { resourceAccess } from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
 
 	type ResourceViewLayout = ResourceLayoutMode | 'pill'
@@ -146,10 +149,10 @@
 		const typeMap: Record<string, string[]> = {
 			threads: ['thread'],
 			notes: ['note'],
-			reminders: ['reminder_list'],
+			reminders: ['reminder', 'reminder_list'],
 			files: ['file'],
 			projects: ['project'],
-			calendars: ['calendar'],
+			calendars: ['calendar_event', 'calendar'],
 		}
 		const allowedTypes = typeMap[filter] ?? []
 		return resources.filter((r) => allowedTypes.includes(r.type))
@@ -265,7 +268,10 @@
 			.filter((ownerId): ownerId is string => Boolean(ownerId && ownerId !== currentUserId))
 		if (ownerIds.length > 0) void session.ensureUsers(ownerIds)
 		for (const resource of resourcesToPrefetch) {
-			void resourceAccess.ensure(resource.type, resource.id, resourceOwnerId(resource))
+			const accessType = accessResourceType(resource.type)
+			if (accessType) {
+				void resourceAccess.ensure(accessType, resource.id, resourceOwnerId(resource))
+			}
 		}
 	})
 
@@ -304,9 +310,26 @@
 		if (currentPage < totalPages - 1) currentPage++
 	}
 
+	/** Return the owner id embedded in resource metadata. */
 	function resourceOwnerId(resource: ResourceItem): string | null {
 		const ownerId = resource.meta?.owner_id
 		return typeof ownerId === 'string' && ownerId.length > 0 ? ownerId : null
+	}
+
+	/** Return the access-controlled container type for a displayed resource. */
+	function accessResourceType(type: ResourceItem['type']): AccessControlledResourceType | null {
+		switch (type) {
+			case 'thread':
+			case 'note':
+			case 'reminder_list':
+			case 'calendar':
+			case 'file':
+			case 'project':
+				return type
+			case 'reminder':
+			case 'calendar_event':
+				return null
+		}
 	}
 
 	function isSharedResource(resource: ResourceItem): boolean {
@@ -356,11 +379,15 @@
 			})
 	}
 
+	/** Add current sharing metadata to a displayed resource. */
 	function resourceWithSharing(resource: ResourceItem): ResourceItem {
 		const shared = isSharedResource(resource)
 		const ownerId = resourceOwnerId(resource)
 		const authorLabel = shared ? session.authorLabel(ownerId) : null
-		const accessLevel = resourceAccess.level(resource.type, resource.id, ownerId)
+		const accessType = accessResourceType(resource.type)
+		const accessLevel = accessType
+			? resourceAccess.level(accessType, resource.id, ownerId)
+			: null
 		if (
 			resource.meta?.shared === shared &&
 			resource.meta?.author_label === authorLabel &&
@@ -483,7 +510,7 @@
 				onclick={onItemClick ? () => onItemClick(resource) : undefined}
 			/>
 		{/if}
-	{:else if resource.type === 'reminder_list'}
+	{:else if resource.type === 'reminder' || resource.type === 'reminder_list'}
 		{#if effectiveLayout === 'pill'}
 			<ResourceWidget
 				resource={displayResource}
@@ -528,7 +555,7 @@
 				onclick={onItemClick ? () => onItemClick(resource) : undefined}
 			/>
 		{/if}
-	{:else if resource.type === 'calendar'}
+	{:else if resource.type === 'calendar_event' || resource.type === 'calendar'}
 		{#if effectiveLayout === 'pill'}
 			<ResourceWidget
 				resource={displayResource}

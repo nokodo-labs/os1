@@ -8,6 +8,7 @@
 	import PencilSquare from '$lib/components/icons/PencilSquare.svelte'
 	import UserGroup from '$lib/components/icons/UserGroup.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import { DropdownSelect } from '$lib/components/primitives'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
 	import { session } from '$lib/stores/session.svelte'
@@ -294,19 +295,15 @@
 						class="text-foreground/50 mb-1.5 block text-xs font-medium"
 						for="edit-gender">gender</label
 					>
-					<select
-						id="edit-gender"
-						class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 focus:border-foreground/20 focus:bg-foreground/8 w-full cursor-pointer appearance-none border px-4 py-2.5 text-sm scheme-dark transition-colors outline-none"
+					<DropdownSelect
+						options={genderOptions}
 						value={editGender}
-						onchange={(e) => {
-							editGender = e.currentTarget.value
+						onchange={(value) => {
+							editGender = value
 							saveGender(editGender)
 						}}
-					>
-						{#each genderOptions as opt (opt.value)}
-							<option value={opt.value} class="bg-neutral-900">{opt.label}</option>
-						{/each}
-					</select>
+						ariaLabel="gender"
+					/>
 				</div>
 			</div>
 		{:else}

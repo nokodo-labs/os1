@@ -5,6 +5,7 @@
 	import Download from '$lib/components/icons/Download.svelte'
 	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
 	import Link from '$lib/components/icons/Link.svelte'
+	import MimeIcon from '$lib/components/icons/MimeIcon.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
 	import type { ResourceAccessPayload } from '$lib/stores/modals.svelte'
 	import type { ExportFormat, ShareTarget, ShareTargetId } from './resourceAccessModal'
@@ -110,7 +111,7 @@
 				onclick={() => downloadSnapshot('md')}
 				disabled={workingAction !== null}
 			>
-				<DocumentArrowDown class="h-4 w-4" />
+				<MimeIcon mimeType="text/markdown" class="h-4 w-4" />
 				{#if workingAction === 'download-snapshot-md'}
 					<ShimmerText className="inline-block">preparing</ShimmerText>
 				{:else}
@@ -122,7 +123,7 @@
 				onclick={() => downloadSnapshot('txt')}
 				disabled={workingAction !== null}
 			>
-				<DocumentArrowDown class="h-4 w-4" />
+				<MimeIcon mimeType="text/plain" class="h-4 w-4" />
 				{#if workingAction === 'download-snapshot-txt'}
 					<ShimmerText className="inline-block">preparing</ShimmerText>
 				{:else}
@@ -134,7 +135,7 @@
 				onclick={() => downloadSnapshot('json')}
 				disabled={workingAction !== null}
 			>
-				<DocumentArrowDown class="h-4 w-4" />
+				<MimeIcon mimeType="application/json" class="h-4 w-4" />
 				{#if workingAction === 'download-snapshot-json'}
 					<ShimmerText className="inline-block">preparing</ShimmerText>
 				{:else}
@@ -146,7 +147,7 @@
 				onclick={printSnapshotPdf}
 				disabled={workingAction !== null}
 			>
-				<DocumentArrowDown class="h-4 w-4" />
+				<MimeIcon mimeType="application/pdf" class="h-4 w-4" />
 				{#if workingAction === 'print-snapshot'}
 					<ShimmerText className="inline-block">preparing</ShimmerText>
 				{:else}

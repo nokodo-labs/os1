@@ -1,9 +1,11 @@
 <script lang="ts">
 	import CalendarWidget from '$lib/components/widgets/CalendarWidget.svelte'
+	import CalendarEventWidget from '$lib/components/widgets/CalendarEventWidget.svelte'
 	import ChatWidget from '$lib/components/widgets/ChatWidget.svelte'
 	import FileWidget from '$lib/components/widgets/FileWidget.svelte'
 	import NoteWidget from '$lib/components/widgets/NoteWidget.svelte'
 	import ProjectWidget from '$lib/components/widgets/ProjectWidget.svelte'
+	import ReminderWidget from '$lib/components/widgets/ReminderWidget.svelte'
 	import RemindersListWidget from '$lib/components/widgets/RemindersListWidget.svelte'
 	import type { ResourceItem, ResourceLayoutMode } from '$lib/components/widgets/types'
 
@@ -31,12 +33,16 @@
 	<ChatWidget {resource} layout={widgetLayout} class={widgetClass} {onclick} />
 {:else if resource.type === 'note'}
 	<NoteWidget {resource} layout={widgetLayout} class={widgetClass} {onclick} />
+{:else if resource.type === 'reminder'}
+	<ReminderWidget {resource} layout={widgetLayout} class={widgetClass} {onclick} />
 {:else if resource.type === 'reminder_list'}
 	<RemindersListWidget {resource} layout={widgetLayout} class={widgetClass} {onclick} />
 {:else if resource.type === 'project'}
 	<ProjectWidget {resource} layout={widgetLayout} class={widgetClass} {onclick} />
 {:else if resource.type === 'file'}
 	<FileWidget {resource} layout={widgetLayout} class={widgetClass} {onclick} />
+{:else if resource.type === 'calendar_event'}
+	<CalendarEventWidget {resource} layout={widgetLayout} class={widgetClass} {onclick} />
 {:else if resource.type === 'calendar'}
 	<CalendarWidget {resource} layout={widgetLayout} class={widgetClass} {onclick} />
 {/if}

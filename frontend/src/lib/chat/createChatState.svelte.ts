@@ -21,7 +21,6 @@ import {
 	buildMessageChildren,
 	buildRunBlocks,
 	computeIsAtBottom,
-	computeThreadAttachments,
 	type RunBlock,
 	type StreamingAssistantState,
 } from './helpers'
@@ -105,13 +104,6 @@ export function createChatState(): ChatState {
 	let eventsInFlight = $state(false)
 	const runActivities = new SvelteMap<string, RunActivityState>()
 
-	// attachment tray - pending user actions (reveal/reference) accumulated
-	// until sent with the next RunInput, then cleared.
-	const pendingActions = new SvelteMap<string, 'reveal' | 'reference'>()
-	// event-derived ground truth for attachment states, updated from
-	// WebSocket events (attachment.decayed / attachment.revealed)
-	const attachmentStates = new SvelteMap<string, 'active' | 'reference'>()
-
 	// citation sources - message-scoped map populated from citation.sources WS events.
 	// keyed by assistant message_id so each message has its own citation set.
 	const citationSources = new SvelteMap<string, ApiCitation[]>()
@@ -167,11 +159,6 @@ export function createChatState(): ChatState {
 	const agentNameById = $derived(buildAgentLookup(agents.list, (a) => a.name))
 	const agentAvatarById = $derived(
 		buildAgentLookup(agents.list, (a) => a.profile_image_url ?? null)
-	)
-
-	// thread-level attachment state (derived from messages + event state)
-	const threadAttachments = $derived.by(() =>
-		computeThreadAttachments(messages, attachmentStates)
 	)
 
 	// run block management
@@ -505,9 +492,6 @@ export function createChatState(): ChatState {
 		eventMessageIdsPending.clear()
 		toolTracker.clear()
 		runActivities.clear()
-		// clear attachment state for previous thread
-		pendingActions.clear()
-		attachmentStates.clear()
 		citationSources.clear()
 	}
 
@@ -667,16 +651,6 @@ export function createChatState(): ChatState {
 		},
 		processRunActivityEvent,
 
-		// attachment tray
-		get pendingActions() {
-			return pendingActions
-		},
-		get attachmentStates() {
-			return attachmentStates
-		},
-		get threadAttachments() {
-			return threadAttachments
-		},
 		get citationSources() {
 			return citationSources
 		},
@@ -701,11 +675,6 @@ export function createChatState(): ChatState {
 			if (runCitationAccumulator.length > 0) {
 				citationSources.set(messageId, [...runCitationAccumulator])
 			}
-		},
-		toggleAttachmentStatus(fileId: string, action: 'reveal' | 'reference') {
-			pendingActions.set(fileId, action)
-			// optimistic: update local state immediately
-			attachmentStates.set(fileId, action === 'reveal' ? 'active' : 'reference')
 		},
 
 		// realtime

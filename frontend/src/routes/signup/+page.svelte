@@ -4,7 +4,14 @@
 	import { resolve } from '$app/paths'
 	import { api } from '$lib/api/client'
 	import { getSystemStatus } from '$lib/api/system'
+	import {
+		parseSignupBackendErrors,
+		signupSubmissionErrorMessage,
+		type FieldErrors,
+		type SignupField,
+	} from '$lib/auth/signupErrors'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
+	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { settingsState } from '$lib/stores/settings.svelte'
 	import { onMount } from 'svelte'
@@ -17,8 +24,6 @@
 	let isSubmitting = $state(false)
 	let isInitialized = $state<boolean | null>(null)
 	let errorMessage = $state<string | null>(null)
-	type SignupField = 'displayName' | 'username' | 'email' | 'password' | 'passwordConfirm'
-	type FieldErrors = Partial<Record<SignupField, string>>
 
 	let touched = $state<Record<SignupField, boolean>>({
 		displayName: false,
@@ -124,90 +129,12 @@
 		return clientFieldErrors[field] ?? null
 	}
 
-	function signupFieldFromValue(value: unknown): SignupField | null {
-		if (typeof value !== 'string') return null
-		switch (value) {
-			case 'display_name':
-			case 'displayName':
-				return 'displayName'
-			case 'username':
-			case 'email':
-			case 'password':
-				return value
-			case 'password_confirm':
-			case 'passwordConfirm':
-				return 'passwordConfirm'
-			default:
-				return null
-		}
-	}
-
-	function fieldFromLocation(location: unknown): SignupField | null {
-		if (!Array.isArray(location)) return signupFieldFromValue(location)
-		for (let i = location.length - 1; i >= 0; i -= 1) {
-			const field = signupFieldFromValue(location[i])
-			if (field) return field
-		}
-		return null
-	}
-
-	function setFieldError(errors: FieldErrors, field: SignupField, message: string): FieldErrors {
-		switch (field) {
-			case 'displayName':
-				return { ...errors, displayName: message }
-			case 'username':
-				return { ...errors, username: message }
-			case 'email':
-				return { ...errors, email: message }
-			case 'password':
-				return { ...errors, password: message }
-			case 'passwordConfirm':
-				return { ...errors, passwordConfirm: message }
-		}
-	}
-
-	function messageFromUnknown(value: unknown): string | null {
-		if (typeof value === 'string' && value.trim()) return value.trim()
-		if (!value || typeof value !== 'object') return null
-		const objectValue = value as { msg?: unknown; message?: unknown; detail?: unknown }
-		return (
-			messageFromUnknown(objectValue.msg) ??
-			messageFromUnknown(objectValue.message) ??
-			messageFromUnknown(objectValue.detail)
-		)
-	}
-
-	function parseBackendErrors(detail: unknown): { message: string | null; fields: FieldErrors } {
-		let fields: FieldErrors = {}
-		let message: string | null = null
-
-		if (Array.isArray(detail)) {
-			for (const item of detail) {
-				const itemMessage = messageFromUnknown(item) ?? 'invalid value'
-				const field =
-					item && typeof item === 'object'
-						? fieldFromLocation((item as { loc?: unknown }).loc)
-						: null
-				if (field) {
-					fields = setFieldError(fields, field, itemMessage)
-				} else if (!message) {
-					message = itemMessage
-				}
-			}
-			return { message, fields }
-		}
-
-		if (detail && typeof detail === 'object') {
-			const objectDetail = detail as Record<string, unknown>
-			for (const key of ['display_name', 'displayName', 'username', 'email', 'password']) {
-				const field = signupFieldFromValue(key)
-				const value = objectDetail[key]
-				const fieldMessage = messageFromUnknown(Array.isArray(value) ? value[0] : value)
-				if (field && fieldMessage) fields = setFieldError(fields, field, fieldMessage)
-			}
-		}
-
-		return { message: messageFromUnknown(detail), fields }
+	function inputClass(field: SignupField): string {
+		const hasError = Boolean(fieldError(field))
+		const stateClass = hasError
+			? 'border-red-400/70 bg-red-500/10 text-red-50 placeholder:text-red-300/45 focus:border-red-300/80'
+			: 'border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20'
+		return `${stateClass} w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none`
 	}
 
 	async function onSubmit(event: SubmitEvent) {
@@ -250,7 +177,7 @@
 					if (typeof origin === 'string' && origin) consoleOriginOverride = origin
 					if (typeof message === 'string' && message) throw new Error(message)
 				}
-				const parsed = parseBackendErrors(detail)
+				const parsed = parseSignupBackendErrors(detail)
 				if (hasErrors(parsed.fields)) {
 					serverFieldErrors = parsed.fields
 					throw new Error(parsed.message ?? 'check the highlighted fields')
@@ -260,7 +187,7 @@
 			}
 			await goto(resolve('/login'), { state: { email: email.trim() } })
 		} catch (err) {
-			errorMessage = err instanceof Error ? err.message : 'failed to create account'
+			errorMessage = signupSubmissionErrorMessage(err)
 		} finally {
 			isSubmitting = false
 		}
@@ -284,11 +211,15 @@
 
 						<form class="space-y-4" onsubmit={onSubmit}>
 							{#if isInitialized === false}
-								<div
-									class="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
-									role="alert"
-								>
-									setup is required before accounts can be created.
+								<div class="space-y-2" role="alert">
+									<div
+										class="flex min-h-10 items-center justify-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-center text-sm text-amber-200"
+									>
+										<ExclamationTriangle class="size-4 shrink-0" />
+										<span
+											>setup is required before accounts can be created.</span
+										>
+									</div>
 									{#if consoleOrigin}
 										{#if consoleOrigin.startsWith('http:')}
 											<a
@@ -314,10 +245,11 @@
 							{/if}
 							{#if !allowSignups}
 								<div
-									class="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+									class="flex min-h-10 items-center justify-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-center text-sm text-amber-200"
 									role="alert"
 								>
-									signups are currently disabled.
+									<ExclamationTriangle class="size-4 shrink-0" />
+									<span>signups are currently disabled.</span>
 								</div>
 							{/if}
 							<div class="space-y-2">
@@ -334,11 +266,15 @@
 									placeholder="optional"
 									aria-invalid={Boolean(fieldError('displayName'))}
 									aria-describedby="displayName-error"
-									class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20 w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none"
+									class={inputClass('displayName')}
 								/>
 								{#if fieldError('displayName')}
-									<p id="displayName-error" class="text-sm text-red-300/85">
-										{fieldError('displayName')}
+									<p
+										id="displayName-error"
+										class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-center text-xs text-red-200"
+									>
+										<ExclamationTriangle class="size-3.5 shrink-0" />
+										<span>{fieldError('displayName')}</span>
 									</p>
 								{/if}
 							</div>
@@ -357,11 +293,15 @@
 									placeholder="3 to 30 characters"
 									aria-invalid={Boolean(fieldError('username'))}
 									aria-describedby="username-error"
-									class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20 w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none"
+									class={inputClass('username')}
 								/>
 								{#if fieldError('username')}
-									<p id="username-error" class="text-sm text-red-300/85">
-										{fieldError('username')}
+									<p
+										id="username-error"
+										class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-center text-xs text-red-200"
+									>
+										<ExclamationTriangle class="size-3.5 shrink-0" />
+										<span>{fieldError('username')}</span>
 									</p>
 								{/if}
 							</div>
@@ -380,11 +320,15 @@
 									placeholder="you@nokodo.net"
 									aria-invalid={Boolean(fieldError('email'))}
 									aria-describedby="email-error"
-									class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20 w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none"
+									class={inputClass('email')}
 								/>
 								{#if fieldError('email')}
-									<p id="email-error" class="text-sm text-red-300/85">
-										{fieldError('email')}
+									<p
+										id="email-error"
+										class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-center text-xs text-red-200"
+									>
+										<ExclamationTriangle class="size-3.5 shrink-0" />
+										<span>{fieldError('email')}</span>
 									</p>
 								{/if}
 							</div>
@@ -403,11 +347,15 @@
 									placeholder="••••••••"
 									aria-invalid={Boolean(fieldError('password'))}
 									aria-describedby="password-error"
-									class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20 w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none"
+									class={inputClass('password')}
 								/>
 								{#if fieldError('password')}
-									<p id="password-error" class="text-sm text-red-300/85">
-										{fieldError('password')}
+									<p
+										id="password-error"
+										class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-center text-xs text-red-200"
+									>
+										<ExclamationTriangle class="size-3.5 shrink-0" />
+										<span>{fieldError('password')}</span>
 									</p>
 								{/if}
 							</div>
@@ -427,21 +375,26 @@
 									placeholder="••••••••"
 									aria-invalid={Boolean(fieldError('passwordConfirm'))}
 									aria-describedby="passwordConfirm-error"
-									class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20 w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none"
+									class={inputClass('passwordConfirm')}
 								/>
 								{#if fieldError('passwordConfirm')}
-									<p id="passwordConfirm-error" class="text-sm text-red-300/85">
-										{fieldError('passwordConfirm')}
+									<p
+										id="passwordConfirm-error"
+										class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-center text-xs text-red-200"
+									>
+										<ExclamationTriangle class="size-3.5 shrink-0" />
+										<span>{fieldError('passwordConfirm')}</span>
 									</p>
 								{/if}
 							</div>
 
 							{#if errorMessage}
 								<div
-									class="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+									class="flex min-h-10 items-center justify-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2 text-center text-sm text-red-200"
 									role="alert"
 								>
-									{errorMessage}
+									<ExclamationTriangle class="size-4 shrink-0" />
+									<span>{errorMessage}</span>
 								</div>
 							{/if}
 

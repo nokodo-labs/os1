@@ -9,8 +9,10 @@
 
 	let {
 		id,
+		rawCode,
 	}: {
 		id: string
+		rawCode: string
 	} = $props()
 
 	const streamdown = useStreamdown()
@@ -47,10 +49,17 @@
 
 		const svgContainer = container.querySelector('[data-mermaid-svg]')
 		if (!svgContainer) return null
+		if (svgContainer instanceof SVGSVGElement) return svgContainer
 
 		// The actual SVG is rendered inside the data-mermaid-svg container
 		const svg = svgContainer.querySelector('svg')
 		return svg
+	}
+
+	const copyRawMarkdown = async () => {
+		const markdown = `\`\`\`mermaid\n${rawCode.trim()}\n\`\`\`\n`
+		await navigator.clipboard.writeText(markdown)
+		popover.isOpen = false
 	}
 
 	const downloadSvg = () => {
@@ -163,6 +172,13 @@
 				class={streamdown.theme.components.button}
 			>
 				PNG
+			</button>
+			<button
+				style="width: 100%; text-align: left; justify-content: flex-start; padding: 0.5rem 1rem; margin: 0.2rem 0;"
+				onclick={() => void copyRawMarkdown()}
+				class={streamdown.theme.components.button}
+			>
+				copy raw MD
 			</button>
 		</dialog>
 	{/if}

@@ -19,8 +19,8 @@ import {
 import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 import { parseToolEvent } from '$lib/tools'
 import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity'
+import { buildMessageChildren, contentPartsToText, type ApiMessage } from './helpers'
 import { parseRunActivityEvent, RUN_ACTIVITY_EVENT_PREFIX } from './runActivities'
-import { buildMessageChildren, type ApiMessage } from './helpers'
 import {
 	getMessageClientSteeringId,
 	getMessageSteeringRunId,
@@ -84,6 +84,28 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		if (msg.type === 'assistant' && msg.citations?.length) {
 			ctx.citationSources.set(msg.id, msg.citations)
 		}
+	}
+
+	function mergeOwnAssistantConfirmation(newMsg: ApiMessage): boolean {
+		if (newMsg.type !== 'assistant') return false
+		if (ctx.streamingAssistant?.messageId === newMsg.id) return false
+		const existing = ctx.messageTree.get(newMsg.id)
+		if (!existing || existing.type !== 'assistant') return false
+		const existingText = contentPartsToText(existing.content).trim()
+		const newText = contentPartsToText(newMsg.content).trim()
+		if (!newText && existingText) return true
+		const confirmed = {
+			...newMsg,
+			parent_id: newMsg.parent_id ?? existing.parent_id,
+		} satisfies ApiMessage
+		ctx.messageTree.set(confirmed.id, confirmed)
+		seedMessageCitations(confirmed)
+		if (ctx.currentLeafId === existing.id || ctx.streamingLeafId === existing.id) {
+			ctx.currentLeafId = confirmed.id
+			ctx.streamingLeafId = confirmed.id
+		}
+		ctx.rebuildRunBlocks()
+		return true
 	}
 
 	function handleMessageEvent(ev: StreamEvent): void {
@@ -154,7 +176,10 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 					return
 				}
 				if (newMsg.type === 'user' && steeringState === 'dropped') return
-				if (ownEvent && newMsg.type !== 'user') return
+				if (ownEvent && newMsg.type !== 'user') {
+					if (mergeOwnAssistantConfirmation(newMsg)) return
+					return
+				}
 				// defense-in-depth: if this is a user message that matches the
 				// optimistic message, clear it to prevent double rendering
 				if (newMsg.type === 'user' && ctx.optimisticUserMessage) {
@@ -338,21 +363,6 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		}
 	}
 
-	// attachment events (state changes from backend)
-
-	function handleAttachmentEvent(ev: StreamEvent): void {
-		if (ev.thread_id !== threadId) return
-		const data = (ev.data ?? {}) as Record<string, unknown>
-		const fileId = data.file_id as string | undefined
-		if (!fileId) return
-
-		if (ev.type === 'attachment.decayed') {
-			ctx.attachmentStates.set(fileId, 'reference')
-		} else if (ev.type === 'attachment.revealed') {
-			ctx.attachmentStates.set(fileId, 'active')
-		}
-	}
-
 	// citation events
 
 	function handleCitationEvent(ev: StreamEvent): void {
@@ -533,8 +543,6 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 			handleMessageEvent(ev as StreamEvent)
 		} else if (ev.type.startsWith('typing.')) {
 			handleTypingEvent(ev as StreamEvent)
-		} else if (ev.type.startsWith('attachment.')) {
-			handleAttachmentEvent(ev as StreamEvent)
 		} else if (ev.type.startsWith('citation.')) {
 			handleCitationEvent(ev as StreamEvent)
 		} else if (ev.type.startsWith('run.steering.')) {

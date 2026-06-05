@@ -9,6 +9,7 @@
 		computeBlockCitations,
 		contentPartsToText,
 		createChatState,
+		extractAttachmentRefs,
 		extractFileParts,
 		extractMediaParts,
 		getBlockFirstAssistant,
@@ -26,6 +27,7 @@
 	import { RunActivity } from '$lib/components/chat/activities'
 	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
 	import AssistantChatMessage from '$lib/components/chat/AssistantChatMessage.svelte'
+	import AttachmentRefs from '$lib/components/chat/AttachmentRefs.svelte'
 	import ChatGptLoadingIndicator from '$lib/components/chat/ChatGptLoadingIndicator.svelte'
 	import ChatInput from '$lib/components/chat/ChatInput.svelte'
 	import ChatSidebarToggleButton from '$lib/components/chat/ChatSidebarToggleButton.svelte'
@@ -631,6 +633,7 @@
 									<UserChatMessage
 										content={contentPartsToText(item.message.content)}
 										contentParts={item.message.content}
+										attachmentRefs={extractAttachmentRefs(item.message)}
 										{timestamp}
 										align={item.align}
 										siblingCount={siblings.length}
@@ -774,6 +777,15 @@
 																fileParts={extractFileParts(
 																	segment.item.message.content,
 																	getApiBaseUrl()
+																)}
+															/>
+														</div>
+													{/if}
+													{#if extractAttachmentRefs(segment.item.message).length > 0}
+														<div class="mb-2">
+															<AttachmentRefs
+																refs={extractAttachmentRefs(
+																	segment.item.message
 																)}
 															/>
 														</div>
@@ -962,8 +974,6 @@
 						placeholder="send a message"
 						focusToken={inputFocusToken}
 						viewTransitionName="chat-input"
-						threadAttachments={chat.threadAttachments}
-						onToggleAttachmentStatus={chat.toggleAttachmentStatus}
 					/>
 				</div>
 			</div>

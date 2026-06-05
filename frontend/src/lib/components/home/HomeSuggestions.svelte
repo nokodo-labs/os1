@@ -270,8 +270,18 @@
 			case 'note':
 				onAction({ type: 'navigate', path: `/notes/${resource.id}` })
 				return
+			case 'reminder':
+				if (resource.parent?.type === 'reminder_list') {
+					onAction({
+						type: 'navigate',
+						path: `/reminders/lists/${resource.parent.id}`,
+					})
+				}
+				return
 			case 'reminder_list':
 				onAction({ type: 'navigate', path: `/reminders/lists/${resource.id}` })
+				return
+			case 'calendar_event':
 				return
 			case 'calendar':
 				onAction({ type: 'navigate', path: appNavigation.getEntryRoute('calendar') })

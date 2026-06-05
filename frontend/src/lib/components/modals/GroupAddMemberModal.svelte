@@ -7,6 +7,7 @@
 	import Search from '$lib/components/icons/Search.svelte'
 	import User from '$lib/components/icons/User.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import { DropdownSelect } from '$lib/components/primitives'
 	import { resourceAccentStyle, resourceVisual } from '$lib/resources/resourceVisuals'
 	import { groups, type Group, type GroupMemberRole } from '$lib/stores/groups.svelte'
 	import { showError } from '$lib/stores/notifications.svelte'
@@ -38,6 +39,10 @@
 	const actionButtonClass =
 		'rounded-pill inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55'
 	const groupVisual = resourceVisual('group')
+	const roleOptions = [
+		{ value: 'member', label: 'member' },
+		{ value: 'admin', label: 'admin' },
+	]
 	const GroupIcon = groupVisual.icon
 	const groupAccentStyle = resourceAccentStyle('group')
 	const existingUserIds = $derived(new Set(group.memberships.map((member) => member.user_id)))
@@ -173,15 +178,13 @@
 				class="text-foreground/60 mb-2 block text-[0.78rem] font-semibold"
 				for="member-role">role</label
 			>
-			<select
-				id="member-role"
-				bind:value={role}
-				class="{inputClass} appearance-none"
+			<DropdownSelect
+				options={roleOptions}
+				value={role}
+				onchange={(value) => (role = value === 'admin' ? 'admin' : 'member')}
 				disabled={adding}
-			>
-				<option value="member">member</option>
-				<option value="admin">admin</option>
-			</select>
+				ariaLabel="member role"
+			/>
 		</div>
 
 		<div class="flex justify-end gap-2 pt-1">

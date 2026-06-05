@@ -625,7 +625,11 @@ export interface paths {
         get: operations["read_user_v1_users__user_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete User
+         * @description delete user.
+         */
+        delete: operations["delete_user_v1_users__user_id__delete"];
         options?: never;
         head?: never;
         /**
@@ -978,7 +982,7 @@ export interface paths {
         patch: operations["update_thread_v1_threads__thread_id__patch"];
         trace?: never;
     };
-    "/v1/threads/{thread_id}/metadata/generate": {
+    "/v1/threads/{thread_id}/maintenance/run": {
         parameters: {
             query?: never;
             header?: never;
@@ -988,13 +992,34 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Generate Thread Metadata
-         * @description generate thread title/tags using a chat model.
+         * Run Thread Maintenance
+         * @description generate thread title, tags, and catalog summary using maintenance.
          *
-         *     uses the task model configured in settings (ai.tasks).
-         *     when replace is false, only fills in missing metadata.
+         *     uses the thread maintenance task model configured in settings. when replace is
+         *     false, only fills in missing metadata, while still refreshing a stale or
+         *     missing catalog summary.
          */
-        post: operations["generate_thread_metadata_v1_threads__thread_id__metadata_generate_post"];
+        post: operations["run_thread_maintenance_v1_threads__thread_id__maintenance_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Thread
+         * @description restore a soft-deleted thread. admin only.
+         */
+        post: operations["restore_thread_v1_threads__thread_id__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2214,6 +2239,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/notes/{note_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Note
+         * @description restore a soft-deleted note. admin only.
+         */
+        post: operations["restore_note_v1_notes__note_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/notes/{note_id}/enhance": {
         parameters: {
             query?: never;
@@ -2806,7 +2851,7 @@ export interface paths {
         post?: never;
         /**
          * Delete File
-         * @description soft-delete a file.
+         * @description delete a file.
          */
         delete: operations["delete_file_v1_files__file_id__delete"];
         options?: never;
@@ -2872,6 +2917,26 @@ export interface paths {
         get: operations["get_file_url_v1_files__file_id__url_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/files/{file_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore File
+         * @description restore a soft-deleted file. admin only.
+         */
+        post: operations["restore_file_v1_files__file_id__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3714,49 +3779,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/plugins/available": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Available Plugins
-         * @description list all available plugins (native and user-defined).
-         *
-         *     native plugins are built into the system and cannot be modified.
-         *     use the plugin_type query parameter to filter by type.
-         */
-        get: operations["list_available_plugins_v1_plugins_available_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/plugins/available/{plugin_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Available Plugin
-         * @description get details about a specific available plugin (native or user-defined).
-         */
-        get: operations["get_available_plugin_v1_plugins_available__plugin_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/plugins": {
         parameters: {
             query?: never;
@@ -3766,7 +3788,7 @@ export interface paths {
         };
         /**
          * List Plugins
-         * @description list all plugin records.
+         * @description list plugin catalog items.
          */
         get: operations["list_plugins_v1_plugins_get"];
         put?: never;
@@ -3790,7 +3812,7 @@ export interface paths {
         };
         /**
          * Get Plugin
-         * @description fetch a plugin record by id.
+         * @description get details about a plugin catalog item.
          */
         get: operations["get_plugin_v1_plugins__plugin_id__get"];
         put?: never;
@@ -3943,6 +3965,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/integrations/mcp/servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Servers
+         * @description list global MCP servers.
+         */
+        get: operations["list_servers_v1_integrations_mcp_servers_get"];
+        put?: never;
+        /**
+         * Create Server
+         * @description create a global MCP server.
+         */
+        post: operations["create_server_v1_integrations_mcp_servers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/integrations/mcp/servers/{server_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Server
+         * @description get a global MCP server.
+         */
+        get: operations["get_server_v1_integrations_mcp_servers__server_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Server
+         * @description delete a global MCP server.
+         */
+        delete: operations["delete_server_v1_integrations_mcp_servers__server_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Server
+         * @description update a global MCP server.
+         */
+        patch: operations["update_server_v1_integrations_mcp_servers__server_id__patch"];
+        trace?: never;
+    };
+    "/v1/integrations/mcp/servers/{server_id}/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Discover Server
+         * @description refresh cached capabilities for a global MCP server.
+         */
+        post: operations["discover_server_v1_integrations_mcp_servers__server_id__discover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/integrations/mcp/servers/{server_id}/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Capabilities
+         * @description list cached capabilities for a global MCP server.
+         */
+        get: operations["list_capabilities_v1_integrations_mcp_servers__server_id__capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/integrations/mcp/servers/{server_id}/capabilities/{capability_type}/{capability_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Capability
+         * @description update a discovered MCP capability snapshot.
+         */
+        patch: operations["update_capability_v1_integrations_mcp_servers__server_id__capabilities__capability_type___capability_id__patch"];
+        trace?: never;
+    };
     "/v1/integrations/open-webui/sources": {
         parameters: {
             query?: never;
@@ -4009,36 +4143,42 @@ export interface components {
     schemas: {
         /**
          * AIAttachmentSettings
-         * @description per-type decay thresholds for native attachments.
+         * @description protection windows for native media fetched onto tool messages.
          *
-         *     after N turns without interaction, an active attachment auto-decays
-         *     to reference state. a 'turn' is one user-assistant exchange.
+         *     native media only ever lives on tool messages (file_get fetches and
+         *     media generators). two tiers govern its lifetime, both measured in
+         *     iterations (one agent-loop restart within a single agent turn, i.e. one
+         *     per assistant message):
+         *
+         *     - hard window (always one iteration): the read iteration where the model
+         *     first sees the fresh bytes. media here is the output the model is reading
+         *     right now; compaction never cuts it. if the hard set alone busts budget,
+         *     compaction throws clearly.
+         *     - soft window (these settings): media stays native and hydrated for the
+         *     configured iterations within the same agent turn, but is NOT protected
+         *     from compaction. under budget pressure compaction may drop soft media (it
+         *     is recoverable via file_get), so the soft window can be cut short down to
+         *     the read iteration.
          */
         AIAttachmentSettings: {
             /**
-             * Image Decay Turns
-             * @description turns before image attachments decay to reference
-             * @default 4
-             */
-            image_decay_turns: number;
-            /**
-             * Audio Decay Turns
-             * @description turns before audio attachments decay to reference
+             * Image Decay Iterations
+             * @description soft protection iterations for fetched image media
              * @default 3
              */
-            audio_decay_turns: number;
+            image_decay_iterations: number;
             /**
-             * Video Decay Turns
-             * @description turns before video attachments decay to reference
-             * @default 2
-             */
-            video_decay_turns: number;
-            /**
-             * Reveal Decay Turns
-             * @description turns before a revealed attachment decays again
+             * Audio Decay Iterations
+             * @description soft protection iterations for fetched audio media
              * @default 3
              */
-            reveal_decay_turns: number;
+            audio_decay_iterations: number;
+            /**
+             * Video Decay Iterations
+             * @description soft protection iterations for fetched video media (token-heavy)
+             * @default 1
+             */
+            video_decay_iterations: number;
         };
         /** AIAttachmentSettingsPatch */
         AIAttachmentSettingsPatch: {
@@ -4125,73 +4265,84 @@ export interface components {
         AIContextCompactionSettings: {
             /**
              * Enabled
-             * @description enable context window management and summarization
+             * @description enable token-aware context compaction before chat generation. when enabled, the system preserves all messages that fit, compacts older tool output and summarized spans when needed, and can schedule background summaries for future runs
              * @default true
              */
             enabled: boolean;
             /**
              * Trigger Ratio
-             * @description start background summarization when unsummarized messages consume this fraction of the available token budget
+             * @description prompt pressure ratio that triggers background summarization while the full raw conversation still fits. lower values create summaries earlier and reduce future latency; higher values defer work until the thread is closer to the model budget
              * @default 0.7
              */
             trigger_ratio: number;
             /**
-             * Max Summaries Before Condense
-             * @description condense existing summaries into one when this many window summaries accumulate. enables truly unlimited threads
-             * @default 4
+             * Recovery Target Ratio
+             * @description target prompt pressure after a summarization recovery pass. must be lower than trigger_ratio so compaction has hysteresis and does not immediately re-trigger after creating a summary
+             * @default 0.55
              */
-            max_summaries_before_condense: number;
+            recovery_target_ratio: number;
+            /**
+             * Target Usage Cap Tokens
+             * @description optional maximum context budget used for compaction before response reserve and prompt overhead are subtracted. set this below a model's advertised window to leave extra provider safety margin or to force smaller prompts during testing
+             */
+            target_usage_cap_tokens?: number | null;
+            /**
+             * Summary Batch Min Tokens
+             * @description minimum raw token span to include in a single summary job. prevents tiny summaries whose marker and metadata would cost more than the messages they replace
+             * @default 512
+             */
+            summary_batch_min_tokens: number;
+            /**
+             * Summary Batch Max Tokens
+             * @description maximum raw token span to send to one summary job. caps summary prompt size so very long threads are summarized in bounded batches instead of one large provider request
+             * @default 16000
+             */
+            summary_batch_max_tokens: number;
             /**
              * Prompt Overhead Tokens
-             * @description extra prompt budget reserved for provider framing, message wrappers, and other non-message overhead
+             * @description tokens reserved for provider framing, system wrappers, schema/tool instructions, and other prompt bytes that are not represented by stored chat messages. increasing this makes compaction more cautious
              * @default 300
              */
             prompt_overhead_tokens: number;
             /**
-             * Recent Tool Output Protection Iterations
-             * @description number of latest tool-output groups that must stay raw so the agent can consume them before compaction
-             * @default 1
-             */
-            recent_tool_output_protection_iterations: number;
-            /**
              * Blocking Summarization Enabled
-             * @description allow last-resort inline summarization when no cheaper context compaction tier can fit the prompt
+             * @description allow a last-resort inline summary during the user request when tool compaction and ready summaries cannot fit the prompt. disabling this avoids extra latency but may force older messages to be pruned sooner
              * @default true
              */
             blocking_summarization_enabled: boolean;
             /**
              * Blocking Summarization Timeout Seconds
-             * @description maximum seconds to wait for last-resort inline summarization
+             * @description maximum time to wait for an inline last-resort summary before giving up and trying the next compaction tier. this bounds user-visible latency when a provider is slow or rejects the summary request
              * @default 20
              */
             blocking_summarization_timeout_seconds: number;
             /**
              * Tool Result Max Share
-             * @description maximum fraction of available budget that a single tool result may consume. results exceeding this are truncated
+             * @description maximum fraction of the available prompt budget that one tool result may consume before it is compacted. lower values keep large search, file, or code outputs from crowding out conversational context
              * @default 0.25
              */
             tool_result_max_share: number;
             /**
              * Tool Result Hard Cap
-             * @description absolute character ceiling per tool result
+             * @description absolute character ceiling for a single tool result before token estimation. this protects the compaction pipeline from extremely large raw outputs even when the token budget is configured generously
              * @default 100000
              */
             tool_result_hard_cap: number;
             /**
              * Tool Results Combined Max Share
-             * @description maximum fraction of available budget for ALL tool results combined. when total tool result tokens exceed this, the oldest tool results are compacted first (Layer 2 guard)
+             * @description maximum fraction of the available prompt budget that all tool results combined may consume. when the combined total exceeds this, older tool results are compacted first so tool-heavy runs do not displace the rest of the conversation
              * @default 0.5
              */
             tool_results_combined_max_share: number;
             /**
              * Response Headroom
-             * @description tokens reserved for the model's response
+             * @description tokens reserved for the assistant response after prompt compaction. larger values reduce prompt capacity but lower the chance that a provider stops because there is too little room left to answer
              * @default 4096
              */
             response_headroom: number;
             /**
              * Summarization Max Chars Per Message
-             * @description max characters per message in summarization transcripts. keeps tokens manageable without losing essential context. null for unlimited
+             * @description maximum characters copied from each raw message into a summary transcript. this limits single-message outliers before they reach the summarization model; null keeps full message text
              * @default 2000
              */
             summarization_max_chars_per_message: number | null;
@@ -4200,42 +4351,72 @@ export interface components {
         AIContextCompactionSettingsPatch: {
             /**
              * Enabled
-             * @description enable context compaction and summarization
+             * @description enable token-aware context compaction before chat generation. when enabled, the system preserves all messages that fit, compacts older tool output and summarized spans when needed, and can schedule background summaries for future runs
              */
             enabled?: boolean;
             /**
              * Trigger Ratio
-             * @description fraction of token budget to trigger background summarization
+             * @description prompt pressure ratio that triggers background summarization while the full raw conversation still fits. lower values create summaries earlier and reduce future latency; higher values defer work until the thread is closer to the model budget
              */
             trigger_ratio?: number;
             /**
-             * Max Summaries Before Condense
-             * @description condense summaries when this many accumulate
+             * Recovery Target Ratio
+             * @description target prompt pressure after a summarization recovery pass. must be lower than trigger_ratio so compaction has hysteresis and does not immediately re-trigger after creating a summary
              */
-            max_summaries_before_condense?: number;
+            recovery_target_ratio?: number;
+            /**
+             * Target Usage Cap Tokens
+             * @description optional maximum context budget used for compaction before response reserve and prompt overhead are subtracted. set this below a model's advertised window to leave extra provider safety margin or to force smaller prompts during testing
+             */
+            target_usage_cap_tokens?: number | null;
+            /**
+             * Summary Batch Min Tokens
+             * @description minimum raw token span to include in a single summary job. prevents tiny summaries whose marker and metadata would cost more than the messages they replace
+             */
+            summary_batch_min_tokens?: number;
+            /**
+             * Summary Batch Max Tokens
+             * @description maximum raw token span to send to one summary job. caps summary prompt size so very long threads are summarized in bounded batches instead of one large provider request
+             */
+            summary_batch_max_tokens?: number;
+            /**
+             * Prompt Overhead Tokens
+             * @description tokens reserved for provider framing, system wrappers, schema/tool instructions, and other prompt bytes that are not represented by stored chat messages. increasing this makes compaction more cautious
+             */
+            prompt_overhead_tokens?: number;
+            /**
+             * Blocking Summarization Enabled
+             * @description allow a last-resort inline summary during the user request when tool compaction and ready summaries cannot fit the prompt. disabling this avoids extra latency but may force older messages to be pruned sooner
+             */
+            blocking_summarization_enabled?: boolean;
+            /**
+             * Blocking Summarization Timeout Seconds
+             * @description maximum time to wait for an inline last-resort summary before giving up and trying the next compaction tier. this bounds user-visible latency when a provider is slow or rejects the summary request
+             */
+            blocking_summarization_timeout_seconds?: number;
             /**
              * Tool Result Max Share
-             * @description max fraction of budget for a single tool result
+             * @description maximum fraction of the available prompt budget that one tool result may consume before it is compacted. lower values keep large search, file, or code outputs from crowding out conversational context
              */
             tool_result_max_share?: number;
             /**
              * Tool Result Hard Cap
-             * @description absolute character ceiling per tool result
+             * @description absolute character ceiling for a single tool result before token estimation. this protects the compaction pipeline from extremely large raw outputs even when the token budget is configured generously
              */
             tool_result_hard_cap?: number;
             /**
              * Tool Results Combined Max Share
-             * @description max fraction of budget for ALL tool results combined (Layer 2)
+             * @description maximum fraction of the available prompt budget that all tool results combined may consume. when the combined total exceeds this, older tool results are compacted first so tool-heavy runs do not displace the rest of the conversation
              */
             tool_results_combined_max_share?: number;
             /**
              * Response Headroom
-             * @description tokens reserved for the model's response
+             * @description tokens reserved for the assistant response after prompt compaction. larger values reduce prompt capacity but lower the chance that a provider stops because there is too little room left to answer
              */
             response_headroom?: number;
             /**
              * Summarization Max Chars Per Message
-             * @description max characters per message in summarization transcripts
+             * @description maximum characters copied from each raw message into a summary transcript. this limits single-message outliers before they reach the summarization model; null keeps full message text
              */
             summarization_max_chars_per_message?: number | null;
         };
@@ -4280,6 +4461,12 @@ export interface components {
              * @default 15
              */
             top_k: number;
+            /**
+             * Post Processing Turns
+             * @description number of recent conversation turns fed to the dedicated memory maintenance agent that runs after each turn. a turn is a contiguous block of user or assistant messages.
+             * @default 6
+             */
+            post_processing_turns: number;
         };
         /** AIMemorySettingsPatch */
         AIMemorySettingsPatch: {
@@ -4450,10 +4637,10 @@ export interface components {
              */
             asset_description_model_id?: string | null;
             /**
-             * Asset Ocr Model Id
-             * @description model for OCR on image-like asset contents
+             * Asset Text Extraction Model Id
+             * @description model for asset file, document, and media text extraction
              */
-            asset_ocr_model_id?: string | null;
+            asset_text_extraction_model_id?: string | null;
             /**
              * Maintenance Max Chars Per Message
              * @description max characters per message in thread maintenance transcripts. null for unlimited
@@ -4504,10 +4691,10 @@ export interface components {
              */
             asset_description_model_id?: string | null;
             /**
-             * Asset Ocr Model Id
-             * @description model for OCR on image-like asset contents
+             * Asset Text Extraction Model Id
+             * @description model for asset file, document, and media text extraction
              */
-            asset_ocr_model_id?: string | null;
+            asset_text_extraction_model_id?: string | null;
             /**
              * Maintenance Max Chars Per Message
              * @description max characters per message in thread maintenance transcripts
@@ -4674,7 +4861,7 @@ export interface components {
          *     naming convention: {domain}:{action}
          * @enum {string}
          */
-        ActionPermission: "roles:read" | "roles:manage" | "users:read" | "users:manage" | "user.friendships:create" | "user.friendships:manage" | "user.blocks:create" | "user.blocks:manage" | "settings:read" | "settings:manage" | "events:read" | "events:manage" | "threads:create" | "projects:create" | "notes:create" | "groups:create" | "reminders:create" | "calendar:create" | "memories:create" | "tasks:create" | "agents:create" | "files:create" | "agents:manage" | "plugins:read" | "plugins:manage" | "prompts:read" | "prompts:manage" | "models:read" | "models:manage" | "providers:read" | "providers:manage" | "frontend:access" | "console:access";
+        ActionPermission: "roles:read" | "roles:manage" | "users:read" | "users:manage" | "user.friendships:create" | "user.friendships:manage" | "user.blocks:create" | "user.blocks:manage" | "settings:read" | "settings:manage" | "events:read" | "events:manage" | "threads:create" | "projects:create" | "notes:create" | "groups:create" | "reminders:create" | "calendar:create" | "memories:create" | "tasks:create" | "agents:create" | "files:create" | "agents:manage" | "plugins:read" | "plugins:manage" | "prompts:read" | "prompts:manage" | "models:read" | "models:manage" | "providers:read" | "providers:manage" | "mcp:manage" | "user.mcp:manage" | "frontend:access" | "console:access";
         /**
          * ActiveRunOut
          * @description lightweight snapshot of an in-memory active run.
@@ -4808,6 +4995,7 @@ export interface components {
          */
         AgentFeatures: {
             steering?: components["schemas"]["SteeringFeature"];
+            user_mcp_tools?: components["schemas"]["UserMCPToolsFeature"];
         } & {
             [key: string]: unknown;
         };
@@ -4966,7 +5154,7 @@ export interface components {
              * @default auto
              * @enum {string}
              */
-            loader: "auto" | "plain" | "markitdown";
+            loader: "auto" | "plain" | "markitdown" | "chatmodel";
             /**
              * Chunking Algorithm
              * @description asset content chunking algorithm
@@ -4976,10 +5164,10 @@ export interface components {
             chunking_algorithm: "auto" | "recursive" | "markdown";
             /**
              * Max Bytes
-             * @description maximum bytes read from an asset for text loading
+             * @description maximum bytes read from an asset; null means unlimited
              * @default 5242880
              */
-            max_bytes: number;
+            max_bytes: number | null;
             /**
              * Target Tokens
              * @description target token count per asset content chunk
@@ -4994,10 +5182,10 @@ export interface components {
             overlap_tokens: number;
             /**
              * Max Chunks
-             * @description maximum content chunks emitted for one asset
+             * @description maximum content chunks per asset; null means unlimited
              * @default 200
              */
-            max_chunks: number;
+            max_chunks: number | null;
         };
         /** AssetContentVectorizationSettingsPatch */
         AssetContentVectorizationSettingsPatch: {
@@ -5006,7 +5194,7 @@ export interface components {
              * @description asset content text loader
              * @enum {string}
              */
-            loader?: "auto" | "plain" | "markitdown";
+            loader?: "auto" | "plain" | "markitdown" | "chatmodel";
             /**
              * Chunking Algorithm
              * @description asset content chunking algorithm
@@ -5015,9 +5203,9 @@ export interface components {
             chunking_algorithm?: "auto" | "recursive" | "markdown";
             /**
              * Max Bytes
-             * @description maximum bytes read from an asset for text loading
+             * @description maximum bytes read from an asset; null means unlimited
              */
-            max_bytes?: number;
+            max_bytes?: number | null;
             /**
              * Target Tokens
              * @description target token count per asset content chunk
@@ -5030,9 +5218,9 @@ export interface components {
             overlap_tokens?: number;
             /**
              * Max Chunks
-             * @description maximum content chunks emitted for one asset
+             * @description maximum content chunks per asset; null means unlimited
              */
-            max_chunks?: number;
+            max_chunks?: number | null;
         };
         /**
          * AssetDescriptionSettings
@@ -5041,29 +5229,29 @@ export interface components {
         AssetDescriptionSettings: {
             /**
              * Max Input Chars
-             * @description maximum extracted asset text characters sent to the description model
+             * @description maximum extracted text characters sent to the description model; null means unlimited
              * @default 24000
              */
-            max_input_chars: number;
+            max_input_chars: number | null;
             /**
              * Max Chars
-             * @description maximum stored asset description characters
+             * @description maximum stored asset description characters; null means unlimited
              * @default 1200
              */
-            max_chars: number;
+            max_chars: number | null;
         };
         /** AssetDescriptionSettingsPatch */
         AssetDescriptionSettingsPatch: {
             /**
              * Max Input Chars
-             * @description maximum extracted asset text characters sent to the description model
+             * @description maximum extracted text characters sent to the description model; null means unlimited
              */
-            max_input_chars?: number;
+            max_input_chars?: number | null;
             /**
              * Max Chars
-             * @description maximum stored asset description characters
+             * @description maximum stored asset description characters; null means unlimited
              */
-            max_chars?: number;
+            max_chars?: number | null;
         };
         /** AssetsSettings */
         AssetsSettings: {
@@ -5378,15 +5566,27 @@ export interface components {
             /**
              * Resource Payload Ttl Seconds
              * @description TTL for resource payload cache entries
-             * @default 30
+             * @default 28800
              */
             resource_payload_ttl_seconds: number;
+            /**
+             * Prompt Template Ttl Seconds
+             * @description TTL for prompt template cache entries
+             * @default 28800
+             */
+            prompt_template_ttl_seconds: number;
             /**
              * Accessible Users Ttl Seconds
              * @description TTL for accessible user recipient cache entries
              * @default 86400
              */
             accessible_users_ttl_seconds: number;
+            /**
+             * Mcp Snapshot Ttl Seconds
+             * @description TTL for MCP DB snapshot projection cache entries
+             * @default 86400
+             */
+            mcp_snapshot_ttl_seconds: number;
         };
         /** CacheSettingsPatch */
         CacheSettingsPatch: {
@@ -5750,9 +5950,11 @@ export interface components {
          * Citation
          * @description a single citation reference within a message.
          *
-         *     ``index`` is the branch-cumulative number used as the [n] marker.
-         *     ``source_type`` discriminates the resource kind.
-         *     ``source_id`` is the source-specific value (URL, TypeID string, etc.).
+         *     citations are reference-based: markers like [n] live in the message text,
+         *     and full citation data lives in message.citations[]. ``index`` is the
+         *     branch-cumulative number used as the [n] marker. ``source_type``
+         *     discriminates the resource kind. ``source_id`` is the source-specific value
+         *     (URL, TypeID string, etc.).
          */
         Citation: {
             /**
@@ -5774,7 +5976,7 @@ export interface components {
          * @description what kind of resource a citation points to.
          * @enum {string}
          */
-        CitationSource: "url" | "file" | "note" | "memory" | "thread" | "tool_result";
+        CitationSource: "url" | "file" | "note" | "thread" | "project" | "reminder" | "reminder_list" | "calendar" | "calendar_event";
         /**
          * ClientContext
          * @description optional runtime context sent by the client with each agent run.
@@ -6314,6 +6516,8 @@ export interface components {
             status: components["schemas"]["FileStatus"];
             /** Message Id */
             message_id?: string | null;
+            /** Origin Thread Id */
+            origin_thread_id?: string | null;
             /** Deleted At */
             deleted_at?: string | null;
         };
@@ -6321,11 +6525,7 @@ export interface components {
         FileCategoryFilter: "image" | "audio" | "video" | "file";
         /**
          * FileContent
-         * @description file attachment content.
-         *
-         *     for ORM storage: metadata["file_id"] is set, url/base64 may be null
-         *     for SDK execution: url or base64 must be populated (resolved from file_id)
-         *     for external files: url is set, no file_id in metadata
+         * @description file content; carries a file_id in metadata or an external url.
          */
         FileContent: {
             /** Metadata */
@@ -6675,9 +6875,7 @@ export interface components {
         };
         /**
          * ImageContent
-         * @description image content part.
-         *
-         *     this mirrors FileContent fields but uses a distinct content type.
+         * @description image content; mirrors FileContent with a distinct type.
          */
         ImageContent: {
             /** Metadata */
@@ -6776,12 +6974,14 @@ export interface components {
          * @description Supported input modalities for models.
          * @enum {string}
          */
-        InputModality: "text" | "images" | "audio" | "video";
+        InputModality: "text" | "documents" | "images" | "audio" | "video";
         /**
          * IntegrationsSettings
          * @description third-party integration configuration.
          */
         IntegrationsSettings: {
+            /** @description MCP integration */
+            mcp?: components["schemas"]["MCPIntegrationSettings"];
             /** @description Open WebUI integration */
             open_webui?: components["schemas"]["OpenWebUIIntegrationSettings"];
             /** @description perplexity integration */
@@ -6791,6 +6991,8 @@ export interface components {
         };
         /** IntegrationsSettingsPatch */
         IntegrationsSettingsPatch: {
+            /** Mcp */
+            mcp?: components["schemas"]["MCPIntegrationSettingsPatch"];
             /** Open Webui */
             open_webui?: components["schemas"]["OpenWebUIIntegrationSettingsPatch"];
             /** Perplexity */
@@ -6812,7 +7014,7 @@ export interface components {
         } | components["schemas"]["JSONValue-Output"][] | null;
         /**
          * JsonContent
-         * @description structured JSON content (for structured outputs).
+         * @description structured json content (for structured outputs).
          */
         JsonContent: {
             /** Metadata */
@@ -6932,6 +7134,455 @@ export interface components {
              */
             root_path?: string;
         };
+        /**
+         * MCPAuthType
+         * @description supported MCP authentication modes.
+         * @enum {string}
+         */
+        MCPAuthType: "none" | "bearer" | "oauth_2.1";
+        /**
+         * MCPCapabilityType
+         * @description MCP snapshot capability family.
+         * @enum {string}
+         */
+        MCPCapabilityType: "tool" | "resource" | "prompt";
+        /**
+         * MCPCapabilityUpdate
+         * @description payload for updating a discovered MCP capability.
+         */
+        MCPCapabilityUpdate: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /**
+         * MCPDiscoveredCapabilities
+         * @description latest discovered MCP capability snapshots for one server.
+         */
+        MCPDiscoveredCapabilities: {
+            /** Tools */
+            tools?: components["schemas"]["MCPDiscoveredTool"][];
+            /** Resources */
+            resources?: components["schemas"]["MCPDiscoveredResource"][];
+            /** Prompts */
+            prompts?: components["schemas"]["MCPDiscoveredPrompt"][];
+        };
+        /**
+         * MCPDiscoveredPrompt
+         * @description prompt discovered from an MCP server.
+         */
+        MCPDiscoveredPrompt: {
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Command */
+            command: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Arguments */
+            arguments?: components["schemas"]["MCPPromptArgument"][];
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Schema Hash */
+            schema_hash: string;
+            /** Last Discovered At */
+            last_discovered_at?: string | null;
+        };
+        /**
+         * MCPDiscoveredResource
+         * @description resource discovered from an MCP server.
+         */
+        MCPDiscoveredResource: {
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /** Uri */
+            uri: string;
+            /** Name */
+            name: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Mime Type */
+            mime_type?: string | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Schema Hash */
+            schema_hash: string;
+            /** Last Discovered At */
+            last_discovered_at?: string | null;
+        };
+        /**
+         * MCPDiscoveredTool
+         * @description tool discovered from an MCP server.
+         */
+        MCPDiscoveredTool: {
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Normalized Name */
+            normalized_name: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            input_schema?: components["schemas"]["JSONObject-Output"];
+            output_schema?: components["schemas"]["JSONObject-Output"] | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Schema Hash */
+            schema_hash: string;
+            /** Last Discovered At */
+            last_discovered_at?: string | null;
+            /** Plugin Id */
+            plugin_id?: string | null;
+        };
+        /**
+         * MCPDiscoveryResult
+         * @description MCP discovery response.
+         */
+        MCPDiscoveryResult: {
+            server: components["schemas"]["MCPServer"];
+            capabilities: components["schemas"]["MCPDiscoveredCapabilities"];
+        };
+        /**
+         * MCPIntegrationSettings
+         * @description MCP integration policy.
+         */
+        MCPIntegrationSettings: {
+            /**
+             * Enabled
+             * @description enable MCP integration
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Startup Discovery Enabled
+             * @description discover enabled global MCP servers during backend startup
+             * @default false
+             */
+            startup_discovery_enabled: boolean;
+            /**
+             * List Change Listening Enabled
+             * @description listen for MCP server list-change notifications
+             * @default true
+             */
+            list_change_listening_enabled: boolean;
+            /**
+             * List Change Debounce Seconds
+             * @description seconds to debounce MCP list-change refetches
+             * @default 1
+             */
+            list_change_debounce_seconds: number;
+            /**
+             * List Change Reconnect Max Delay Seconds
+             * @description maximum delay between MCP list-change listener reconnects
+             * @default 30
+             */
+            list_change_reconnect_max_delay_seconds: number;
+            /**
+             * Allowed Transports
+             * @description MCP transports admins may configure
+             */
+            allowed_transports?: ("streamable_http" | "sse" | "stdio")[];
+            /**
+             * Default Timeout Seconds
+             * @description default MCP request timeout in seconds
+             * @default 30
+             */
+            default_timeout_seconds: number;
+            /**
+             * Max Timeout Seconds
+             * @description maximum MCP request timeout in seconds
+             * @default 60
+             */
+            max_timeout_seconds: number;
+            /**
+             * User Server Origin Mode
+             * @description how to apply user-managed MCP server origins
+             * @default deny
+             * @enum {string}
+             */
+            user_server_origin_mode: "deny" | "allow";
+            /**
+             * User Server Origins
+             * @description origins used by the user-managed MCP server origin mode
+             */
+            user_server_origins?: string[];
+            /**
+             * User Server Max Count
+             * @description maximum user-owned MCP servers per user
+             * @default 5
+             */
+            user_server_max_count: number;
+            /**
+             * User Server Max Tools
+             * @description maximum discovered tools per user-owned MCP server
+             * @default 50
+             */
+            user_server_max_tools: number;
+            /**
+             * User Tool Definition Max Tokens
+             * @description maximum estimated tokens for one user MCP tool definition
+             * @default 8192
+             */
+            user_tool_definition_max_tokens: number;
+        };
+        /** MCPIntegrationSettingsPatch */
+        MCPIntegrationSettingsPatch: {
+            /** Enabled */
+            enabled?: boolean;
+            /** Startup Discovery Enabled */
+            startup_discovery_enabled?: boolean;
+            /** List Change Listening Enabled */
+            list_change_listening_enabled?: boolean;
+            /**
+             * List Change Debounce Seconds
+             * @description seconds to debounce MCP list-change refetches
+             */
+            list_change_debounce_seconds?: number;
+            /**
+             * List Change Reconnect Max Delay Seconds
+             * @description maximum delay between MCP list-change listener reconnects
+             */
+            list_change_reconnect_max_delay_seconds?: number;
+            /** Allowed Transports */
+            allowed_transports?: ("streamable_http" | "sse" | "stdio")[];
+            /**
+             * Default Timeout Seconds
+             * @description default MCP request timeout in seconds
+             */
+            default_timeout_seconds?: number;
+            /**
+             * Max Timeout Seconds
+             * @description maximum MCP request timeout in seconds
+             */
+            max_timeout_seconds?: number;
+            /**
+             * User Server Origin Mode
+             * @enum {string}
+             */
+            user_server_origin_mode?: "deny" | "allow";
+            /** User Server Origins */
+            user_server_origins?: string[];
+            /**
+             * User Server Max Count
+             * @description maximum user-owned MCP servers per user
+             */
+            user_server_max_count?: number;
+            /**
+             * User Server Max Tools
+             * @description maximum discovered tools per user-owned MCP server
+             */
+            user_server_max_tools?: number;
+            /**
+             * User Tool Definition Max Tokens
+             * @description maximum estimated tokens for one user MCP tool definition
+             */
+            user_tool_definition_max_tokens?: number;
+        };
+        /**
+         * MCPPromptArgument
+         * @description argument accepted by an MCP prompt.
+         */
+        MCPPromptArgument: {
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Required */
+            required?: boolean | null;
+        };
+        /**
+         * MCPServer
+         * @description MCP server response.
+         */
+        MCPServer: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            metadata_?: components["schemas"]["JSONObject-Output"];
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            scope: components["schemas"]["MCPServerScope"];
+            /** Owner User Id */
+            owner_user_id?: string | null;
+            transport: components["schemas"]["MCPTransport"];
+            /** Url */
+            url?: string | null;
+            auth_type: components["schemas"]["MCPAuthType"];
+            /** Enabled */
+            enabled: boolean;
+            capabilities?: components["schemas"]["MCPSurfaceConfig"];
+            status: components["schemas"]["MCPServerStatus"];
+            /** Last Discovered At */
+            last_discovered_at?: string | null;
+            /** Last Error */
+            last_error?: string | null;
+            /**
+             * Has Credentials
+             * @default false
+             */
+            has_credentials: boolean;
+            /** Discovered Tools */
+            discovered_tools?: components["schemas"]["MCPDiscoveredTool"][];
+            /** Discovered Resources */
+            discovered_resources?: components["schemas"]["MCPDiscoveredResource"][];
+            /** Discovered Prompts */
+            discovered_prompts?: components["schemas"]["MCPDiscoveredPrompt"][];
+            /** Tools Plugin Id */
+            tools_plugin_id?: string | null;
+        };
+        /**
+         * MCPServerCreate
+         * @description payload for creating an MCP server.
+         */
+        MCPServerCreate: {
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** @default global */
+            scope: components["schemas"]["MCPServerScope"];
+            /** @default streamable_http */
+            transport: components["schemas"]["MCPTransport"];
+            /** Url */
+            url?: string | null;
+            /** Command */
+            command?: string | null;
+            /** Args */
+            args?: string[];
+            env?: components["schemas"]["JSONObject-Input"];
+            /** @default none */
+            auth_type: components["schemas"]["MCPAuthType"];
+            headers?: components["schemas"]["JSONObject-Input"];
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            capabilities?: components["schemas"]["MCPSurfaceConfig"];
+            config?: components["schemas"]["JSONObject-Input"];
+            /** Access Token */
+            access_token?: string | null;
+        };
+        /**
+         * MCPServerScope
+         * @description owner scope for an MCP server.
+         * @enum {string}
+         */
+        MCPServerScope: "global" | "user";
+        /**
+         * MCPServerStatus
+         * @description cached MCP server health state.
+         * @enum {string}
+         */
+        MCPServerStatus: "disconnected" | "ready" | "error";
+        /**
+         * MCPServerUpdate
+         * @description payload for updating an MCP server.
+         */
+        MCPServerUpdate: {
+            /** Metadata */
+            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Name */
+            name?: string;
+            /** Description */
+            description?: string | null;
+            /** Transport */
+            transport?: components["schemas"]["MCPTransport"];
+            /** Url */
+            url?: string | null;
+            /** Command */
+            command?: string | null;
+            /** Args */
+            args?: string[];
+            /** Env */
+            env?: components["schemas"]["JSONObject-Input"];
+            /** Auth Type */
+            auth_type?: components["schemas"]["MCPAuthType"];
+            /** Headers */
+            headers?: components["schemas"]["JSONObject-Input"];
+            /** Access Token */
+            access_token?: string | null;
+            /** Enabled */
+            enabled?: boolean;
+            /** Capabilities */
+            capabilities?: components["schemas"]["MCPSurfaceConfig"];
+            /** Config */
+            config?: components["schemas"]["JSONObject-Input"];
+        };
+        /**
+         * MCPSurfaceConfig
+         * @description enabled MCP capability families.
+         */
+        MCPSurfaceConfig: {
+            /**
+             * Tools
+             * @default true
+             */
+            tools: boolean;
+            /**
+             * Resources
+             * @default false
+             */
+            resources: boolean;
+            /**
+             * Prompts
+             * @default false
+             */
+            prompts: boolean;
+            /**
+             * Sampling
+             * @default false
+             */
+            sampling: boolean;
+        };
+        /**
+         * MCPTransport
+         * @description supported MCP transport types.
+         * @enum {string}
+         */
+        MCPTransport: "streamable_http" | "sse" | "stdio";
         /**
          * ManifestAssetSettings
          * @description source control for one optional generated manifest asset.
@@ -7127,14 +7778,12 @@ export interface components {
             tool_calls?: {
                 [key: string]: unknown;
             }[];
-            /** Usage */
-            usage?: {
-                [key: string]: unknown;
-            } | null;
             /** Read By */
             read_by?: string[];
             /** Citations */
             citations?: components["schemas"]["Citation"][];
+            /** Attachments */
+            attachments?: components["schemas"]["ResourceAttachment"][];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -7187,6 +7836,8 @@ export interface components {
             read_by?: string[];
             /** Citations */
             citations?: components["schemas"]["Citation"][];
+            /** Attachments */
+            attachments?: components["schemas"]["ResourceAttachment"][];
             /** Parent Id */
             parent_id?: string | null;
             /** Task Id */
@@ -8219,7 +8870,7 @@ export interface components {
         };
         /**
          * Plugin
-         * @description Response schema.
+         * @description response schema.
          */
         Plugin: {
             /**
@@ -8268,7 +8919,7 @@ export interface components {
         };
         /**
          * PluginCreate
-         * @description Payload for plugin creation.
+         * @description payload for plugin creation.
          */
         PluginCreate: {
             metadata_?: components["schemas"]["JSONObject-Input"];
@@ -8302,7 +8953,7 @@ export interface components {
         };
         /**
          * PluginInfo
-         * @description metadata about an available plugin (native or user-defined).
+         * @description metadata about a plugin catalog item.
          */
         PluginInfo: {
             /**
@@ -8321,17 +8972,17 @@ export interface components {
              */
             description: string;
             /**
+             * Source
+             * @description where this plugin comes from
+             * @enum {string}
+             */
+            source: "native" | "external" | "custom";
+            /**
              * Type
              * @description type of plugin: 'tool', 'filter', or 'hook'
              * @enum {string}
              */
             type: "tool" | "filter" | "hook";
-            /**
-             * Is Native
-             * @description whether this plugin is built-in (native) or user-defined
-             * @default false
-             */
-            is_native: boolean;
         };
         /**
          * PluginType
@@ -8341,7 +8992,7 @@ export interface components {
         PluginType: "tool" | "filter" | "hook";
         /**
          * PluginUpdate
-         * @description Payload for plugin update.
+         * @description payload for plugin update.
          */
         PluginUpdate: {
             /** Metadata */
@@ -8545,6 +9196,12 @@ export interface components {
             content: string;
             /** Id */
             id: string;
+            /**
+             * Source
+             * @default custom
+             * @enum {string}
+             */
+            source: "native" | "external" | "custom";
         };
         /**
          * PromptCreate
@@ -8874,7 +9531,7 @@ export interface components {
         };
         /**
          * RefusalContent
-         * @description refusal content (when model refuses to respond).
+         * @description refusal content (when the model refuses to respond).
          */
         RefusalContent: {
             /** Metadata */
@@ -9299,6 +9956,22 @@ export interface components {
             top_k?: number;
         };
         /**
+         * ResourceAttachment
+         * @description reference to an attached resource.
+         */
+        ResourceAttachment: {
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "file" | "note" | "thread" | "project" | "reminder" | "reminder_list" | "calendar_event" | "calendar";
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+        };
+        /**
          * ResourceType
          * @description supported resource types for access control.
          * @enum {string}
@@ -9385,7 +10058,7 @@ export interface components {
          * RunInput
          * @description structured input for an agent run.
          *
-         *     supports plain text, file attachments via IDs, or both.
+         *     supports plain text, resource attachments, or both.
          */
         RunInput: {
             /**
@@ -9394,17 +10067,10 @@ export interface components {
              */
             text?: string | null;
             /**
-             * Attachment Ids
-             * @description file IDs to include as content parts in the message. each ID is resolved server-side to an image or file content part.
+             * Attachments
+             * @description resource references to attach to the message.
              */
-            attachment_ids?: string[];
-            /**
-             * Attachment Actions
-             * @description one-off user attachment actions. keys are file_ids, values are 'reveal' (make active) or 'reference' (force decay). persisted as events and applied by the decay filter.
-             */
-            attachment_actions?: {
-                [key: string]: "reveal" | "reference";
-            } | null;
+            attachments?: components["schemas"]["ResourceAttachment"][];
         };
         /**
          * RunRequest
@@ -9431,7 +10097,12 @@ export interface components {
              * Tool Choice
              * @description optional tool choice override for this run. only specific tools can be forced.
              */
-            tool_choice?: ("web_search" | "think" | "generate_image") | null;
+            tool_choice?: ("agentic_web_search" | "think" | "generate_image") | null;
+            /**
+             * Extra Plugins
+             * @description extra tool plugin ids to include for this run only.
+             */
+            extra_plugins?: string[];
             /**
              * Stream
              * @description when true (default) the response is an SSE stream; when false a JSON response is returned (not yet implemented).
@@ -9679,6 +10350,12 @@ export interface components {
          */
         SearchMode: "hybrid" | "dense" | "sparse" | "autocomplete" | "full";
         /**
+         * SearchResourceReferenceType
+         * @description known resource types that can be referenced by search result context.
+         * @enum {string}
+         */
+        SearchResourceReferenceType: "thread" | "note" | "reminder" | "reminder_list" | "project" | "file" | "calendar_event" | "calendar";
+        /**
          * SearchResultItem
          * @description a single search result across any searchable entity.
          */
@@ -9695,6 +10372,7 @@ export interface components {
             preview?: string | null;
             /** Score */
             score?: number | null;
+            parent?: components["schemas"]["SearchResultParent"] | null;
             metadata?: components["schemas"]["JSONObject-Output"];
             /**
              * Created At
@@ -9706,6 +10384,18 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * SearchResultParent
+         * @description immediate parent resource needed to display or route a nested result.
+         */
+        SearchResultParent: {
+            type: components["schemas"]["SearchResourceReferenceType"];
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
         };
         /**
          * SearchResultType
@@ -10531,7 +11221,12 @@ export interface components {
              * Tool Choice
              * @description optional tool choice override for this run. only specific tools can be forced.
              */
-            tool_choice?: ("web_search" | "think" | "generate_image") | null;
+            tool_choice?: ("agentic_web_search" | "think" | "generate_image") | null;
+            /**
+             * Extra Plugins
+             * @description extra tool plugin ids to include for this run only.
+             */
+            extra_plugins?: string[];
             /**
              * Stream
              * @description when true (default) the response is an SSE stream; when false a JSON response is returned (not yet implemented).
@@ -10627,6 +11322,17 @@ export interface components {
             min_inactivity_hours?: number;
         };
         /**
+         * ThreadMaintenanceRunRequest
+         * @description request body for running thread maintenance.
+         */
+        ThreadMaintenanceRunRequest: {
+            /**
+             * Replace Metadata
+             * @default false
+             */
+            replace_metadata: boolean;
+        };
+        /**
          * ThreadMaintenanceSettings
          * @description live thread maintenance scheduling and execution policy.
          */
@@ -10689,19 +11395,6 @@ export interface components {
              * @description minutes before stale thread-related tasks are cleaned up
              */
             stale_task_cleanup_after_minutes?: number;
-        };
-        /**
-         * ThreadMetadataGenerateRequest
-         * @description request body for generating thread metadata.
-         */
-        ThreadMetadataGenerateRequest: {
-            /**
-             * Replace
-             * @default false
-             */
-            replace: boolean;
-            /** Model Id */
-            model_id?: string | null;
         };
         /**
          * ThreadParticipant
@@ -10953,7 +11646,7 @@ export interface components {
             is_superuser: boolean;
             /**
              * Find By Email
-             * @default true
+             * @default false
              */
             find_by_email: boolean;
             privacy?: components["schemas"]["UserPrivacy"];
@@ -11095,6 +11788,19 @@ export interface components {
             is_active?: boolean | null;
             /** Is Superuser */
             is_superuser?: boolean | null;
+        };
+        /**
+         * UserMCPToolsFeature
+         * @description user-managed MCP tool toggle for an agent.
+         */
+        UserMCPToolsFeature: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+        } & {
+            [key: string]: unknown;
         };
         /**
          * UserPermissions
@@ -14698,6 +15404,98 @@ export interface operations {
             };
         };
     };
+    delete_user_v1_users__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     update_user_v1_users__user_id__patch: {
         parameters: {
             query?: never;
@@ -17112,7 +17910,7 @@ export interface operations {
             };
         };
     };
-    generate_thread_metadata_v1_threads__thread_id__metadata_generate_post: {
+    run_thread_maintenance_v1_threads__thread_id__maintenance_run_post: {
         parameters: {
             query?: never;
             header?: {
@@ -17125,9 +17923,105 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["ThreadMetadataGenerateRequest"] | null;
+                "application/json": components["schemas"]["ThreadMaintenanceRunRequest"] | null;
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Thread"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    restore_thread_v1_threads__thread_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -24565,6 +25459,7 @@ export interface operations {
                 sort_by?: components["schemas"]["CommonSortBy"] | "title";
                 sort_dir?: "asc" | "desc";
                 owner_id?: string | null;
+                include_deleted?: boolean;
             };
             header?: never;
             path?: never;
@@ -24761,6 +25656,7 @@ export interface operations {
         parameters: {
             query?: {
                 owner_id?: string | null;
+                include_deleted?: boolean;
             };
             header?: never;
             path?: never;
@@ -25242,7 +26138,9 @@ export interface operations {
     };
     delete_note_v1_notes__note_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                permanent?: boolean;
+            };
             header?: {
                 "x-session-id"?: string | null;
             };
@@ -25259,6 +26157,102 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    restore_note_v1_notes__note_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                note_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Note"];
+                };
             };
             /** @description bad request */
             400: {
@@ -29006,10 +30000,12 @@ export interface operations {
                 limit?: number;
                 sort_by?: components["schemas"]["CommonSortBy"] | ("filename" | "size_bytes");
                 sort_dir?: "asc" | "desc";
+                resolve_origin?: boolean;
                 owner_id?: string | null;
                 project_id?: string | null;
                 source?: components["schemas"]["FileSource"] | null;
                 category?: components["schemas"]["FileCategoryFilter"] | null;
+                include_deleted?: boolean;
             };
             header?: never;
             path?: never;
@@ -29303,6 +30299,7 @@ export interface operations {
                 project_id?: string | null;
                 source?: components["schemas"]["FileSource"] | null;
                 category?: components["schemas"]["FileCategoryFilter"] | null;
+                include_deleted?: boolean;
             };
             header?: never;
             path?: never;
@@ -29586,7 +30583,9 @@ export interface operations {
     };
     get_file_v1_files__file_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                resolve_origin?: boolean;
+            };
             header?: never;
             path: {
                 file_id: string;
@@ -29680,7 +30679,9 @@ export interface operations {
     };
     delete_file_v1_files__file_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                permanent?: boolean;
+            };
             header?: {
                 "x-session-id"?: string | null;
             };
@@ -30085,6 +31086,102 @@ export interface operations {
                     "application/json": {
                         [key: string]: string | null;
                     };
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    restore_file_v1_files__file_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["File"];
                 };
             };
             /** @description bad request */
@@ -35764,6 +36861,7 @@ export interface operations {
                 sort_by?: components["schemas"]["CommonSortBy"] | "command";
                 sort_dir?: "asc" | "desc";
                 q?: string | null;
+                source?: ("native" | "external" | "custom") | null;
             };
             header?: never;
             path?: never;
@@ -35954,6 +37052,7 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string | null;
+                source?: ("native" | "external" | "custom") | null;
             };
             header?: never;
             path?: never;
@@ -36424,10 +37523,13 @@ export interface operations {
             };
         };
     };
-    list_available_plugins_v1_plugins_available_get: {
+    list_plugins_v1_plugins_get: {
         parameters: {
             query?: {
+                skip?: number;
+                limit?: number;
                 plugin_type?: ("tool" | "filter" | "hook") | null;
+                source?: ("native" | "external" | "custom") | null;
             };
             header?: never;
             path?: never;
@@ -36442,192 +37544,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PluginInfo"][];
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    get_available_plugin_v1_plugins_available__plugin_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                plugin_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PluginInfo"];
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    list_plugins_v1_plugins_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Plugin"][];
                 };
             };
             /** @description bad request */
@@ -36817,7 +37733,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Plugin"];
+                    "application/json": components["schemas"]["PluginInfo"];
                 };
             };
             /** @description bad request */
@@ -37863,6 +38779,766 @@ export interface operations {
                     "application/json": {
                         [key: string]: number;
                     };
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_servers_v1_integrations_mcp_servers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPServer"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_server_v1_integrations_mcp_servers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MCPServerCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPServer"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_server_v1_integrations_mcp_servers__server_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPServer"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    delete_server_v1_integrations_mcp_servers__server_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_server_v1_integrations_mcp_servers__server_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MCPServerUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPServer"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    discover_server_v1_integrations_mcp_servers__server_id__discover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPDiscoveryResult"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_capabilities_v1_integrations_mcp_servers__server_id__capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPDiscoveredCapabilities"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_capability_v1_integrations_mcp_servers__server_id__capabilities__capability_type___capability_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                server_id: string;
+                capability_type: components["schemas"]["MCPCapabilityType"];
+                capability_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MCPCapabilityUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPServer"];
                 };
             };
             /** @description bad request */

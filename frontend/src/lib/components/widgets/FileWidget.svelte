@@ -6,6 +6,7 @@
 	import { resourceAccentStyle, resourceVisual } from '$lib/resources/resourceVisuals'
 	import { files } from '$lib/stores/files.svelte'
 	import { describeFileType, formatFileSize } from '$lib/utils/fileTypes'
+	import { resourceSharing } from '$lib/utils/resourceSharing.svelte'
 	import ResourcePreview from './ResourcePreview.svelte'
 	import type { ResourceItem } from './types'
 
@@ -28,9 +29,8 @@
 	const fileSizeLabel = $derived(formatFileSize(fileSize))
 	const category = $derived((resource.meta?.category as string) ?? 'file')
 	const source = $derived((resource.meta?.source as string) ?? '')
-	const isShared = $derived(Boolean(resource.meta?.shared))
-	const authorLabel = $derived((resource.meta?.author_label as string | null) ?? null)
-	const authorMeta = $derived(isShared ? authorLabel : null)
+	const sharing = resourceSharing(() => resource)
+	const authorMeta = $derived(sharing.authorMeta)
 	const thumbnailUrl = $derived(files.getThumbnailUrl(resource.id) ?? null)
 	const fileVisual = resourceVisual('file')
 	const fileAccentStyle = resourceAccentStyle('file')

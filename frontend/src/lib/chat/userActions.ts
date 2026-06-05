@@ -15,7 +15,7 @@ import { syncCacheAfterRun } from './dataLoader'
 import { computeIsAtBottom, contentPartsToText } from './helpers'
 import { runThreadStream } from './streamProcessor'
 import { getLatestLeaf } from './treeNavigation'
-import type { ChatContext, PendingRunInput } from './types'
+import type { ApiMessage, ChatContext, PendingRunInput } from './types'
 
 function resolveLeafAfterDelete(startParentId: string | null, ctx: ChatContext): string | null {
 	if (startParentId && ctx.messageTree.has(startParentId)) {
@@ -40,8 +40,7 @@ function createLocalSteeringMessageId(): string {
 function cloneRunInput(input: RunInput): PendingRunInput {
 	return {
 		text: input.text ?? null,
-		attachment_ids: input.attachment_ids ? [...input.attachment_ids] : undefined,
-		attachment_actions: input.attachment_actions ? { ...input.attachment_actions } : undefined,
+		attachments: input.attachments ? input.attachments.map((att) => ({ ...att })) : undefined,
 	}
 }
 
@@ -91,6 +90,53 @@ function resolveRunParentId(ctx: ChatContext, preferredParentId: string | null):
 	return null
 }
 
+function finalizeStreamingAssistantAsPartial(ctx: ChatContext): void {
+	const streaming = ctx.streamingAssistant
+	if (!streaming) return
+
+	const existingMessage = ctx.messageTree.get(streaming.messageId)
+	const content = streaming.content.trim() || contentPartsToText(existingMessage?.content).trim()
+	const createdAt = existingMessage?.created_at ?? new SvelteDate().toISOString()
+	const updatedAt = new SvelteDate().toISOString()
+	const parentId = existingMessage?.parent_id ?? ctx.streamingAssistantParentId
+	const streamCitations = ctx.citationSources.get(streaming.messageId)
+	const citedIndices = new Set(
+		[...content.matchAll(/\[\^?(\d+)\]/g)].map((match) => Number(match[1]))
+	)
+	const citedSources = streamCitations?.filter((citation) => citedIndices.has(citation.index))
+	const metadata: NonNullable<ApiMessage['metadata_']> = {
+		...(existingMessage?.metadata_ ?? {}),
+		partial: true,
+		partial_reason: 'cancelled',
+	}
+	if (streaming.runId) metadata.run_id = streaming.runId
+
+	const finalized = {
+		id: streaming.messageId,
+		thread_id: existingMessage?.thread_id ?? ctx.thread?.id ?? '',
+		parent_id: parentId,
+		type: 'assistant',
+		content: content ? [{ type: 'text', text: content }] : [],
+		tool_calls: streaming.toolCalls.map((toolCall) => ({
+			id: toolCall.id,
+			name: toolCall.name,
+			arguments: toolCall.arguments,
+		})),
+		citations: citedSources?.length ? citedSources : existingMessage?.citations,
+		metadata_: metadata,
+		sender_agent_id: streaming.senderAgentId,
+		sender_user_id: null,
+		created_at: createdAt,
+		updated_at: updatedAt,
+	} satisfies ApiMessage
+
+	ctx.messageTree.set(finalized.id, finalized)
+	ctx.citationTargetMessageId = finalized.id
+	ctx.streamingLeafId = finalized.id
+	if (ctx.viewingStreamingBranch) ctx.currentLeafId = finalized.id
+	ctx.streamingAssistantParentId = finalized.id
+}
+
 function stagePendingSteeringMessage(
 	ctx: ChatContext,
 	runId: string,
@@ -126,12 +172,10 @@ export async function handleSendMessage(
 
 	const runInput: RunInput = { text: trimmed || null }
 	if (hasAttachments) {
-		runInput.attachment_ids = modifiers.attachments.map((a) => a.fileId)
-	}
-
-	// include user attachment actions (reveals/references)
-	if (ctx.pendingActions.size > 0) {
-		runInput.attachment_actions = Object.fromEntries(ctx.pendingActions)
+		runInput.attachments = modifiers.attachments.map((a) => ({
+			type: a.resourceType,
+			id: a.fileId,
+		}))
 	}
 
 	const displayText = trimmed || modifiers?.attachments.map((a) => a.filename).join(', ') || ''
@@ -231,6 +275,7 @@ export async function handleSendMessage(
 	}
 
 	const toolChoice = modifiers ? deriveToolChoice(modifiers) : null
+	const extraPlugins = modifiers?.extraPlugins ?? []
 
 	try {
 		await runThreadStream(
@@ -241,14 +286,13 @@ export async function handleSendMessage(
 				runId,
 				parentId: resolveRunParentId(ctx, ctx.currentLeafId),
 				toolChoice,
+				extraPlugins,
 			},
 			ctx
 		)
 		if (runId !== ctx.activeRun) return
 		ctx.optimisticUserMessage = null
 		ctx.streamingAssistant = null
-		// clear pending actions - they've been persisted as events by the backend
-		ctx.pendingActions.clear()
 		ctx.rebuildRunBlocks()
 		syncCacheAfterRun(ctx)
 	} catch (e) {
@@ -311,11 +355,6 @@ export async function handleRegenerateMessage(
 				? { text: ctx.lastRunInput }
 				: {}
 
-		// include pending attachment actions with the regeneration
-		if (ctx.pendingActions.size > 0) {
-			regenInput.attachment_actions = Object.fromEntries(ctx.pendingActions)
-		}
-
 		await runThreadStream(
 			{
 				threadId: ctx.thread.id,
@@ -330,7 +369,6 @@ export async function handleRegenerateMessage(
 		ctx.optimisticUserMessage = null
 		ctx.streamingAssistant = null
 		ctx.streamingAssistantParentId = null
-		ctx.pendingActions.clear()
 		ctx.rebuildRunBlocks()
 		syncCacheAfterRun(ctx)
 	} catch (e) {
@@ -362,10 +400,9 @@ export async function handleStopGeneration(ctx: ChatContext): Promise<void> {
 	ctx.activeRun++
 	ctx.isGenerating = false
 	ctx.viewingStreamingBranch = true
-	ctx.streamingLeafId = null
 	ctx.optimisticUserMessage = null
+	finalizeStreamingAssistantAsPartial(ctx)
 	ctx.streamingAssistant = null
-	ctx.streamingAssistantParentId = null
 	// close any pending/running tool executions directly - incrementing
 	// activeRun above causes the finally-block safety net in handleSendMessage/
 	// handleRegenerateMessage to skip cleanup, so we must do it here.

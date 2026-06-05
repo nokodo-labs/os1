@@ -3,6 +3,7 @@
 	import Check from '$lib/components/icons/Check.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
+	import { DropdownSelect } from '$lib/components/primitives'
 	import {
 		NOTIFICATION_OFFSET_PRESETS,
 		describeNotificationOffset,
@@ -23,6 +24,13 @@
 	let customAmount = $state(15)
 	let customUnit = $state<NotificationOffsetUnit>('minutes')
 	let customOpen = $state(false)
+	const unitOptions = [
+		{ value: 'minutes', label: 'minutes before' },
+		{ value: 'hours', label: 'hours before' },
+		{ value: 'days', label: 'days before' },
+		{ value: 'weeks', label: 'weeks before' },
+		{ value: 'months', label: 'months before' },
+	]
 
 	const normalizedOffsets = $derived(normalizeNotificationOffsets(value))
 	const customOffsets = $derived(
@@ -132,18 +140,14 @@
 					onblur={normalizeAmount}
 					aria-label="custom notification amount"
 				/>
-				<select
-					bind:value={customUnit}
-					class={inputClass}
+				<DropdownSelect
+					options={unitOptions}
+					value={customUnit}
+					onchange={(value) => (customUnit = value as NotificationOffsetUnit)}
 					{disabled}
-					aria-label="custom notification unit"
-				>
-					<option value="minutes">minutes before</option>
-					<option value="hours">hours before</option>
-					<option value="days">days before</option>
-					<option value="weeks">weeks before</option>
-					<option value="months">months before</option>
-				</select>
+					ariaLabel="custom notification unit"
+					buttonClass="rounded-xl px-3"
+				/>
 				<button
 					type="button"
 					class="{chipBaseClass} {quietChipClass}"

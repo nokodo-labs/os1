@@ -17,7 +17,7 @@ import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 import { hapticFeedback, throttledHapticFeedback } from '$lib/utils/haptics'
 import { SvelteDate } from 'svelte/reactivity'
 import { syncCacheAfterRun } from './dataLoader'
-import { sdkPartsToText, upsertToolCalls, type ApiMessage } from './helpers'
+import { extractAttachmentRefs, sdkPartsToText, upsertToolCalls, type ApiMessage } from './helpers'
 import {
 	getMessageClientSteeringId,
 	getMessageSteeringRunId,
@@ -71,11 +71,20 @@ export function processDelta(
 				return 'continue'
 			}
 			if (msg.type === 'user' && steeringState === 'dropped') return 'continue'
-			if (msg.type === 'user') {
-				ctx.optimisticUserMessage = null
-				const runId = getMessageSteeringRunId(msg)
-				void ctx.flushPendingSteeringMessages(runId, msg.id)
+			if (msg.type !== 'user') {
+				// authoritative canonical upsert for assistant/tool messages
+				// persisted by the run worker: brings the attachments column and
+				// resolved citations onto the already-streamed message. leaf and
+				// parent state is owned by the delta path, so we must NOT mutate
+				// it here - a late post-persist event could otherwise regress
+				// streaming order.
+				const existing = ctx.messageTree.get(msg.id)
+				ctx.messageTree.set(msg.id, existing ? { ...existing, ...msg } : msg)
+				return 'continue'
 			}
+			ctx.optimisticUserMessage = null
+			const runId = getMessageSteeringRunId(msg)
+			void ctx.flushPendingSteeringMessages(runId, msg.id)
 			ctx.messageTree.set(msg.id, msg)
 			ctx.streamingLeafId = msg.id
 			if (ctx.viewingStreamingBranch) {
@@ -124,12 +133,17 @@ export function processDelta(
 				}
 				const attachmentParts = contentParts.filter((p) => p.type !== 'text')
 
+				// resource refs ({type, id}) attached by producer tools live in
+				// the public `attachments` metadata key on the streamed tool message.
+				const attachmentRefs = extractAttachmentRefs({ metadata_: toolMetadata })
+
 				if (toolCallId) {
 					ctx.toolTracker.registerResult({
 						toolCallId,
 						output,
 						isError,
 						contentParts: attachmentParts.length > 0 ? attachmentParts : undefined,
+						attachmentRefs: attachmentRefs.length > 0 ? attachmentRefs : undefined,
 						metadata: toolMetadata,
 					})
 				}
@@ -376,6 +390,7 @@ export async function runThreadStream(
 		runId: number
 		parentId?: string | null
 		toolChoice?: ToolChoiceValue | null
+		extraPlugins?: string[]
 	},
 	ctx: ChatContext
 ): Promise<void> {
@@ -396,6 +411,7 @@ export async function runThreadStream(
 		input: opts.input,
 		parentId,
 		toolChoice: opts.toolChoice,
+		extraPlugins: opts.extraPlugins,
 		signal: ctx.runAbortController.signal,
 	})
 

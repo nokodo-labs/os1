@@ -3,6 +3,7 @@
 import type { components } from '$lib/api/types'
 
 export type ApiMessage = components['schemas']['Message']
+export type ResourceAttachment = components['schemas']['ResourceAttachment']
 
 export interface ToolCall {
 	id: string
@@ -53,6 +54,8 @@ export interface ToolResult {
 	output: string
 	isError: boolean
 	contentParts?: ApiMessage['content']
+	/** resource refs ({type, id}) attached by the tool (producer tools). */
+	attachmentRefs?: ResourceAttachment[]
 	metadata?: Record<string, unknown>
 }
 
@@ -70,4 +73,6 @@ export interface ToolSummary {
 	subtitle?: string
 	resourceId?: string
 	resourceType?: ToolSummaryResourceType
+	/** display name of the MCP server backing this tool, when applicable. */
+	mcpServerName?: string
 }

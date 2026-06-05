@@ -5,6 +5,7 @@
 	import { page } from '$app/state'
 	import { api } from '$lib/api/client'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
+	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { settingsState } from '$lib/stores/settings.svelte'
@@ -13,6 +14,11 @@
 	let password = $state('')
 	let isSubmitting = $state(false)
 	let errorMessage = $state<string | null>(null)
+	type LoginField = 'identifier' | 'password'
+	type LoginFieldErrors = Partial<Record<LoginField, string>>
+	let touched = $state<Record<LoginField, boolean>>({ identifier: false, password: false })
+	let submitted = $state(false)
+	let serverFieldErrors = $state<LoginFieldErrors>({})
 
 	// NOTE: searchParams access must be guarded for SSG/prerender compatibility
 	const next = $derived(
@@ -46,12 +52,96 @@
 		return { type: 'home' }
 	}
 
+	function markTouched(field: LoginField): void {
+		touched[field] = true
+	}
+
+	function validateFields(): LoginFieldErrors {
+		const errors: LoginFieldErrors = {}
+		if (!identifier.trim()) errors.identifier = 'email or username is required'
+		if (!password) errors.password = 'password is required'
+		return errors
+	}
+
+	function hasErrors(errors: LoginFieldErrors): boolean {
+		return Object.values(errors).some(Boolean)
+	}
+
+	function fieldError(field: LoginField): string | null {
+		const serverError = serverFieldErrors[field]
+		if (serverError) return serverError
+		if (!submitted && !touched[field]) return null
+		return validateFields()[field] ?? null
+	}
+
+	function inputClass(field: LoginField): string {
+		const hasError = Boolean(fieldError(field))
+		const stateClass = hasError
+			? 'border-red-400/70 bg-red-500/10 text-red-50 placeholder:text-red-300/45 focus:border-red-300/80'
+			: 'border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20'
+		return `${stateClass} w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none`
+	}
+
+	function fieldFromLocation(location: unknown): LoginField | null {
+		if (!Array.isArray(location)) return null
+		for (let i = location.length - 1; i >= 0; i -= 1) {
+			const value = location[i]
+			if (value === 'username') return 'identifier'
+			if (value === 'password') return 'password'
+		}
+		return null
+	}
+
+	function parseBackendErrors(detail: unknown): {
+		message: string | null
+		fields: LoginFieldErrors
+	} {
+		let fields: LoginFieldErrors = {}
+		let message: string | null = null
+
+		if (!Array.isArray(detail)) return { message, fields }
+		for (const item of detail) {
+			const itemMessage =
+				item && typeof item === 'object' && 'msg' in item && typeof item.msg === 'string'
+					? item.msg
+					: 'invalid value'
+			const field = item && typeof item === 'object' ? fieldFromLocation(item.loc) : null
+			if (field) fields = { ...fields, [field]: itemMessage }
+			else if (!message) message = itemMessage
+		}
+		return { message, fields }
+	}
+
+	function submitErrorMessage(error: unknown): string {
+		if (error instanceof Error) {
+			const message = error.message.trim()
+			if (!message) return 'failed to sign in'
+			if (
+				error instanceof TypeError ||
+				/failed to fetch|networkerror|load failed/i.test(message)
+			) {
+				return 'could not reach the server. try again in a moment.'
+			}
+			return message
+		}
+		return 'failed to sign in'
+	}
+
 	async function onSubmit(event: SubmitEvent) {
 		event.preventDefault()
 		if (isSubmitting) return
 		if (oidcOnly) return
 
+		submitted = true
 		errorMessage = null
+		serverFieldErrors = {}
+
+		const validationErrors = validateFields()
+		if (hasErrors(validationErrors)) {
+			errorMessage = 'fix the highlighted fields'
+			return
+		}
+
 		isSubmitting = true
 
 		try {
@@ -69,16 +159,12 @@
 			if (error || !data) {
 				const detail = (error as { detail?: unknown } | undefined)?.detail
 				if (typeof detail === 'string' && detail) throw new Error(detail)
-				if (Array.isArray(detail) && detail.length) {
-					const messages = detail
-						.map((item) =>
-							typeof item === 'object' && item && 'msg' in item
-								? (item as { msg: string }).msg
-								: null
-						)
-						.filter((msg): msg is string => Boolean(msg))
-					if (messages.length) throw new Error(messages.join(', '))
+				const parsed = parseBackendErrors(detail)
+				if (hasErrors(parsed.fields)) {
+					serverFieldErrors = parsed.fields
+					throw new Error(parsed.message ?? 'check the highlighted fields')
 				}
+				if (parsed.message) throw new Error(parsed.message)
 				throw new Error(response.statusText || 'failed to sign in')
 			}
 
@@ -91,7 +177,7 @@
 				await goto(resolve('/'))
 			}
 		} catch (err) {
-			errorMessage = err instanceof Error ? err.message : 'failed to sign in'
+			errorMessage = submitErrorMessage(err)
 		} finally {
 			isSubmitting = false
 		}
@@ -123,9 +209,21 @@
 									autocomplete="username"
 									required
 									bind:value={identifier}
+									onblur={() => markTouched('identifier')}
 									placeholder="email or username"
-									class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20 w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none"
+									aria-invalid={Boolean(fieldError('identifier'))}
+									aria-describedby="identifier-error"
+									class={inputClass('identifier')}
 								/>
+								{#if fieldError('identifier')}
+									<p
+										id="identifier-error"
+										class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-center text-xs text-red-200"
+									>
+										<ExclamationTriangle class="size-3.5 shrink-0" />
+										<span>{fieldError('identifier')}</span>
+									</p>
+								{/if}
 							</div>
 
 							<div class="space-y-2">
@@ -138,24 +236,38 @@
 									autocomplete="current-password"
 									required
 									bind:value={password}
+									onblur={() => markTouched('password')}
 									placeholder="••••••••"
-									class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20 w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none"
+									aria-invalid={Boolean(fieldError('password'))}
+									aria-describedby="password-error"
+									class={inputClass('password')}
 								/>
+								{#if fieldError('password')}
+									<p
+										id="password-error"
+										class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-center text-xs text-red-200"
+									>
+										<ExclamationTriangle class="size-3.5 shrink-0" />
+										<span>{fieldError('password')}</span>
+									</p>
+								{/if}
 							</div>
 
 							{#if oidcOnly}
 								<div
-									class="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+									class="flex min-h-10 items-center justify-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-center text-sm text-amber-200"
 									role="alert"
 								>
-									password login is disabled. sign in with oidc.
+									<ExclamationTriangle class="size-4 shrink-0" />
+									<span>password login is disabled. sign in with oidc.</span>
 								</div>
 							{:else if errorMessage}
 								<div
-									class="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+									class="flex min-h-10 items-center justify-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2 text-center text-sm text-red-200"
 									role="alert"
 								>
-									{errorMessage}
+									<ExclamationTriangle class="size-4 shrink-0" />
+									<span>{errorMessage}</span>
 								</div>
 							{/if}
 

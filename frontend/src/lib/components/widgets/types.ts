@@ -1,11 +1,12 @@
 /**
  * shared types for resource widgets and the resources view.
  *
- * resource types closely map to the backend AccessRule model's FK columns,
- * which define all resource types a user can interact with.
+ * resource identity types come from the generated backend API schema.
  */
 
-export type ResourceType = 'thread' | 'note' | 'reminder_list' | 'project' | 'file' | 'calendar'
+import type { components } from '$lib/api/types'
+
+export type ResourceType = components['schemas']['SearchResourceReferenceType']
 
 export type ResourceSortBy = 'updated_at' | 'created_at' | 'title'
 export type SortDir = 'asc' | 'desc'
@@ -22,6 +23,8 @@ export type ResourceFilterMode =
 
 export type ResourceLayoutMode = 'grid' | 'list'
 
+export type ResourceParentRef = components['schemas']['SearchResultParent']
+
 /** shared props accepted by all resource widget components */
 export interface WidgetProps {
 	resource: ResourceItem
@@ -33,6 +36,7 @@ export interface WidgetProps {
 export interface ResourceItem {
 	id: string
 	type: ResourceType
+	parent?: ResourceParentRef
 	title: string
 	subtitle?: string
 	preview?: string

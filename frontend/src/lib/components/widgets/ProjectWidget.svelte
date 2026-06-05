@@ -23,6 +23,7 @@
 		resourceAccess,
 	} from '$lib/stores/resourceAccess.svelte'
 	import { metadataLine } from '$lib/utils/resourceAuthors'
+	import { resourceSharing } from '$lib/utils/resourceSharing.svelte'
 	import ResourcePreview from './ResourcePreview.svelte'
 	import type { ResourceItem } from './types'
 
@@ -71,12 +72,12 @@
 			: 0
 	)
 	const memberCount = $derived((resource.meta?.member_count as number) ?? 0)
-	const isShared = $derived(Boolean(resource.meta?.shared))
 	const ownerId = $derived(
 		typeof resource.meta?.owner_id === 'string' ? resource.meta.owner_id : null
 	)
-	const authorLabel = $derived((resource.meta?.author_label as string | null) ?? null)
-	const showAuthor = $derived(Boolean(isShared && authorLabel))
+	const sharing = resourceSharing(() => resource)
+	const authorLabel = $derived(sharing.authorMeta)
+	const showAuthor = $derived(Boolean(authorLabel))
 	const accessLevel = $derived(
 		resourceAccess.level('project', resource.id, ownerId) ??
 			readAccessLevel(resource.meta?.access_level)
@@ -154,7 +155,7 @@
 </script>
 
 <a
-	href={resolve(`/projects/${resource.id}`)}
+	href={onclick ? undefined : resolve(`/projects/${resource.id}`)}
 	onclick={handleClick}
 	class="group liquid-glass liquid-glass--frosted relative block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'

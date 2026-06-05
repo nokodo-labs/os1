@@ -422,7 +422,7 @@ export const usePanzoom = (opts = {}) => {
 					passive: true,
 				}
 			)
-			// prevent text selection/scrolling while interacting
+			// prevent text selection while interacting
 			const t = eventTarget ?? node
 			if (!t) return () => destroy()
 			t.style.userSelect = 'none'
@@ -431,7 +431,7 @@ export const usePanzoom = (opts = {}) => {
 			const isTouchDevice = 'ontouchstart' in window
 			t.style.touchAction = isTouchDevice ? 'pan-y' : 'none'
 			t.style.cursor = 'grab'
-			t.style.overscrollBehavior = isTouchDevice ? 'auto' : 'contain'
+			t.style.overscrollBehavior = 'auto'
 			// For SVG root, use fill-box so translation math stays in CSS px space
 			const n = node
 			if (typeof SVGSVGElement !== 'undefined' && target instanceof SVGSVGElement) {
@@ -477,6 +477,7 @@ export const usePanzoom = (opts = {}) => {
 			isExpanded = true
 			// enable touch interaction now that we're fullscreen
 			target.style.touchAction = 'none'
+			target.style.overscrollBehavior = 'contain'
 			zoomToFit()
 
 			// Last: capture new state (now fixed on body)
@@ -571,7 +572,8 @@ export const usePanzoom = (opts = {}) => {
 				isExpanded = false
 				// restore touch-action for mobile scrolling
 				const isTouchDevice = 'ontouchstart' in window
-				eventTarget.style.touchAction = isTouchDevice ? 'auto' : 'none'
+				eventTarget.style.touchAction = isTouchDevice ? 'pan-y' : 'none'
+				eventTarget.style.overscrollBehavior = 'auto'
 
 				if (restoreParent) {
 					if (restoreNextSibling) {

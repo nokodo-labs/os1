@@ -7,7 +7,7 @@
 		type RunModifiers,
 		uploadFile,
 	} from '$lib/chat/attachments'
-	import type { ThreadAttachment } from '$lib/chat/types'
+	import { getSourceConfig } from '$lib/citations/config'
 	import AddContext from '$lib/components/chat/AddContext.svelte'
 	import SearchSettingsPanel from '$lib/components/chat/SearchSettingsPanel.svelte'
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
@@ -18,9 +18,11 @@
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import type { ResourceItem } from '$lib/components/widgets/types'
 	import { device } from '$lib/stores/device.svelte'
-	import { files } from '$lib/stores/files.svelte'
+	import { apiFileToResource, files } from '$lib/stores/files.svelte'
 	import { settingsState } from '$lib/stores/settings.svelte'
 	import { tick } from 'svelte'
+
+	type QuickAction = 'none' | 'web_search' | 'think' | 'generate_image'
 
 	interface ChatInputProps {
 		value?: string
@@ -30,14 +32,12 @@
 		isGenerating?: boolean
 		clearOnSubmit?: boolean
 		focusToken?: number
-		threadAttachments?: ThreadAttachment[]
 		onSubmit?: (message: string, modifiers?: RunModifiers) => void
 		onClear?: () => void
 		searchTypes?: SearchResourceType[]
 		onSearchTypesChange?: (types: SearchResourceType[]) => void
 		onStop?: () => void
 		onKeyDown?: (event: KeyboardEvent) => boolean | void
-		onToggleAttachmentStatus?: (fileId: string, action: 'reveal' | 'reference') => void
 		viewTransitionName?: string
 	}
 
@@ -49,14 +49,12 @@
 		isGenerating = false,
 		clearOnSubmit = true,
 		focusToken,
-		threadAttachments = [],
 		onSubmit,
 		onClear,
 		searchTypes = SEARCH_RESOURCE_TYPES,
 		onSearchTypesChange,
 		onStop,
 		onKeyDown,
-		onToggleAttachmentStatus,
 		viewTransitionName,
 	}: ChatInputProps = $props()
 
@@ -75,49 +73,41 @@
 	let webSearchEnabled = $state(false)
 	let thinkLongerEnabled = $state(false)
 	let generateImageEnabled = $state(false)
+	const quickAction = $derived<QuickAction>(
+		webSearchEnabled
+			? 'web_search'
+			: thinkLongerEnabled
+				? 'think'
+				: generateImageEnabled
+					? 'generate_image'
+					: 'none'
+	)
+	let extraPluginIds = $state<string[]>([])
 	let pendingAttachments = $state<PendingAttachment[]>([])
 	let isUploading = $state(false)
 
-	// combine pending uploads and thread-level attachments for the tray
+	// pending uploads + picked resources for THIS message's input tray
 	const pendingAsNative = $derived(
 		pendingAttachments.map((att) => ({
 			id: att.fileId,
+			resourceType: att.resourceType,
 			filename: att.filename,
 			type: att.category as 'image' | 'audio' | 'video' | 'file',
-			status: 'active' as const,
 			isPending: true,
 			previewUrl: att.previewUrl,
+			resource: pendingToResource(att),
 		}))
 	)
-	const threadAsNative = $derived(
-		threadAttachments.map((att) => ({
-			id: att.fileId,
-			filename: att.filename ?? att.fileId,
-			type: att.category,
-			status: att.status,
-			isPending: false,
-			previewUrl: files.getThumbnailUrl(att.fileId),
-		}))
-	)
-	const activeAttachments = $derived([...pendingAsNative, ...threadAsNative])
-
-	// ensure thread attachment files are cached and thumbnails loaded
-	$effect(() => {
-		for (const att of threadAttachments) {
-			void files.ensure(att.fileId).then((f) => {
-				if (f) void files.loadThumbnail(att.fileId)
-			})
-		}
-	})
+	const activeAttachments = $derived(pendingAsNative)
 
 	// track whether context is active for the badge indicator
 	const hasContextActive = $derived(
 		!isSearchMode &&
 			(pendingAttachments.length > 0 ||
-				threadAttachments.length > 0 ||
 				webSearchEnabled ||
 				thinkLongerEnabled ||
-				generateImageEnabled)
+				generateImageEnabled ||
+				extraPluginIds.length > 0)
 	)
 
 	$effect(() => {
@@ -196,21 +186,95 @@
 		}
 	}
 
+	/** return the chat-attachable resource type for a picked item. */
+	function attachmentTypeForResource(
+		type: ResourceItem['type']
+	): PendingAttachment['resourceType'] | null {
+		switch (type) {
+			case 'file':
+			case 'note':
+			case 'thread':
+			case 'project':
+			case 'reminder':
+			case 'reminder_list':
+			case 'calendar_event':
+			case 'calendar':
+				return type
+		}
+	}
+
+	/** build a display ResourceItem for a pending attachment (tray rendering). */
+	function pendingToResource(att: PendingAttachment): ResourceItem {
+		if (att.resource) return att.resource
+		if (att.resourceType === 'file') {
+			const cached = files.all.find((f) => f.id === att.fileId)
+			if (cached) return apiFileToResource(cached)
+			return {
+				id: att.fileId,
+				type: 'file',
+				title: att.filename,
+				href: getSourceConfig('file').href(att.fileId),
+				updatedAt: Date.now(),
+				createdAt: Date.now(),
+				meta: {
+					mime_type: att.mediaType,
+					category: att.category,
+					file_type: '',
+					file_size: 0,
+					source: '',
+					owner_id: '',
+					project_ids: [],
+				},
+			}
+		}
+		const cfg = getSourceConfig(att.resourceType)
+		return {
+			id: att.fileId,
+			type: cfg.resourceType,
+			title: att.filename,
+			href: cfg.href(att.fileId),
+			updatedAt: Date.now(),
+			createdAt: Date.now(),
+		}
+	}
+
+	/** convert a picker resource into the pending attachment list. */
 	function handleAttachResource(resource: ResourceItem) {
-		if (resource.type !== 'file') return
-		if (pendingAttachments.some((a) => a.fileId === resource.id)) return
-		const mime = (resource.meta?.mime_type as string) ?? 'application/octet-stream'
+		const resourceType = attachmentTypeForResource(resource.type)
+		if (!resourceType) return
+		if (
+			pendingAttachments.some(
+				(a) => a.resourceType === resourceType && a.fileId === resource.id
+			)
+		) {
+			return
+		}
+		const mime =
+			resourceType === 'file'
+				? ((resource.meta?.mime_type as string) ?? 'application/octet-stream')
+				: 'application/x-nokodo-resource'
 		pendingAttachments = [
 			...pendingAttachments,
 			{
 				fileId: resource.id,
+				resourceType,
 				filename: resource.title,
 				mediaType: mime,
-				category: categorizeMediaType(mime),
-				previewUrl: files.getThumbnailUrl(resource.id),
+				category: resourceType === 'file' ? categorizeMediaType(mime) : 'file',
+				previewUrl:
+					resourceType === 'file' ? files.getThumbnailUrl(resource.id) : undefined,
 				source: 'resource',
+				resource,
 			},
 		]
+	}
+
+	function toggleExtraPlugin(pluginId: string) {
+		if (extraPluginIds.includes(pluginId)) {
+			extraPluginIds = extraPluginIds.filter((id) => id !== pluginId)
+		} else {
+			extraPluginIds = [...extraPluginIds, pluginId]
+		}
 	}
 
 	function resize() {
@@ -263,6 +327,7 @@
 			webSearch: webSearchEnabled,
 			thinkLonger: thinkLongerEnabled,
 			generateImage: generateImageEnabled,
+			extraPlugins: [...extraPluginIds],
 			attachments: [...pendingAttachments],
 		}
 
@@ -270,6 +335,7 @@
 			modifiers.webSearch ||
 			modifiers.thinkLonger ||
 			modifiers.generateImage ||
+			modifiers.extraPlugins.length > 0 ||
 			modifiers.attachments.length > 0
 
 		onSubmit(message, hasModifiers ? modifiers : undefined)
@@ -282,6 +348,7 @@
 		webSearchEnabled = false
 		thinkLongerEnabled = false
 		generateImageEnabled = false
+		extraPluginIds = []
 		if (textarea) {
 			textarea.style.height = 'auto'
 		}
@@ -299,6 +366,12 @@
 
 	function handleSearchTypesChange(types: SearchResourceType[]): void {
 		onSearchTypesChange?.(types)
+	}
+
+	function setQuickAction(action: QuickAction): void {
+		webSearchEnabled = action === 'web_search'
+		thinkLongerEnabled = action === 'think'
+		generateImageEnabled = action === 'generate_image'
 	}
 
 	function handleCompositionStart() {
@@ -475,12 +548,12 @@
 		{webSearchEnabled}
 		{thinkLongerEnabled}
 		{generateImageEnabled}
+		{quickAction}
+		{extraPluginIds}
 		onFileUpload={handleFileUpload}
 		onAttachResource={handleAttachResource}
-		onToggleWebSearch={() => (webSearchEnabled = !webSearchEnabled)}
-		onToggleThinkLonger={() => (thinkLongerEnabled = !thinkLongerEnabled)}
-		onToggleGenerateImage={() => (generateImageEnabled = !generateImageEnabled)}
-		onToggleAttachmentStatus={(id, action) => onToggleAttachmentStatus?.(id, action)}
+		onQuickActionChange={setQuickAction}
+		onToggleExtraPlugin={toggleExtraPlugin}
 		onRemoveAttachment={removeAttachment}
 	/>
 {/if}

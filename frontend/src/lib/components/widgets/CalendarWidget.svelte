@@ -5,6 +5,7 @@
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { resourceAccentStyle, resourceVisual } from '$lib/resources/resourceVisuals'
 	import { metadataLine } from '$lib/utils/resourceAuthors'
+	import { resourceSharing } from '$lib/utils/resourceSharing.svelte'
 	import ResourcePreview from './ResourcePreview.svelte'
 	import type { ResourceItem } from './types'
 
@@ -21,15 +22,15 @@
 	const CalendarVisualIcon = calendarVisual.icon
 	const color = $derived((resource.meta?.color as string | null) ?? null)
 	const timezone = $derived((resource.meta?.timezone as string | null) ?? null)
-	const isShared = $derived(Boolean(resource.meta?.shared))
-	const authorLabel = $derived((resource.meta?.author_label as string | null) ?? null)
-	const authorMeta = $derived(isShared ? authorLabel : null)
+	const sharing = resourceSharing(() => resource)
+	const authorMeta = $derived(sharing.authorMeta)
 	const calendarAccentStyle = $derived(
 		color
 			? `--resource-accent: ${color}; --accent-primary: ${color}`
 			: resourceAccentStyle('calendar')
 	)
-	const subtitle = $derived(metadataLine(authorMeta, timezone ?? resource.subtitle ?? 'calendar'))
+	const calendarMeta = $derived(timezone ?? resource.subtitle ?? 'calendar')
+	const subtitle = $derived(metadataLine(authorMeta, calendarMeta))
 
 	function handleClick(event: MouseEvent): void {
 		if (!onclick) return
@@ -39,7 +40,7 @@
 </script>
 
 <a
-	href={resolve('/calendar')}
+	href={onclick ? undefined : resolve('/calendar')}
 	onclick={handleClick}
 	class="group liquid-glass liquid-glass--frosted block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
@@ -50,7 +51,7 @@
 		<ResourcePreview
 			tone={calendarVisual.tone}
 			label={calendarVisual.label}
-			caption={timezone ?? 'schedule'}
+			caption={calendarMeta}
 			showFallback={true}
 			class="-mx-6 -mt-6"
 		>
@@ -66,7 +67,9 @@
 				<CalendarVisualIcon variant="solid" class="size-5" />
 			</div>
 			<div class="flex min-w-0 flex-col">
-				<span class="text-foreground/60 text-[13px] font-medium">calendar</span>
+				<span class="text-foreground/60 text-[13px] font-medium"
+					>{calendarVisual.label}</span
+				>
 				{#if subtitle}
 					<span class="text-foreground/40 truncate text-[11px]">{subtitle}</span>
 				{/if}

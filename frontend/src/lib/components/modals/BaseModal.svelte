@@ -45,7 +45,7 @@
 	<div
 		use:portal
 		class="fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4"
-		style="padding-top: max(1rem, env(safe-area-inset-top)); padding-bottom: max(1rem, env(safe-area-inset-bottom));"
+		style="padding-top: max(1.5rem, env(safe-area-inset-top)); padding-bottom: max(1.5rem, env(safe-area-inset-bottom));"
 		role="presentation"
 		onpointerdown={onPointerDown}
 	>
@@ -61,13 +61,15 @@
 
 		<!-- dialog panel -->
 		<div
-			class="relative max-h-[calc(100dvh-2rem)] w-full {widthClassName} rounded-container border-border/60 bg-card/88 text-card-foreground overflow-hidden border shadow-[0_24px_48px_rgba(15,23,42,0.16)] backdrop-blur-xl will-change-transform dark:shadow-[0_32px_64px_rgba(12,10,30,0.55)]"
+			class="relative max-h-[calc(100dvh-3rem)] w-full {widthClassName} rounded-container border-border/60 bg-card/88 text-card-foreground overflow-hidden border shadow-[0_24px_48px_rgba(15,23,42,0.16)] backdrop-blur-xl will-change-transform sm:max-h-[calc(100dvh-2rem)] dark:shadow-[0_32px_64px_rgba(12,10,30,0.55)]"
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}
 			transition:scale={{ duration: 220, start: 0.96, opacity: 0, easing: quintOut }}
 		>
-			<div class="relative z-10 flex max-h-[calc(100dvh-2rem)] min-h-0 flex-col">
+			<div
+				class="relative z-10 flex max-h-[calc(100dvh-3rem)] min-h-0 flex-col sm:max-h-[calc(100dvh-2rem)]"
+			>
 				<header class="flex shrink-0 items-start justify-between gap-3 px-4 pt-4 pb-2">
 					<div class="flex min-h-9 min-w-0 items-center">
 						<div class="text-card-foreground pl-3 text-lg font-semibold">

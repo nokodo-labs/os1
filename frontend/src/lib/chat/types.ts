@@ -4,8 +4,13 @@
  * modules like helpers.ts or attachments.ts.
  */
 
-import type { CreateAndRunStreamDelta } from '$lib/api/streaming/chatStream'
+import type {
+	CreateAndRunStreamDelta,
+	ResourceAttachment,
+	RunAttachmentType,
+} from '$lib/api/streaming/chatStream'
 import type { components } from '$lib/api/types'
+import type { ResourceItem } from '$lib/components/widgets/types'
 import type { Thread } from '$lib/stores/chat.svelte'
 import type { ToolCall, ToolExecution, ToolExecutionTracker } from '$lib/tools'
 import type { SvelteMap, SvelteSet } from 'svelte/reactivity'
@@ -14,6 +19,7 @@ import type { SvelteMap, SvelteSet } from 'svelte/reactivity'
 
 export type ApiMessage = components['schemas']['Message']
 export type ApiCitation = components['schemas']['Citation']
+export type { ResourceAttachment } from '$lib/api/streaming/chatStream'
 
 // --- content part types ---
 
@@ -24,7 +30,6 @@ export interface MediaContentPart {
 	filename?: string | null
 	mediaType?: string | null
 	fileId?: string
-	attachmentStatus?: string
 }
 
 /** a non-media file content part */
@@ -34,17 +39,16 @@ export interface FileContentPart {
 	filename?: string | null
 	mediaType?: string | null
 	fileId?: string
-	attachmentStatus?: string
 }
 
 // --- attachment types ---
 
 export type AttachmentMediaCategory = 'image' | 'audio' | 'video' | 'file'
-export type AttachmentStatus = 'active' | 'reference'
 
 /** a file that has been uploaded and is pending inclusion in the next message */
 export interface PendingAttachment {
 	fileId: string
+	resourceType: RunAttachmentType
 	filename: string
 	mediaType: string
 	category: AttachmentMediaCategory
@@ -52,17 +56,8 @@ export interface PendingAttachment {
 	previewUrl?: string
 	/** how this attachment was added - 'upload' = new file, 'resource' = existing resource */
 	source: 'upload' | 'resource'
-}
-
-/** an attachment already present in the thread (derived from message content) */
-export interface ThreadAttachment {
-	fileId: string
-	filename: string | null
-	mediaType: string | null
-	category: AttachmentMediaCategory
-	status: AttachmentStatus
-	/** the turn index where this attachment was first introduced */
-	turn: number
+	/** rich display resource captured at attach time (resource picks) for tray rendering */
+	resource?: ResourceItem
 }
 
 /** modifiers toggled by the user in AddContext */
@@ -70,6 +65,7 @@ export interface RunModifiers {
 	webSearch: boolean
 	thinkLonger: boolean
 	generateImage: boolean
+	extraPlugins: string[]
 	attachments: PendingAttachment[]
 }
 
@@ -82,8 +78,7 @@ export interface OptimisticUserMessage {
 
 export interface PendingRunInput {
 	text?: string | null
-	attachment_ids?: string[]
-	attachment_actions?: Record<string, 'reveal' | 'reference'> | null
+	attachments?: ResourceAttachment[]
 }
 
 export type SteeringState = 'queued' | 'injected' | 'dropped'
@@ -102,7 +97,7 @@ export interface QueuedSteeringMessage {
 }
 
 /** allowed tool_choice values that can be forced by the user */
-export type ToolChoiceValue = 'web_search' | 'think' | 'generate_image'
+export type ToolChoiceValue = 'agentic_web_search' | 'think' | 'generate_image'
 
 // --- run/block types ---
 
@@ -229,11 +224,6 @@ export interface ChatContext {
 	readonly runActivities: SvelteMap<string, RunActivityState>
 	processRunActivityEvent(event: RunActivityEvent): void
 
-	// attachment tray
-	readonly pendingActions: Map<string, 'reveal' | 'reference'>
-	readonly attachmentStates: SvelteMap<string, AttachmentStatus>
-	readonly threadAttachments: ThreadAttachment[]
-
 	// citations (message-scoped, accumulated from citation.sources WS events)
 	readonly citationSources: SvelteMap<string, ApiCitation[]>
 	citationTargetMessageId: string | null
@@ -288,9 +278,6 @@ export interface ChatState extends ChatContext {
 
 	// tools
 	getToolExecution(toolCallId: string): ToolExecution | undefined
-
-	// attachment tray
-	toggleAttachmentStatus(fileId: string, action: 'reveal' | 'reference'): void
 
 	// delegated actions
 	loadTree(threadId: string): Promise<boolean>

@@ -417,6 +417,7 @@
 	}
 
 	function handleResourceShare(resource: ResourceItem): void {
+		if (resource.type === 'reminder' || resource.type === 'calendar_event') return
 		modals.open('resource-access', {
 			resourceType: resource.type,
 			resourceId: resource.id,

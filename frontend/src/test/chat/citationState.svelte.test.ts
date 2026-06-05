@@ -464,19 +464,19 @@ describe('citation state management', () => {
 	})
 
 	describe('source type variety', () => {
-		it('handles url, note, and tool_result source types', () => {
+		it('handles url, note, and calendar_event source types', () => {
 			const h = createCitationHarness()
 			const cUrl = makeCitation(1, 'url')
 			const cNote = makeCitation(2, 'note')
-			const cTool = makeCitation(3, 'tool_result')
+			const cEvent = makeCitation(3, 'calendar_event')
 
 			h.streamingAssistant = makeStreamingState('msg_1', '')
-			h.addCitationSources([cUrl, cNote, cTool])
+			h.addCitationSources([cUrl, cNote, cEvent])
 			h.streamingAssistant = makeStreamingState('msg_1', 'see [1], [2], [3]')
 
 			const result = computeBlockCitations([], h.streamingAssistant, h.citationSources)
 			expect(result).toHaveLength(3)
-			expect(result.map((c) => c.source_type)).toEqual(['url', 'note', 'tool_result'])
+			expect(result.map((c) => c.source_type)).toEqual(['url', 'note', 'calendar_event'])
 		})
 	})
 

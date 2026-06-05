@@ -1,7 +1,8 @@
 /** dispatches tool executions to per-tool summary handlers. */
 
+import { readNonEmptyString } from '$lib/utils/records'
 import { formatToolEventLine } from '../display'
-import { getToolDisplayName } from '../registry'
+import { getToolDisplayName, isMcpToolName } from '../registry'
 import type { ToolExecution, ToolSummary } from '../types'
 import { summarizeCalendarEventGet, summarizeCalendarEventWrite } from './calendar'
 import { summarizeChatGet } from './chat'
@@ -10,12 +11,12 @@ import { summarizeFileEdit, summarizeFileGet } from './file'
 import { summarizeGenerateAudio, summarizeGenerateImage, summarizeGenerateVideo } from './media'
 import { summarizeMemoryCreate, summarizeMemoryRecall } from './memory'
 import { summarizeNoteGet, summarizeNoteWrite } from './note'
+import { summarizeRevealAttachment, summarizeSendNotification } from './notification'
 import { summarizeProjectGet } from './project'
 import { summarizeReminderGet, summarizeReminderWrite } from './reminder'
 import { summarizeResourceSearch } from './resourceSearch'
 import { getThinkElapsed, getThinkTitle, summarizeThink } from './think'
 import { summarizeAgenticWebSearch, summarizeFetchUrl } from './web'
-import { summarizeRevealAttachment, summarizeSendNotification } from './notification'
 
 type ToolSummaryHandler = (execution: ToolExecution) => ToolSummary
 
@@ -50,7 +51,21 @@ export { getThinkElapsed, getThinkTitle }
 export function getToolSummary(execution: ToolExecution): ToolSummary {
 	const handler = summaryHandlers.get(execution.toolCall.name)
 	if (handler) return handler(execution)
+	if (isMcpToolName(execution.toolCall.name)) return summarizeMcpTool(execution)
 	return summarizeGenericTool(execution)
+}
+
+/** builds a summary for an MCP-backed tool from backend-stamped attribution. */
+function summarizeMcpTool(execution: ToolExecution): ToolSummary {
+	const metadata = execution.result?.metadata
+	const serverName = readNonEmptyString(metadata?.mcp_server_name) ?? undefined
+	const cleanName = readNonEmptyString(metadata?.mcp_tool_name)
+	const summary: ToolSummary = {
+		title: cleanName ? cleanName.replace(/_/g, ' ') : 'MCP tool',
+		mcpServerName: serverName,
+	}
+	if (execution.lastMessage) summary.subtitle = execution.lastMessage
+	return summary
 }
 
 /** builds a fallback summary for tools without a dedicated handler. */

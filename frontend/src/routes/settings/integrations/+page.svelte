@@ -2,19 +2,32 @@
 	import { api } from '$lib/api/client'
 	import { eventStreamClient, streamTask, type StreamMessage } from '$lib/api/streaming'
 	import type { components } from '$lib/api/types'
+	import EmptyState from '$lib/components/EmptyState.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
+	import Check from '$lib/components/icons/Check.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Download from '$lib/components/icons/Download.svelte'
+	import FloppyDisk from '$lib/components/icons/FloppyDisk.svelte'
 	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
+	import Plus from '$lib/components/icons/Plus.svelte'
 	import QuestionMarkCircle from '$lib/components/icons/QuestionMarkCircle.svelte'
+	import Refresh from '$lib/components/icons/Refresh.svelte'
+	import Trash from '$lib/components/icons/Trash.svelte'
+	import Wrench from '$lib/components/icons/Wrench.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
-	import type { SelectorOption } from '$lib/components/primitives'
-	import { ActionButton, Selector, Switch } from '$lib/components/primitives'
+	import type { DropdownSelectOption, SelectorOption } from '$lib/components/primitives'
+	import { ActionButton, DropdownSelect, Selector, Switch } from '$lib/components/primitives'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
+	import { session } from '$lib/stores/session.svelte'
 	import { faviconCandidates, faviconUrl } from '$lib/utils/favicons'
 	import { onMount } from 'svelte'
 
 	type ApiTask = components['schemas']['Task']
+	type MCPCapabilityType = components['schemas']['MCPCapabilityType']
+	type MCPDiscoveredTool = components['schemas']['MCPDiscoveredTool']
+	type MCPServer = components['schemas']['MCPServer']
+	type MCPServerCreate = components['schemas']['MCPServerCreate']
+	type MCPServerUpdate = components['schemas']['MCPServerUpdate']
 	type TaskStatus = components['schemas']['TaskStatus']
 
 	type OpenWebUIDeployment = {
@@ -63,11 +76,45 @@
 	let importTaskStreamController: AbortController | null = null
 	let importTaskStreamId: string | null = null
 	let openWebUIFaviconIndex = $state(0)
+	let mcpServers = $state<MCPServer[]>([])
+	let mcpServersLoaded = $state(false)
+	let mcpServersError = $state<string | null>(null)
+	let mcpCanManage = $state(true)
+	let mcpModalOpen = $state(false)
+	let mcpModalMode = $state<'create' | 'edit'>('create')
+	let mcpEditingId = $state<string | null>(null)
+	let mcpName = $state('')
+	let mcpDescription = $state('')
+	let mcpUrl = $state('')
+	let mcpAuthType = $state<'none' | 'bearer'>('none')
+	let mcpAccessToken = $state('')
+	let mcpEnabled = $state(true)
+	let mcpSaving = $state(false)
+	let mcpDiscovering = $state(false)
+	let mcpSubmitError = $state<string | null>(null)
+	let mcpSavingToolId = $state<string | null>(null)
 
 	const OPEN_WEBUI_IMPORT_TASK = 'integrations.open_webui.import'
 
 	const selectedDeployment = $derived(
 		deployments.find((deployment) => deployment.origin === selectedOrigin) ?? null
+	)
+	const userMcpServers = $derived.by(() => {
+		const currentUserId = session.currentUserId
+		return mcpServers.filter(
+			(server) =>
+				server.scope === 'user' &&
+				(currentUserId === null || server.owner_user_id === currentUserId)
+		)
+	})
+	const selectedMcpServer = $derived(
+		mcpEditingId === null
+			? null
+			: (userMcpServers.find((server) => server.id === mcpEditingId) ?? null)
+	)
+	const selectedMcpTools = $derived(selectedMcpServer?.discovered_tools ?? [])
+	const selectedMcpEnabledToolCount = $derived(
+		selectedMcpTools.filter((tool) => tool.enabled).length
 	)
 
 	const deploymentOptions = $derived<SelectorOption[]>(
@@ -78,6 +125,10 @@
 			iconUrls: faviconCandidates(deployment.origin),
 		}))
 	)
+	const mcpAuthOptions: DropdownSelectOption[] = [
+		{ value: 'none', label: 'none', description: 'no authentication' },
+		{ value: 'bearer', label: 'bearer token', description: 'send an authorization token' },
+	]
 	const importTaskActive = $derived(
 		importTask?.status === 'pending' || importTask?.status === 'running'
 	)
@@ -165,6 +216,208 @@
 			selectedOrigin = deployments[0]?.origin ?? ''
 		}
 		sourcesLoaded = true
+	}
+
+	async function loadMcpServers() {
+		mcpServersError = null
+		const { data, error, response } = await api.GET('/v1/integrations/mcp/servers')
+		if (error || !data) {
+			mcpCanManage = response.status !== 403 && response.status !== 404
+			mcpServersError =
+				response.status === 403 || response.status === 404
+					? 'MCP servers are not available for your account'
+					: 'failed to load MCP servers'
+			mcpServersLoaded = true
+			return
+		}
+		mcpCanManage = true
+		mcpServers = data
+		mcpServersLoaded = true
+	}
+
+	function replaceMcpServer(server: MCPServer): void {
+		mcpServers = mcpServers.map((item) => (item.id === server.id ? server : item))
+	}
+
+	function openCreateMcpModal(): void {
+		mcpModalMode = 'create'
+		mcpEditingId = null
+		mcpName = ''
+		mcpDescription = ''
+		mcpUrl = ''
+		mcpAuthType = 'none'
+		mcpAccessToken = ''
+		mcpEnabled = true
+		mcpSubmitError = null
+		mcpModalOpen = true
+	}
+
+	function openEditMcpModal(server: MCPServer): void {
+		mcpModalMode = 'edit'
+		mcpEditingId = server.id
+		mcpName = server.name
+		mcpDescription = server.description ?? ''
+		mcpUrl = server.url ?? ''
+		mcpAuthType = server.auth_type === 'bearer' ? 'bearer' : 'none'
+		mcpAccessToken = ''
+		mcpEnabled = server.enabled
+		mcpSubmitError = null
+		mcpModalOpen = true
+	}
+
+	function mcpDescriptionValue(): string | null {
+		const trimmed = mcpDescription.trim()
+		return trimmed ? trimmed : null
+	}
+
+	function mcpUrlValue(): string | null {
+		const trimmed = mcpUrl.trim()
+		return trimmed ? trimmed : null
+	}
+
+	async function saveMcpServer(): Promise<void> {
+		if (!mcpName.trim() || mcpSaving) return
+		mcpSaving = true
+		mcpSubmitError = null
+		try {
+			if (mcpModalMode === 'create') {
+				const payload: MCPServerCreate = {
+					name: mcpName.trim(),
+					description: mcpDescriptionValue(),
+					scope: 'user',
+					transport: 'streamable_http',
+					url: mcpUrlValue(),
+					command: null,
+					args: [],
+					env: {},
+					auth_type: mcpAuthType,
+					headers: {},
+					enabled: mcpEnabled,
+					capabilities: {
+						tools: true,
+						resources: false,
+						prompts: false,
+						sampling: false,
+					},
+					config: {},
+					access_token: mcpAccessToken.trim() || null,
+				}
+				const { data, error } = await api.POST('/v1/integrations/mcp/servers', {
+					body: payload,
+				})
+				if (error || !data) throw new Error('failed to add MCP server')
+				mcpServers = [data, ...mcpServers]
+				mcpEditingId = data.id
+				mcpModalMode = 'edit'
+			} else if (mcpEditingId !== null) {
+				const payload: MCPServerUpdate = {
+					name: mcpName.trim(),
+					description: mcpDescriptionValue(),
+					transport: 'streamable_http',
+					url: mcpUrlValue(),
+					command: null,
+					args: [],
+					env: {},
+					auth_type: mcpAuthType,
+					headers: {},
+					enabled: mcpEnabled,
+					capabilities: {
+						tools: true,
+						resources: false,
+						prompts: false,
+						sampling: false,
+					},
+				}
+				const token = mcpAccessToken.trim()
+				if (token) payload.access_token = token
+				const { data, error } = await api.PATCH(
+					'/v1/integrations/mcp/servers/{server_id}',
+					{
+						params: { path: { server_id: mcpEditingId } },
+						body: payload,
+					}
+				)
+				if (error || !data) throw new Error('failed to save MCP server')
+				replaceMcpServer(data)
+			}
+			mcpAccessToken = ''
+		} catch (err) {
+			mcpSubmitError = err instanceof Error ? err.message : 'failed to save MCP server'
+		} finally {
+			mcpSaving = false
+		}
+	}
+
+	async function discoverMcpServer(): Promise<void> {
+		if (mcpEditingId === null || mcpDiscovering) return
+		mcpDiscovering = true
+		mcpSubmitError = null
+		try {
+			const { data, error } = await api.POST(
+				'/v1/integrations/mcp/servers/{server_id}/discover',
+				{
+					params: { path: { server_id: mcpEditingId } },
+				}
+			)
+			if (error || !data) throw new Error('failed to discover MCP tools')
+			replaceMcpServer(data.server)
+		} catch (err) {
+			mcpSubmitError = err instanceof Error ? err.message : 'failed to discover MCP tools'
+		} finally {
+			mcpDiscovering = false
+		}
+	}
+
+	async function deleteMcpServer(): Promise<void> {
+		if (mcpEditingId === null || mcpSaving) return
+		if (!confirm('delete this MCP server?')) return
+		const serverId = mcpEditingId
+		mcpSaving = true
+		mcpSubmitError = null
+		try {
+			const { error } = await api.DELETE('/v1/integrations/mcp/servers/{server_id}', {
+				params: { path: { server_id: serverId } },
+			})
+			if (error) throw new Error('failed to delete MCP server')
+			mcpServers = mcpServers.filter((server) => server.id !== serverId)
+			mcpModalOpen = false
+		} catch (err) {
+			mcpSubmitError = err instanceof Error ? err.message : 'failed to delete MCP server'
+		} finally {
+			mcpSaving = false
+		}
+	}
+
+	async function toggleMcpTool(tool: MCPDiscoveredTool, enabled: boolean): Promise<void> {
+		if (mcpEditingId === null) return
+		const capabilityType: MCPCapabilityType = 'tool'
+		mcpSavingToolId = tool.id
+		mcpSubmitError = null
+		try {
+			const { data, error } = await api.PATCH(
+				'/v1/integrations/mcp/servers/{server_id}/capabilities/{capability_type}/{capability_id}',
+				{
+					params: {
+						path: {
+							server_id: mcpEditingId,
+							capability_type: capabilityType,
+							capability_id: tool.id,
+						},
+					},
+					body: { enabled },
+				}
+			)
+			if (error || !data) throw new Error('failed to update MCP tool')
+			replaceMcpServer(data)
+		} catch (err) {
+			mcpSubmitError = err instanceof Error ? err.message : 'failed to update MCP tool'
+		} finally {
+			mcpSavingToolId = null
+		}
+	}
+
+	function mcpToolDescription(tool: MCPDiscoveredTool): string {
+		return tool.description.trim() || tool.normalized_name
 	}
 
 	function applyImportTask(task: ApiTask | null): void {
@@ -373,6 +626,7 @@
 
 	onMount(() => {
 		void loadSources()
+		void loadMcpServers()
 		void loadLatestImportTask()
 		const unsubscribe = eventStreamClient.subscribe(handleTaskEvent)
 		return () => {
@@ -408,8 +662,7 @@
 					<div class="min-w-0">
 						<div class="text-foreground/90 text-base font-semibold">Open WebUI</div>
 						<div class="text-foreground/55 mt-1 text-sm">
-							import your chats, memories, and notes from an allowed Open WebUI
-							deployment.
+							import chats, memories, and notes from configured deployments.
 						</div>
 					</div>
 				</div>
@@ -678,6 +931,81 @@
 			</div>
 		</section>
 
+		<section class="rounded-container liquid-glass liquid-glass--frosted p-5">
+			<header>
+				<div class="flex min-w-0 items-start gap-3">
+					<div
+						class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden"
+					>
+						<Wrench class="text-foreground/70 h-6 w-6" />
+					</div>
+					<div class="min-w-0">
+						<div class="text-foreground/90 text-base font-semibold">MCP servers</div>
+						<div class="text-foreground/55 mt-1 text-sm">
+							connect tools from servers you trust.
+						</div>
+					</div>
+				</div>
+			</header>
+
+			<div class="mt-5 space-y-3">
+				{#if !mcpServersLoaded}
+					<div class="text-foreground/55 text-sm">
+						<ShimmerText className="inline-block">loading MCP servers</ShimmerText>
+					</div>
+				{:else if mcpServersError}
+					<div
+						class="rounded-container border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200"
+					>
+						{mcpServersError}
+					</div>
+				{:else if userMcpServers.length === 0}
+					<EmptyState label="no MCP servers" compact={true}>
+						{#snippet icon()}
+							<Wrench class="h-5 w-5" />
+						{/snippet}
+					</EmptyState>
+				{:else}
+					<div class="space-y-2">
+						{#each userMcpServers as server (server.id)}
+							<button
+								type="button"
+								class="border-foreground/10 bg-foreground/4 hover:bg-foreground/7 rounded-container flex w-full cursor-pointer items-center justify-between gap-3 border p-3 text-left transition-colors"
+								onclick={() => openEditMcpModal(server)}
+							>
+								<div class="min-w-0">
+									<div class="text-foreground/88 truncate text-sm font-medium">
+										{server.name}
+									</div>
+									<div class="text-foreground/45 mt-0.5 truncate text-xs">
+										{server.discovered_tools?.filter((tool) => tool.enabled)
+											.length ?? 0} enabled tools · {server.status}
+									</div>
+								</div>
+								<div class="flex shrink-0 items-center gap-2">
+									<span
+										class="rounded-pill bg-foreground/8 text-foreground/55 px-2 py-1 text-xs"
+									>
+										{server.enabled ? 'on' : 'off'}
+									</span>
+								</div>
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				<ActionButton
+					variant="secondary"
+					class="dark:border-foreground dark:bg-foreground dark:text-background dark:hover:bg-foreground/90 w-full"
+					disabled={!mcpCanManage || !mcpServersLoaded}
+					onclick={openCreateMcpModal}
+				>
+					<Plus class="h-4 w-4" />
+					add new MCP server
+				</ActionButton>
+			</div>
+		</section>
+
 		<div class="grid gap-4 sm:grid-cols-3">
 			{#each pendingIntegrations as integration (integration.name)}
 				<section
@@ -708,6 +1036,210 @@
 		</div>
 	</div>
 </SettingsSectionLayout>
+
+<BaseModal
+	open={mcpModalOpen}
+	title={mcpModalMode === 'create' ? 'add MCP server' : 'MCP server properties'}
+	onClose={() => (mcpModalOpen = false)}
+	widthClassName="max-w-2xl"
+>
+	<form
+		class="space-y-4 text-sm"
+		onsubmit={(event) => {
+			event.preventDefault()
+			void saveMcpServer()
+		}}
+	>
+		{#if mcpSubmitError}
+			<div
+				class="rounded-container border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
+			>
+				{mcpSubmitError}
+			</div>
+		{/if}
+
+		<div
+			class="rounded-container border-foreground/12 bg-foreground/5 flex items-start gap-3 border p-4"
+		>
+			<div
+				class="rounded-container flex h-10 w-10 shrink-0 items-center justify-center bg-cyan-500/12 text-cyan-300"
+			>
+				<Wrench class="h-5 w-5" />
+			</div>
+			<div class="min-w-0">
+				<div class="text-foreground/90 font-semibold">
+					{mcpModalMode === 'create'
+						? 'new server'
+						: (selectedMcpServer?.name ?? 'server')}
+				</div>
+				<div class="text-foreground/50 mt-1 text-xs">
+					{selectedMcpTools.length} tools · {selectedMcpEnabledToolCount} enabled
+				</div>
+			</div>
+		</div>
+
+		<div class="grid gap-3 sm:grid-cols-2">
+			<div>
+				<label
+					class="text-foreground/55 mb-1.5 block pl-4 text-xs font-medium"
+					for="mcp-name"
+				>
+					name
+				</label>
+				<input
+					id="mcp-name"
+					class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border px-4 py-2.5 text-sm transition-colors outline-none"
+					bind:value={mcpName}
+					placeholder="my tool server"
+					required
+				/>
+			</div>
+			<div>
+				<label
+					class="text-foreground/55 mb-1.5 block pl-4 text-xs font-medium"
+					for="mcp-auth"
+				>
+					auth
+				</label>
+				<DropdownSelect
+					options={mcpAuthOptions}
+					value={mcpAuthType}
+					onchange={(value) => (mcpAuthType = value === 'bearer' ? 'bearer' : 'none')}
+					ariaLabel="MCP authentication"
+				/>
+			</div>
+		</div>
+
+		<div>
+			<label class="text-foreground/55 mb-1.5 block pl-4 text-xs font-medium" for="mcp-url">
+				streamable HTTP URL
+			</label>
+			<input
+				id="mcp-url"
+				class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border px-4 py-2.5 text-sm transition-colors outline-none"
+				bind:value={mcpUrl}
+				placeholder="https://example.com/mcp"
+			/>
+		</div>
+
+		<div>
+			<label class="text-foreground/55 mb-1.5 block pl-4 text-xs font-medium" for="mcp-token">
+				access token
+			</label>
+			<input
+				id="mcp-token"
+				type="password"
+				autocomplete="off"
+				class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border px-4 py-2.5 text-sm transition-colors outline-none"
+				bind:value={mcpAccessToken}
+				placeholder={mcpModalMode === 'edit'
+					? 'leave blank to keep current token'
+					: 'paste bearer token'}
+			/>
+		</div>
+
+		<div>
+			<label
+				class="text-foreground/55 mb-1.5 block pl-3 text-xs font-medium"
+				for="mcp-description"
+			>
+				description
+			</label>
+			<textarea
+				id="mcp-description"
+				class="rounded-popup border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 min-h-22 w-full border px-4 py-3 text-sm transition-colors outline-none"
+				bind:value={mcpDescription}
+				placeholder="what this server is for"
+			></textarea>
+		</div>
+
+		<div
+			class="border-foreground/10 bg-foreground/4 rounded-container flex items-center justify-between gap-3 border p-3"
+		>
+			<div class="min-w-0">
+				<div id="mcp-enabled-label" class="text-foreground/80 font-medium">enabled</div>
+			</div>
+			<Switch bind:checked={mcpEnabled} ariaLabelledbyId="mcp-enabled-label" />
+		</div>
+
+		{#if mcpModalMode === 'edit'}
+			<div class="border-foreground/10 border-t pt-4">
+				<div class="flex items-center justify-between gap-3">
+					<div>
+						<div class="text-foreground/86 font-semibold">discovered tools</div>
+						<div class="text-foreground/45 mt-0.5 text-xs">
+							{selectedMcpEnabledToolCount} enabled
+						</div>
+					</div>
+					<ActionButton
+						variant="secondary"
+						disabled={mcpDiscovering || mcpSaving}
+						onclick={discoverMcpServer}
+					>
+						<Refresh class="h-4 w-4 {mcpDiscovering ? 'animate-spin' : ''}" />
+						{#if mcpDiscovering}
+							<ShimmerText className="inline-block">discovering</ShimmerText>
+						{:else}
+							discover
+						{/if}
+					</ActionButton>
+				</div>
+
+				{#if selectedMcpTools.length > 0}
+					<div class="mt-3 space-y-2">
+						{#each selectedMcpTools as tool (tool.id)}
+							<div
+								class="border-foreground/10 bg-foreground/4 rounded-container flex items-center justify-between gap-3 border p-3"
+							>
+								<div class="min-w-0">
+									<div class="text-foreground/82 truncate text-sm font-medium">
+										{tool.name}
+									</div>
+									<div class="text-foreground/45 mt-0.5 line-clamp-2 text-xs">
+										{mcpToolDescription(tool)}
+									</div>
+								</div>
+								<Switch
+									checked={tool.enabled}
+									disabled={mcpSavingToolId === tool.id}
+									onchange={() => toggleMcpTool(tool, !tool.enabled)}
+								/>
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<div class="text-foreground/55 mt-3 text-sm">no tools discovered yet.</div>
+				{/if}
+			</div>
+		{/if}
+
+		<div class="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
+			<div>
+				{#if mcpModalMode === 'edit'}
+					<button
+						type="button"
+						class="rounded-pill inline-flex cursor-pointer items-center justify-center gap-2 border border-red-500/25 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/15"
+						disabled={mcpSaving}
+						onclick={deleteMcpServer}
+					>
+						<Trash class="h-4 w-4" />
+						delete
+					</button>
+				{/if}
+			</div>
+			<div class="flex justify-end gap-2">
+				<ActionButton disabled={mcpSaving || !mcpName.trim()} onclick={saveMcpServer}>
+					{#if mcpSaving}
+						<ShimmerText className="inline-block">saving</ShimmerText>
+					{:else}
+						<FloppyDisk class="h-4 w-4" />
+						save
+					{/if}
+				</ActionButton>
+			</div>
+		</div>
+	</form>
+</BaseModal>
 
 <BaseModal
 	open={showHowTo}
@@ -748,7 +1280,10 @@
 					open Open WebUI
 				</button>
 			{/if}
-			<ActionButton variant="ghost" onclick={() => (showHowTo = false)}>done</ActionButton>
+			<ActionButton variant="ghost" onclick={() => (showHowTo = false)}>
+				<Check class="h-4 w-4" />
+				done
+			</ActionButton>
 		</div>
 	</div>
 </BaseModal>

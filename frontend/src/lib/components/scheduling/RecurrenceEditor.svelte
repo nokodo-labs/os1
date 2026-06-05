@@ -4,6 +4,7 @@
 	import Check from '$lib/components/icons/Check.svelte'
 	import ClockRotateRight from '$lib/components/icons/ClockRotateRight.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
+	import { DropdownSelect } from '$lib/components/primitives'
 	import {
 		FREQUENCY_OPTIONS,
 		MONTH_OPTIONS,
@@ -50,6 +51,11 @@
 	let count = $state(10)
 	let customOpen = $state(false)
 	let previousValueKey = $state('')
+	const endModeOptions = [
+		{ value: 'never', label: 'never' },
+		{ value: 'on', label: 'on date' },
+		{ value: 'after', label: 'after occurrences' },
+	]
 
 	const quickPresets = $derived(getQuickRecurrencePresets(anchorDate))
 	const currentRule = $derived(value?.rrule?.[0]?.trim() ?? '')
@@ -274,17 +280,14 @@
 							commitCurrent()
 						}}
 					/>
-					<select
-						bind:value={frequency}
-						class={inputClass}
+					<DropdownSelect
+						options={FREQUENCY_OPTIONS}
+						value={frequency}
+						onchange={(value) => setFrequency(value as RecurrenceFrequency)}
 						{disabled}
-						onchange={(event) =>
-							setFrequency(event.currentTarget.value as RecurrenceFrequency)}
-					>
-						{#each FREQUENCY_OPTIONS as option (option.value)}
-							<option value={option.value}>{option.label}</option>
-						{/each}
-					</select>
+						ariaLabel="recurrence frequency"
+						buttonClass="rounded-xl px-3"
+					/>
 				</div>
 			</div>
 
@@ -399,18 +402,14 @@
 					ends
 				</label>
 				<div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-					<select
-						id="recurrence-end-mode"
-						bind:value={endMode}
-						class={inputClass}
+					<DropdownSelect
+						options={endModeOptions}
+						value={endMode}
+						onchange={(value) => setEndMode(value as RecurrenceEndMode)}
 						{disabled}
-						onchange={(event) =>
-							setEndMode(event.currentTarget.value as RecurrenceEndMode)}
-					>
-						<option value="never">never</option>
-						<option value="on">on date</option>
-						<option value="after">after occurrences</option>
-					</select>
+						ariaLabel="recurrence end"
+						buttonClass="rounded-xl px-3"
+					/>
 					{#if endMode === 'on'}
 						<input
 							type="date"

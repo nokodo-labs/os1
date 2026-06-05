@@ -7,17 +7,15 @@ import { parseToolCalls, parseToolResult, type ToolCall, type ToolResult } from 
 import type {
 	ApiCitation,
 	ApiMessage,
-	AttachmentMediaCategory,
-	AttachmentStatus,
 	FileContentPart,
 	MediaContentPart,
 	OptimisticUserMessage,
 	PendingAttachment,
-	RunBlock,
+	ResourceAttachment,
 	RunActivityState,
+	RunBlock,
 	RunItem,
 	StreamingAssistantState,
-	ThreadAttachment,
 } from './types'
 
 export type {
@@ -86,7 +84,6 @@ export function extractMediaParts(
 					filename: part.filename,
 					mediaType: part.media_type,
 					fileId,
-					attachmentStatus: part.metadata?.attachment_status as string | undefined,
 				})
 			}
 		} else if (part.type === 'file') {
@@ -104,7 +101,6 @@ export function extractMediaParts(
 						filename: part.filename,
 						mediaType: part.media_type,
 						fileId,
-						attachmentStatus: part.metadata?.attachment_status as string | undefined,
 					})
 				}
 			}
@@ -137,7 +133,6 @@ export function extractFileParts(
 			filename: part.filename,
 			mediaType: part.media_type,
 			fileId,
-			attachmentStatus: part.metadata?.attachment_status as string | undefined,
 		})
 	}
 	return results
@@ -151,89 +146,51 @@ export function hasAttachmentParts(parts: ApiMessage['content']): boolean {
 	return parts.some((p) => p && (p.type === 'image' || p.type === 'file'))
 }
 
-function classifyMediaCategory(mime: string | null | undefined): AttachmentMediaCategory {
-	if (!mime) return 'file'
-	const lower = mime.toLowerCase()
-	if (lower.startsWith('image/')) return 'image'
-	if (lower.startsWith('audio/')) return 'audio'
-	if (lower.startsWith('video/')) return 'video'
-	return 'file'
+function isAttachmentRefType(value: unknown): value is ResourceAttachment['type'] {
+	return (
+		value === 'file' ||
+		value === 'note' ||
+		value === 'thread' ||
+		value === 'project' ||
+		value === 'reminder' ||
+		value === 'reminder_list' ||
+		value === 'calendar_event' ||
+		value === 'calendar'
+	)
 }
 
 /**
- * derive all unique file attachments from the current message branch
- * with status determined from the event-derived state map.
+ * extract attachment resource refs ({type, id}) from a message.
  *
- * attachmentStates is populated from backend events (attachment.decayed,
- * attachment.revealed) so the frontend displays authoritative state
- * rather than guessing decay client-side.
+ * refs live in two places depending on the message representation:
+ * - complete (ORM) messages carry them in the dedicated `attachments` column.
+ * - streamed (SDK/delta) messages carry them in `metadata_.attachments`.
  *
- * attachments without an entry in attachmentStates default to 'active'
- * (newly uploaded files before the first run).
+ * this reads both sources and de-dupes by `type:id`, so callers get one
+ * uniform list regardless of which representation produced the message.
  */
-export function computeThreadAttachments(
-	messages: ApiMessage[],
-	attachmentStates?: Map<string, AttachmentStatus>
-): ThreadAttachment[] {
-	// compute turn indices (same logic as backend _compute_turn_indices)
-	const turnIndices: number[] = []
-	let currentTurn = 0
-	let sawUserInTurn = false
+export function extractAttachmentRefs(
+	msg: Pick<ApiMessage, 'attachments' | 'metadata_'>
+): ResourceAttachment[] {
+	const seen = new Set<string>()
+	const refs: ResourceAttachment[] = []
 
-	for (const msg of messages) {
-		if (msg.type === 'system') {
-			turnIndices.push(currentTurn)
-			continue
-		}
-		if (msg.type === 'user') {
-			sawUserInTurn = true
-			turnIndices.push(currentTurn)
-			continue
-		}
-		if (msg.type === 'assistant') {
-			turnIndices.push(currentTurn)
-			if (sawUserInTurn) {
-				currentTurn++
-				sawUserInTurn = false
-			}
-			continue
-		}
-		// tool or unknown
-		turnIndices.push(currentTurn)
+	const push = (value: unknown): void => {
+		if (!value || typeof value !== 'object') return
+		const ref = value as Record<string, unknown>
+		const { type, id } = ref
+		if (!isAttachmentRefType(type) || typeof id !== 'string') return
+		const key = `${type}:${id}`
+		if (seen.has(key)) return
+		seen.add(key)
+		refs.push({ type, id })
 	}
 
-	// collect unique attachments (earliest occurrence)
-	const seen = new Map<string, ThreadAttachment>()
+	for (const ref of msg.attachments ?? []) push(ref)
+	const metaRefs = msg.metadata_?.attachments
+	if (Array.isArray(metaRefs)) for (const ref of metaRefs) push(ref)
 
-	for (let i = 0; i < messages.length; i++) {
-		const msg = messages[i]
-		if (!msg.content) continue
-
-		for (const part of msg.content) {
-			if (!part || (part.type !== 'image' && part.type !== 'file')) continue
-			const fileId = (part.metadata as Record<string, unknown> | undefined)?.file_id
-			if (!fileId || typeof fileId !== 'string') continue
-			if (seen.has(fileId)) continue
-
-			const mime = part.media_type ?? null
-			const category = classifyMediaCategory(mime)
-			const turn = turnIndices[i] ?? 0
-
-			// use event-derived state if available, else default to active
-			const status = attachmentStates?.get(fileId) ?? 'active'
-
-			seen.set(fileId, {
-				fileId,
-				filename: part.filename ?? null,
-				mediaType: mime,
-				category,
-				status,
-				turn,
-			})
-		}
-	}
-
-	return [...seen.values()]
+	return refs
 }
 
 /**
@@ -569,6 +526,9 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 	if (streamingAssistant && viewingStreamingBranch) {
 		const sourceRunId = streamingAssistant.runId ?? `legacy-${streamingAssistant.messageId}`
 		const sourceAgentId = streamingAssistant.senderAgentId
+		const completedToolCallIds = new Set(
+			collectedToolResults.map((result) => result.toolCallId)
+		)
 		if (
 			!activeBlock ||
 			activeBlock.sourceRunId !== sourceRunId ||
@@ -617,7 +577,14 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 			targetBlock.responseRootId = streamingAssistant.messageId
 		}
 
-		targetBlock.items.push({ kind: 'streaming_assistant' })
+		const hasStreamingText = streamingAssistant.content.trim().length > 0
+		const hasUnresolvedPreviousToolCalls = Array.from(targetBlockState.seenToolCalls).some(
+			(toolCallId) => !completedToolCallIds.has(toolCallId)
+		)
+		const hasNewStreamingToolCalls = streamingAssistant.toolCalls.length > 0
+		if (hasStreamingText || (!hasUnresolvedPreviousToolCalls && !hasNewStreamingToolCalls)) {
+			targetBlock.items.push({ kind: 'streaming_assistant' })
+		}
 		for (const tc of streamingAssistant.toolCalls) {
 			collectedToolCalls.push(tc)
 			if (!targetBlockState.seenToolCalls.has(tc.id)) {

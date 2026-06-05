@@ -15,7 +15,9 @@ export {
 	type CreateAndRunStreamDelta,
 	type CreateAndRunStreamOptions,
 	type CreateAndRunThread,
+	type ResourceAttachment,
 	type ResumeRunStreamOptions,
+	type RunAttachmentType,
 	type RunInput,
 	type StreamedMessage,
 	type StreamError,
@@ -35,6 +37,7 @@ export {
 	searchStream,
 	type SearchResourceType,
 	type SearchResult,
+	type SearchResultParent,
 	type SearchResultType,
 	type SearchStreamOptions,
 } from './searchStream'

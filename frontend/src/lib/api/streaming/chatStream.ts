@@ -13,6 +13,7 @@ import { getClientContext } from '$lib/stores/device.svelte'
 import { preferences } from '$lib/stores/preferences.svelte'
 import { getApiBaseUrl, refreshAccessToken } from '../client'
 import { getSessionId } from '../sessionId'
+import type { components } from '../types'
 
 export interface RawSseFrame {
 	event: string
@@ -303,12 +304,9 @@ async function* readSseFrames(
 
 // run input shape
 
-/** structured input for a run request. */
-export interface RunInput {
-	text?: string | null
-	attachment_ids?: string[]
-	attachment_actions?: Record<string, 'reveal' | 'reference'> | null
-}
+export type ResourceAttachment = components['schemas']['ResourceAttachment']
+export type RunAttachmentType = ResourceAttachment['type']
+export type RunInput = components['schemas']['RunInput']
 
 // run chat stream
 
@@ -319,6 +317,7 @@ export interface ChatStreamOptions {
 	parentId?: string | null
 	persist?: boolean
 	toolChoice?: ToolChoiceValue | null
+	extraPlugins?: string[]
 	signal?: AbortSignal
 }
 
@@ -349,6 +348,7 @@ export async function* runChatStream(
 	if (opts.threadId) body.thread_id = opts.threadId
 	if (opts.persist === false) body.persist = false
 	if (opts.toolChoice) body.tool_choice = opts.toolChoice
+	if (opts.extraPlugins && opts.extraPlugins.length > 0) body.extra_plugins = opts.extraPlugins
 	if (clientContext) body.clientContext = clientContext
 
 	const reader = await streamSseFrames({ url, body, signal: opts.signal })
@@ -382,6 +382,7 @@ export interface CreateAndRunStreamOptions {
 	tags?: string[]
 	projectIds?: string[]
 	toolChoice?: ToolChoiceValue | null
+	extraPlugins?: string[]
 	signal?: AbortSignal
 }
 
@@ -413,6 +414,7 @@ export async function* runCreateAndRunStream(
 	}
 	if (opts.threadId) body.thread_id = opts.threadId
 	if (opts.toolChoice) body.tool_choice = opts.toolChoice
+	if (opts.extraPlugins && opts.extraPlugins.length > 0) body.extra_plugins = opts.extraPlugins
 	if (clientContext) body.clientContext = clientContext
 
 	const reader = await streamSseFrames({ url, body, signal: opts.signal })

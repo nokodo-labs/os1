@@ -2,20 +2,13 @@
 	import { browser } from '$app/environment'
 	import { base } from '$app/paths'
 	import { api } from '$lib/api/client'
-	import type { components } from '$lib/api/types'
-	import { contentPartsToText } from '$lib/chat/helpers'
 	import ShieldCheck from '$lib/components/icons/ShieldCheck.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
-	import { calendars } from '$lib/stores/calendars.svelte'
-	import { chat } from '$lib/stores/chat.svelte'
 	import { downloadFile, files } from '$lib/stores/files.svelte'
 	import { friends } from '$lib/stores/friends.svelte'
 	import { groups } from '$lib/stores/groups.svelte'
 	import type { ResourceAccessPayload } from '$lib/stores/modals.svelte'
-	import { notes } from '$lib/stores/notes.svelte'
 	import { notifications, showError } from '$lib/stores/notifications.svelte'
-	import { projects } from '$lib/stores/projects.svelte'
-	import { reminders } from '$lib/stores/reminders.svelte'
 	import {
 		canShareAccessLevel,
 		resourceAccess,
@@ -40,13 +33,13 @@
 		type UserPick,
 		type UserResult,
 	} from './resourceAccessModal'
-
-	type ApiFile = components['schemas']['File']
-	type ApiMessage = components['schemas']['Message']
-	type ApiReminder = components['schemas']['Reminder']
-	type ApiReminderWithSubtasks = components['schemas']['ReminderWithSubtasks']
-	type ApiThread = components['schemas']['Thread']
-	type ReminderSnapshotItem = ApiReminder | ApiReminderWithSubtasks
+	import {
+		buildResourceSnapshot,
+		cleanSnapshotFilename,
+		exportResourceSnapshot,
+		snapshotExtension,
+		snapshotMimeType,
+	} from './resourceAccessSnapshots'
 
 	interface Props {
 		open: boolean
@@ -142,7 +135,6 @@
 		'flex h-11 w-11 shrink-0 items-center justify-center rounded-[15px] border border-[color-mix(in_oklch,var(--accent-primary)_22%,transparent)] bg-[color-mix(in_oklch,var(--accent-primary)_12%,transparent)] text-(--accent-primary)'
 	const inputClass =
 		'rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border py-2.5 pr-4 pl-10 text-sm transition-colors outline-none'
-	const THREAD_EXPORT_MESSAGE_LIMIT = 500
 	const MAX_CLIPBOARD_SNAPSHOT_CHARS = 120_000
 
 	function shareIconUrls(target: ShareTarget): string[] {
@@ -353,15 +345,6 @@
 		dragOverIndex = null
 	}
 
-	function cleanFilename(value: string): string {
-		return (
-			value
-				.toLowerCase()
-				.replace(/[^a-z0-9]+/g, '-')
-				.replace(/(^-|-$)/g, '') || 'share'
-		)
-	}
-
 	function downloadTextFile(filename: string, content: string, mimeType: string): void {
 		const blob = new Blob([content], { type: mimeType })
 		const href = URL.createObjectURL(blob)
@@ -396,188 +379,8 @@
 		}
 	}
 
-	function threadTitle(thread: ApiThread | null): string {
-		return thread?.title?.trim() || shareTitle
-	}
-
-	function messageText(message: ApiMessage): string {
-		return contentPartsToText(message.content).trim()
-	}
-
-	function plainTextFromMarkdown(markdown: string): string {
-		return markdown
-			.replace(/^#{1,6}\s+/gm, '')
-			.replace(/^[-*]\s+/gm, '- ')
-			.trim()
-	}
-
-	function formatSnapshotDate(value: string | null | undefined): string | null {
-		if (!value) return null
-		return new Date(value).toLocaleString().toLowerCase()
-	}
-
-	function reminderSubtasks(reminder: ReminderSnapshotItem): ReminderSnapshotItem[] {
-		if (!('subtasks' in reminder)) return []
-		return reminder.subtasks ?? []
-	}
-
-	function appendReminderSnapshot(
-		lines: string[],
-		reminder: ReminderSnapshotItem,
-		depth = 0
-	): void {
-		const indent = '  '.repeat(depth)
-		const checked = reminder.status === 'completed' ? 'x' : ' '
-		lines.push(`${indent}- [${checked}] ${reminder.title}`)
-		const dueAt = formatSnapshotDate(reminder.due_at)
-		const remindAt = formatSnapshotDate(reminder.remind_at)
-
-		const meta = [
-			dueAt ? `due: ${dueAt}` : null,
-			remindAt ? `remind: ${remindAt}` : null,
-			reminder.recurrence ? 'repeats' : null,
-		]
-			.filter(Boolean)
-			.join(' | ')
-		if (meta) lines.push(`${indent}  ${meta}`)
-
-		const description = reminder.description?.trim()
-		if (description) {
-			for (const line of description.split('\n')) {
-				lines.push(`${indent}  ${line}`)
-			}
-		}
-
-		for (const subtask of reminderSubtasks(reminder)) {
-			appendReminderSnapshot(lines, subtask, depth + 1)
-		}
-	}
-
-	function exportExtension(format: ExportFormat): string {
-		return format === 'json' ? 'json' : format
-	}
-
-	function exportMimeType(format: ExportFormat): string {
-		if (format === 'json') return 'application/json;charset=utf-8'
-		if (format === 'txt') return 'text/plain;charset=utf-8'
-		return 'text/markdown;charset=utf-8'
-	}
-
-	function exportSnapshot(markdown: string, format: ExportFormat): string {
-		if (format === 'md') return markdown
-		if (format === 'txt') return plainTextFromMarkdown(markdown)
-		return JSON.stringify(
-			{
-				resource_type: payload?.resourceType ?? null,
-				resource_id: payload?.resourceId ?? null,
-				title: shareTitle,
-				url: shareUrl,
-				markdown,
-			},
-			null,
-			2
-		)
-	}
-
-	async function buildResourceSnapshot(): Promise<string> {
-		if (!payload) return shareUrl
-		const title = shareTitle
-		switch (payload.resourceType) {
-			case 'thread': {
-				const thread = await chat.threadCache.getThread(payload.resourceId)
-				const { messages } = await chat.threadCache.getMessages(
-					payload.resourceId,
-					0,
-					THREAD_EXPORT_MESSAGE_LIMIT
-				)
-				const lines = [`# ${threadTitle(thread)}`, '', `link: ${shareUrl}`, '']
-				for (const message of messages) {
-					const text = messageText(message)
-					if (!text) continue
-					lines.push(`## ${message.type}`, '', text, '')
-				}
-				return lines.join('\n')
-			}
-			case 'note': {
-				await notes.load()
-				const note = notes.get(payload.resourceId)
-				return [
-					`# ${note?.title || title}`,
-					'',
-					note?.content ?? '',
-					'',
-					`link: ${shareUrl}`,
-				]
-					.filter(Boolean)
-					.join('\n')
-			}
-			case 'file': {
-				await files.load()
-				const file = files.get(payload.resourceId) as ApiFile | null
-				return [
-					`# ${file?.filename || title}`,
-					'',
-					file?.mime_type ? `type: ${file.mime_type}` : '',
-					file?.size_bytes ? `size: ${file.size_bytes} bytes` : '',
-					`link: ${shareUrl}`,
-				]
-					.filter(Boolean)
-					.join('\n')
-			}
-			case 'project': {
-				await projects.load()
-				const project = projects.getById(payload.resourceId)
-				return [
-					`# ${project?.name || title}`,
-					'',
-					project?.description ?? '',
-					'',
-					`link: ${shareUrl}`,
-				]
-					.filter(Boolean)
-					.join('\n')
-			}
-			case 'group': {
-				await groups.load()
-				const group = groups.getById(payload.resourceId)
-				return [
-					`# ${group?.name || title}`,
-					'',
-					group?.description ?? '',
-					'',
-					`link: ${shareUrl}`,
-				]
-					.filter(Boolean)
-					.join('\n')
-			}
-			case 'reminder_list': {
-				await reminders.loadLists()
-				const list = reminders.getListById(payload.resourceId)
-				const listReminders = await reminders.loadReminders(payload.resourceId, {
-					force: true,
-				})
-				const lines = [
-					`# ${list?.name || title}`,
-					'',
-					list ? `total: ${list.total_count}` : '',
-					list ? `pending: ${list.pending_count}` : '',
-					list ? `completed: ${list.completed_count}` : '',
-					`link: ${shareUrl}`,
-				].filter(Boolean)
-				if (listReminders.length > 0) {
-					lines.push('', '## reminders', '')
-					for (const reminder of listReminders) appendReminderSnapshot(lines, reminder)
-				}
-				return lines.join('\n')
-			}
-			case 'calendar': {
-				await calendars.load()
-				const calendar = calendars.all.find((item) => item.id === payload.resourceId)
-				return [`# ${calendar?.name || title}`, '', `link: ${shareUrl}`].join('\n')
-			}
-			case 'agent':
-				return [`# ${title}`, '', `link: ${shareUrl}`].join('\n')
-		}
+	async function resourceSnapshot() {
+		return await buildResourceSnapshot({ payload, title: shareTitle, url: shareUrl })
 	}
 
 	async function copyLink(): Promise<void> {
@@ -586,17 +389,17 @@
 
 	async function copySnapshot(): Promise<void> {
 		await withWorking('copy-snapshot', async () => {
-			await copyText(exportSnapshot(await buildResourceSnapshot(), 'txt'), 'copied')
+			await copyText(exportResourceSnapshot(await resourceSnapshot(), 'txt'), 'copied')
 		})
 	}
 
 	async function downloadSnapshot(format: ExportFormat): Promise<void> {
 		await withWorking(`download-snapshot-${format}`, async () => {
-			const content = exportSnapshot(await buildResourceSnapshot(), format)
+			const content = exportResourceSnapshot(await resourceSnapshot(), format)
 			downloadTextFile(
-				`${cleanFilename(shareTitle)}.${exportExtension(format)}`,
+				`${cleanSnapshotFilename(shareTitle)}.${snapshotExtension(format)}`,
 				content,
-				exportMimeType(format)
+				snapshotMimeType(format)
 			)
 		})
 	}
@@ -609,7 +412,7 @@
 			return
 		}
 		await withWorking('print-snapshot', async () => {
-			const content = exportSnapshot(await buildResourceSnapshot(), 'txt')
+			const content = exportResourceSnapshot(await resourceSnapshot(), 'txt')
 			printWindow.document.write(
 				'<!doctype html><html><head><title></title><style>body{font-family:system-ui,sans-serif;margin:32px;line-height:1.5}pre{white-space:pre-wrap;font:inherit}</style></head><body><pre></pre></body></html>'
 			)

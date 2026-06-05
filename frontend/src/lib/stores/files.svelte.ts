@@ -39,6 +39,12 @@ export interface FileLoadOptions {
 	projectId?: string | null
 	source?: FileSourceFilter | null
 	category?: FileCategoryFilter | null
+	resolveOrigin?: boolean
+}
+
+export interface FileEnsureOptions {
+	force?: boolean
+	resolveOrigin?: boolean
 }
 
 export interface FileResource {
@@ -171,7 +177,12 @@ function areCountsFresh(key: string): boolean {
 }
 
 function filterKey(options?: FileLoadOptions): string {
-	return [options?.projectId ?? '', options?.source ?? '', options?.category ?? ''].join(':')
+	return [
+		options?.projectId ?? '',
+		options?.source ?? '',
+		options?.category ?? '',
+		options?.resolveOrigin ? 'origin' : '',
+	].join(':')
 }
 
 function listQuery(options: FileLoadOptions | undefined, skip: number) {
@@ -183,6 +194,7 @@ function listQuery(options: FileLoadOptions | undefined, skip: number) {
 		project_id: options?.projectId ?? undefined,
 		source: options?.source ?? undefined,
 		category: options?.category ?? undefined,
+		resolve_origin: options?.resolveOrigin || undefined,
 	}
 }
 
@@ -200,6 +212,7 @@ function rememberOptions(options?: FileLoadOptions): FileLoadOptions | undefined
 		projectId: options.projectId,
 		source: options.source,
 		category: options.category,
+		resolveOrigin: options.resolveOrigin,
 	}
 }
 
@@ -210,6 +223,7 @@ function optionsFromKey(key: string): FileLoadOptions | undefined {
 		projectId: projectId || null,
 		source: (source || null) as FileSourceFilter | null,
 		category: (category || null) as FileCategoryFilter | null,
+		resolveOrigin: false,
 	}
 }
 
@@ -286,10 +300,14 @@ export const files = {
 	 * ensure a single file is in the cache. fetches from API if missing.
 	 * returns the cached record, or null if the file doesn't exist.
 	 */
-	async ensure(fileId: string): Promise<ApiFile | null> {
+	async ensure(fileId: string, options?: FileEnsureOptions): Promise<ApiFile | null> {
 		const cached = filesMap.get(fileId)
-		if (cached) return cached
-		const file = await fetchSingleFile(fileId)
+		const force = options?.force ?? false
+		const resolveOrigin = options?.resolveOrigin ?? false
+		if (cached && !force && (!resolveOrigin || cached.origin_thread_id || !cached.message_id)) {
+			return cached
+		}
+		const file = await fetchSingleFile(fileId, resolveOrigin)
 		if (file) {
 			filesMap.set(file.id, file)
 			if (fetchedAt === null) fetchedAt = Date.now()
@@ -523,9 +541,12 @@ const FILE_STREAM_EVENTS = [
 	...STORE_EVENT_TYPES.resourceAccessResource,
 ] as const
 
-async function fetchSingleFile(fileId: string): Promise<ApiFile | null> {
+async function fetchSingleFile(fileId: string, resolveOrigin = false): Promise<ApiFile | null> {
 	const { data, error } = await api.GET('/v1/files/{file_id}', {
-		params: { path: { file_id: fileId } },
+		params: {
+			path: { file_id: fileId },
+			query: { resolve_origin: resolveOrigin || undefined },
+		},
 	})
 	if (error || !data) return null
 	return data as ApiFile

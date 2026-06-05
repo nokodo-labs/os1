@@ -1,6 +1,7 @@
 import type { RunActivityState } from '$lib/chat'
 import ContextCompactionActivity from '$lib/components/chat/activities/ContextCompactionActivity.svelte'
 import GenericRunActivity from '$lib/components/chat/activities/GenericRunActivity.svelte'
+import MemoryMaintenanceActivity from '$lib/components/chat/activities/MemoryMaintenanceActivity.svelte'
 import RunActivity from '$lib/components/chat/activities/RunActivity.svelte'
 import { getRunActivityRenderer } from '$lib/components/chat/activities/registry'
 import { render, screen } from '@testing-library/svelte'
@@ -58,5 +59,24 @@ describe('run activity renderers', () => {
 		})
 
 		expect(screen.getByText('indexing files completed in 3s')).toBeTruthy()
+	})
+
+	it('routes memory maintenance through its native renderer', () => {
+		expect(getRunActivityRenderer('memory_maintenance')).toBe(MemoryMaintenanceActivity)
+
+		render(RunActivity, {
+			props: {
+				activity: makeActivity({
+					activityType: 'memory_maintenance',
+					status: 'success',
+					message: 'memory saved',
+					updatedAt: new Date(3000),
+					endedAt: new Date(3000),
+					outcome: 'success',
+				}),
+			},
+		})
+
+		expect(screen.getByText('memory saved')).toBeTruthy()
 	})
 })

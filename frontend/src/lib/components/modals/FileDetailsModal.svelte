@@ -35,10 +35,10 @@
 	)
 	const canDeleteFile = $derived(canDeleteAccessLevel(fileAccessLevel))
 
-	// fetch the file into cache if not already present (e.g. after page refresh)
+	// fetch fresh details with origin resolution when the modal opens.
 	$effect(() => {
-		if (open && payload?.fileId && !file) {
-			void files.ensure(payload.fileId)
+		if (open && payload?.fileId) {
+			void files.ensure(payload.fileId, { force: true, resolveOrigin: true })
 		}
 	})
 
@@ -82,10 +82,10 @@
 	const isAudio = $derived(primaryType === 'audio')
 	const isPdf = $derived(mimeType.toLowerCase().split(';')[0]?.trim() === 'application/pdf')
 	const hasPreview = $derived(isImage || isVideo || isAudio)
-
+	const fileDescription = $derived(file?.description?.trim() ?? '')
 	const threadId = $derived.by(() => {
-		const v = (file?.metadata_ as Record<string, unknown> | undefined)?.thread_id
-		return typeof v === 'string' && v.startsWith('thread_') ? v : undefined
+		const value = file?.origin_thread_id
+		return typeof value === 'string' && value.startsWith('thread_') ? value : undefined
 	})
 
 	const genPrompt = $derived(
@@ -404,6 +404,18 @@
 							</dt>
 							<dd class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word">
 								{fileAuthorLabel}
+							</dd>
+						</div>
+					{/if}
+					{#if fileDescription}
+						<div class="min-w-0 sm:col-span-2">
+							<dt class="text-foreground/40 text-xs tracking-wide uppercase">
+								description
+							</dt>
+							<dd
+								class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word whitespace-pre-wrap"
+							>
+								{fileDescription}
 							</dd>
 						</div>
 					{/if}

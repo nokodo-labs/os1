@@ -104,8 +104,15 @@
 			case 'note':
 				void goto(resolve(`/notes/${resource.id}`))
 				return
+			case 'reminder':
+				if (resource.parent?.type === 'reminder_list') {
+					void goto(resolve('/reminders/lists/[listId]', { listId: resource.parent.id }))
+				}
+				return
 			case 'reminder_list':
 				void goto(resolve(`/reminders/lists/${resource.id}`))
+				return
+			case 'calendar_event':
 				return
 			case 'calendar':
 				void goto(resolve('/calendar'))

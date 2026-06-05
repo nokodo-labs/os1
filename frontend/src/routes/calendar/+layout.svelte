@@ -22,7 +22,11 @@
 	})
 </script>
 
-<MasterDetailScaffold masterWidthClass="w-[clamp(260px,24vw,360px)] h-full" ariaLabel="calendar">
+<MasterDetailScaffold
+	masterWidthClass="w-[clamp(260px,24vw,360px)] h-full"
+	ariaLabel="calendar"
+	detailBottomPaddingClass="pb-6"
+>
 	{#snippet master({ isMobile })}
 		<CalendarSidebar {isMobile} />
 	{/snippet}

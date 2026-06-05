@@ -30,7 +30,11 @@
 	import { notes } from '$lib/stores/notes.svelte'
 	import { notifications, showError } from '$lib/stores/notifications.svelte'
 	import { projects } from '$lib/stores/projects.svelte'
-	import { reminders } from '$lib/stores/reminders.svelte'
+	import {
+		reminders,
+		type Reminder,
+		type ReminderWithSubtasks,
+	} from '$lib/stores/reminders.svelte'
 	import {
 		canShareAccessLevel,
 		resourceAccess,
@@ -44,6 +48,21 @@
 	type ApiFile = components['schemas']['File']
 	type ApiMessage = components['schemas']['Message']
 	type ApiThread = components['schemas']['Thread']
+	type JsonSnapshot = Record<string, unknown>
+	type ReminderSnapshot = {
+		id: string
+		title: string
+		description: string | null
+		status: Reminder['status']
+		due_at: string | null
+		remind_at: string | null
+		completed_at: string | null
+		recurrence: Reminder['recurrence'] | null
+		recurrence_until: string | null
+		source_thread_id: string | null
+		position: number
+		sub_reminders: ReminderSnapshot[]
+	}
 
 	interface Props {
 		open: boolean
@@ -427,11 +446,153 @@
 				resource_id: payload?.resourceId ?? null,
 				title: shareTitle,
 				url: shareUrl,
-				markdown,
+				text: markdown,
 			},
 			null,
 			2
 		)
+	}
+
+	function reminderSnapshot(reminder: ReminderWithSubtasks | Reminder): ReminderSnapshot {
+		const subtasks = 'subtasks' in reminder ? (reminder.subtasks ?? []) : []
+		return {
+			id: reminder.id,
+			title: reminder.title,
+			description: reminder.description ?? null,
+			status: reminder.status,
+			due_at: reminder.due_at ?? null,
+			remind_at: reminder.remind_at ?? null,
+			completed_at: reminder.completed_at ?? null,
+			recurrence: reminder.recurrence ?? null,
+			recurrence_until: reminder.recurrence_until ?? null,
+			source_thread_id: reminder.source_thread_id ?? null,
+			position: reminder.position ?? 0,
+			sub_reminders: subtasks.map(reminderSnapshot),
+		}
+	}
+
+	async function buildResourceSnapshotJson(): Promise<JsonSnapshot> {
+		if (!payload) return { title: shareTitle, url: shareUrl }
+		switch (payload.resourceType) {
+			case 'thread': {
+				const thread = await chat.threadCache.getThread(payload.resourceId)
+				const { messages } = await chat.threadCache.getMessages(
+					payload.resourceId,
+					0,
+					THREAD_EXPORT_MESSAGE_LIMIT
+				)
+				return {
+					resource_type: 'thread',
+					resource_id: payload.resourceId,
+					title: threadTitle(thread),
+					url: shareUrl,
+					thread,
+					messages: messages.map((message) => ({
+						id: message.id,
+						type: message.type,
+						parent_id: message.parent_id ?? null,
+						created_at: message.created_at,
+						updated_at: message.updated_at,
+						text: messageText(message),
+						tool_call_id: message.tool_call_id ?? null,
+					})),
+				}
+			}
+			case 'note': {
+				await notes.load()
+				const note = notes.get(payload.resourceId)
+				return {
+					resource_type: 'note',
+					resource_id: payload.resourceId,
+					title: note?.title || shareTitle,
+					url: shareUrl,
+					note,
+				}
+			}
+			case 'file': {
+				await files.load()
+				const file = files.get(payload.resourceId) as ApiFile | null
+				return {
+					resource_type: 'file',
+					resource_id: payload.resourceId,
+					title: file?.filename || shareTitle,
+					url: shareUrl,
+					file,
+				}
+			}
+			case 'project': {
+				await projects.load()
+				const project = projects.getById(payload.resourceId)
+				return {
+					resource_type: 'project',
+					resource_id: payload.resourceId,
+					title: project?.name || shareTitle,
+					url: shareUrl,
+					project,
+				}
+			}
+			case 'group': {
+				await groups.load()
+				const group = groups.getById(payload.resourceId)
+				return {
+					resource_type: 'group',
+					resource_id: payload.resourceId,
+					title: group?.name || shareTitle,
+					url: shareUrl,
+					group,
+				}
+			}
+			case 'reminder_list': {
+				await reminders.loadLists()
+				const list = reminders.getListById(payload.resourceId)
+				const listReminders = await reminders.loadReminders(payload.resourceId)
+				return {
+					resource_type: 'reminder_list',
+					resource_id: payload.resourceId,
+					title: list?.name || shareTitle,
+					url: shareUrl,
+					list: list
+						? {
+								id: list.id,
+								name: list.name,
+								description: list.description ?? null,
+								color: list.color ?? null,
+								icon: list.icon ?? null,
+								position: list.position ?? 0,
+								is_default: list.is_default,
+								project_ids: list.project_ids ?? [],
+								owner_id: list.owner_id,
+							}
+						: null,
+					counts: list
+						? {
+								total: list.total_count,
+								pending: list.pending_count,
+								completed: list.completed_count,
+							}
+						: null,
+					reminders: listReminders.map(reminderSnapshot),
+				}
+			}
+			case 'calendar': {
+				await calendars.load()
+				const calendar = calendars.all.find((item) => item.id === payload.resourceId)
+				return {
+					resource_type: 'calendar',
+					resource_id: payload.resourceId,
+					title: calendar?.name || shareTitle,
+					url: shareUrl,
+					calendar,
+				}
+			}
+			case 'agent':
+				return {
+					resource_type: 'agent',
+					resource_id: payload.resourceId,
+					title: shareTitle,
+					url: shareUrl,
+				}
+		}
 	}
 
 	async function buildResourceSnapshot(): Promise<string> {
@@ -541,7 +702,10 @@
 
 	async function downloadSnapshot(format: ExportFormat): Promise<void> {
 		await withWorking(`download-snapshot-${format}`, async () => {
-			const content = exportSnapshot(await buildResourceSnapshot(), format)
+			const content =
+				format === 'json'
+					? JSON.stringify(await buildResourceSnapshotJson(), null, 2)
+					: exportSnapshot(await buildResourceSnapshot(), format)
 			downloadTextFile(
 				`${cleanFilename(shareTitle)}.${exportExtension(format)}`,
 				content,

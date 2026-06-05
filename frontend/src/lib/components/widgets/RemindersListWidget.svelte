@@ -4,6 +4,7 @@
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { resourceAccentStyle, resourceVisual } from '$lib/resources/resourceVisuals'
 	import { metadataLine } from '$lib/utils/resourceAuthors'
+	import { resourceSharing } from '$lib/utils/resourceSharing.svelte'
 	import ResourcePreview from './ResourcePreview.svelte'
 	import type { ResourceItem } from './types'
 
@@ -21,11 +22,10 @@
 	const completedCount = $derived((resource.meta?.completed_count as number) ?? 0)
 	const color = $derived((resource.meta?.color as string) ?? null)
 	const icon = $derived((resource.meta?.icon as string) ?? null)
-	const isShared = $derived(Boolean(resource.meta?.shared))
-	const authorLabel = $derived((resource.meta?.author_label as string | null) ?? null)
-	const authorMeta = $derived(isShared ? authorLabel : null)
+	const sharing = resourceSharing(() => resource)
+	const authorMeta = $derived(sharing.authorMeta)
 	const reminderVisual = resourceVisual('reminder_list')
-	const ReminderIcon = reminderVisual.icon
+	const ReminderIcon = $derived(reminderVisual.icon)
 	const listAccentStyle = $derived(
 		color
 			? `--resource-accent: ${color}; --accent-primary: ${color}`
@@ -46,7 +46,7 @@
 </script>
 
 <a
-	href={resolve(`/reminders/lists/${resource.id}`)}
+	href={onclick ? undefined : resolve('/reminders/lists/[listId]', { listId: resource.id })}
 	onclick={handleClick}
 	class="group liquid-glass liquid-glass--frosted block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
@@ -56,7 +56,7 @@
 	{#if layout === 'grid'}
 		<ResourcePreview
 			tone={reminderVisual.tone}
-			label={reminderVisual.pluralLabel}
+			label={reminderVisual.label}
 			caption={totalCount > 0 ? `${pendingCount} pending` : 'empty list'}
 			showFallback={totalCount === 0}
 			class="-mx-6 -mt-6"

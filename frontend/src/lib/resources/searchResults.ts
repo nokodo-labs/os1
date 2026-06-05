@@ -1,23 +1,14 @@
-import type { SearchResult } from '$lib/api/streaming'
+import type { SearchResult, SearchResultParent } from '$lib/api/streaming'
 import type { ResourceItem } from '$lib/components/widgets/types'
 
+/** map generated search result types into widget resource types. */
 function resourceTypeForSearchResult(type: SearchResult['type']): ResourceItem['type'] {
-	switch (type) {
-		case 'thread':
-			return 'thread'
-		case 'note':
-			return 'note'
-		case 'reminder':
-			return 'reminder_list'
-		case 'calendar_event':
-			return 'calendar'
-		case 'memory':
-			return 'file'
-		case 'project':
-			return 'project'
-		case 'file':
-			return 'file'
-	}
+	return type === 'memory' ? 'file' : type
+}
+
+/** return the immediate parent resource carried by a search result. */
+function parentForSearchResult(result: SearchResult): SearchResultParent | undefined {
+	return result.parent ?? undefined
 }
 
 function hrefForSearchResult(result: SearchResult): string {
@@ -26,10 +17,12 @@ function hrefForSearchResult(result: SearchResult): string {
 			return `/c/${result.id}`
 		case 'note':
 			return `/notes/${result.id}`
-		case 'reminder':
-			return `/reminders/lists/${result.id}`
+		case 'reminder': {
+			const parent = parentForSearchResult(result)
+			return parent?.type === 'reminder_list' ? `/reminders/lists/${parent.id}` : '#'
+		}
 		case 'calendar_event':
-			return '/calendar'
+			return '#'
 		case 'memory':
 			return '#'
 		case 'project':
@@ -46,6 +39,7 @@ export function searchResultToResource(result: SearchResult): ResourceItem {
 	return {
 		id: result.id,
 		type: resourceTypeForSearchResult(result.type),
+		parent: parentForSearchResult(result),
 		title: result.title,
 		preview: result.preview ?? undefined,
 		href: hrefForSearchResult(result),

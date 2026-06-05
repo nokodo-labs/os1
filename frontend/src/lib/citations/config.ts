@@ -7,12 +7,13 @@
  */
 
 import type { components } from '$lib/api/types'
-import Brain from '$lib/components/icons/Brain.svelte'
+import Calendar from '$lib/components/icons/Calendar.svelte'
 import ChatBubbles from '$lib/components/icons/ChatBubbles.svelte'
-import CommandLine from '$lib/components/icons/CommandLine.svelte'
+import CheckBox from '$lib/components/icons/CheckBox.svelte'
 import Document from '$lib/components/icons/Document.svelte'
+import FinderFolder from '$lib/components/icons/FinderFolder.svelte'
 import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
-import type { WidgetProps } from '$lib/components/widgets/types'
+import type { ResourceType, WidgetProps } from '$lib/components/widgets/types'
 import type { Component } from 'svelte'
 
 type CitationSource = components['schemas']['CitationSource']
@@ -31,7 +32,7 @@ export interface CitationSourceConfig {
 	/** widget component to render the full card (lazy) */
 	widget: () => Promise<{ default: Component<WidgetProps> }>
 	/** resource type for the widget's ResourceItem */
-	resourceType: string
+	resourceType: ResourceType
 	/** fallback display label when title is empty */
 	label: string
 }
@@ -71,15 +72,6 @@ export const citationConfig: Record<CitationSource, CitationSourceConfig> = {
 		resourceType: 'note',
 		label: 'note',
 	},
-	memory: {
-		icon: Brain,
-		color: 'text-purple-400',
-		iconBg: 'bg-purple-500/20',
-		href: () => '#',
-		widget: () => import('$lib/components/widgets/UrlWidget.svelte'),
-		resourceType: 'file',
-		label: 'memory',
-	},
 	thread: {
 		icon: ChatBubbles,
 		color: 'text-emerald-400',
@@ -90,14 +82,55 @@ export const citationConfig: Record<CitationSource, CitationSourceConfig> = {
 		resourceType: 'thread',
 		label: 'thread',
 	},
-	tool_result: {
-		icon: CommandLine,
-		color: 'text-orange-400',
-		iconBg: 'bg-orange-500/20',
+	project: {
+		icon: FinderFolder,
+		color: 'text-yellow-400',
+		iconBg: 'bg-yellow-500/20',
+		iconVariant: 'solid',
+		href: (id) => `/projects/${id}`,
+		widget: () => import('$lib/components/widgets/ProjectWidget.svelte'),
+		resourceType: 'project',
+		label: 'project',
+	},
+	reminder: {
+		icon: CheckBox,
+		color: 'text-rose-400',
+		iconBg: 'bg-rose-500/20',
+		iconVariant: 'solid',
 		href: () => '#',
-		widget: () => import('$lib/components/widgets/UrlWidget.svelte'),
-		resourceType: 'file',
-		label: 'tool result',
+		widget: () => import('$lib/components/widgets/ReminderWidget.svelte'),
+		resourceType: 'reminder',
+		label: 'reminder',
+	},
+	reminder_list: {
+		icon: CheckBox,
+		color: 'text-rose-400',
+		iconBg: 'bg-rose-500/20',
+		iconVariant: 'solid',
+		href: (id) => `/reminders/lists/${id}`,
+		widget: () => import('$lib/components/widgets/RemindersListWidget.svelte'),
+		resourceType: 'reminder_list',
+		label: 'reminder list',
+	},
+	calendar: {
+		icon: Calendar,
+		color: 'text-red-400',
+		iconBg: 'bg-red-500/20',
+		iconVariant: 'solid',
+		href: () => '/calendar',
+		widget: () => import('$lib/components/widgets/CalendarWidget.svelte'),
+		resourceType: 'calendar',
+		label: 'calendar',
+	},
+	calendar_event: {
+		icon: Calendar,
+		color: 'text-red-400',
+		iconBg: 'bg-red-500/20',
+		iconVariant: 'solid',
+		href: () => '#',
+		widget: () => import('$lib/components/widgets/CalendarEventWidget.svelte'),
+		resourceType: 'calendar_event',
+		label: 'calendar event',
 	},
 }
 
