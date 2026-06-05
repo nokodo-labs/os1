@@ -40,19 +40,18 @@ from api.v1.service.chat.filters.steering import SteeringFilter
 from api.v1.service.chat.message_metadata import (
 	CLIENT_STEERING_ID_KEY,
 	CREATED_AT_KEY,
-	MESSAGE_ID_KEY,
-	SENDER_USER_ID_KEY,
 	STEERING_DROPPED_AT_KEY,
 	STEERING_ENQUEUED_AT_KEY,
 	STEERING_INJECTED_AT_KEY,
 	get_message_id,
 )
-from api.v1.service.chat.run_status import run_status_store
-from api.v1.service.chat.user_message import (
-	create_run_user_message,
-	resolve_run_input,
+from api.v1.service.chat.messages import (
+	build_run_input_sdk_user_message,
+	build_steering_sdk_message,
+	persist_sdk_message,
 	validate_run_input,
 )
+from api.v1.service.chat.run_status import run_status_store
 from api.v1.service.events import fanout_live_payload
 from nokodo_ai import Agent as SDKAgent
 from nokodo_ai.messages import UserMessage as SDKUserMessage
@@ -121,14 +120,14 @@ async def enqueue_run_steering(
 	previous_current_message_id = (
 		thread.current_message_id if thread is not None else None
 	)
-	if run_input is None or (not run_input.text and not run_input.attachment_ids):
+	if run_input is None or (not run_input.text and not run_input.attachments):
 		raise HTTPException(
 			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="input is required to steer a run",
 		)
 	validate_run_input(run_input)
 
-	resolved = await resolve_run_input(run_input, db)
+	resolved_input_message = build_run_input_sdk_user_message(run_input)
 	enqueued_at = datetime.now(UTC)
 	extra_meta: JSONObject = {
 		"steering_state": "queued",
@@ -137,36 +136,37 @@ async def enqueue_run_steering(
 	}
 	if client_steering_id is not None:
 		extra_meta[CLIENT_STEERING_ID_KEY] = client_steering_id
-
-	user_msg = await create_run_user_message(
-		thread_id,
-		db,
+	metadata: JSONObject = {
+		**(resolved_input_message.metadata or {}),
+		**extra_meta,
+	}
+	sdk_user = resolved_input_message.model_copy(update={"metadata": metadata})
+	user_msg = await persist_sdk_message(
+		thread_id=thread_id,
+		sdk_msg=sdk_user,
+		session=db,
 		principal=principal,
-		resolved_input=resolved,
-		parent_id=parent_id,
+		sender_agent_id=None,
 		run_id=run_id,
+		citations=[],
+		model_id=None,
+		message_id=None,
+		parent_id=parent_id,
 		# intentionally NOT passing origin_session_id: the originating client
 		# needs to receive the message.created event since the /steer http
 		# response races the WS event for tree updates.
 		origin_session_id=None,
-		extra_metadata=extra_meta,
 	)
 	user_msg_id = TypeID(str(user_msg.id))
 	if thread is not None:
 		thread.current_message_id = previous_current_message_id
 		await db.commit()
 
-	sdk_metadata: JSONObject = {
-		MESSAGE_ID_KEY: str(user_msg.id),
-		SENDER_USER_ID_KEY: str(principal.user.id),
-		STEERING_ENQUEUED_AT_KEY: enqueued_at.isoformat(),
-	}
-	if client_steering_id is not None:
-		sdk_metadata[CLIENT_STEERING_ID_KEY] = client_steering_id
-
-	sdk_msg = SDKUserMessage(
-		content=resolved,
-		metadata=sdk_metadata,
+	sdk_msg = build_steering_sdk_message(
+		user_msg,
+		principal_user_id=principal.user.id,
+		enqueued_at=enqueued_at,
+		client_steering_id=client_steering_id,
 	)
 
 	accepted = await run_status_store.enqueue_steering(run_id, user_msg_id, sdk_msg)

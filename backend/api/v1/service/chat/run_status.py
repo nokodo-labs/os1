@@ -29,9 +29,11 @@ from enum import StrEnum
 from typing import Any
 
 from api.database import async_session_local
+from api.models.event_types import EventType
 from api.permissions import ResourceType
 from api.v1.service.authorization import list_accessible_user_ids
 from api.v1.service.chat import run_bus
+from api.v1.service.events import fanout_live_payload
 from nokodo_ai.utils.sse import sse_encode
 from nokodo_ai.utils.typeid import TypeID
 
@@ -40,6 +42,38 @@ logger = logging.getLogger(__name__)
 
 # stale run TTL - auto-cleanup after this many seconds without updates
 _STALE_TTL_SECONDS = 600  # 10 minutes
+
+
+async def broadcast_run_event(
+	thread_id: TypeID,
+	agent_id: TypeID,
+	run_id: TypeID,
+	started: bool,
+	error: bool = False,
+) -> None:
+	"""broadcast run.started / run.completed / run.error to all users with access."""
+	if started:
+		msg_type = EventType.RUN_STARTED
+	elif error:
+		msg_type = EventType.RUN_ERROR
+	else:
+		msg_type = EventType.RUN_COMPLETED
+	payload: dict[str, object] = {
+		"type": msg_type,
+		"data": {
+			"thread_id": thread_id,
+			"agent_id": agent_id,
+			"run_id": run_id,
+		},
+	}
+
+	async with async_session_local() as db_session:
+		recipient_ids = await list_accessible_user_ids(
+			ResourceType.THREAD, thread_id, db_session
+		)
+
+	if recipient_ids:
+		await fanout_live_payload(payload, recipient_ids, None, False)
 
 
 class RunState(StrEnum):

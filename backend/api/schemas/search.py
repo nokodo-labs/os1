@@ -22,6 +22,19 @@ class SearchResultType(StrEnum):
 	FILE = "file"
 
 
+class SearchResourceReferenceType(StrEnum):
+	"""known resource types that can be referenced by search result context."""
+
+	THREAD = "thread"
+	NOTE = "note"
+	REMINDER = "reminder"
+	REMINDER_LIST = "reminder_list"
+	PROJECT = "project"
+	FILE = "file"
+	CALENDAR_EVENT = "calendar_event"
+	CALENDAR = "calendar"
+
+
 class SearchMode(StrEnum):
 	"""determines which search tiers to run.
 
@@ -73,6 +86,13 @@ class SearchParams(ORMModel):
 	)
 
 
+class SearchResultParent(ORMModel):
+	"""immediate parent resource needed to display or route a nested result."""
+
+	type: SearchResourceReferenceType
+	id: TypeID
+
+
 class SearchResultItem(ORMModel):
 	"""a single search result across any searchable entity."""
 
@@ -81,6 +101,7 @@ class SearchResultItem(ORMModel):
 	title: str
 	preview: str | None = None
 	score: float | None = None
+	parent: SearchResultParent | None = None
 	metadata: JSONObject = Field(default_factory=dict)
 	created_at: datetime
 	updated_at: datetime

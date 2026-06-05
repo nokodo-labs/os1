@@ -127,10 +127,6 @@ class EventType(StrEnum):
 	ROLE_UPDATED = "role.updated"
 	ROLE_DELETED = "role.deleted"
 
-	# attachment lifecycle events
-	ATTACHMENT_DECAYED = "attachment.decayed"
-	ATTACHMENT_REVEALED = "attachment.revealed"
-
 	# citation events
 	CITATION_SOURCES = "citation.sources"
 
@@ -266,11 +262,6 @@ TASK_EVENTS = {
 	EventType.TASK_COMPLETED,
 	EventType.TASK_FAILED,
 	EventType.TASK_CANCELLED,
-}
-
-ATTACHMENT_EVENTS = {
-	EventType.ATTACHMENT_DECAYED,
-	EventType.ATTACHMENT_REVEALED,
 }
 
 CITATION_EVENTS = {

@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from api.settings import SearchRecencyFilter, settings
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.message_metadata import CITABLE_SOURCES_KEY
 from api.v1.service.web_search.errors import WebSearchError
 from api.v1.service.web_search.loaders import fetch_url
 from api.v1.service.web_search.progress import source_payload
@@ -120,7 +121,7 @@ class WebSearchTool(Tool[AppContext]):
 			"images": images,
 		}
 		metadata: JSONObject = {
-			"_citable_sources": [
+			CITABLE_SOURCES_KEY: [
 				{
 					"source_type": "url",
 					"source_id": result_source.url,
@@ -224,7 +225,7 @@ class FetchUrlTool(Tool[AppContext]):
 			tool_call_id=__tool_call_context__.tool_call_id,
 			tool_output=json.dumps(payload, ensure_ascii=True),
 			metadata={
-				"_citable_sources": [
+				CITABLE_SOURCES_KEY: [
 					{
 						"source_type": "url",
 						"source_id": inp.url,

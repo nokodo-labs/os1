@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from api.schemas.message import Message
+from api.schemas.message import Message, ResourceAttachment
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -166,23 +166,16 @@ class ClientContext(BaseModel):
 class RunInput(BaseModel):
 	"""structured input for an agent run.
 
-	supports plain text, file attachments via IDs, or both.
+	supports plain text, resource attachments, or both.
 	"""
 
 	text: str | None = Field(
 		default=None,
 		description="user message text content",
 	)
-	attachment_ids: list[TypeID] = Field(
+	attachments: list[ResourceAttachment] = Field(
 		default_factory=list,
-		description="file IDs to include as content parts in the message. "
-		"each ID is resolved server-side to an image or file content part.",
-	)
-	attachment_actions: dict[str, Literal["reveal", "reference"]] | None = Field(
-		default=None,
-		description="one-off user attachment actions. keys are file_ids, values are "
-		"'reveal' (make active) or 'reference' (force decay). "
-		"persisted as events and applied by the decay filter.",
+		description="resource references to attach to the message.",
 	)
 
 

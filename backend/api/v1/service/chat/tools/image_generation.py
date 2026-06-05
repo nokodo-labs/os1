@@ -2,11 +2,12 @@
 
 delegates to the media generation service layer which handles
 engine dispatch and settings resolution. generated images are
-persisted as File records and attached to the tool response.
+persisted as File records and referenced through the attachments
+system; the model resolves them with a file tool or the inline
+fallback, never inline bytes from this tool.
 
 the tool supports both text-to-image creation and editing an
 existing image: pass file_id to edit, omit for pure generation.
-the agent sees all attached image file_ids from the conversation context.
 """
 
 from __future__ import annotations
@@ -14,19 +15,18 @@ from __future__ import annotations
 import base64
 import json
 import logging
-from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.v1.service.auth import Principal
 from api.v1.service.chat.context import AppContext
-from api.v1.service.files import resolve_file_data
+from api.v1.service.chat.message_metadata import ATTACHMENTS_KEY
+from api.v1.service.files import read_file_base64
 from api.v1.service.media import MediaError, generate_image
-from api.v1.service.media.images import ImageResult
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
-from nokodo_ai.messages import ImageContent, ToolAttachment, ToolMessage
+from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
@@ -75,26 +75,11 @@ class GenerateImageInput(BaseModel):
 	)
 
 
-def _build_attachments(results: Sequence[ImageResult]) -> list[ToolAttachment]:
-	"""build ImageContent attachments from generation results."""
-	attachments: list[ToolAttachment] = []
-	for img in results:
-		if img.b64_data and img.file_id:
-			attachments.append(
-				ImageContent(
-					base64=img.b64_data,
-					media_type=img.mime_type,
-					metadata={"file_id": img.file_id},
-				)
-			)
-	return attachments
-
-
 async def _load_file_bytes(
 	file_id: TypeID, session: AsyncSession, principal: Principal
 ) -> bytes | None:
 	"""load raw bytes for a stored file (access-checked)."""
-	b64 = await resolve_file_data(file_id, session, principal=principal)
+	b64 = await read_file_base64(file_id, session, principal=principal)
 	if b64:
 		return base64.b64decode(b64)
 	return None
@@ -152,7 +137,6 @@ class GenerateImageTool(Tool[AppContext]):
 				n=inp.n,
 				size=inp.size,
 				agent_id=__app_context__.agent_id,
-				thread_id=__app_context__.thread_id,
 			)
 		except MediaError:
 			logger.exception("image generation failed")
@@ -161,10 +145,13 @@ class GenerateImageTool(Tool[AppContext]):
 				__tool_call_context__,
 			)
 
-		attachments = _build_attachments(results)
 		count = len(results)
 		action = "edited" if inp.file_id else "generated"
 		label = "image" if count == 1 else "images"
+		metadata: dict = __tool_call_context__.metadata or {}
+		refs = [{"type": "file", "id": str(r.file_id)} for r in results if r.file_id]
+		if refs:
+			metadata[ATTACHMENTS_KEY] = refs
 		return ToolMessage(
 			tool_call_id=__tool_call_context__.tool_call_id,
 			tool_output=json.dumps(
@@ -175,7 +162,6 @@ class GenerateImageTool(Tool[AppContext]):
 					"file_ids": [r.file_id for r in results if r.file_id],
 				}
 			),
-			metadata=__tool_call_context__.metadata,
+			metadata=metadata,
 			is_error=False,
-			attachments=attachments,
 		)

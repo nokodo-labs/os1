@@ -12,6 +12,7 @@ from api.schemas.note import NoteCreate, NoteUpdate
 from api.schemas.search import SearchMode, SearchParams
 from api.v1.service import notes as note_service
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.message_metadata import CITABLE_SOURCES_KEY
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
@@ -130,7 +131,7 @@ class NoteGetTool(Tool[AppContext]):
 				tool_call_id=__tool_call_context__.tool_call_id,
 				tool_output=json.dumps(result),
 				metadata={
-					"_citable_sources": [
+					CITABLE_SOURCES_KEY: [
 						{
 							"source_type": "note",
 							"source_id": str(note.id),
@@ -190,7 +191,7 @@ class NoteGetTool(Tool[AppContext]):
 		return ToolMessage(
 			tool_call_id=__tool_call_context__.tool_call_id,
 			tool_output=json.dumps(out),
-			metadata={"_citable_sources": citable_sources},
+			metadata={CITABLE_SOURCES_KEY: citable_sources},
 		)
 
 

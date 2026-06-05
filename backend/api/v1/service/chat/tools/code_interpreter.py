@@ -20,15 +20,15 @@ from api.models.file import FileSource
 from api.settings import settings
 from api.v1.service.auth import Principal
 from api.v1.service.chat.context import AppContext
-from api.v1.service.chat.message_metadata import E2B_SANDBOX_ID_KEY
-from api.v1.service.files import get_file, read_content, store_file
+from api.v1.service.chat.message_metadata import ATTACHMENTS_KEY, E2B_SANDBOX_ID_KEY
+from api.v1.service.files import get_file, ingest_file, read_content
 from api.v1.service.projects import resolve_thread_project_id
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
-from nokodo_ai.messages import FileContent, ImageContent, ToolMessage
+from nokodo_ai.messages import ToolMessage
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.tool import Tool
-from nokodo_ai.types.json import JSONObject
+from nokodo_ai.types.json import JSONArray, JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -93,23 +93,19 @@ async def _store_output_files(
 	owner_id: TypeID,
 	project_ids: list[TypeID] | None = None,
 	agent_id: TypeID | None = None,
-	thread_id: TypeID | None = None,
-) -> list[ImageContent | FileContent]:
-	"""persist E2B output files and return tool attachments.
+) -> list[TypeID]:
+	"""persist E2B output files and return their stored file ids.
 
-	inline_images (from execution results, e.g. matplotlib) become
-	ImageContent so the frontend renders them as image previews.
-	all other files (including image files from disk) become
-	FileContent so the frontend renders them as file widgets.
+	outputs are referenced through the attachments system (file ids only);
+	the model resolves them with a file tool or the inline fallback. the tool
+	never inlines bytes itself.
 	"""
-	attachments: list[ImageContent | FileContent] = []
+	stored_ids: list[TypeID] = []
 
-	async def _store(
-		entry: FileEntry, as_image: bool
-	) -> ImageContent | FileContent | None:
-		"""store one sandbox output and wrap it as message content."""
+	async def _store(entry: FileEntry) -> TypeID | None:
+		"""store one sandbox output and return its stored file id."""
 		try:
-			stored = await store_file(
+			stored = await ingest_file(
 				session,
 				data=entry.content,
 				owner_id=owner_id,
@@ -120,41 +116,22 @@ async def _store_output_files(
 			)
 			file_meta: JSONObject = {}
 			if agent_id:
-				file_meta["agent_id"] = agent_id
-			if thread_id:
-				file_meta["thread_id"] = thread_id
+				file_meta["agent_id"] = str(agent_id)
 			if file_meta and hasattr(stored, "metadata_"):
 				stored.metadata_ = {**(stored.metadata_ or {}), **file_meta}
 				await session.flush()
-			file_url = f"/v1/files/{stored.id}/content"
-			if as_image:
-				return ImageContent(
-					url=file_url,
-					filename=entry.filename,
-					media_type=entry.mime_type,
-					metadata={"file_id": str(stored.id)},
-				)
-			return FileContent(
-				url=file_url,
-				filename=entry.filename,
-				media_type=entry.mime_type,
-				metadata={"file_id": str(stored.id)},
-			)
+			return stored.id
 		except Exception:
 			logger.warning(
 				"failed to store output file %s", entry.filename, exc_info=True
 			)
 			return None
 
-	for entry in inline_images:
-		result = await _store(entry, as_image=True)
-		if result:
-			attachments.append(result)
-	for entry in files:
-		result = await _store(entry, as_image=False)
-		if result:
-			attachments.append(result)
-	return attachments
+	for entry in [*inline_images, *files]:
+		stored_id = await _store(entry)
+		if stored_id:
+			stored_ids.append(stored_id)
+	return stored_ids
 
 
 async def _upload_input_files(
@@ -308,7 +285,7 @@ class CodeInterpreterTool(Tool[AppContext]):
 				)
 			output = json.dumps(response, ensure_ascii=False)
 
-		# persist output files and build attachments
+		# persist output files and build attachment refs
 		thread_project_id: TypeID | None = None
 		if __app_context__.thread_id:
 			thread_project_id = await resolve_thread_project_id(
@@ -316,16 +293,14 @@ class CodeInterpreterTool(Tool[AppContext]):
 			)
 
 		agent_id = __app_context__.agent_id if __app_context__.agent_id else None
-		thread_id = __app_context__.thread_id if __app_context__.thread_id else None
 
-		attachments = await _store_output_files(
+		file_ids = await _store_output_files(
 			result.inline_images,
 			result.files,
 			session=__app_context__.session,
 			owner_id=__app_context__.user_id,
 			project_ids=[thread_project_id] if thread_project_id else None,
 			agent_id=agent_id,
-			thread_id=thread_id,
 		)
 
 		# build metadata with sandbox id for session persistence
@@ -334,11 +309,13 @@ class CodeInterpreterTool(Tool[AppContext]):
 		}
 		if result.sandbox_id:
 			metadata[E2B_SANDBOX_ID_KEY] = result.sandbox_id
+		refs: JSONArray = [{"type": "file", "id": str(fid)} for fid in file_ids]
+		if refs:
+			metadata[ATTACHMENTS_KEY] = refs
 
 		return ToolMessage(
 			tool_call_id=__tool_call_context__.tool_call_id,
 			tool_output=output,
 			metadata=metadata,
 			is_error=bool(result.error),
-			attachments=attachments,
 		)

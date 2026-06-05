@@ -335,11 +335,7 @@ async def apply_context_compaction(
 		nonlocal working_ids, working_messages
 		if not blocking_enabled or blocking_summarize is None:
 			return total_tokens
-		await _emit_compaction_progress(
-			progress_callback,
-			15,
-			"compacting context",
-		)
+
 		while total_tokens > budget:
 			batch_token_limit = summary_cluster_token_limit(
 				total_tokens,

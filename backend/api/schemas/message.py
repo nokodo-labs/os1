@@ -3,17 +3,25 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Annotated
+from enum import StrEnum
+from typing import Annotated, Literal
 
-from pydantic import Field, field_serializer, field_validator, model_validator
+from pydantic import (
+	BaseModel,
+	ConfigDict,
+	Field,
+	TypeAdapter,
+	field_serializer,
+	field_validator,
+	model_validator,
+)
 
 from api.models.message import MessageType
-from api.schemas.citations import Citation
-from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
-from api.schemas.content import (
-	ContentPart,
-	ContentPartAdapter,
-	TextContent,
+from api.schemas.common import (
+	MetadataModel,
+	MetadataUpdateModel,
+	ORMModel,
+	TimestampedModel,
 )
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
 from nokodo_ai.messages import BaseContentPart as SDKContentPart
@@ -25,15 +33,155 @@ from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
+class CitationSource(StrEnum):
+	"""what kind of resource a citation points to."""
+
+	URL = "url"
+	FILE = "file"
+	NOTE = "note"
+	THREAD = "thread"
+	PROJECT = "project"
+	REMINDER = "reminder"
+	REMINDER_LIST = "reminder_list"
+	CALENDAR = "calendar"
+	CALENDAR_EVENT = "calendar_event"
+
+
+class Citation(ORMModel):
+	"""a single citation reference within a message.
+
+	citations are reference-based: markers like [n] live in the message text,
+	and full citation data lives in message.citations[]. ``index`` is the
+	branch-cumulative number used as the [n] marker. ``source_type``
+	discriminates the resource kind. ``source_id`` is the source-specific value
+	(URL, TypeID string, etc.).
+	"""
+
+	index: Annotated[
+		int,
+		Field(ge=1, description="branch-cumulative citation number"),
+	]
+	source_type: CitationSource
+	source_id: str = Field(
+		description="source-specific value: URL string, TypeID, tool_call_id, etc.",
+	)
+	title: str | None = None
+
+
+class BaseContentPart(BaseModel):
+	"""base class for all content parts."""
+
+	model_config = ConfigDict(extra="ignore")
+
+	metadata: dict | None = None
+
+
+class TextContent(BaseContentPart):
+	"""plain text content."""
+
+	type: Literal["text"] = "text"
+	text: str = ""
+
+
+class JsonContent(BaseContentPart):
+	"""structured json content (for structured outputs)."""
+
+	type: Literal["json"] = "json"
+	data: dict | None = None
+
+
+class FileContent(BaseContentPart):
+	"""file content; carries a file_id in metadata or an external url."""
+
+	type: Literal["file"] = "file"
+	url: str | None = None
+	base64: str | None = None
+	filename: str | None = None
+	media_type: str | None = None
+
+
+class ImageContent(BaseContentPart):
+	"""image content; mirrors FileContent with a distinct type."""
+
+	type: Literal["image"] = "image"
+	url: str | None = None
+	base64: str | None = None
+	filename: str | None = None
+	media_type: str | None = None
+
+
+class RefusalContent(BaseContentPart):
+	"""refusal content (when the model refuses to respond)."""
+
+	type: Literal["refusal"] = "refusal"
+	reason: str = ""
+
+
+AttachmentRefType = Literal[
+	"file",
+	"note",
+	"thread",
+	"project",
+	"reminder",
+	"reminder_list",
+	"calendar_event",
+	"calendar",
+]
+
+
+class ResourceAttachment(BaseModel):
+	"""reference to an attached resource."""
+
+	model_config = ConfigDict(extra="ignore")
+
+	type: AttachmentRefType
+	id: TypeID
+
+
+ContentPart = Annotated[
+	TextContent | JsonContent | ImageContent | FileContent | RefusalContent,
+	Field(discriminator="type"),
+]
+
+# subset allowed for user messages
+UserContentPart = Annotated[
+	TextContent | ImageContent | FileContent,
+	Field(discriminator="type"),
+]
+
+# subset allowed for system messages
+SystemContentPart = Annotated[
+	TextContent,
+	Field(discriminator="type"),
+]
+
+ContentPartAdapter: TypeAdapter[ContentPart] = TypeAdapter(ContentPart)
+
+
 # type adapter for content validation
 ContentPartList = Annotated[list[ContentPart], Field(default_factory=list)]
+
+
+def is_private_metadata_key(key: str) -> bool:
+	"""return True for backend-private metadata keys that must not leave the api.
+
+	the single source of truth for message-metadata redaction: any key prefixed
+	with ``_`` is private. used by both ``public_message_metadata`` (complete
+	messages on REST + the ``message`` SSE event) and the streaming ``delta``
+	gate, so every wire path strips identical keys.
+	"""
+	return key.startswith("_")
 
 
 def public_message_metadata(metadata: JSONObject | None) -> JSONObject:
 	"""return metadata safe to include in API/SSE message payloads."""
 	if not metadata:
 		return {}
-	return {key: value for key, value in metadata.items() if not key.startswith("_")}
+	return {
+		key: value
+		for key, value in metadata.items()
+		if not is_private_metadata_key(key)
+	}
 
 
 class MessageBase(MetadataModel):
@@ -44,9 +192,9 @@ class MessageBase(MetadataModel):
 	tool_call_id: str | None = None
 	is_error: bool | None = None
 	tool_calls: list[dict[str, object]] = Field(default_factory=list)
-	usage: dict[str, object] | None = None
 	read_by: list[TypeID] = Field(default_factory=list)
 	citations: list[Citation] = Field(default_factory=list)
+	attachments: list[ResourceAttachment] = Field(default_factory=list)
 
 
 class MessageCreate(MetadataModel):
@@ -65,6 +213,7 @@ class MessageCreate(MetadataModel):
 	usage: dict[str, object] | None = None
 	read_by: list[TypeID] = Field(default_factory=list)
 	citations: list[Citation] = Field(default_factory=list)
+	attachments: list[ResourceAttachment] = Field(default_factory=list)
 	parent_id: TypeID | None = None
 	task_id: TypeID | None = None
 	sender_agent_id: TypeID | None = None

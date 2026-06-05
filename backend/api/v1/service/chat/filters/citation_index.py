@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
-from api.schemas.citations import Citation, CitationSource
+from api.schemas.message import Citation, CitationSource
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.message_metadata import (

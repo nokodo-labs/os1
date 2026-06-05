@@ -3,11 +3,11 @@
 native media bytes only ever live on tool messages (file_get fetches and
 media generators). this module projects a thread for the model:
 
-- renders all user/assistant media as text references (never native bytes)
+- renders all user/assistant media as inline decay markers (never native
+  bytes)
 - keeps tool-message media native only within its protection window
   (per-modality min-life turns), applies user reveal/decay events and
-  dedup, and releases the rest
-- builds the attachment inventory manifest injected into the system prompt
+  dedup, and replaces the rest with inline decay markers
 - marks active (in-window) tool messages via metadata so the compaction
   layer can exempt them from prune/summarize
 
@@ -17,13 +17,13 @@ this module does not depend on compaction internals, and does no I/O.
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from api.settings.settings import AIAttachmentSettings
 from api.v1.service.chat.message_metadata import SENDER_USER_ID_KEY
+from api.v1.service.files.modalities import classify_media, modality_supported
 from nokodo_ai.messages import (
 	AssistantMessage as SDKAssistantMessage,
 )
@@ -62,23 +62,6 @@ MEDIA_PROTECTED_METADATA_KEY = "media_protected"
 # is never cut; only it is hard-protected.
 _HARD_PROTECTION_ITERATIONS = 1
 
-# cap the attachment inventory so a media-heavy thread cannot grow an
-# unbounded, uncompressible system-prompt section. active/released entries
-# are always kept; the oldest "available" entries are collapsed into a count.
-_MANIFEST_MAX_ENTRIES = 50
-
-_IMAGE_PREFIXES = ("image/",)
-_AUDIO_PREFIXES = ("audio/",)
-_VIDEO_PREFIXES = ("video/",)
-
-# map media category -> model InputModality value. media whose category
-# isn't in the model's input_modalities can't be shown natively.
-_CATEGORY_TO_MODALITY: dict[str, str] = {
-	"image": "images",
-	"audio": "audio",
-	"video": "video",
-}
-
 
 @dataclass(slots=True)
 class _MediaOccurrence:
@@ -102,40 +85,7 @@ class MediaProjection:
 	"""result of projecting native media for the model context."""
 
 	messages: list[SDKMessage]
-	manifest: str
 	newly_released: set[TypeID] = field(default_factory=set)
-	released_meta: dict[TypeID, _MediaOccurrence] = field(default_factory=dict)
-
-
-def classify_media(media_type: str | None) -> str:
-	"""classify a mime type into image/audio/video/other."""
-	if not media_type:
-		return "other"
-	lower = media_type.lower()
-	if any(lower.startswith(p) for p in _IMAGE_PREFIXES):
-		return "image"
-	if any(lower.startswith(p) for p in _AUDIO_PREFIXES):
-		return "audio"
-	if any(lower.startswith(p) for p in _VIDEO_PREFIXES):
-		return "video"
-	return "other"
-
-
-def modality_supported(media_type: str | None, supported: set[str] | None) -> bool:
-	"""check whether the model can natively consume this media category.
-
-	fails open (true) when modalities are unknown. categories with no modality
-	mapping ("other", e.g. pdf/text files) also return true: such files are
-	carried as their derived text content, so they are kept native within the
-	image protection window rather than released.
-	"""
-	if supported is None:
-		return True
-	category = classify_media(media_type)
-	modality = _CATEGORY_TO_MODALITY.get(category)
-	if modality is None:
-		return True
-	return modality in supported
 
 
 def _extract_file_id(part: ImageContent | FileContent) -> TypeID | None:
@@ -307,69 +257,33 @@ def _protection_iterations(
 	return settings.image_decay_iterations
 
 
-def _reference_text(occ: _MediaOccurrence) -> str:
-	"""build the text reference marker for a non-native attachment."""
-	payload: dict[str, str] = {"id": str(occ.file_id)}
-	if occ.filename:
-		payload["name"] = occ.filename
-	if occ.description:
-		payload["summary"] = " ".join(occ.description.split())
-	return "attachment_ref " + json.dumps(payload, separators=(",", ":"))
+# inline marker that replaces released native media bytes. tool-message media
+# uses this id-less form because the tool call that produced the result already
+# names the file it fetched, so repeating the id would be redundant.
+_DECAY_MARKER = "[native media attachment unloaded]"
 
 
-def _format_manifest(entries: list[dict[str, object]], omitted: int = 0) -> str:
-	"""format the attachment inventory as a system prompt section."""
-	if not entries:
-		return ""
-	lines = [
-		"## attachment inventory",
-		"",
-		"all attachments in this conversation and their current state:",
-		"- **active** - native content is included on a tool message. visible now.",
-		"- **available** / **released** - content is not loaded.",
-		"  use `file_get` with the attachment id to load it natively.",
-		"",
-		"```json",
-		json.dumps(entries, indent=2),
-		"```",
-	]
-	if omitted > 0:
-		lines.append("")
-		lines.append(
-			f"_{omitted} older attachment(s) omitted; their ids remain in the "
-			"conversation history. use `file_get` with an id to load one._"
-		)
-	return "\n".join(lines)
+def _identified_decay_marker(occ: _MediaOccurrence) -> str:
+	"""decay marker for natively attached (non-tool) media.
+
+	media attached directly to a user or assistant message is not the result of
+	a tool call, so nothing else in the thread names it. unlike the tool-message
+	marker, this one carries the file id so the reference is not lost.
+	"""
+	return f"[native media attachment unloaded: {occ.file_id}]"
 
 
-def _entry(occ: _MediaOccurrence, status: str) -> dict[str, object]:
-	"""build a JSON inventory entry for an attachment."""
-	entry: dict[str, object] = {
-		"type": occ.content_type,
-		"id": str(occ.file_id),
-		"status": status,
-	}
-	if occ.filename:
-		entry["filename"] = occ.filename
-	if occ.description:
-		entry["summary"] = " ".join(occ.description.split())
-	if occ.media_type:
-		entry["media_type"] = occ.media_type
-	return entry
-
-
-def project_media(
+def project_attachments(
 	messages: Sequence[SDKMessage],
 	supported_modalities: set[str] | None,
-	event_states: dict[TypeID, str],
 	settings: AIAttachmentSettings,
 ) -> MediaProjection:
 	"""project native media into a model-ready thread.
 
-	user/assistant media always become text references. tool-message media
-	stays native only for the latest live copy within its protection window
-	(unless the user released it early). everything else is released, and the
-	inventory manifest is returned for system-prompt injection.
+	user/assistant media always become inline decay markers. tool-message
+	media stays native only for the latest live copy within its protection
+	window; everything else is released and its bytes are replaced by an
+	inline decay marker.
 	"""
 	turn_indices = compute_turn_indices(messages)
 	iteration_indices = compute_iteration_indices(messages)
@@ -383,8 +297,8 @@ def project_media(
 		current_iteration = iteration_indices[-1]
 	occurrences = _collect_occurrences(messages, turn_indices, iteration_indices)
 
-	# latest tool occurrence per file_id is the live candidate for manifest
-	# status and the reference fallback (dedup).
+	# latest tool occurrence per file_id is the live candidate for release
+	# tracking and the dedup fallback.
 	latest_tool: dict[TypeID, _MediaOccurrence] = {}
 	for occ in occurrences:
 		if not occ.on_tool_message:
@@ -408,8 +322,8 @@ def project_media(
 		return False
 
 	# decide the native set: media in the CURRENT agent turn, within its
-	# iteration window, modality-ok, not user-released, not superseded. the hard
-	# set is the read iteration (distance 0), which compaction must never cut.
+	# iteration window, modality-ok, not superseded. the hard set is the read
+	# iteration (distance 0), which compaction must never cut.
 	active_indices: dict[TypeID, _MediaOccurrence] = {}
 	hard_protected_files: set[TypeID] = set()
 	released_indices: set[tuple[int, int]] = set()
@@ -424,14 +338,8 @@ def project_media(
 			occ.media_type, settings
 		)
 		within_hard = in_current_turn and distance < _HARD_PROTECTION_ITERATIONS
-		user_released = event_states.get(occ.file_id) == "reference"
 		modality_ok = modality_supported(occ.media_type, supported_modalities)
-		keep_native = (
-			within_soft
-			and modality_ok
-			and not user_released
-			and not _is_superseded(occ)
-		)
+		keep_native = within_soft and modality_ok and not _is_superseded(occ)
 		if keep_native:
 			active_indices[occ.file_id] = occ
 			if within_hard:
@@ -439,26 +347,14 @@ def project_media(
 		else:
 			released_indices.add((occ.message_index, occ.part_index))
 
-	# build inventory per file_id (first occurrence wins for metadata)
-	entries: list[dict[str, object]] = []
-	seen_files: set[TypeID] = set()
-	released_files: set[TypeID] = set()
-	released_meta: dict[TypeID, _MediaOccurrence] = {}
-	for occ in occurrences:
-		if occ.file_id in seen_files:
-			continue
-		seen_files.add(occ.file_id)
-		if occ.file_id in active_indices:
-			entries.append(_entry(occ, "active"))
-		elif occ.file_id in latest_tool:
-			entries.append(_entry(occ, "released"))
-			released_files.add(occ.file_id)
-			released_meta[occ.file_id] = occ
-		else:
-			entries.append(_entry(occ, "available"))
+	# a file is newly released when its latest tool copy exists but is not in
+	# the native set (its bytes were just stripped to an inline marker).
+	released_files: set[TypeID] = {
+		file_id for file_id in latest_tool if file_id not in active_indices
+	}
 
-	# transform messages: references for user/assistant, drop released tool
-	# attachments, keep + protect active tool media.
+	# transform messages: decay markers for user/assistant, drop released tool
+	# attachments (appending a decay marker), keep + protect active tool media.
 	new_messages: list[SDKMessage] = []
 	occ_by_loc = {(o.message_index, o.part_index): o for o in occurrences}
 	for msg_idx, msg in enumerate(messages):
@@ -468,12 +364,7 @@ def project_media(
 			for part_idx, part in enumerate(msg.content):
 				occ = occ_by_loc.get((msg_idx, part_idx))
 				if occ is not None:
-					new_content.append(
-						TextContent(
-							text=_reference_text(occ),
-							metadata={"attachment_ref": str(occ.file_id)},
-						)
-					)
+					new_content.append(TextContent(text=_identified_decay_marker(occ)))
 					changed = True
 				else:
 					new_content.append(part)
@@ -484,11 +375,13 @@ def project_media(
 
 		if isinstance(msg, SDKToolMessage):
 			kept: list[ImageContent | FileContent] = []
+			any_decayed = False
 			has_hard = False
 			changed = False
 			for part_idx, att in enumerate(msg.attachments):
 				if (msg_idx, part_idx) in released_indices:
 					changed = True
+					any_decayed = True
 					continue
 				kept.append(att)
 				occ = occ_by_loc.get((msg_idx, part_idx))
@@ -501,6 +394,12 @@ def project_media(
 			update: dict[str, object] = {}
 			if changed:
 				update["attachments"] = kept
+				if any_decayed:
+					update["tool_output"] = (
+						_DECAY_MARKER + "\n" + msg.tool_output
+						if msg.tool_output
+						else _DECAY_MARKER
+					)
 			metadata = dict(msg.metadata or {})
 			if has_hard:
 				if not metadata.get(MEDIA_PROTECTED_METADATA_KEY):
@@ -513,27 +412,7 @@ def project_media(
 
 		new_messages.append(msg)
 
-	# newly released = released tool media the user hadn't already released
-	prior_released = {fid for fid, st in event_states.items() if st == "reference"}
-	newly_released = released_files - prior_released
-
-	# bound manifest growth: keep all active/released entries, collapse the
-	# oldest "available" entries into a count.
-	omitted = 0
-	if len(entries) > _MANIFEST_MAX_ENTRIES:
-		priority = [e for e in entries if e.get("status") != "available"]
-		available = [e for e in entries if e.get("status") == "available"]
-		room = max(_MANIFEST_MAX_ENTRIES - len(priority), 0)
-		kept_available = available[-room:] if room else []
-		omitted = len(available) - len(kept_available)
-		keep_ids = {id(e) for e in priority} | {id(e) for e in kept_available}
-		entries = [e for e in entries if id(e) in keep_ids]
-
 	return MediaProjection(
 		messages=new_messages,
-		manifest=_format_manifest(entries, omitted),
-		newly_released=newly_released,
-		released_meta={
-			fid: released_meta[fid] for fid in newly_released if fid in released_meta
-		},
+		newly_released=released_files,
 	)

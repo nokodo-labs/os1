@@ -40,7 +40,6 @@ def _preference_value[T](value: T | MissingType, default: T) -> T:
 # jinja2 renders {{ variable_name }} into these sentinels at template time.
 # filters find-and-replace the sentinel with actual content.
 # if the sentinel is absent from the rendered prompt, the filter is a no-op.
-SENTINEL_REFERENCED_ATTACHMENTS = "<<FILTER:referenced_attachments>>"
 SENTINEL_USER_MEMORIES = "<<FILTER:user_memories>>"
 SENTINEL_CHAT_CONTEXT = "<<FILTER:chat_context>>"
 SENTINEL_CHAT_WINDOW_INFO = "<<FILTER:chat_window_info>>"
@@ -479,7 +478,6 @@ def build_prompt_variables(
 
 	variables.update(_build_location_variables(client_context))
 
-	variables["referenced_attachments"] = SENTINEL_REFERENCED_ATTACHMENTS
 	variables["chat_window_info"] = SENTINEL_CHAT_WINDOW_INFO
 	variables["citation_sources"] = SENTINEL_CITATION_SOURCES
 

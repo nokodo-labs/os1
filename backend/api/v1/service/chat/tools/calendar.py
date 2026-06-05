@@ -18,12 +18,13 @@ from api.schemas.search import SearchMode, SearchParams
 from api.v1.service import calendar as calendar_service
 from api.v1.service.calendar.events import list_calendar_scheduled_items
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.message_metadata import CITABLE_SOURCES_KEY
 from api.v1.service.reminders.core import list_reminder_scheduled_items
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
-from nokodo_ai.types.json import JSONObject
+from nokodo_ai.types.json import JSONObject, JSONValue
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -156,6 +157,7 @@ class CalendarEventWriteInput(BaseModel):
 
 
 def _event_payload(calendar_event: CalendarEvent) -> dict[str, object]:
+	"""serialize one calendar event for tool output."""
 	return {
 		"id": str(calendar_event.id),
 		"title": calendar_event.title,
@@ -186,14 +188,85 @@ def _event_payload(calendar_event: CalendarEvent) -> dict[str, object]:
 
 
 def _scheduled_item_payload(item: ScheduledItem) -> dict[str, object]:
-	payload = item.model_dump(mode="json")
+	"""serialize one scheduled reminder or calendar occurrence for tool output."""
+	status = item.status if isinstance(item.status, str) else item.status.value
+	payload: dict[str, object] = {
+		"type": "reminder" if item.kind == "reminder" else "calendar_event",
+		"id": str(item.parent_id),
+		"occurrence_id": item.id,
+		"original_occurrence_at": item.original_occurrence_at.isoformat(),
+		"effective_start_at": item.effective_start_at.isoformat(),
+		"title": item.title,
+		"status": status,
+		"readonly": item.readonly,
+	}
+	if item.effective_end_at is not None:
+		payload["effective_end_at"] = item.effective_end_at.isoformat()
+	if item.description is not None:
+		payload["description"] = item.description
+	if item.color is not None:
+		payload["color"] = item.color
+	if item.all_day:
+		payload["all_day"] = item.all_day
+	if item.completed_at is not None:
+		payload["completed_at"] = item.completed_at.isoformat()
 	if item.kind == "reminder":
-		payload["type"] = "reminder"
 		payload["reminder_id"] = str(item.parent_id)
+		if item.reminder_list_id is not None:
+			payload["reminder_list_id"] = str(item.reminder_list_id)
 	elif item.kind == "event":
-		payload["type"] = "calendar_event"
 		payload["calendar_event_id"] = str(item.parent_id)
+		if item.calendar_id is not None:
+			payload["calendar_id"] = str(item.calendar_id)
 	return payload
+
+
+def _citable_source(
+	source_type: str, source_id: object, title: str | None
+) -> JSONValue:
+	"""build one citation-source payload for concrete scheduled resources."""
+	return {
+		"source_type": source_type,
+		"source_id": str(source_id),
+		"title": title,
+	}
+
+
+def _calendar_event_citable_sources(calendar_event: CalendarEvent) -> list[JSONValue]:
+	"""return the event and owning calendar citation sources for an event."""
+	return [
+		_citable_source("calendar_event", calendar_event.id, calendar_event.title),
+		_citable_source("calendar", calendar_event.calendar_id, calendar_event.title),
+	]
+
+
+def _scheduled_item_citable_sources(item: ScheduledItem) -> list[JSONValue]:
+	"""return citation sources represented by one scheduled item."""
+	sources: list[JSONValue] = []
+	if item.kind == "reminder":
+		sources.append(_citable_source("reminder", item.parent_id, item.title))
+		if item.reminder_list_id is not None:
+			sources.append(
+				_citable_source("reminder_list", item.reminder_list_id, item.title)
+			)
+	elif item.kind == "event":
+		sources.append(_citable_source("calendar_event", item.parent_id, item.title))
+		if item.calendar_id is not None:
+			sources.append(_citable_source("calendar", item.calendar_id, item.title))
+	return sources
+
+
+def _success_with_citations(
+	output: dict[str, object],
+	tool_call_context: ToolCallContext,
+	citable_sources: list[JSONValue],
+) -> ToolMessage:
+	"""return a tool success message carrying citation metadata."""
+	return ToolMessage(
+		tool_call_id=tool_call_context.tool_call_id,
+		tool_output=json.dumps(output),
+		metadata={CITABLE_SOURCES_KEY: citable_sources},
+	)
 
 
 class CalendarEventGetTool(Tool[AppContext]):
@@ -240,7 +313,11 @@ class CalendarEventGetTool(Tool[AppContext]):
 					"message": "calendar event retrieved",
 					"event": _event_payload(calendar_event),
 				}
-				return self.success(json.dumps(out), __tool_call_context__)
+				return _success_with_citations(
+					out,
+					__tool_call_context__,
+					_calendar_event_citable_sources(calendar_event),
+				)
 
 			if inp.query:
 				page = await calendar_service.search_calendar_events(
@@ -267,7 +344,14 @@ class CalendarEventGetTool(Tool[AppContext]):
 					"has_more": page.has_more,
 					"results": search_results,
 				}
-				return self.success(json.dumps(search_out), __tool_call_context__)
+				return _success_with_citations(
+					search_out,
+					__tool_call_context__,
+					[
+						_citable_source("calendar_event", item.id, item.title)
+						for item in page.items
+					],
+				)
 		except HTTPException as exc:
 			return self.error(str(exc.detail), __tool_call_context__)
 
@@ -279,6 +363,7 @@ class CalendarEventGetTool(Tool[AppContext]):
 		tool_call_context: ToolCallContext,
 		app_context: AppContext,
 	) -> ToolMessage:
+		"""return a merged scheduled-item page for calendars and reminders."""
 		start_at = inp.start_at or datetime.now(tz=UTC)
 		end_at = inp.end_at or start_at + timedelta(days=_DEFAULT_UPCOMING_DAYS)
 		if end_at <= start_at:
@@ -314,6 +399,9 @@ class CalendarEventGetTool(Tool[AppContext]):
 		)
 		page = items[inp.skip : inp.skip + inp.limit]
 		results = [_scheduled_item_payload(item) for item in page]
+		citable_sources: list[JSONValue] = []
+		for item in page:
+			citable_sources.extend(_scheduled_item_citable_sources(item))
 		next_skip = (
 			inp.skip + len(results) if inp.skip + len(results) < len(items) else None
 		)
@@ -329,7 +417,7 @@ class CalendarEventGetTool(Tool[AppContext]):
 			"next_skip": next_skip,
 			"results": results,
 		}
-		return self.success(json.dumps(out), tool_call_context)
+		return _success_with_citations(out, tool_call_context, citable_sources)
 
 
 class CalendarEventWriteTool(Tool[AppContext]):

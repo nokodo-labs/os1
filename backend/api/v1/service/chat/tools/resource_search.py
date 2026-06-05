@@ -69,6 +69,7 @@ class ResourceSearchInput(BaseModel):
 
 
 def _result_payload(item: SearchResultItem) -> dict[str, object]:
+	"""serialize one search result for the resource_search tool output."""
 	data = item.model_dump(mode="json")
 	if data.get("type") == "thread":
 		data["type"] = "chat"

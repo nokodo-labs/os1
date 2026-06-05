@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from api.schemas.citations import Citation
+from api.schemas.message import Citation
 
 
 @dataclass(frozen=True, slots=True)

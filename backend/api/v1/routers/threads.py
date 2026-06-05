@@ -111,7 +111,7 @@ async def create_and_run(
 			detail="non-streaming runs are not yet implemented",
 		)
 
-	if not req.input or (not req.input.text and not req.input.attachment_ids):
+	if not req.input or (not req.input.text and not req.input.attachments):
 		raise HTTPException(
 			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="input is required when creating a new thread",

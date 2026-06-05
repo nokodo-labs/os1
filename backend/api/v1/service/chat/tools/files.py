@@ -13,11 +13,11 @@ from api.schemas.file import FileUpdate
 from api.schemas.search import SearchMode, SearchParams
 from api.v1.service import files as file_service
 from api.v1.service.chat.context import AppContext
-from api.v1.service.chat.context_compaction.media import (
+from api.v1.service.chat.models import fetch_agent_input_modalities
+from api.v1.service.files.modalities import (
 	classify_media,
 	modality_supported,
 )
-from api.v1.service.chat.models import fetch_agent_input_modalities
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import FileContent, ImageContent, ToolMessage
@@ -169,14 +169,12 @@ class FileGetTool(Tool[AppContext]):
 					}
 					attachment = (
 						ImageContent(
-							url=f"/v1/files/{f.id}/content",
 							filename=f.filename,
 							media_type=mime,
 							metadata=metadata,
 						)
 						if category == "image"
 						else FileContent(
-							url=f"/v1/files/{f.id}/content",
 							filename=f.filename,
 							media_type=mime,
 							metadata=metadata,

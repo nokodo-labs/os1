@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from pydantic import Field
 
 from api.v1.service.chat.filters.base import Filter
-from api.v1.service.files import resolve_file_data
+from api.v1.service.files import read_file_base64
 from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
@@ -133,7 +133,7 @@ class FileResolveFilter(Filter):
 		if not file_id:
 			return None
 		try:
-			b64 = await resolve_file_data(file_id, session, principal=principal)
+			b64 = await read_file_base64(file_id, session, principal=principal)
 			if b64:
 				return part.model_copy(update={"base64": b64})
 			log.warning("file_resolve: no data for file %s", file_id)

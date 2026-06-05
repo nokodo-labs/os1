@@ -21,8 +21,7 @@ from api.schemas.runs import (
 from api.v1.service import runs as runs_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.authorization import require_thread_access
-from api.v1.service.chat.run_helpers import broadcast_run_event
-from api.v1.service.chat.run_status import run_status_store
+from api.v1.service.chat.run_status import broadcast_run_event, run_status_store
 from api.v1.service.chat.steering import (
 	broadcast_steering_event,
 	drop_run_steering,
@@ -77,7 +76,7 @@ async def create_run(
 	# ephemeral run - no thread, no persistence. routes through the same
 	# producer-task path as persisted runs so it is cancellable and
 	# observable in the run_status_store.
-	if not req.input or (not req.input.text and not req.input.attachment_ids):
+	if not req.input or (not req.input.text and not req.input.attachments):
 		raise HTTPException(
 			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="input is required for ephemeral runs",

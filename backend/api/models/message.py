@@ -93,8 +93,7 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		StringEnum(MessageType),
 		default=MessageType.USER,
 	)
-	# Ordered list of content parts (TextContent, ImageContent, etc.)
-	# Each part is a dict with "type" discriminator matching api.schemas.content
+	# ordered list of content part dicts (see api.schemas.message ContentPart)
 	content: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
 	# Tool-specific fields. Nullable for non-tool messages.
 	tool_call_id: Mapped[str | None] = mapped_column(String(TYPEID_LENGTH), index=True)
@@ -103,8 +102,10 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	# Token usage from chat model response (matches SDK Usage model)
 	usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 	read_by: Mapped[list[str]] = mapped_column(JSONB, default=list)
-	# Citation references used in this message (see api.schemas.citations)
+	# Citation references used in this message (see api.schemas.message Citation)
 	citations: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+	# attached resource references (see api.schemas.message ResourceAttachment)
+	attachments: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
 
 	__mapper_args__ = {
 		"polymorphic_on": type,
@@ -230,11 +231,7 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 					metadata=self.metadata_,
 					attachments=att,
 				)
-			case _:
-				return SDKUserMessage(
-					content=self._sdk_user_content(),
-					metadata=self.metadata_,
-				)
+		raise ValueError(f"unsupported message type: {self.type}")
 
 
 class UserMessage(Message):

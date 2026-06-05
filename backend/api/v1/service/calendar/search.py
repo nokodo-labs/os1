@@ -16,7 +16,9 @@ from api.schemas.search import (
 	CursorPage,
 	SearchMode,
 	SearchParams,
+	SearchResourceReferenceType,
 	SearchResultItem,
+	SearchResultParent,
 	SearchResultType,
 )
 from api.v1.service import vectorstores as vectorstore_service
@@ -185,6 +187,10 @@ async def _autocomplete_calendar_events(
 			preview=calendar_event.description[:100]
 			if calendar_event.description
 			else None,
+			parent=SearchResultParent(
+				type=SearchResourceReferenceType.CALENDAR,
+				id=TypeID(calendar_event.calendar_id),
+			),
 			metadata=_calendar_event_metadata(calendar_event),
 			created_at=calendar_event.created_at,
 			updated_at=calendar_event.updated_at,
@@ -255,6 +261,10 @@ async def _hybrid_search_calendar_events(
 				if calendar_event.description
 				else None,
 				score=score_by_id.get(resource_id),
+				parent=SearchResultParent(
+					type=SearchResourceReferenceType.CALENDAR,
+					id=TypeID(calendar_event.calendar_id),
+				),
 				metadata=_calendar_event_metadata(calendar_event),
 				created_at=calendar_event.created_at,
 				updated_at=calendar_event.updated_at,

@@ -12,6 +12,7 @@ from api.models.event_types import EventType
 from api.settings import SearchRecencyFilter, settings
 from api.v1.schemas.web_search import WebSearchSource
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.message_metadata import CITABLE_SOURCES_KEY
 from api.v1.service.web_search.agentic import search_agentic_web
 from api.v1.service.web_search.errors import WebSearchError
 from api.v1.service.web_search.progress import build_agentic_web_search_progress
@@ -193,7 +194,7 @@ class AgenticWebSearchTool(Tool[AppContext]):
 			"images": images,
 		}
 		metadata: JSONObject = {
-			"_citable_sources": citable_sources,
+			CITABLE_SOURCES_KEY: citable_sources,
 			"_web_search": {
 				"agent": result.agent,
 				"engine": result.engine,

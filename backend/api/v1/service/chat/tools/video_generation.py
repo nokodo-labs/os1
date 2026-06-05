@@ -2,7 +2,8 @@
 
 delegates to the media generation service layer which handles
 engine dispatch and settings resolution. generated videos are
-persisted as File records and attached to the tool response.
+persisted as File records and referenced through the attachments
+system; the tool never inlines bytes itself.
 """
 
 from __future__ import annotations
@@ -13,11 +14,11 @@ import logging
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.message_metadata import ATTACHMENTS_KEY
 from api.v1.service.media import MediaError, generate_video
-from api.v1.service.media.videos import VideoResult
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
-from nokodo_ai.messages import FileContent, ToolAttachment, ToolMessage
+from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
 
@@ -51,24 +52,6 @@ class GenerateVideoInput(BaseModel):
 		default=None,
 		description="aspect ratio like '16:9' (omit for default).",
 	)
-
-
-def _build_attachments(
-	results: list[VideoResult],
-) -> list[ToolAttachment]:
-	"""build FileContent attachments from generation results."""
-	attachments: list[ToolAttachment] = []
-	for vid in results:
-		if vid.file_id:
-			attachments.append(
-				FileContent(
-					url=f"/v1/files/{vid.file_id}/content",
-					filename=f"generated.{vid.mime_type.split('/')[-1]}",
-					media_type=vid.mime_type,
-					metadata={"file_id": vid.file_id},
-				)
-			)
-	return attachments
 
 
 class GenerateVideoTool(Tool[AppContext]):
@@ -115,9 +98,12 @@ class GenerateVideoTool(Tool[AppContext]):
 				__tool_call_context__,
 			)
 
-		attachments = _build_attachments(results)
 		count = len(results)
 		label = "video" if count == 1 else "videos"
+		metadata = dict(__tool_call_context__.metadata or {})
+		refs = [{"type": "file", "id": str(r.file_id)} for r in results if r.file_id]
+		if refs:
+			metadata[ATTACHMENTS_KEY] = refs
 		return ToolMessage(
 			tool_call_id=__tool_call_context__.tool_call_id,
 			tool_output=json.dumps(
@@ -128,7 +114,6 @@ class GenerateVideoTool(Tool[AppContext]):
 					"file_ids": [r.file_id for r in results if r.file_id],
 				}
 			),
-			metadata=__tool_call_context__.metadata,
+			metadata=metadata,
 			is_error=False,
-			attachments=attachments,
 		)
