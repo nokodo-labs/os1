@@ -44,7 +44,9 @@ def _agent_context() -> AgentContext:
 def _hook_state(
 	thread: SDKThread, final: bool = False
 ) -> AgentIterationSnapshot[AppContext]:
-	return AgentIterationState[AppContext](thread=thread, tools=[]).snapshot(final=final)
+	return AgentIterationState[AppContext](thread=thread, tools=[]).snapshot(
+		final=final
+	)
 
 
 @pytest.mark.asyncio
