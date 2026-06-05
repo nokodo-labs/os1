@@ -84,4 +84,5 @@ class File(FileBase, TimestampedModel, ORMModel):
 	checksum_sha256: str | None = None
 	status: FileStatus
 	message_id: TypeID | None = None
+	origin_thread_id: TypeID | None = None
 	deleted_at: datetime | None = Field(default=None)

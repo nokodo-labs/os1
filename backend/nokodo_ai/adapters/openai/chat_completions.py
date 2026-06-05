@@ -182,6 +182,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 			model=warn_known_model(model, OpenAIChatModel),
 			messages=_messages_to_openai_chatcompletions(messages),
 			stream=True,
+			stream_options={"include_usage": True},
 			tools=_tools_to_openai_chatcompletions(tools) or openai.omit,
 			tool_choice=_tool_choice_to_openai_chatcompletions(params.tool_choice)
 			if tools and params and params.tool_choice is not None

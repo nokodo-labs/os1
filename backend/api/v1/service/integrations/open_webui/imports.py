@@ -38,6 +38,7 @@ from api.v1.service.integrations.open_webui.deployments import (
 	normalize_origin,
 )
 from api.v1.service.threads import ensure_participant
+from api.v1.tasks.files import start_file_processing_task
 from nokodo_ai.types.json import JSONValue
 from nokodo_ai.utils.typeid import TypeID
 
@@ -368,6 +369,9 @@ class ImportSummary:
 	notes_imported: int = 0
 	notes_skipped: int = 0
 	errors: list[str] | None = None
+	# files created during this run that still need async processing; the
+	# import enqueues them only after its transaction has committed.
+	processing_file_ids: list[TypeID] = field(default_factory=list)
 
 	def add_error(self, msg: str) -> None:
 		if self.errors is None:
@@ -1548,7 +1552,6 @@ async def _import_file_entry(
 			source=FileSource.IMPORT,
 			project_ids=project_ids,
 			message_id=message_id,
-			create_event=False,
 		)
 	except (OSError, RuntimeError, ValueError) as exc:
 		summary.files_skipped += 1
@@ -1568,8 +1571,11 @@ async def _import_file_entry(
 		_owui_metadata(deployment, "file", owui_file_id, file_id=owui_file_id),
 	)
 	summary.files_imported += 1
+	# imported attachments are stored inside the import's nested transaction;
+	# defer async processing until after the whole import has committed.
+	summary.processing_file_ids.append(file.id)
 	return _file_content_part(
-		file_id=TypeID(file.id),
+		file_id=file.id,
 		url=None,
 		filename=file.filename,
 		media_type=file.mime_type,
@@ -2027,6 +2033,42 @@ def _require_import_permissions(
 		require_permission(principal, ActionPermission.NOTES_CREATE.value)
 
 
+async def _enqueue_imported_file_processing(
+	session: AsyncSession,
+	principal: Principal,
+	summary: ImportSummary,
+) -> None:
+	"""enqueue async processing for files created during this import.
+
+	runs after the import transaction has committed so each task sees a
+	durably stored file. files whose nested transaction rolled back are
+	skipped. failures are logged, never raised - a missed processing
+	enqueue must not fail an otherwise successful import.
+	"""
+	file_ids = summary.processing_file_ids
+	if not file_ids:
+		return
+	existing = set(
+		(
+			await session.scalars(
+				select(File.id).where(
+					File.id.in_([str(file_id) for file_id in file_ids]),
+					File.deleted_at.is_(None),
+				)
+			)
+		).all()
+	)
+	for file_id in file_ids:
+		if str(file_id) not in existing:
+			continue
+		try:
+			await start_file_processing_task(session, principal, file_id)
+		except Exception:
+			logger.exception(
+				"failed to enqueue processing for imported file %s", file_id
+			)
+
+
 async def import_from_open_webui(
 	deployment_origin: str,
 	credential: str,
@@ -2286,5 +2328,6 @@ async def import_from_open_webui(
 			await _report_progress(progress_callback, 93, "notes imported")
 
 	await session.commit()
+	await _enqueue_imported_file_processing(session, principal, summary)
 	await _report_progress(progress_callback, 95 if include_notes else 90, "finalizing")
 	return summary

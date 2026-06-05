@@ -49,13 +49,14 @@ class AgentIterationState[AppContextT = None]:
 	tool_choice: AgentToolChoice = "auto"
 	iteration: int = 0
 
-	def snapshot(self) -> AgentIterationSnapshot[AppContextT]:
+	def snapshot(self, final: bool = False) -> AgentIterationSnapshot[AppContextT]:
 		"""return a read-only view for observers."""
 		return AgentIterationSnapshot(
 			thread=self.thread.model_copy(deep=True),
 			tools=[tool.model_copy(deep=True) for tool in self.tools],
 			tool_choice=self.tool_choice,
 			iteration=self.iteration,
+			final=final,
 		)
 
 
@@ -72,6 +73,7 @@ class AgentIterationSnapshot[AppContextT = None]:
 	tools: list[Tool[AppContextT]]
 	tool_choice: AgentToolChoice
 	iteration: int
+	final: bool = False
 
 
 # strong references to fire-and-forget cancel tasks so the event loop does
@@ -261,6 +263,7 @@ class Agent[AppContextT = None](Base):
 			self.tools = state.tools
 
 			if not _should_continue_agent_run(state):
+				await self._execute_hooks(state, agent_context, app_context, final=True)
 				return produced
 
 			if model_calls >= self.max_iterations:
@@ -272,17 +275,14 @@ class Agent[AppContextT = None](Base):
 				tools=self.tool_definitions,
 				tool_choice=tool_choice_for_generation,
 			)
+			# tool_choice is consumed for this iteration only; reset to "auto"
+			# so a forced choice never carries into later iterations.
+			state.tool_choice = "auto"
 			model_calls += 1
 			state.thread.add(assistant_response)
 			produced.append(assistant_response)
 
-			# execute hooks after response (read-only observation)
-			for hook in self.hooks:
-				await hook.execute(
-					state.snapshot(),
-					agent_context=agent_context,
-					app_context=app_context,
-				)
+			await self._execute_hooks(state, agent_context, app_context)
 
 			for tool_call in assistant_response.tool_calls:
 				tool_message = await self._execute_tools(
@@ -303,6 +303,7 @@ class Agent[AppContextT = None](Base):
 		)
 		state.thread.add(final_response)
 		produced.append(final_response)
+		await self._execute_hooks(state, agent_context, app_context, final=True)
 
 		return produced
 
@@ -323,6 +324,7 @@ class Agent[AppContextT = None](Base):
 			self.tools = state.tools
 
 			if not _should_continue_agent_run(state):
+				await self._execute_hooks(state, agent_context, app_context, final=True)
 				yield AgentDelta.done_sentinel(chunk_index=chunk_index)
 				return
 
@@ -346,15 +348,12 @@ class Agent[AppContextT = None](Base):
 
 			# add completed message to thread
 			model_calls += 1
+			# tool_choice is consumed for this iteration only; reset to "auto"
+			# so a forced choice never carries into later iterations.
+			state.tool_choice = "auto"
 			state.thread.add(assistant_message)
 
-			# execute hooks (read-only observation)
-			for hook in self.hooks:
-				await hook.execute(
-					state.snapshot(),
-					agent_context=agent_context,
-					app_context=app_context,
-				)
+			await self._execute_hooks(state, agent_context, app_context)
 
 			# execute each tool call
 			for tool_call in assistant_message.tool_calls:
@@ -390,7 +389,23 @@ class Agent[AppContextT = None](Base):
 				)
 			)
 
+		await self._execute_hooks(state, agent_context, app_context, final=True)
 		yield AgentDelta.done_sentinel(chunk_index=chunk_index)
+
+	async def _execute_hooks(
+		self,
+		state: AgentIterationState[AppContextT],
+		agent_context: AgentContext,
+		app_context: AppContextT | None,
+		final: bool = False,
+	) -> None:
+		"""execute hooks with a read-only snapshot of the current run state."""
+		for hook in self.hooks:
+			await hook.execute(
+				state.snapshot(final=final),
+				agent_context=agent_context,
+				app_context=app_context,
+			)
 
 	async def _stream_with_cancel(
 		self,

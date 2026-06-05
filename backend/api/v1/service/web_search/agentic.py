@@ -16,7 +16,7 @@ from api.models.agent import Agent as AgentORM
 from api.models.model import Model
 from api.permissions import ResourceType
 from api.perplexity import PerplexityClient
-from api.schemas.citations import Citation, CitationSource
+from api.schemas.message import Citation, CitationSource
 from api.settings import SearchAgent, SearchEngine, SearchRecencyFilter, settings
 from api.v1.schemas.web_search import (
 	AgenticWebSearchResult,

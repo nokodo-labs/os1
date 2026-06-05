@@ -42,6 +42,9 @@ from anthropic.types.raw_content_block_start_event import (
 from anthropic.types.raw_content_block_stop_event import (
 	RawContentBlockStopEvent as AnthropicRawContentBlockStopEvent,
 )
+from anthropic.types.raw_message_delta_event import (
+	RawMessageDeltaEvent as AnthropicRawMessageDeltaEvent,
+)
 from anthropic.types.raw_message_start_event import (
 	RawMessageStartEvent as AnthropicRawMessageStartEvent,
 )
@@ -90,6 +93,7 @@ __all__ = [
 	"AnthropicRawContentBlockDeltaEvent",
 	"AnthropicRawContentBlockStartEvent",
 	"AnthropicRawContentBlockStopEvent",
+	"AnthropicRawMessageDeltaEvent",
 	"AnthropicRawMessageStartEvent",
 	"AnthropicTextBlock",
 	"AnthropicTextBlockParam",

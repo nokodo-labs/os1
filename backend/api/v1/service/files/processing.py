@@ -15,7 +15,7 @@ from api.v1.service.files.content_vectorization import (
 	vectorize_file_content,
 )
 from api.v1.service.files.description import update_file_description
-from api.v1.service.files.service import emit_file_event
+from api.v1.service.files.events import emit_file_event
 from api.v1.service.files.vectorization import replace_file_description_vectors
 from api.v1.service.resource_payload_cache import invalidate_resource_payload_cache
 from nokodo_ai.types.json import JSONObject

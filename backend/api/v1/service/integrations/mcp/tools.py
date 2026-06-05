@@ -12,11 +12,17 @@ from api.mcp import MCPError
 from api.models.mcp import MCPServer, MCPServerScope
 from api.permissions import ActionPermission
 from api.schemas.agent import AgentConfig
-from api.schemas.mcp import MCPDiscoveredTool, MCPSurfaceConfig
+from api.schemas.mcp import (
+	MCP_RESULT_SERVER_NAME_KEY,
+	MCP_RESULT_TOOL_NAME_KEY,
+	MCPDiscoveredTool,
+	MCPSurfaceConfig,
+)
 from api.settings import settings
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.tools.external import ExternalToolSource
 from api.v1.service.integrations.mcp.cache import (
+	CachedMCPServerTools,
 	get_cached_mcp_server_tools,
 	set_cached_mcp_server_tools,
 )
@@ -72,6 +78,7 @@ class MCPRemoteTool(Tool[AppContext]):
 	"""chat tool backed by one MCP server tool."""
 
 	server_id: str
+	mcp_server_name: str
 	mcp_tool_id: str
 	mcp_tool_name: str
 
@@ -84,6 +91,12 @@ class MCPRemoteTool(Tool[AppContext]):
 		**kwargs: object,
 	) -> ToolMessage:
 		"""call the backing MCP tool."""
+		# stamp MCP attribution so the client can label this inline tool call with
+		# its server and clean tool name without reverse-engineering anything.
+		__tool_call_context__.metadata[MCP_RESULT_SERVER_NAME_KEY] = (
+			self.mcp_server_name
+		)
+		__tool_call_context__.metadata[MCP_RESULT_TOOL_NAME_KEY] = self.mcp_tool_name
 		if __app_context__ is None:
 			return self.error("app context is required", __tool_call_context__)
 		json_arguments = to_jsonable_python(kwargs, exclude_none=True, fallback=str)
@@ -131,18 +144,24 @@ async def resolve_mcp_tools(
 	server_tools = await _load_server_tools(wanted_server_ids, session)
 	seen_tools: set[tuple[str, str]] = set()
 	for server_id, mcp_tool_id in tool_refs:
-		tool = _find_enabled_tool(server_tools.get(server_id, []), mcp_tool_id)
+		entry = server_tools.get(server_id)
+		if entry is None:
+			continue
+		tool = _find_enabled_tool(entry.tools, mcp_tool_id)
 		if tool is None:
 			continue
 		seen_tools.add((server_id, mcp_tool_id))
-		tools.append(_tool_from_snapshot(server_id, tool))
+		tools.append(_tool_from_snapshot(server_id, entry.name, tool))
 	for server_id in server_ids:
-		for tool in server_tools.get(server_id, []):
+		entry = server_tools.get(server_id)
+		if entry is None:
+			continue
+		for tool in entry.tools:
 			key = (server_id, str(tool.id))
 			if key in seen_tools:
 				continue
 			seen_tools.add(key)
-			tools.append(_tool_from_snapshot(server_id, tool))
+			tools.append(_tool_from_snapshot(server_id, entry.name, tool))
 	return tools
 
 
@@ -165,31 +184,35 @@ async def resolve_mcp_extra_tools(
 			tool_refs.add(tool_ref)
 	if not tool_refs:
 		return []
+	wanted_server_ids = {server_id for server_id, _ in tool_refs}
 	server_tools = await _load_user_server_tools(
-		{server_id for server_id, _ in tool_refs},
+		wanted_server_ids,
 		app_context.session,
 		str(app_context.user_id),
 	)
 	tools: list[Tool[AppContext]] = []
 	seen_tools: set[tuple[str, str]] = set()
 	for server_id, mcp_tool_id in tool_refs:
-		tool = _find_enabled_tool(server_tools.get(server_id, []), mcp_tool_id)
+		entry = server_tools.get(server_id)
+		if entry is None:
+			continue
+		tool = _find_enabled_tool(entry.tools, mcp_tool_id)
 		if tool is None:
 			continue
 		key = (server_id, mcp_tool_id)
 		if key in seen_tools:
 			continue
 		seen_tools.add(key)
-		tools.append(_tool_from_snapshot(server_id, tool))
+		tools.append(_tool_from_snapshot(server_id, entry.name, tool))
 	return tools
 
 
 async def _load_server_tools(
 	server_ids: set[str],
 	session: AsyncSession,
-) -> dict[str, list[MCPDiscoveredTool]]:
+) -> dict[str, CachedMCPServerTools]:
 	"""load enabled tool snapshots for MCP servers, preferring Redis cache."""
-	server_tools: dict[str, list[MCPDiscoveredTool]] = {}
+	server_tools: dict[str, CachedMCPServerTools] = {}
 	missing_ids: set[str] = set()
 	for server_id in server_ids:
 		cached = await get_cached_mcp_server_tools(session, server_id)
@@ -208,9 +231,9 @@ async def _load_server_tools(
 	)
 	for server in result.scalars().all():
 		server_id = str(server.id)
-		tools = _enabled_tools(server)
-		server_tools[server_id] = tools
-		await set_cached_mcp_server_tools(session, server_id, tools)
+		snapshot = CachedMCPServerTools(name=server.name, tools=_enabled_tools(server))
+		server_tools[server_id] = snapshot
+		await set_cached_mcp_server_tools(session, server_id, snapshot)
 	return server_tools
 
 
@@ -218,7 +241,7 @@ async def _load_user_server_tools(
 	server_ids: set[str],
 	session: AsyncSession,
 	user_id: str,
-) -> dict[str, list[MCPDiscoveredTool]]:
+) -> dict[str, CachedMCPServerTools]:
 	"""load enabled tool snapshots for owned user MCP servers."""
 	if not server_ids:
 		return {}
@@ -230,7 +253,12 @@ async def _load_user_server_tools(
 			MCPServer.id.in_(server_ids),
 		)
 	)
-	return {str(server.id): _enabled_tools(server) for server in result.scalars().all()}
+	return {
+		str(server.id): CachedMCPServerTools(
+			name=server.name, tools=_enabled_tools(server)
+		)
+		for server in result.scalars().all()
+	}
 
 
 def _enabled_tools(server: MCPServer) -> list[MCPDiscoveredTool]:
@@ -258,13 +286,16 @@ def _find_enabled_tool(
 	return None
 
 
-def _tool_from_snapshot(server_id: str, tool: MCPDiscoveredTool) -> MCPRemoteTool:
+def _tool_from_snapshot(
+	server_id: str, server_name: str, tool: MCPDiscoveredTool
+) -> MCPRemoteTool:
 	"""build a runtime chat tool from a cached MCP tool snapshot."""
 	return MCPRemoteTool(
 		name=tool.normalized_name,
 		description=tool.description or "MCP tool",
 		parameters=tool.input_schema,
 		server_id=server_id,
+		mcp_server_name=server_name,
 		mcp_tool_id=str(tool.id),
 		mcp_tool_name=tool.name,
 	)

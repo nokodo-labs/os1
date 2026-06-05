@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.file import FileSource
 from api.settings import settings
 from api.v1.service.chat.models import resolve_image_model
-from api.v1.service.files import store_file
+from api.v1.service.files import ingest_file
 from nokodo_ai.adapters.images import ImageGenerationParams
 from nokodo_ai.utils.typeid import TypeID
 
@@ -62,7 +62,6 @@ async def generate_image(
 	message_id: TypeID | None = None,
 	origin_session_id: str | None = None,
 	agent_id: TypeID | None = None,
-	thread_id: TypeID | None = None,
 ) -> list[ImageResult]:
 	"""generate or edit images and persist them as File records.
 
@@ -141,7 +140,7 @@ async def generate_image(
 			file_bytes = base64.b64decode(img.b64_data)
 
 		if file_bytes is not None:
-			file = await store_file(
+			file = await ingest_file(
 				session,
 				data=file_bytes,
 				owner_id=owner_id,
@@ -156,8 +155,6 @@ async def generate_image(
 			gen_meta: dict[str, str] = {"prompt": prompt}
 			if agent_id:
 				gen_meta["agent_id"] = str(agent_id)
-			if thread_id:
-				gen_meta["thread_id"] = thread_id
 			file.metadata_ = {**file.metadata_, **gen_meta}
 			await session.flush()
 

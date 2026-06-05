@@ -42,6 +42,7 @@ from .types import (
 	AnthropicRawContentBlockDeltaEvent,
 	AnthropicRawContentBlockStartEvent,
 	AnthropicRawContentBlockStopEvent,
+	AnthropicRawMessageDeltaEvent,
 	AnthropicRawMessageStartEvent,
 	AnthropicTextBlock,
 	AnthropicTextBlockParam,
@@ -299,15 +300,46 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 
 		run_tracker = RunIdTracker("anthropic.messages")
 
+		# prompt-side usage is reported once on message_start; output usage
+		# accumulates and is finalized on message_delta. we carry the input
+		# counts forward so the final usage delta is complete.
+		input_tokens = 0
+		cache_creation_input_tokens: int | None = None
+		cache_read_input_tokens: int | None = None
+
 		async for event in stream:
 			now = time()
 
 			# --- message_start: surface the provider message id for
 			# consistent metadata across all adapters.
 			if isinstance(event, AnthropicRawMessageStartEvent):
+				start_usage = event.message.usage
+				input_tokens = start_usage.input_tokens
+				cache_creation_input_tokens = (
+					start_usage.cache_creation_input_tokens
+				)
+				cache_read_input_tokens = start_usage.cache_read_input_tokens
 				meta_chunk = run_tracker.observe(event.message.id)
 				if meta_chunk is not None:
 					yield meta_chunk
+				continue
+
+			# --- message_delta: carries final output token usage and stop
+			# reason. emit a usage-only delta so the merged assistant message
+			# (and its persistence) records real provider token counts.
+			if isinstance(event, AnthropicRawMessageDeltaEvent):
+				output_tokens = event.usage.output_tokens or 0
+				yield AssistantMessage(
+					usage=Usage(
+						input_tokens=input_tokens,
+						output_tokens=output_tokens,
+						total_tokens=input_tokens + output_tokens,
+						cache_creation_input_tokens=cache_creation_input_tokens,
+						cache_read_input_tokens=cache_read_input_tokens,
+					),
+					created_at=now,
+					updated_at=now,
+				)
 				continue
 
 			if isinstance(event, AnthropicRawContentBlockStartEvent):

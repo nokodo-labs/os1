@@ -533,12 +533,6 @@ class AIMemorySettingsPatch(BaseModel):
 		ge=1,
 		description="number of relevant memories to retrieve",
 	)
-	post_processing_turns: int | MissingType = Field(
-		default=MISSING,
-		ge=1,
-		description="number of recent conversation turns fed to the dedicated "
-		"memory maintenance agent",
-	)
 
 
 class AIChatContextSettingsPatch(BaseModel):
@@ -614,20 +608,25 @@ class AITaskSettingsPatch(BaseModel):
 class AIAttachmentSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
-	image_decay_iterations: int | MissingType = Field(
+	image_decay_turns: int | MissingType = Field(
 		default=MISSING,
 		ge=1,
-		description="protection iterations for fetched image media before release",
+		description="turns before image attachments decay to reference",
 	)
-	audio_decay_iterations: int | MissingType = Field(
+	audio_decay_turns: int | MissingType = Field(
 		default=MISSING,
 		ge=1,
-		description="protection iterations for fetched audio media before release",
+		description="turns before audio attachments decay to reference",
 	)
-	video_decay_iterations: int | MissingType = Field(
+	video_decay_turns: int | MissingType = Field(
 		default=MISSING,
 		ge=1,
-		description="protection iterations for fetched video media before release",
+		description="turns before video attachments decay to reference",
+	)
+	reveal_decay_turns: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="turns before a revealed attachment decays again",
 	)
 
 
@@ -1332,20 +1331,10 @@ class CacheSettingsPatch(BaseModel):
 		ge=1,
 		description="TTL for resource payload cache entries",
 	)
-	prompt_template_ttl_seconds: int | MissingType = Field(
-		default=MISSING,
-		ge=1,
-		description="TTL for prompt template cache entries",
-	)
 	accessible_users_ttl_seconds: int | MissingType = Field(
 		default=MISSING,
 		ge=1,
 		description="TTL for accessible user recipient cache entries",
-	)
-	mcp_snapshot_ttl_seconds: int | MissingType = Field(
-		default=MISSING,
-		ge=1,
-		description="TTL for MCP DB snapshot projection cache entries",
 	)
 
 

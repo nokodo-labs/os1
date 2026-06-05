@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from api.models.mcp import (
 	MCPAuthType,
@@ -22,6 +22,33 @@ from api.schemas.common import (
 )
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
+
+
+# -- plugin id format --
+# canonical MCP plugin id format, owned by the schema layer. the service-layer
+# `ids` module re-exports these so serialization and tool resolution share one
+# source of truth and clients never reconstruct ids by hand.
+MCP_TOOL_PREFIX = "mcp:tool:"
+MCP_SERVER_TOOLS_PREFIX = "mcp:server:"
+MCP_SERVER_TOOLS_SUFFIX = ":tools"
+
+
+def mcp_tool_plugin_id(server_id: str, tool_id: str) -> str:
+	"""return the plugin id for one MCP tool snapshot."""
+	return f"{MCP_TOOL_PREFIX}{server_id}:{tool_id}"
+
+
+def mcp_server_tools_plugin_id(server_id: str) -> str:
+	"""return the plugin id for all enabled tools from one MCP server."""
+	return f"{MCP_SERVER_TOOLS_PREFIX}{server_id}{MCP_SERVER_TOOLS_SUFFIX}"
+
+
+# -- tool result metadata keys --
+# stamped onto MCP tool-call results so clients can attribute an inline tool
+# call to its MCP server (server name + clean tool name) without reconstructing
+# anything from the normalized tool name. the frontend mirrors these keys.
+MCP_RESULT_SERVER_NAME_KEY = "mcp_server_name"
+MCP_RESULT_TOOL_NAME_KEY = "mcp_tool_name"
 
 
 class MCPSurfaceConfig(BaseModel):
@@ -116,6 +143,8 @@ class MCPDiscoveredTool(BaseModel):
 	enabled: bool = True
 	schema_hash: str
 	last_discovered_at: datetime | None = None
+	plugin_id: str | None = None
+	"""plugin id for this tool, stamped when served in a server response."""
 
 
 class MCPDiscoveredResource(BaseModel):
@@ -177,6 +206,18 @@ class MCPServer(MetadataModel, TimestampedModel):
 	discovered_tools: list[MCPDiscoveredTool] = Field(default_factory=list)
 	discovered_resources: list[MCPDiscoveredResource] = Field(default_factory=list)
 	discovered_prompts: list[MCPDiscoveredPrompt] = Field(default_factory=list)
+	tools_plugin_id: str | None = None
+	"""aggregate plugin id enabling every tool this server exposes, when any."""
+
+	@model_validator(mode="after")
+	def _populate_plugin_ids(self) -> MCPServer:
+		"""stamp plugin ids so clients never reconstruct them by hand."""
+		server_id = str(self.id)
+		for tool in self.discovered_tools:
+			tool.plugin_id = mcp_tool_plugin_id(server_id, str(tool.id))
+		if any(tool.enabled for tool in self.discovered_tools):
+			self.tools_plugin_id = mcp_server_tools_plugin_id(server_id)
+		return self
 
 
 class MCPDiscoveryResult(BaseModel):

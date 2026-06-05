@@ -23,6 +23,11 @@ from api.schemas.sorting import CommonSortBy
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_thread_access, thread_access_predicate
+from api.v1.service.files.message_links import (
+	fanout_message_file_link_updates,
+	invalidate_message_file_link_caches,
+	link_message_content_files,
+)
 from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.resource_payload_cache import invalidate_resource_payload_cache
 from api.v1.service.threads.core import (
@@ -469,12 +474,27 @@ async def create_message(
 	thread.last_activity_at = datetime.now(tz=UTC)
 	session.add(message)
 	await session.flush()
+	linked_file_ids: list[TypeID] = []
+	if isinstance(message_in.content, list):
+		linked_file_ids = await link_message_content_files(
+			session,
+			message_in.content,
+			TypeID(str(message.id)),
+			principal,
+		)
 	thread.current_message_id = message.id
 
 	# ensure sender is tracked as a participant
 	await ensure_participant(thread_id, principal.user.id, session)
 
 	await session.commit()
+	await invalidate_message_file_link_caches(session, linked_file_ids)
+	await fanout_message_file_link_updates(
+		session,
+		linked_file_ids,
+		principal.user_id,
+		origin_session_id=origin_session_id,
+	)
 
 	await session.refresh(thread, attribute_names=["last_activity_at", "updated_at"])
 

@@ -23,6 +23,13 @@ class CachedMCPPromptRef(BaseModel):
 	command: str
 
 
+class CachedMCPServerTools(BaseModel):
+	"""DB-derived MCP server tool snapshot safe to cache in Redis."""
+
+	name: str
+	tools: list[MCPDiscoveredTool]
+
+
 async def invalidate_mcp_cache(
 	session: AsyncSession,
 	server_id: object | None = None,
@@ -97,15 +104,15 @@ async def set_cached_mcp_capabilities(
 async def get_cached_mcp_server_tools(
 	session: AsyncSession,
 	server_id: str,
-) -> list[MCPDiscoveredTool] | None:
+) -> CachedMCPServerTools | None:
 	"""return cached enabled tool snapshots for one MCP server."""
 	namespace = _cache_namespace(session)
 	key = f"mcp:{namespace}:server-tools:{server_id}"
 	value = await _get_cache_value(key)
-	if not isinstance(value, list):
+	if not isinstance(value, dict):
 		return None
 	try:
-		return [MCPDiscoveredTool.model_validate(item) for item in value]
+		return CachedMCPServerTools.model_validate(value)
 	except ValidationError:
 		await _delete_cache_key(key)
 		return None
@@ -114,13 +121,13 @@ async def get_cached_mcp_server_tools(
 async def set_cached_mcp_server_tools(
 	session: AsyncSession,
 	server_id: str,
-	tools: list[MCPDiscoveredTool],
+	snapshot: CachedMCPServerTools,
 ) -> None:
 	"""cache enabled tool snapshots for one MCP server."""
 	namespace = _cache_namespace(session)
 	await _set_cache_value(
 		f"mcp:{namespace}:server-tools:{server_id}",
-		[tool.model_dump(mode="json") for tool in tools],
+		snapshot.model_dump(mode="json"),
 		ttl=settings.cache.mcp_snapshot_ttl_seconds,
 		tags=[f"mcp:{namespace}:global", f"mcp:{namespace}:server:{server_id}"],
 	)

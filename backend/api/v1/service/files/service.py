@@ -1,12 +1,18 @@
 """service layer for file operations.
 
-provides both low-level storage primitives (store_file, read_content,
-delete_content) and authenticated HTTP-facing operations (upload_file,
-get_file_content, etc.).
+layered from lowest to highest level:
 
-low-level functions accept owner_id directly and skip access checks,
-making them suitable for agents, tools, background jobs, and any
-programmatic flow that doesn't originate from an HTTP request.
+- storage primitives (store_file, read_content, delete_content): move
+  bytes to/from the backend and own the File row. no events, no caches,
+  no async processing, no commit.
+- programmatic intake (ingest_file): store_file + announce + enqueue
+  async processing. the entry point for agents, tools, and generated
+  media that create a brand-new file from raw bytes.
+- authenticated HTTP-facing operations (upload_file, register_stored_file,
+  get_file_content, ...): add permission checks on top of the above.
+
+the low-level and intake functions accept owner_id directly and skip
+access checks, so the caller is responsible for authorization.
 """
 
 from __future__ import annotations
@@ -23,9 +29,9 @@ from sqlalchemy import case, func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import ColumnElement, Select
+from sqlalchemy.sql.base import ExecutableOption
 
 from api.models.access_rule import AccessLevel
-from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.file import File, FileSource, FileStatus
 from api.models.many_to_many import file_project_association
@@ -42,8 +48,7 @@ from api.schemas.file import (
 from api.settings import settings
 from api.storage import get_storage_backend
 from api.storage.base import MimeType
-from api.v1.service import events as event_service
-from api.v1.service.auth import Principal
+from api.v1.service.auth import Principal, load_principal_for_user
 from api.v1.service.authorization import (
 	invalidate_accessible_users_for_resource,
 	list_accessible_user_ids,
@@ -52,6 +57,7 @@ from api.v1.service.authorization import (
 	require_resource_access,
 	resource_access_predicate,
 )
+from api.v1.service.files.events import emit_file_event
 from api.v1.service.files.vectorization import (
 	FILE_SPEC,
 	remove_file_vectors,
@@ -64,6 +70,7 @@ from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
 	invalidate_resource_payload_cache,
 )
+from api.v1.tasks.files import start_file_processing_task
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -72,40 +79,11 @@ log = logging.getLogger(__name__)
 # internal helpers
 
 
-async def emit_file_event(
-	session: AsyncSession,
-	event_type: EventType,
-	file_id: TypeID,
-	user_id: TypeID,
-	filename: str | None = None,
-	project_ids: list[TypeID] | None = None,
-	affected_project_ids: set[TypeID] | None = None,
-	origin_session_id: str | None = None,
-	recipient_ids: list[TypeID] | None = None,
-) -> None:
-	"""persist and fanout a file lifecycle event."""
-	data: dict[str, object] = {"id": str(file_id)}
-	if filename is not None:
-		data["filename"] = filename
-	if project_ids is not None:
-		data["project_ids"] = [str(project_id) for project_id in project_ids]
-	if affected_project_ids:
-		data["affected_project_ids"] = [
-			str(project_id) for project_id in affected_project_ids
-		]
-	event = Event(
-		scope=EventScope.USER,
-		scope_id=user_id,
-		type=event_type,
-		data=data,
-		user_id=user_id,
-	)
-	await event_service.persist_and_fanout_event(
-		session,
-		event=event,
-		origin_session_id=origin_session_id,
-		recipient_ids=recipient_ids,
-	)
+def _file_load_options(resolve_origin: bool = False) -> tuple[ExecutableOption, ...]:
+	options: list[ExecutableOption] = [selectinload(File.projects)]
+	if resolve_origin:
+		options.append(selectinload(File.message))
+	return tuple(options)
 
 
 async def _get_file(
@@ -128,10 +106,17 @@ async def _get_file(
 
 
 async def _get_file_with_projects(
-	file_id: TypeID, session: AsyncSession, include_deleted: bool = False
+	file_id: TypeID,
+	session: AsyncSession,
+	include_deleted: bool = False,
+	resolve_origin: bool = False,
 ) -> File:
 	"""fetch a file record with project links by id (no access check)."""
-	stmt = select(File).where(File.id == file_id).options(selectinload(File.projects))
+	stmt = (
+		select(File)
+		.where(File.id == file_id)
+		.options(*_file_load_options(resolve_origin))
+	)
 	if include_deleted:
 		stmt = stmt.execution_options(include_deleted=True)
 	else:
@@ -190,31 +175,7 @@ async def _stream_upload(upload: UploadFile) -> AsyncIterator[bytes]:
 		yield chunk
 
 
-async def _process_file_after_write(
-	session: AsyncSession,
-	file: File,
-	origin_session_id: str | None = None,
-) -> None:
-	"""vectorize stored file metadata and enqueue async file processing."""
-	file.status = FileStatus.PENDING
-	await replace_file_description_vectors(file, session)
-	await session.flush()
-
-	from api.v1.service.auth import load_principal_for_user
-	from api.v1.tasks.files import start_file_processing_task
-
-	principal = await load_principal_for_user(TypeID(file.owner_id), session)
-	await start_file_processing_task(
-		session,
-		principal,
-		TypeID(file.id),
-		origin_session_id=origin_session_id,
-	)
-
-
-# ---------------------------------------------------------------------------
 # low-level storage primitives (no auth, no HTTP deps)
-# ---------------------------------------------------------------------------
 
 
 async def store_file(
@@ -228,14 +189,19 @@ async def store_file(
 	message_id: TypeID | None = None,
 	backend_name: str | None = None,
 	key_prefix: str | None = None,
-	create_event: bool = True,
-	origin_session_id: str | None = None,
 ) -> File:
-	"""store bytes and create a File record.
+	"""write raw bytes to storage and create the File row. nothing else.
 
-	this is the generic entry point for programmatic file creation.
-	agents, tools, background jobs, and imports should use this
-	instead of the HTTP-facing upload_file().
+	this is the lowest-level persistence primitive: it puts the bytes on
+	the storage backend, computes size/checksum, and inserts a flushed
+	File record linked to the given projects. it does NOT emit events,
+	invalidate caches, enqueue processing, or commit the session.
+
+	callers that want the full intake pipeline (announce + async
+	processing) should use ingest_file() instead. callers that need to
+	defer or batch processing - such as bulk imports running inside a
+	larger transaction - call this directly and trigger processing
+	themselves once their unit of work has committed.
 
 	does NOT check access permissions - the caller is responsible
 	for authorization in their own context.
@@ -280,21 +246,63 @@ async def store_file(
 	)
 	session.add(file)
 	await session.flush()
+	return file
 
-	if create_event:
-		await emit_file_event(
-			session,
-			event_type=EventType.FILE_CREATED,
-			file_id=file_id,
-			user_id=owner_id,
-			filename=filename,
-			project_ids=project_ids or [],
-			origin_session_id=origin_session_id,
-		)
-	await invalidate_project_payload_caches(set(project_ids or []))
-	await _process_file_after_write(
+
+async def ingest_file(
+	session: AsyncSession,
+	data: bytes | AsyncIterator[bytes],
+	owner_id: TypeID,
+	filename: str | None = None,
+	content_type: MimeType = "application/octet-stream",
+	source: FileSource = FileSource.GENERATED,
+	project_ids: list[TypeID] | None = None,
+	message_id: TypeID | None = None,
+	backend_name: str | None = None,
+	key_prefix: str | None = None,
+	origin_session_id: str | None = None,
+) -> File:
+	"""store a brand-new file from raw bytes and run the full intake pipeline.
+
+	this is the high-level entry point for programmatic file creation
+	(agents, tools, generated media, background jobs). it:
+
+	1. persists the bytes + File row via store_file(),
+	2. emits a FILE_CREATED lifecycle event,
+	3. invalidates affected project payload caches,
+	4. enqueues async processing (description + content vectorization).
+
+	does NOT check access permissions - the caller is responsible
+	for authorization in their own context. for HTTP uploads use
+	upload_file(), which adds permission checks on top of this.
+	"""
+	file = await store_file(
 		session,
-		file,
+		data=data,
+		owner_id=owner_id,
+		filename=filename,
+		content_type=content_type,
+		source=source,
+		project_ids=project_ids,
+		message_id=message_id,
+		backend_name=backend_name,
+		key_prefix=key_prefix,
+	)
+	await emit_file_event(
+		session,
+		event_type=EventType.FILE_CREATED,
+		file_id=TypeID(file.id),
+		user_id=owner_id,
+		filename=filename,
+		project_ids=project_ids or [],
+		origin_session_id=origin_session_id,
+	)
+	await invalidate_project_payload_caches(set(project_ids or []))
+	principal = await load_principal_for_user(owner_id, session)
+	await start_file_processing_task(
+		session,
+		principal,
+		TypeID(file.id),
 		origin_session_id=origin_session_id,
 	)
 
@@ -319,7 +327,7 @@ async def read_content(
 	return stream, file.mime_type, file.size_bytes
 
 
-async def resolve_file_data(
+async def read_file_base64(
 	file_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
@@ -340,7 +348,7 @@ async def resolve_file_data(
 	)
 	file = result.scalars().one_or_none()
 	if file is None:
-		log.warning("resolve_file_data: file %s not found", file_id)
+		log.warning("read_file_base64: file %s not found", file_id)
 		return None
 
 	# enforce access - silently return None when denied so the caller
@@ -355,7 +363,7 @@ async def resolve_file_data(
 		)
 	except HTTPException:
 		log.warning(
-			"resolve_file_data: access denied for file %s (user %s)",
+			"read_file_base64: access denied for file %s (user %s)",
 			file_id,
 			principal.user_id,
 		)
@@ -365,7 +373,7 @@ async def resolve_file_data(
 		stream, _, _ = await read_content(file)
 	except FileNotFoundError:
 		log.warning(
-			"resolve_file_data: storage object missing for file %s",
+			"read_file_base64: storage object missing for file %s",
 			file.id,
 		)
 		return None
@@ -395,18 +403,22 @@ async def delete_content(file: File) -> None:
 		)
 
 
-# ---------------------------------------------------------------------------
 # authenticated operations (HTTP-facing, access-checked)
-# ---------------------------------------------------------------------------
 
 
-async def create_file(
+async def register_stored_file(
 	file_in: FileCreate,
 	session: AsyncSession,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> File:
-	"""register a new file record (metadata only, no bytes)."""
+	"""register a File row for bytes already present in a storage backend.
+
+	unlike store_file()/ingest_file(), this writes no bytes: the caller
+	supplies an existing storage_backend + storage_key via FileCreate.
+	it creates the record, announces it, and indexes the supplied
+	description, but does not enqueue content processing.
+	"""
 	require_permission(principal, "files:create")
 	for pid in file_in.project_ids:
 		await require_project_access(
@@ -470,7 +482,7 @@ async def upload_file(
 	else:
 		file_data = _stream_upload(upload)
 
-	return await store_file(
+	return await ingest_file(
 		session,
 		data=file_data,
 		owner_id=principal.user_id,
@@ -578,6 +590,7 @@ async def list_files(
 	limit: int = 50,
 	sort_by: str = "created_at",
 	sort_dir: SortDir = "desc",
+	resolve_origin: bool = False,
 ) -> list[File]:
 	"""list files accessible by the principal."""
 	file_filters = filters or FileListFilters()
@@ -607,7 +620,7 @@ async def list_files(
 		tie_breaker=File.id,
 	)
 	result = await session.execute(
-		stmt.offset(skip).limit(limit).options(selectinload(File.projects))
+		stmt.offset(skip).limit(limit).options(*_file_load_options(resolve_origin))
 	)
 	return list(result.scalars().all())
 
@@ -681,6 +694,7 @@ async def get_file(
 	file_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
+	resolve_origin: bool = False,
 ) -> File:
 	"""get a file by id (requires reader access)."""
 	await require_resource_access(
@@ -693,7 +707,7 @@ async def get_file(
 	result = await session.execute(
 		select(File)
 		.where(File.id == file_id, File.deleted_at.is_(None))
-		.options(selectinload(File.projects))
+		.options(*_file_load_options(resolve_origin))
 	)
 	file = result.scalars().one_or_none()
 	if not file:
@@ -709,6 +723,7 @@ async def get_file_payload(
 	session: AsyncSession,
 	principal: Principal,
 	use_cache: bool = True,
+	resolve_origin: bool = False,
 ) -> FileOut:
 	"""get a file API payload after resource access is validated."""
 	await require_resource_access(
@@ -720,9 +735,15 @@ async def get_file_payload(
 	)
 
 	async def load_payload() -> FileOut:
-		return FileOut.model_validate(await _get_file_with_projects(file_id, session))
+		return FileOut.model_validate(
+			await _get_file_with_projects(
+				file_id,
+				session,
+				resolve_origin=resolve_origin,
+			)
+		)
 
-	if not use_cache:
+	if not use_cache or resolve_origin:
 		return await load_payload()
 	return await get_or_set_resource_payload_cache(
 		ResourceType.FILE,

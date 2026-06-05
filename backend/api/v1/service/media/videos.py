@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.file import FileSource
 from api.settings import settings
 from api.v1.service.chat.models import resolve_video_model
-from api.v1.service.files import store_file
+from api.v1.service.files import ingest_file
 from api.v1.service.media.images import MediaError
 from nokodo_ai.adapters.videos import VideoGenerationParams
 from nokodo_ai.utils.typeid import TypeID
@@ -123,7 +123,7 @@ async def generate_video(
 
 		if file_bytes is not None:
 			ext = vid.mime_type.split("/")[-1] if "/" in vid.mime_type else "mp4"
-			file = await store_file(
+			file = await ingest_file(
 				session,
 				data=file_bytes,
 				owner_id=owner_id,

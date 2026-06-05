@@ -16,7 +16,9 @@ from api.schemas.search import (
 	CursorPage,
 	SearchMode,
 	SearchParams,
+	SearchResourceReferenceType,
 	SearchResultItem,
+	SearchResultParent,
 	SearchResultType,
 )
 from api.v1.service import vectorstores as vectorstore_service
@@ -170,6 +172,10 @@ async def _autocomplete_reminders(
 			id=TypeID(reminder.id),
 			title=reminder.title or "",
 			preview=(reminder.description[:100] if reminder.description else None),
+			parent=SearchResultParent(
+				type=SearchResourceReferenceType.REMINDER_LIST,
+				id=TypeID(reminder.list_id),
+			),
 			metadata=_reminder_metadata(reminder),
 			created_at=reminder.created_at,
 			updated_at=reminder.updated_at,
@@ -240,6 +246,10 @@ async def _hybrid_search_reminders(
 				title=reminder.title or "",
 				preview=(reminder.description[:100] if reminder.description else None),
 				score=score_by_rid.get(resource_id),
+				parent=SearchResultParent(
+					type=SearchResourceReferenceType.REMINDER_LIST,
+					id=TypeID(reminder.list_id),
+				),
 				metadata=_reminder_metadata(reminder),
 				created_at=reminder.created_at,
 				updated_at=reminder.updated_at,

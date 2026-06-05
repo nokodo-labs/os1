@@ -45,6 +45,8 @@ _MAINTENANCE_PROMPT = """\
 given the active chat history, generate compact catalog metadata for finding and
 recognizing this thread later.
 
+this metadata will be used for vector search and standard keyword searches.
+
 the summary is a search/catalog snippet, not a transcript recap. write 1-2
 sentences that synthesize the durable point of the chat: the user's intent, the
 final outcome or artifact, important decisions, named entities, files, URLs,
@@ -52,6 +54,12 @@ failures that still matter, and unresolved follow-up. do not retell each turn,
 list tool calls, quote raw errors unless the error is the durable outcome, or
 repeat "user asked / assistant answered" for every exchange. if the chat is
 mostly exploratory, name the topic and conclusion instead of narrating steps.
+"""
+
+_SUMMARY_FIELD_DESCRIPTION = """\
+1-2 sentence catalog snippet, not a chronological recap. capture the
+durable request, outcome/artifact, named entities, decisions, failures,
+and unresolved work in a compact searchable form
 """
 
 
@@ -77,11 +85,7 @@ class _ThreadMaintenanceOut(BaseModel):
 	)
 	summary: str = Field(
 		min_length=1,
-		description=(
-			"1-2 sentence catalog snippet, not a chronological recap. capture the "
-			"durable request, outcome/artifact, named entities, decisions, failures, "
-			"and unresolved work in a compact searchable form"
-		),
+		description=_SUMMARY_FIELD_DESCRIPTION,
 		examples=[
 			(
 				"debugged an oauth login loop caused by a callback mismatch; redirect "
@@ -91,8 +95,8 @@ class _ThreadMaintenanceOut(BaseModel):
 	)
 	emoji: str = Field(
 		min_length=1,
-		max_length=16,
-		description="one emoji that visually identifies the thread",
+		max_length=1,
+		description="one single emoji that visually identifies the thread",
 		examples=["🔐", "📝"],
 	)
 

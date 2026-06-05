@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
-from contextlib import AsyncExitStack
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Protocol
@@ -15,7 +15,7 @@ from mcp.client.streamable_http import streamablehttp_client
 from mcp.shared.session import RequestResponder
 from pydantic_core import to_jsonable_python
 
-from api.mcp.errors import MCPUnsupportedTransportError
+from api.mcp.errors import MCPError, MCPUnsupportedTransportError
 from api.mcp.types import (
 	MCPCapabilitySnapshot,
 	MCPListChangedEvent,
@@ -61,7 +61,15 @@ class MCPClientConfig:
 
 
 class MCPClient:
-	"""small async wrapper around the official MCP client."""
+	"""small async wrapper around the official MCP client.
+
+	the SDK transport and session are anyio task-group backed context managers
+	that must be entered and exited within the same task. this wrapper runs that
+	whole lifecycle inside one dedicated worker task and keeps it open while
+	callers issue requests from their own task. request methods are safe to call
+	cross-task because the SDK only binds the task-group lifecycle (not individual
+	requests) to the owning task.
+	"""
 
 	def __init__(
 		self,
@@ -70,11 +78,13 @@ class MCPClient:
 	) -> None:
 		"""create a client wrapper for one MCP server connection."""
 		self.config = config
-		self._events: asyncio.Queue[MCPServerEvent | Exception] | None = (
+		self._events: asyncio.Queue[MCPServerEvent | Exception | None] | None = (
 			asyncio.Queue() if receive_events else None
 		)
-		self._exit_stack = AsyncExitStack()
 		self._session: _ClientSession | None = None
+		self._worker: asyncio.Task[None] | None = None
+		self._stop = asyncio.Event()
+		self._ready: asyncio.Future[None] | None = None
 
 	async def __aenter__(self) -> MCPClient:
 		"""connect and return the ready MCP client."""
@@ -86,61 +96,79 @@ class MCPClient:
 		await self.disconnect()
 
 	async def connect(self) -> None:
-		"""open the configured MCP transport and initialize a client session."""
+		"""start a worker task that owns the MCP transport and session."""
 		if self.config.transport is not MCPTransport.STREAMABLE_HTTP:
 			raise MCPUnsupportedTransportError(
 				f"MCP transport is not supported yet: {self.config.transport}"
 			)
-		if not self.config.url:
+		url = self.config.url
+		if not url:
 			raise MCPUnsupportedTransportError("streamable HTTP MCP requires a URL")
-
-		timeout = timedelta(seconds=self.config.timeout)
+		if self._worker is not None:
+			return
+		self._stop.clear()
+		self._ready = asyncio.get_running_loop().create_future()
+		self._worker = asyncio.create_task(self._run(url), name="mcp-client-session")
 		try:
-			transport_manager = streamablehttp_client(
-				self.config.url,
-				headers=self.config.headers or None,
-				timeout=timeout,
-				terminate_on_close=False,
-			)
-		except TypeError:
-			try:
-				transport_manager = streamablehttp_client(
-					self.config.url,
-					headers=self.config.headers or None,
-					timeout=timeout,
-				)
-			except TypeError:
-				transport_manager = streamablehttp_client(
-					self.config.url,
-					headers=self.config.headers or None,
-				)
-
-		try:
-			read_stream, write_stream, _ = await self._exit_stack.enter_async_context(
-				transport_manager
-			)
-			session_args = (read_stream, write_stream)
-			if self._events is None:
-				session_manager = ClientSession(*session_args)
-			else:
-				session_manager = ClientSession(
-					*session_args,
-					message_handler=self._handle_sdk_message,
-				)
-			session: _ClientSession = await self._exit_stack.enter_async_context(
-				session_manager
-			)
-			async with asyncio.timeout(self.config.timeout):
-				await session.initialize()
-			self._session = session
-		except Exception:
+			await self._ready
+		except BaseException:
 			await self.disconnect()
 			raise
 
 	async def disconnect(self) -> None:
-		"""close the current MCP session."""
+		"""stop the worker task and tear down the MCP session."""
 		self._session = None
-		await self._exit_stack.aclose()
+		self._stop.set()
+		worker = self._worker
+		self._worker = None
+		if worker is not None:
+			with suppress(Exception):
+				await worker
+
+	async def _run(self, url: str) -> None:
+		"""own the full SDK session lifecycle inside a single task."""
+		ready = self._ready
+		try:
+			async with self._open_session(url) as session:
+				self._session = session
+				if ready is not None and not ready.done():
+					ready.set_result(None)
+				await self._stop.wait()
+		except asyncio.CancelledError:
+			raise
+		except Exception as exc:
+			error = _adapter_error(exc, "MCP connection failed")
+			if ready is not None and not ready.done():
+				ready.set_exception(error)
+			elif self._events is not None:
+				self._events.put_nowait(error)
+		finally:
+			self._session = None
+			if self._events is not None:
+				self._events.put_nowait(None)
+
+	@asynccontextmanager
+	async def _open_session(self, url: str) -> AsyncIterator[_ClientSession]:
+		"""enter the transport and session and initialize, all in one scope."""
+		timeout = timedelta(seconds=self.config.timeout)
+		async with streamablehttp_client(
+			url,
+			headers=self.config.headers or None,
+			timeout=timeout,
+			terminate_on_close=False,
+		) as (read_stream, write_stream, _):
+			if self._events is None:
+				session_manager = ClientSession(read_stream, write_stream)
+			else:
+				session_manager = ClientSession(
+					read_stream,
+					write_stream,
+					message_handler=self._handle_sdk_message,
+				)
+			async with session_manager as session:
+				async with asyncio.timeout(self.config.timeout):
+					await session.initialize()
+				yield session
 
 	async def events(self) -> AsyncIterator[MCPServerEvent]:
 		"""yield normalized server events from the open MCP session."""
@@ -148,6 +176,8 @@ class MCPClient:
 			raise MCPUnsupportedTransportError("MCP event reception is not enabled")
 		while True:
 			item = await self._events.get()
+			if item is None:
+				return
 			if isinstance(item, Exception):
 				raise item
 			yield item
@@ -166,29 +196,27 @@ class MCPClient:
 
 	async def list_tools(self) -> list[MCPToolSpec]:
 		"""list tools exposed by the connected MCP server."""
-		session = self._require_session()
-		result = await session.list_tools()
+		result = await self._request(lambda session: session.list_tools())
 		tools = _sequence_attr(result, "tools")
 		return [_tool_spec(tool) for tool in tools]
 
 	async def list_resources(self) -> list[MCPResourceSpec]:
 		"""list resources exposed by the connected MCP server."""
-		session = self._require_session()
-		result = await session.list_resources()
+		result = await self._request(lambda session: session.list_resources())
 		resources = _sequence_attr(result, "resources")
 		return [_resource_spec(resource) for resource in resources]
 
 	async def list_prompts(self) -> list[MCPPromptSpec]:
 		"""list prompts exposed by the connected MCP server."""
-		session = self._require_session()
-		result = await session.list_prompts()
+		result = await self._request(lambda session: session.list_prompts())
 		prompts = _sequence_attr(result, "prompts")
 		return [_prompt_spec(prompt) for prompt in prompts]
 
 	async def call_tool(self, name: str, arguments: JSONObject) -> MCPToolCallResult:
 		"""call an MCP tool."""
-		session = self._require_session()
-		result = await session.call_tool(name, arguments=arguments)
+		result = await self._request(
+			lambda session: session.call_tool(name, arguments=arguments)
+		)
 		content_blocks = _sequence_attr(result, "content")
 		parts: list[str] = []
 		for block in content_blocks:
@@ -212,8 +240,9 @@ class MCPClient:
 		arguments: dict[str, str] | None = None,
 	) -> MCPPromptRenderResult:
 		"""get an MCP prompt as plain text."""
-		session = self._require_session()
-		result = await session.get_prompt(name, arguments=arguments)
+		result = await self._request(
+			lambda session: session.get_prompt(name, arguments=arguments)
+		)
 		parts: list[str] = []
 		for message in _sequence_attr(result, "messages"):
 			content = getattr(message, "content", None)
@@ -230,6 +259,16 @@ class MCPClient:
 		if self._session is None:
 			raise MCPUnsupportedTransportError("MCP client is not connected")
 		return self._session
+
+	async def _request[T](self, run: Callable[[_ClientSession], Awaitable[T]]) -> T:
+		"""run one SDK request, normalizing failures into adapter errors."""
+		session = self._require_session()
+		try:
+			return await run(session)
+		except asyncio.CancelledError:
+			raise
+		except Exception as exc:
+			raise _adapter_error(exc, "MCP request failed")
 
 	async def _handle_sdk_message(
 		self,
@@ -260,6 +299,25 @@ def _event_from_sdk_message(
 			return MCPListChangedEvent(kind="prompts")
 		case _:
 			return None
+
+
+def _adapter_error(exc: BaseException, prefix: str) -> MCPError:
+	"""normalize an SDK failure into an MCP adapter error."""
+	leaf = _first_leaf(exc)
+	if isinstance(leaf, MCPError):
+		return leaf
+	message = str(leaf).strip() or leaf.__class__.__name__
+	error = MCPError(f"{prefix}: {message}")
+	error.__cause__ = leaf
+	return error
+
+
+def _first_leaf(exc: BaseException) -> BaseException:
+	"""unwrap nested exception groups to a representative leaf error."""
+	current = exc
+	while isinstance(current, BaseExceptionGroup) and current.exceptions:
+		current = current.exceptions[0]
+	return current
 
 
 def _tool_spec(tool: object) -> MCPToolSpec:

@@ -86,3 +86,47 @@ def should_try_model_text(
 def _meaningful_text(text: str) -> str:
 	"""return only alphanumeric characters for density heuristics."""
 	return "".join(char for char in text if char.isalnum())
+
+
+_IMAGE_PREFIXES = ("image/",)
+_AUDIO_PREFIXES = ("audio/",)
+_VIDEO_PREFIXES = ("video/",)
+
+# map media category -> model InputModality value. media whose category
+# isn't in the model's input_modalities can't be shown natively.
+_CATEGORY_TO_MODALITY: dict[str, str] = {
+	"image": "images",
+	"audio": "audio",
+	"video": "video",
+}
+
+
+def classify_media(media_type: str | None) -> str:
+	"""classify a mime type into image/audio/video/other."""
+	if not media_type:
+		return "other"
+	lower = media_type.lower()
+	if any(lower.startswith(p) for p in _IMAGE_PREFIXES):
+		return "image"
+	if any(lower.startswith(p) for p in _AUDIO_PREFIXES):
+		return "audio"
+	if any(lower.startswith(p) for p in _VIDEO_PREFIXES):
+		return "video"
+	return "other"
+
+
+def modality_supported(media_type: str | None, supported: set[str] | None) -> bool:
+	"""check whether the model can natively consume this media category.
+
+	fails open (true) when modalities are unknown. categories with no modality
+	mapping ("other", e.g. pdf/text files) also return true: such files are
+	carried as their derived text content, so they are kept native within the
+	image protection window rather than released.
+	"""
+	if supported is None:
+		return True
+	category = classify_media(media_type)
+	modality = _CATEGORY_TO_MODALITY.get(category)
+	if modality is None:
+		return True
+	return modality in supported

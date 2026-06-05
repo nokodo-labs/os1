@@ -53,7 +53,7 @@ async def create_file(
 	x_session_id: SessionId = None,
 ) -> File:
 	"""register a new file record (metadata only)."""
-	return await file_service.create_file(
+	return await file_service.register_stored_file(
 		file_in,
 		db,
 		principal=principal,
@@ -92,6 +92,7 @@ async def list_files(
 	limit: int = 50,
 	sort_by: FileSortBy = "created_at",
 	sort_dir: SortDir = "desc",
+	resolve_origin: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[File]:
@@ -104,6 +105,7 @@ async def list_files(
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
+		resolve_origin=resolve_origin,
 	)
 
 
@@ -151,11 +153,17 @@ async def revectorize_files(
 @router.get("/{file_id}", response_model=FileSchema)
 async def get_file(
 	file_id: TypeID,
+	resolve_origin: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> FileSchema:
 	"""fetch a file by id."""
-	return await file_service.get_file_payload(file_id, db, principal=principal)
+	return await file_service.get_file_payload(
+		file_id,
+		db,
+		principal=principal,
+		resolve_origin=resolve_origin,
+	)
 
 
 @router.get("/{file_id}/content")

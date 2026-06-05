@@ -41,6 +41,7 @@ from api.v1.service.chat.context_compaction.summarization import (
 	condense_summaries,
 	summarize_thread_message_range,
 )
+from api.v1.service.chat.message_references import wait_message_reference
 from api.v1.service.chat.run_activities import start_detached_run_activity
 from api.v1.service.events import build_live_persisting_event_emitter
 from nokodo_ai.types.json import JSONObject, JSONValue
@@ -225,6 +226,7 @@ async def start_memory_post_processing_task(
 	conversation_snapshot: str | None = None,
 	thread_id: str | None = None,
 	message_id: str | None = None,
+	message_ref: str | None = None,
 	run_id: str | None = None,
 	emit_activity: bool = False,
 ) -> Task:
@@ -235,6 +237,7 @@ async def start_memory_post_processing_task(
 		"conversation_snapshot": conversation_snapshot,
 		"thread_id": thread_id,
 		"message_id": message_id,
+		"message_ref": message_ref,
 		"run_id": run_id,
 		"emit_activity": emit_activity,
 	}
@@ -572,6 +575,8 @@ async def run_memory_post_processing_task(
 	thread_id = thread_id_value if isinstance(thread_id_value, str) else None
 	message_id_value = context.runtime.get("message_id")
 	message_id = message_id_value if isinstance(message_id_value, str) else None
+	message_ref_value = context.runtime.get("message_ref")
+	message_ref = message_ref_value if isinstance(message_ref_value, str) else None
 	run_id_value = context.runtime.get("run_id")
 	run_id = run_id_value if isinstance(run_id_value, str) else None
 	emit_activity = context.runtime.get("emit_activity") is True
@@ -593,6 +598,17 @@ async def run_memory_post_processing_task(
 		await session.commit()
 	await context.update(progress=90, stage="finalizing")
 	if emit_activity:
+		activity_changes = (
+			_activity_count(result, "created")
+			+ _activity_count(result, "updated")
+			+ _activity_count(result, "deleted")
+		)
+		if (
+			activity_changes > 0
+			and message_id is None
+			and message_ref is not None
+		):
+			message_id = await wait_message_reference(message_ref)
 		await _emit_memory_maintenance_activity(
 			result,
 			user_id=str(context.user_id),
@@ -620,6 +636,7 @@ async def _emit_memory_maintenance_activity(
 	created = _activity_count(result, "created")
 	updated = _activity_count(result, "updated")
 	deleted = _activity_count(result, "deleted")
+	changed_kinds = sum(1 for count in (created, updated, deleted) if count > 0)
 	if created + updated + deleted <= 0:
 		return
 	if thread_id is None or message_id is None or run_id is None:
@@ -637,7 +654,14 @@ async def _emit_memory_maintenance_activity(
 	)
 	if activity is None:
 		return
-	summary = f"created {created}, updated {updated}, and deleted {deleted} memories"
+	if changed_kinds > 1:
+		summary = "memories updated"
+	elif created > 0:
+		summary = "memory saved" if created == 1 else "memories saved"
+	elif updated > 0:
+		summary = "memory updated" if updated == 1 else "memories updated"
+	else:
+		summary = "memory removed" if deleted == 1 else "memories removed"
 	await activity.ended(
 		outcome="success",
 		message=summary,

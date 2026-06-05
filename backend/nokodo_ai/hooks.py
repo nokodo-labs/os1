@@ -18,7 +18,8 @@ if TYPE_CHECKING:
 class Hook[AppContextT = None](Base, ABC):
 	"""base class for hooks.
 
-	hooks run after each assistant response is appended to the thread.
+	hooks run after each assistant response is appended to the thread, and once
+	more when the run is final.
 	they receive a read-only iteration snapshot and CANNOT modify the
 	agent loop state - they are observers.
 
@@ -42,7 +43,7 @@ class Hook[AppContextT = None](Base, ABC):
 		agent_context: AgentContext,
 		app_context: AppContextT | None,
 	) -> None:
-		"""execute the hook after an assistant response.
+		"""execute the hook after an assistant response or final run boundary.
 
 		args:
 			state: read-only view of the current iteration state
