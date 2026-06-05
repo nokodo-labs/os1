@@ -69,6 +69,7 @@ def _recursive_chunk_ranges(
 		start = max(end - overlap_chars, start + 1)
 	return ranges
 
+
 def _chunks_from_ranges(
 	text: str,
 	ranges: list[tuple[int, int]],

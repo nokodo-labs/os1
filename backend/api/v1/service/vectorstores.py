@@ -47,6 +47,7 @@ class VectorChunkResourceType(StrEnum):
 	CALENDAR_EVENT = "calendar_event"
 	REMINDER = "reminder"
 
+
 DEFAULT_INDEXES: Index = {
 	"resource_type": "keyword",
 	"resource_id": "keyword",

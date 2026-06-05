@@ -315,9 +315,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 			if isinstance(event, AnthropicRawMessageStartEvent):
 				start_usage = event.message.usage
 				input_tokens = start_usage.input_tokens
-				cache_creation_input_tokens = (
-					start_usage.cache_creation_input_tokens
-				)
+				cache_creation_input_tokens = start_usage.cache_creation_input_tokens
 				cache_read_input_tokens = start_usage.cache_read_input_tokens
 				meta_chunk = run_tracker.observe(event.message.id)
 				if meta_chunk is not None:

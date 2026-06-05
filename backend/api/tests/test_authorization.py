@@ -48,9 +48,10 @@ def test_vector_chunk_acl_mappings_are_plural_and_parent_aware() -> None:
 		VECTOR_CHUNK_PARENT_RESOURCE_TYPES[VectorChunkResourceType.FILE_CONTENT]
 		== VectorChunkResourceType.FILE
 	)
-	for access_resource_type, chunk_resource_types in (
-		ACL_SYNC_VECTOR_CHUNK_RESOURCE_TYPES.items()
-	):
+	for (
+		access_resource_type,
+		chunk_resource_types,
+	) in ACL_SYNC_VECTOR_CHUNK_RESOURCE_TYPES.items():
 		for chunk_resource_type in chunk_resource_types:
 			assert (
 				VECTOR_CHUNK_ACCESS_RESOURCE_TYPES[chunk_resource_type]
@@ -102,8 +103,7 @@ def test_acl_sync_chunk_filters_split_direct_and_parented_file_chunks() -> None:
 
 def test_acl_sync_chunk_filters_ignore_unaddressable_acl_resources() -> None:
 	assert (
-		vectorize_service._acl_sync_chunk_filters(ResourceType.CALENDAR, "cal-1")
-		== []
+		vectorize_service._acl_sync_chunk_filters(ResourceType.CALENDAR, "cal-1") == []
 	)
 
 

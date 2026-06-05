@@ -603,11 +603,7 @@ async def run_memory_post_processing_task(
 			+ _activity_count(result, "updated")
 			+ _activity_count(result, "deleted")
 		)
-		if (
-			activity_changes > 0
-			and message_id is None
-			and message_ref is not None
-		):
+		if activity_changes > 0 and message_id is None and message_ref is not None:
 			message_id = await wait_message_reference(message_ref)
 		await _emit_memory_maintenance_activity(
 			result,

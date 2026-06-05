@@ -71,7 +71,7 @@ async def remove_file_vectors(
 			target=vectorstore_service.parent_resource_filter(
 				FILE_RESOURCE_TYPE,
 				file_id,
-					resource_types=[FILE_CONTENT_RESOURCE_TYPE],
+				resource_types=[FILE_CONTENT_RESOURCE_TYPE],
 			),
 			session=session,
 		)

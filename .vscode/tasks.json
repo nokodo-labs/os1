@@ -16,6 +16,18 @@
 			}
 		},
 		{
+			"label": "backend: format",
+			"type": "shell",
+			"command": "uv run ruff format .",
+			"options": {
+				"cwd": "${workspaceFolder}/backend"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
 			"label": "backend: run server",
 			"type": "shell",
 			"command": "uv run uvicorn api.main:app --host 0.0.0.0 --port 1383 --loop api.runtime:selector_loop_factory",

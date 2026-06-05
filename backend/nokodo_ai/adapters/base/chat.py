@@ -270,9 +270,10 @@ class ChatGenerationExceptionMapperDecorator:
 		self,
 		func: Callable[Concatenate[ChatAdapterT, ParamsT], Awaitable[GeneratedT]]
 		| Callable[Concatenate[ChatAdapterT, ParamsT], AsyncIterator[GeneratedT]],
-	) -> Callable[Concatenate[ChatAdapterT, ParamsT], Awaitable[GeneratedT]] | Callable[
-		Concatenate[ChatAdapterT, ParamsT], AsyncIterator[GeneratedT]
-	]:
+	) -> (
+		Callable[Concatenate[ChatAdapterT, ParamsT], Awaitable[GeneratedT]]
+		| Callable[Concatenate[ChatAdapterT, ParamsT], AsyncIterator[GeneratedT]]
+	):
 		if _is_chat_generation_stream_function(func):
 			return self._wrap_stream(func)
 		return self._wrap_call(func)

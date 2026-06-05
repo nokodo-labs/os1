@@ -50,9 +50,10 @@ VECTOR_CHUNK_PARENT_RESOURCE_TYPES: dict[
 
 
 def _validate_vector_chunk_acl_mappings() -> None:
-	for access_resource_type, chunk_resource_types in (
-		ACL_SYNC_VECTOR_CHUNK_RESOURCE_TYPES.items()
-	):
+	for (
+		access_resource_type,
+		chunk_resource_types,
+	) in ACL_SYNC_VECTOR_CHUNK_RESOURCE_TYPES.items():
 		if access_resource_type not in RESOURCE_CONFIG:
 			raise RuntimeError(
 				f"{access_resource_type.value} is not an ACL resource type"
@@ -66,9 +67,10 @@ def _validate_vector_chunk_acl_mappings() -> None:
 					f"{chunk_resource_type.value} does not resolve to "
 					f"{access_resource_type.value}"
 				)
-	for chunk_resource_type, parent_resource_type in (
-		VECTOR_CHUNK_PARENT_RESOURCE_TYPES.items()
-	):
+	for (
+		chunk_resource_type,
+		parent_resource_type,
+	) in VECTOR_CHUNK_PARENT_RESOURCE_TYPES.items():
 		chunk_access_resource_type = VECTOR_CHUNK_ACCESS_RESOURCE_TYPES[
 			chunk_resource_type
 		]
