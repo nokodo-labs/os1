@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal, overload
 
 from fastapi import HTTPException, status
@@ -11,6 +12,7 @@ from sqlalchemy.sql import Select
 
 from api.models.plugin import Plugin
 from api.permissions import ActionPermission
+from api.schemas.agent import AgentConfig
 from api.schemas.plugin import (
 	PluginCreate,
 	PluginInfo,
@@ -20,14 +22,17 @@ from api.schemas.plugin import (
 )
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
+from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters import (
 	FILTER_REGISTRY,
+	resolve_filters,
 )
 from api.v1.service.chat.filters import (
 	get_registered_names as get_filter_names,
 )
 from api.v1.service.chat.hooks import (
 	HOOK_REGISTRY,
+	resolve_hooks,
 )
 from api.v1.service.chat.hooks import (
 	get_registered_names as get_hook_names,
@@ -38,10 +43,15 @@ from api.v1.service.chat.tools.external import (
 )
 from api.v1.service.chat.tools.registry import (
 	TOOL_REGISTRY,
+	resolve_extra_tools,
+	resolve_tools,
 )
 from api.v1.service.chat.tools.registry import (
 	get_registered_names as get_tool_names,
 )
+from nokodo_ai import Filter as SDKFilter
+from nokodo_ai import Hook as SDKHook
+from nokodo_ai.tool import Tool
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -378,3 +388,61 @@ async def delete_plugin(
 	plugin = await _get_db_plugin(plugin_id, session)
 	await session.delete(plugin)
 	await session.commit()
+
+
+# agent plugin resolution
+
+
+@dataclass(slots=True)
+class ResolvedPlugins:
+	"""instantiated plugins resolved from an agent's flat plugin id list."""
+
+	tools: list[Tool[AppContext]]
+	filters: list[SDKFilter[AppContext]]
+	hooks: list[SDKHook[AppContext]]
+
+
+def _tool_candidate_plugin_ids(plugin_ids: list[str]) -> list[str]:
+	"""return plugin ids the tool registry should attempt to resolve.
+
+	drops ids that are known filters / hooks (but not also tools) so the tool
+	resolver does not warn on them. unknown ids are kept so external / MCP tool
+	sources still get a chance to resolve them.
+	"""
+	tool_names = get_tool_names()
+	non_tool_names = (get_filter_names() | get_hook_names()) - tool_names
+	return [plugin_id for plugin_id in plugin_ids if plugin_id not in non_tool_names]
+
+
+async def resolve_plugins(
+	plugin_ids: list[str],
+	app_context: AppContext,
+	agent_config: AgentConfig,
+	extra_plugins: list[str] | None = None,
+) -> ResolvedPlugins:
+	"""resolve a flat plugin id list into instantiated tools, filters, and hooks.
+
+	``extra_plugins`` are request-scoped tool ids (e.g. user MCP tools) merged
+	into the resolved tool list, de-duplicated by tool name.
+	"""
+	tools = await resolve_tools(
+		tool_ids=_tool_candidate_plugin_ids(plugin_ids),
+		app_context=app_context,
+	)
+	if extra_plugins:
+		extra_tools = await resolve_extra_tools(
+			tool_ids=extra_plugins,
+			app_context=app_context,
+			agent_config=agent_config,
+		)
+		seen_tool_names = {tool.name for tool in tools}
+		for tool in extra_tools:
+			if tool.name in seen_tool_names:
+				continue
+			seen_tool_names.add(tool.name)
+			tools.append(tool)
+	return ResolvedPlugins(
+		tools=tools,
+		filters=resolve_filters(plugin_ids),
+		hooks=resolve_hooks(plugin_ids),
+	)

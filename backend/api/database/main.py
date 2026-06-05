@@ -66,6 +66,14 @@ async def session_scope(
 			yield new_session
 
 
+async def safe_rollback(session: AsyncSession) -> None:
+	"""rollback the session, swallowing errors if already closed."""
+	try:
+		await session.rollback()
+	except Exception:
+		pass
+
+
 @event.listens_for(Session, "do_orm_execute")
 def _soft_delete_default_criteria(execute_state: Any) -> None:
 	"""Exclude soft-deleted rows by default for all SELECTs.

@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.database import async_session_local
+from api.database import async_session_local, safe_rollback
 from api.local_tasks import create_background_task
 from api.models.access_rule import AccessLevel
 from api.models.agent import Agent as AgentORM
@@ -19,49 +19,35 @@ from api.models.event import Event
 from api.models.event_types import EventType
 from api.models.model import Model
 from api.permissions import ResourceType
-from api.schemas.message import MessageCreate
+from api.schemas.message import Message as MessageSchema
+from api.schemas.message import is_private_metadata_key
 from api.schemas.runs import ClientContext, RunInput, ToolChoice
 from api.settings import settings as app_settings
-from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import resource_access_predicate
 from api.v1.service.chat.context import AppContext
-from api.v1.service.chat.filters import (
-	get_registered_names as get_filter_plugin_names,
+from api.v1.service.chat.message_metadata import MESSAGE_ID_KEY
+from api.v1.service.chat.message_references import (
+	new_message_reference,
+	reject_message_reference,
+	resolve_message_reference,
 )
-from api.v1.service.chat.filters import resolve_filters
-from api.v1.service.chat.filters.citation_index import (
-	resolve_assistant_citations,
-)
-from api.v1.service.chat.hooks import get_registered_names as get_hook_plugin_names
-from api.v1.service.chat.hooks import resolve_hooks
-from api.v1.service.chat.message_metadata import (
-	MESSAGE_ID_KEY,
-	MODEL_ID_KEY,
-	NEXT_CITATION_INDEX_KEY,
-)
-from api.v1.service.chat.models import build_chat_model
-from api.v1.service.chat.run_helpers import (
-	broadcast_run_event,
+from api.v1.service.chat.messages import (
+	build_run_input_sdk_user_message,
 	inject_system_instructions,
 	load_sdk_thread,
-	message_to_sse_data,
-	safe_rollback,
-	sse_event,
+	persist_sdk_message,
 )
-from api.v1.service.chat.run_status import run_status_store
+from api.v1.service.chat.models import build_chat_model
+from api.v1.service.chat.run_status import broadcast_run_event, run_status_store
 from api.v1.service.chat.steering import (
 	broadcast_steering_event,
 	persist_steering_state,
 	prepare_steering,
 )
-from api.v1.service.chat.tools.registry import (
-	get_registered_names as get_tool_plugin_names,
-)
-from api.v1.service.chat.tools.registry import resolve_extra_tools, resolve_tools
-from api.v1.service.chat.user_message import create_run_user_message, resolve_run_input
 from api.v1.service.embeddings import embed_text
 from api.v1.service.events import build_live_persisting_event_emitter
+from api.v1.service.plugins import resolve_plugins
 from api.v1.tasks.threads import schedule_thread_inactivity_maintenance
 from nokodo_ai import Agent as SDKAgent
 from nokodo_ai import Filter as SDKFilter
@@ -75,17 +61,11 @@ from nokodo_ai.messages import TextContent
 from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.tool import Tool
+from nokodo_ai.utils.sse import sse_encode
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 logger = logging.getLogger(__name__)
-
-
-def _tool_candidate_plugin_ids(plugin_ids: list[str]) -> list[str]:
-	"""return plugin ids that should be resolved by the tool registry."""
-	tool_names = get_tool_plugin_names()
-	non_tool_names = (get_filter_plugin_names() | get_hook_plugin_names()) - tool_names
-	return [plugin_id for plugin_id in plugin_ids if plugin_id not in non_tool_names]
 
 
 class _PersistStop:
@@ -103,7 +83,7 @@ async def _resolve_run_thread(
 	principal: Principal,
 	thread_id: TypeID | None,
 	initial_parent_id: TypeID | None,
-	resolved_input: list,
+	resolved_input_message: SDKUserMessage | None,
 	client_context: ClientContext | None,
 	persist: bool,
 ) -> tuple[SDKThread, TypeID | None]:
@@ -165,12 +145,12 @@ async def _resolve_run_thread(
 	else:
 		sdk_thread = SDKThread(messages=[])
 
-	if resolved_input:
+	if resolved_input_message is not None:
 		sdk_thread = sdk_thread.model_copy(
 			update={
 				"messages": [
 					*sdk_thread.messages,
-					SDKUserMessage(content=resolved_input),
+					resolved_input_message,
 				]
 			}
 		)
@@ -289,7 +269,13 @@ def _schedule_terminate_broadcast(
 
 
 def _public_delta_payload(value: object) -> object:
-	"""return a stream payload copy with every metadata object public-sanitized."""
+	"""return a stream payload copy with every metadata object public-sanitized.
+
+	this is the centralized redaction gate for streamed SSE ``delta`` events
+	(partial SDK messages). it applies the SAME private-key rule as the
+	``Message`` schema's metadata serializer - ``is_private_metadata_key`` - so
+	streamed deltas and complete messages strip identical ``_``-prefixed keys.
+	"""
 	if isinstance(value, Mapping):
 		payload: dict[str, object] = {}
 		for key, item in value.items():
@@ -298,7 +284,7 @@ def _public_delta_payload(value: object) -> object:
 				payload[key_str] = {
 					str(meta_key): meta_value
 					for meta_key, meta_value in item.items()
-					if not str(meta_key).startswith("_")
+					if not is_private_metadata_key(str(meta_key))
 				}
 			else:
 				payload[key_str] = _public_delta_payload(item)
@@ -441,25 +427,13 @@ async def build_agent_from_orm(
 		params=chat_model_config,
 	)
 
-	# resolve plugins from agent's plugin_ids
-	tools = await resolve_tools(
-		tool_ids=_tool_candidate_plugin_ids(agent_orm.plugin_ids),
+	# resolve the agent's flat plugin id list into tools, filters, and hooks
+	resolved = await resolve_plugins(
+		agent_orm.plugin_ids,
 		app_context=context,
+		agent_config=agent_orm.parsed_config,
+		extra_plugins=extra_plugins,
 	)
-	if extra_plugins:
-		extra_tools = await resolve_extra_tools(
-			tool_ids=extra_plugins,
-			app_context=context,
-			agent_config=agent_orm.parsed_config,
-		)
-		seen_tool_names = {tool.name for tool in tools}
-		for tool in extra_tools:
-			if tool.name in seen_tool_names:
-				continue
-			seen_tool_names.add(tool.name)
-			tools.append(tool)
-	filters = resolve_filters(agent_orm.plugin_ids)
-	hooks = resolve_hooks(agent_orm.plugin_ids)
 
 	# extract max_iterations from agent config
 	max_iterations = 10
@@ -468,9 +442,9 @@ async def build_agent_from_orm(
 
 	return build_agent(
 		chat_model=chat_model,
-		tools=tools,
-		filters=filters,
-		hooks=hooks,
+		tools=resolved.tools,
+		filters=resolved.filters,
+		hooks=resolved.hooks,
 		max_iterations=max_iterations,
 	)
 
@@ -518,7 +492,14 @@ async def run_agent(
 		initial_parent_id: TypeID | None = None
 
 		# resolve structured input to content parts
-		resolved_input = await resolve_run_input(input, session) if input else []
+		has_input_payload = bool(
+			input and ((input.text and input.text.strip()) or input.attachments)
+		)
+		resolved_input_message = (
+			build_run_input_sdk_user_message(input)
+			if has_input_payload and input
+			else None
+		)
 
 		# register run in status store + (when on a thread) broadcast
 		# run.started. ``persist`` only gates DB writes (messages, metadata);
@@ -552,20 +533,25 @@ async def run_agent(
 				name="broadcast_run_started",
 			)
 
-		if persist and resolved_input:
+		if persist and resolved_input_message is not None:
 			assert thread_id is not None  # persist=True requires a thread_id
-			user_msg = await create_run_user_message(
-				thread_id,
-				session,
+			user_msg = await persist_sdk_message(
+				thread_id=thread_id,
+				sdk_msg=resolved_input_message,
+				session=session,
 				principal=principal,
-				resolved_input=resolved_input,
-				parent_id=parent_id,
+				sender_agent_id=None,
 				run_id=run_id,
+				citations=[],
+				model_id=None,
+				message_id=None,
+				parent_id=parent_id,
 				origin_session_id=origin_session_id,
-				attachment_actions=(input.attachment_actions if input else None),
 			)
-			user_msg_data = message_to_sse_data(user_msg)
-			frame = sse_event(event="message_created", data=user_msg_data)
+			user_msg_data = MessageSchema.model_validate(user_msg).model_dump(
+				mode="json", by_alias=True
+			)
+			frame = sse_encode(event="message_created", data=user_msg_data)
 			await run_status_store.publish(run_id, frame)
 			yield frame
 			initial_parent_id = user_msg.id
@@ -589,8 +575,8 @@ async def run_agent(
 			raise
 		except Exception:
 			logger.exception("failed to load agent")
-			err = sse_event(event="error", data={"message": "failed to load agent"})
-			done = sse_event(event="done", data={})
+			err = sse_encode(event="error", data={"message": "failed to load agent"})
+			done = sse_encode(event="done", data={})
 			await run_status_store.publish(run_id, err)
 			await run_status_store.publish(run_id, done)
 			yield err
@@ -621,40 +607,37 @@ async def run_agent(
 				message_id, sdk_msg = item
 				try:
 					async with async_session_local() as bg_session:
-						create_in = MessageCreate.from_sdk_message(
-							sdk_msg,
-							sender_agent_id=agent_id,
-						)
-						# resolve citations for assistant messages
-						if isinstance(sdk_msg, SDKAssistantMessage):
-							text = ""
-							for part in sdk_msg.content or []:
-								if isinstance(part, TextContent) and part.text:
-									text += part.text
-							citations = resolve_assistant_citations(text, ctx.citations)
-							if citations:
-								create_in.citations = citations
-							# stamp the running index so future runs can
-							# pick up without loading the full branch.
-							if ctx.citations:
-								nci = ctx.citations[-1].index + 1
-								create_in.metadata[NEXT_CITATION_INDEX_KEY] = nci
-						create_in.metadata["run_id"] = run_id
-						if _model_id_for_persist:
-							create_in.metadata[MODEL_ID_KEY] = _model_id_for_persist
 						if persist_parent_override is not None:
 							last_parent_id = persist_parent_override
 							persist_parent_override = None
-						create_in.parent_id = last_parent_id
-						persisted = await thread_service.create_message(
+						persisted = await persist_sdk_message(
 							thread_id=thread_id,
-							message_in=create_in,
+							sdk_msg=sdk_msg,
 							session=bg_session,
 							principal=principal,
+							sender_agent_id=agent_id,
+							run_id=run_id,
+							citations=ctx.citations,
+							model_id=_model_id_for_persist,
 							message_id=message_id,
+							parent_id=last_parent_id,
 							origin_session_id=origin_session_id,
 						)
 						last_parent_id = TypeID(str(persisted.id))
+						# emit the authoritative persisted message (canonical
+						# Message schema) so every subscriber converges on the
+						# same shape that load/branch/tree return. the streamed
+						# deltas remain the live-typing channel; this message
+						# event is the final source of truth for this message.
+						await run_status_store.publish(
+							run_id,
+							sse_encode(
+								event="message_created",
+								data=MessageSchema.model_validate(persisted).model_dump(
+									mode="json", by_alias=True
+								),
+							),
+						)
 				except Exception:
 					logger.exception(
 						"failed to persist streamed message",
@@ -720,12 +703,14 @@ async def run_agent(
 
 			emitter = _noop_emitter
 
+		final_assistant_message_ref = new_message_reference() if persist else None
 		ctx = AppContext(
 			session=session,
 			principal=principal,
 			run_id=run_id,
 			agent_id=agent_id,
 			thread_id=thread_id,
+			final_assistant_message_ref=final_assistant_message_ref,
 			event_emitter=emitter,
 			context_window=(agent.model.context_window if agent.model else None),
 		)
@@ -734,10 +719,10 @@ async def run_agent(
 			sdk_agent = await build_agent_from_orm(agent, ctx, extra_plugins)
 		except Exception:
 			logger.exception("failed to build agent")
-			err = sse_event(
+			err = sse_encode(
 				event="error", data={"message": "failed to initialize agent"}
 			)
-			done = sse_event(event="done", data={})
+			done = sse_encode(event="done", data={})
 			await run_status_store.publish(run_id, err)
 			await run_status_store.publish(run_id, done)
 			yield err
@@ -752,7 +737,7 @@ async def run_agent(
 			principal,
 			thread_id=thread_id,
 			initial_parent_id=initial_parent_id,
-			resolved_input=resolved_input,
+			resolved_input_message=resolved_input_message,
 			client_context=client_context,
 			persist=persist,
 		)
@@ -771,6 +756,7 @@ async def run_agent(
 				)
 
 		streaming_parent_id: TypeID | None = initial_parent_id
+		last_completed_assistant_id: TypeID | None = None
 
 		def _advance_parent_after_steering(message_id: TypeID) -> None:
 			"""advance streaming and persistence parents after steering injection."""
@@ -950,6 +936,7 @@ async def run_agent(
 							await message_queue.put(
 								(current_assistant_id, assistant_accum)
 							)
+						last_completed_assistant_id = current_assistant_id
 						current_assistant_id = None
 
 				if delta.tool is not None:
@@ -976,7 +963,7 @@ async def run_agent(
 				if delta.done:
 					message_id = None
 
-				frame = sse_event(
+				frame = sse_encode(
 					event="delta",
 					data=_delta_envelope(message_id=message_id, delta=delta),
 				)
@@ -1054,8 +1041,8 @@ async def run_agent(
 			error_payload: dict[str, object] = {"message": "generation failed"}
 			if partial_finalized:
 				error_payload["partial"] = True
-			yield sse_event(event="error", data=error_payload)
-			yield sse_event(event="done", data={})
+			yield sse_encode(event="error", data=error_payload)
+			yield sse_encode(event="done", data={})
 			return
 		except Exception:
 			partial_finalized = await _finalize_partial_assistant(
@@ -1080,8 +1067,8 @@ async def run_agent(
 			error_payload: dict[str, object] = {"message": "generation failed"}
 			if partial_finalized:
 				error_payload["partial"] = True
-			yield sse_event(event="error", data=error_payload)
-			yield sse_event(event="done", data={})
+			yield sse_encode(event="error", data=error_payload)
+			yield sse_encode(event="done", data={})
 			return
 		finally:
 			await _request_persist_worker_stop()
@@ -1091,6 +1078,17 @@ async def run_agent(
 		if persist:
 			assert thread_id is not None  # persist=True requires a thread_id
 			await _drain_persist_worker(timeout=30, operation="normal_completion")
+			if final_assistant_message_ref is not None:
+				if last_completed_assistant_id is not None:
+					await resolve_message_reference(
+						final_assistant_message_ref,
+						last_completed_assistant_id,
+					)
+				else:
+					await reject_message_reference(
+						final_assistant_message_ref,
+						"no_final_assistant_message",
+					)
 			try:
 				async with async_session_local() as task_session:
 					await schedule_thread_inactivity_maintenance(
@@ -1106,4 +1104,4 @@ async def run_agent(
 			thread_id, agent_id, run_id, error=False, dropped_steering=dropped
 		)
 
-		yield sse_event(event="done", data={})
+		yield sse_encode(event="done", data={})
