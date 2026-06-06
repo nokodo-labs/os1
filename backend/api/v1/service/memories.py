@@ -835,6 +835,7 @@ async def post_process_relevant_memories(
 	max_related_memories: int = 10,
 	conversation_snapshot: str | None = None,
 	progress_callback: MemoryPostProcessingProgress | None = None,
+	source_message_id: str | None = None,
 ) -> JSONObject:
 	"""create/update/delete memories from the latest conversation context."""
 	query = _truncate_post_processing_text(
@@ -968,6 +969,9 @@ async def post_process_relevant_memories(
 					content=content,
 					tags=action.tags or None,
 					user_id=TypeID(principal.user.id),
+					source_message_id=TypeID(source_message_id)
+					if source_message_id
+					else None,
 				),
 				session,
 				principal,

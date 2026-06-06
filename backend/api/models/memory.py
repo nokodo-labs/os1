@@ -46,6 +46,7 @@ class Memory(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	source_message_id: Mapped[str | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("messages.id", ondelete="SET NULL"),
+		index=True,
 	)
 	embedding: Mapped[bytes | None] = mapped_column(LargeBinary())
 	last_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

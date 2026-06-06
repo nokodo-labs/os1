@@ -585,6 +585,11 @@ async def run_memory_post_processing_task(
 		await context.update(progress=progress, stage=stage)
 
 	await context.update(progress=10, stage="starting memory processing")
+	# resolve message_id before processing so newly created memories get
+	# source_message_id set; wait_message_reference is a quick poll if the
+	# message is already committed.
+	if message_id is None and message_ref is not None:
+		message_id = await wait_message_reference(message_ref)
 	async with async_session_local() as session:
 		principal = await load_principal_for_user(context.user_id, session)
 		result = await memory_service.post_process_relevant_memories(
@@ -594,6 +599,7 @@ async def run_memory_post_processing_task(
 			max_related_memories=max_related_memories,
 			conversation_snapshot=conversation_snapshot,
 			progress_callback=report_progress,
+			source_message_id=message_id,
 		)
 		await session.commit()
 	await context.update(progress=90, stage="finalizing")
@@ -603,8 +609,6 @@ async def run_memory_post_processing_task(
 			+ _activity_count(result, "updated")
 			+ _activity_count(result, "deleted")
 		)
-		if activity_changes > 0 and message_id is None and message_ref is not None:
-			message_id = await wait_message_reference(message_ref)
 		await _emit_memory_maintenance_activity(
 			result,
 			user_id=str(context.user_id),
