@@ -31,6 +31,10 @@ engine = create_async_engine(
 	echo=boot_settings.DEBUG,
 	future=True,
 	pool_pre_ping=True,
+	pool_size=boot_settings.DB_POOL_SIZE,
+	max_overflow=boot_settings.DB_MAX_OVERFLOW,
+	pool_timeout=boot_settings.DB_POOL_TIMEOUT,
+	pool_recycle=boot_settings.DB_POOL_RECYCLE,
 )
 
 # Async session factory - accessed via async_session_local() so that test

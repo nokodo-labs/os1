@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Sequence
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
@@ -493,16 +493,10 @@ NOTE_SPEC: VectorSpec[Note] = VectorSpec(
 )
 
 
-async def vectorize_all_notes(session: AsyncSession) -> int:
-	"""vectorize all non-deleted notes in bulk. returns count."""
-	stmt = (
-		select(Note)
-		.where(Note.deleted_at.is_(None))
-		.options(selectinload(Note.projects))
-	)
-	result = await session.execute(stmt)
+async def _vectorize_notes(notes: list[Note], session: AsyncSession) -> int:
+	"""embed and upsert the given notes (with acl metadata). returns count."""
 	valid: list[tuple[Note, str]] = []
-	for n in result.scalars().all():
+	for n in notes:
 		text = _note_searchable_text(n)
 		if text.strip():
 			valid.append((n, text))
@@ -521,6 +515,33 @@ async def vectorize_all_notes(session: AsyncSession) -> int:
 		chunks.append(build_chunk(NOTE_SPEC, note, emb, extra_metadata=acl))
 	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
 	return len(valid)
+
+
+async def vectorize_notes(note_ids: Sequence[TypeID], session: AsyncSession) -> int:
+	"""vectorize specific notes by id in batches. returns count."""
+	if not note_ids:
+		return 0
+	stmt = (
+		select(Note)
+		.where(
+			Note.id.in_([str(nid) for nid in note_ids]),
+			Note.deleted_at.is_(None),
+		)
+		.options(selectinload(Note.projects))
+	)
+	result = await session.execute(stmt)
+	return await _vectorize_notes(list(result.scalars().all()), session)
+
+
+async def vectorize_all_notes(session: AsyncSession) -> int:
+	"""vectorize all non-deleted notes in bulk. returns count."""
+	stmt = (
+		select(Note)
+		.where(Note.deleted_at.is_(None))
+		.options(selectinload(Note.projects))
+	)
+	result = await session.execute(stmt)
+	return await _vectorize_notes(list(result.scalars().all()), session)
 
 
 async def _autocomplete_notes(

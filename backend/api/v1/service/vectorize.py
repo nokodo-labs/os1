@@ -17,7 +17,6 @@ concrete specs live in each resource's service module.
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -38,6 +37,7 @@ from api.v1.service.embeddings import embed_text
 from api.v1.service.vectorstores import VectorChunkResourceType
 from nokodo_ai.adapters.base.vectorstores import Chunk, ChunkFilter
 from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.concurrency import map_concurrently
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -223,9 +223,11 @@ async def _sync_resource_vector_acl_payloads(
 		for target in _acl_sync_chunk_filters(resource_type, rid):
 			await vs.update(target, payload=payload)
 
-	for offset in range(0, len(unique_resource_ids), _VECTOR_ACL_UPDATE_CONCURRENCY):
-		batch = unique_resource_ids[offset : offset + _VECTOR_ACL_UPDATE_CONCURRENCY]
-		await asyncio.gather(*(_sync_one(rid) for rid in batch))
+	await map_concurrently(
+		_sync_one,
+		unique_resource_ids,
+		limit=_VECTOR_ACL_UPDATE_CONCURRENCY,
+	)
 
 
 def _acl_sync_chunk_filters(

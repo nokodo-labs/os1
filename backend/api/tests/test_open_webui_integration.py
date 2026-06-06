@@ -28,6 +28,7 @@ from api.v1.routers.integrations import open_webui as owui_router
 from api.v1.service import tasks as task_service
 from api.v1.service.auth import Principal
 from api.v1.service.integrations import open_webui
+from api.v1.service.integrations.open_webui import files as owui_files
 from api.v1.service.integrations.open_webui import imports as owui_imports
 from api.v1.tasks import open_webui as owui_tasks
 
@@ -1185,7 +1186,7 @@ async def test_open_webui_import_skips_failed_file_storage_without_skipping_chat
 			"storage backend not registered: 'local'. registered backends: []"
 		)
 
-	monkeypatch.setattr(owui_imports, "store_file", fail_store_file)
+	monkeypatch.setattr(owui_files, "store_file", fail_store_file)
 	principal = await _persisted_principal(db_session, *_all_import_permissions())
 
 	summary = await open_webui.import_from_open_webui(
@@ -1439,3 +1440,191 @@ async def test_open_webui_import_deduplicates_notes(
 	assert notes[0].updated_at == datetime(2023, 11, 14, 22, 15, tzinfo=UTC)
 	assert _owui_meta(notes[0].metadata_)["id"] == "note_1"
 	assert _owui_meta(notes[0].metadata_)["is_pinned"] is True
+
+
+def _bulk_concurrency_dataset(
+	chat_count: int,
+	memory_count: int,
+	note_count: int,
+) -> tuple[
+	list[dict[str, object]],
+	dict[str, tuple[dict[str, object], bytes, str | None]],
+	list[dict[str, object]],
+	list[dict[str, object]],
+]:
+	files: dict[str, tuple[dict[str, object], bytes, str | None]] = {
+		"shared_file": (
+			{
+				"id": "shared_file",
+				"filename": "shared.txt",
+				"meta": {"content_type": "text/plain"},
+			},
+			b"shared attachment",
+			"text/plain",
+		)
+	}
+	chats: list[dict[str, object]] = []
+	for index in range(chat_count):
+		# even chats all reference one shared file so their worker sessions
+		# contend on the same file lock; odd chats each own a private file.
+		if index % 2 == 0:
+			file_id = "shared_file"
+		else:
+			file_id = f"file_{index}"
+			files[file_id] = (
+				{
+					"id": file_id,
+					"filename": f"f{index}.txt",
+					"meta": {"content_type": "text/plain"},
+				},
+				f"attachment {index}".encode(),
+				"text/plain",
+			)
+		chats.append(
+			_chat_with_messages(
+				chat_id=f"chat_{index}",
+				folder_id="folder_a" if index < chat_count // 2 else "folder_b",
+				pinned=index < chat_count // 2,
+				current_id="m1",
+				messages={
+					"m1": {
+						"id": "m1",
+						"role": "user",
+						"content": "see attached",
+						"files": [{"id": file_id}],
+					}
+				},
+			)
+		)
+	memories: list[dict[str, object]] = [
+		{"id": f"memory_{index}", "content": f"memory content {index}"}
+		for index in range(memory_count)
+	]
+	notes: list[dict[str, object]] = [
+		{
+			"id": f"note_{index}",
+			"title": f"note {index}",
+			"data": {"content": {"md": f"note body {index}"}},
+		}
+		for index in range(note_count)
+	]
+	return chats, files, memories, notes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("chat_import_mode", ["batched", "bulk"])
+async def test_open_webui_import_handles_concurrent_resource_writes(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+	chat_import_mode: owui_imports.ChatImportMode,
+) -> None:
+	"""per-resource fan-out writes stay correct under bounded concurrency.
+
+	many chats commit in parallel worker sessions while contending on a shared
+	file lock and racing to create one shared pinned-chats project; memories and
+	notes commit as concurrent chunks. a low ``db_write_concurrency`` forces the
+	semaphore-bounded path so the workers genuinely overlap.
+	"""
+	_allow_test_deployment(monkeypatch)
+	monkeypatch.setattr(settings.integrations.open_webui, "db_write_concurrency", 4)
+
+	chat_count = 16
+	memory_count = 24
+	note_count = 16
+	chats, files, memories, notes = _bulk_concurrency_dataset(
+		chat_count, memory_count, note_count
+	)
+	_install_fake_open_webui_client(
+		monkeypatch,
+		folders=[
+			{"id": "folder_a", "name": "research"},
+			{"id": "folder_b", "name": "archive"},
+		],
+		chats=chats,
+		memories=memories,
+		notes=notes,
+		files=files,
+	)
+	principal = await _persisted_principal(
+		db_session,
+		ActionPermission.THREADS_CREATE,
+		ActionPermission.PROJECTS_CREATE,
+		ActionPermission.FILES_CREATE,
+		ActionPermission.MEMORIES_CREATE,
+		ActionPermission.NOTES_CREATE,
+	)
+
+	summary = await open_webui.import_from_open_webui(
+		deployment_origin="https://open-webui.example.com",
+		credential="token",
+		include_chats=True,
+		include_memories=True,
+		include_notes=True,
+		chat_import_mode=chat_import_mode,
+		session=db_session,
+		principal=principal,
+	)
+
+	# every chat imported exactly once across the overlapping worker sessions.
+	assert summary.chats_imported == chat_count
+	assert summary.chats_skipped == 0
+	assert summary.messages_imported == chat_count
+	# the shared file is stored once (1 import + N-1 lock-serialized skips); each
+	# odd chat stores its own private file.
+	assert summary.files_imported == 1 + chat_count // 2
+	assert summary.files_skipped == chat_count // 2 - 1
+	# folder_a + folder_b + exactly one shared pinned-chats project despite the
+	# pinned chats being committed concurrently.
+	assert summary.projects_imported == 3
+	assert summary.memories_imported == memory_count
+	assert summary.notes_imported == note_count
+	assert summary.errors is None
+
+	threads = (await db_session.scalars(select(Thread))).all()
+	file_rows = (await db_session.scalars(select(File))).all()
+	memory_rows = (await db_session.scalars(select(Memory))).all()
+	note_rows = (await db_session.scalars(select(Note))).all()
+	pinned_projects = (
+		await db_session.scalars(select(Project).where(Project.name == "pinned chats"))
+	).all()
+	assert len(threads) == chat_count
+	assert len(file_rows) == 1 + chat_count // 2
+	assert len(memory_rows) == memory_count
+	assert len(note_rows) == note_count
+	# the concurrent pinned-project race created no duplicate projects.
+	assert len(pinned_projects) == 1
+
+	# re-import: the worker sessions must dedup against the committed rows
+	# instead of racing to insert duplicates.
+	second = await open_webui.import_from_open_webui(
+		deployment_origin="https://open-webui.example.com",
+		credential="token",
+		include_chats=True,
+		include_memories=True,
+		include_notes=True,
+		chat_import_mode=chat_import_mode,
+		session=db_session,
+		principal=principal,
+	)
+
+	assert second.chats_imported == 0
+	assert second.chats_skipped == chat_count
+	assert second.memories_imported == 0
+	assert second.memories_skipped == memory_count
+	assert second.notes_imported == 0
+	assert second.notes_skipped == note_count
+	assert second.files_imported == 0
+	assert len((await db_session.scalars(select(Thread))).all()) == chat_count
+	assert len((await db_session.scalars(select(File))).all()) == 1 + chat_count // 2
+	assert len((await db_session.scalars(select(Memory))).all()) == memory_count
+	assert len((await db_session.scalars(select(Note))).all()) == note_count
+	assert (
+		len(
+			(
+				await db_session.scalars(
+					select(Project).where(Project.name == "pinned chats")
+				)
+			).all()
+		)
+		== 1
+	)

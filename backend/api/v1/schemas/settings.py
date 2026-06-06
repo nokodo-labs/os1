@@ -269,6 +269,11 @@ class EmbeddingsSettingsPatch(BaseModel):
 		le=4096,
 		description="embedding batch size",
 	)
+	max_concurrency: int | None | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="max concurrent embedding batches; null means unbounded",
+	)
 
 
 class RerankSettingsPatch(BaseModel):
@@ -1200,6 +1205,21 @@ class OpenWebUIIntegrationSettingsPatch(BaseModel):
 
 	enabled: bool | MissingType = MISSING
 	deployments: list[OpenWebUIDeploymentPatch] | MissingType = MISSING
+	fetch_concurrency: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="max chats fetched concurrently from Open WebUI during "
+		"import. higher values speed up large imports but can overwhelm the "
+		"Open WebUI host or trip its rate limits; 24-64 is a sane range.",
+	)
+	db_write_concurrency: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="max resources written to the database concurrently during "
+		"import. each worker holds its own pooled connection, so keep this below "
+		"DB_POOL_SIZE + DB_MAX_OVERFLOW or workers will block on connection "
+		"checkout. 8 is comfortable for the default pool of 15.",
+	)
 
 	@field_validator("deployments")
 	@classmethod

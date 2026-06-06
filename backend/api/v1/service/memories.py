@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine, Sequence
 from typing import Literal
 
 from fastapi import HTTPException, status
@@ -584,12 +584,10 @@ MEMORY_SPEC: VectorSpec[Memory] = VectorSpec(
 )
 
 
-async def vectorize_all_memories(session: AsyncSession) -> int:
-	"""vectorize all memories in bulk. returns count."""
-	stmt = select(Memory)
-	result = await session.execute(stmt)
+async def _vectorize_memories(memories: list[Memory], session: AsyncSession) -> int:
+	"""embed and upsert the given memories in batches. returns count."""
 	valid: list[tuple[Memory, str]] = []
-	for m in result.scalars().all():
+	for m in memories:
 		text = _memory_dense_text(m)
 		if text.strip():
 			valid.append((m, text))
@@ -604,6 +602,24 @@ async def vectorize_all_memories(session: AsyncSession) -> int:
 		chunks.append(build_chunk(MEMORY_SPEC, memory, emb))
 	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
 	return len(valid)
+
+
+async def vectorize_memories(
+	memory_ids: Sequence[TypeID], session: AsyncSession
+) -> int:
+	"""vectorize specific memories by id in batches. returns count."""
+	if not memory_ids:
+		return 0
+	result = await session.execute(
+		select(Memory).where(Memory.id.in_([str(mid) for mid in memory_ids]))
+	)
+	return await _vectorize_memories(list(result.scalars().all()), session)
+
+
+async def vectorize_all_memories(session: AsyncSession) -> int:
+	"""vectorize all memories in bulk. returns count."""
+	result = await session.execute(select(Memory))
+	return await _vectorize_memories(list(result.scalars().all()), session)
 
 
 async def _autocomplete_memories(

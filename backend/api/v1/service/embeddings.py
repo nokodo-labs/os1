@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from typing import overload
@@ -17,6 +16,7 @@ from api.models.provider import Provider
 from api.redis import on_invalidation
 from api.settings import settings
 from nokodo_ai.embeddings import EmbeddingModel
+from nokodo_ai.utils.concurrency import gather_bounded
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -85,17 +85,28 @@ async def embed_texts(
 	session: AsyncSession,
 	batch_size: int | None = None,
 	parallel: bool = True,
+	max_concurrency: int | None = None,
 ) -> list[list[float]]:
 	"""embed a list of texts in batches. preserves input order.
 
 	batch_size defaults to settings.assets.embeddings.batch_size when not set.
-	parallel=True (default): all batches are gathered concurrently.
+	parallel=True (default): batches are embedded concurrently, capped by
+	max_concurrency.
 	parallel=False: sequential - useful for rate-limited or ordered paths.
+
+	max_concurrency caps how many batches embed at once when parallel. it
+	defaults to settings.assets.embeddings.max_concurrency (100); set that
+	setting to null for fully unbounded fan-out.
 	"""
 	if not texts:
 		return []
 	model = await _get_embedding_model(session)
 	actual_batch = batch_size or settings.assets.embeddings.batch_size
+	actual_concurrency = (
+		max_concurrency
+		if max_concurrency is not None
+		else settings.assets.embeddings.max_concurrency
+	)
 	batches = [texts[i : i + actual_batch] for i in range(0, len(texts), actual_batch)]
 	extra: dict[str, object] = {
 		"model": model.model_name,
@@ -103,13 +114,17 @@ async def embed_texts(
 		"batch_count": len(batches),
 		"batch_size": actual_batch,
 		"parallel": parallel,
+		"max_concurrency": actual_concurrency,
 		"input_chars": sum(len(text) for text in texts),
 	}
 	started = time.perf_counter()
 	logger.info("embedding batch started", extra=extra)
 	try:
 		if parallel:
-			nested = await asyncio.gather(*(model.embed(b) for b in batches))
+			nested = await gather_bounded(
+				(model.embed(b) for b in batches),
+				limit=actual_concurrency,
+			)
 			vectors = [vec for batch in nested for vec in batch]
 		else:
 			vectors = []

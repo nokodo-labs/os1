@@ -59,5 +59,34 @@ class BootSettings(BaseSettings):
 			raise ValueError(f"unsupported DATABASE_URL scheme: {scheme}")
 		return v
 
+	# connection pool sizing. these are boot settings because the engine is
+	# created once at import time and a pool resize needs a process restart.
+	DB_POOL_SIZE: int = Field(
+		default=5,
+		ge=1,
+		description="base number of persistent connections kept open per "
+		"process. concurrent work (e.g. the Open WebUI import's "
+		"db_write_concurrency) draws from DB_POOL_SIZE + DB_MAX_OVERFLOW; keep "
+		"that work below the total or it will block waiting for a connection.",
+	)
+	DB_MAX_OVERFLOW: int = Field(
+		default=10,
+		ge=0,
+		description="extra connections opened on demand above DB_POOL_SIZE and "
+		"closed again when idle. 0 means a hard cap at DB_POOL_SIZE.",
+	)
+	DB_POOL_TIMEOUT: float = Field(
+		default=30.0,
+		gt=0,
+		description="seconds a caller waits for a free connection before "
+		"raising TimeoutError. raise this only if brief pool exhaustion is "
+		"expected and tolerable.",
+	)
+	DB_POOL_RECYCLE: int = Field(
+		default=-1,
+		description="recycle (reconnect) a connection older than this many "
+		"seconds to dodge server-side idle timeouts. -1 disables recycling.",
+	)
+
 
 boot_settings = BootSettings()

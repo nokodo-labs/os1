@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Sequence
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -119,19 +119,10 @@ THREAD_SPEC: VectorSpec[Thread] = VectorSpec(
 )
 
 
-async def vectorize_all_threads(session: AsyncSession) -> int:
-	"""vectorize all non-deleted, non-temporary threads in bulk. returns count."""
-	stmt = (
-		select(Thread)
-		.where(
-			Thread.deleted_at.is_(None),
-			Thread.is_temporary.is_(False),
-		)
-		.options(selectinload(Thread.messages), selectinload(Thread.summaries))
-	)
-	result = await session.execute(stmt)
+async def _vectorize_threads(threads: list[Thread], session: AsyncSession) -> int:
+	"""embed and upsert the given threads (with acl metadata). returns count."""
 	valid: list[tuple[Thread, str]] = []
-	for th in result.scalars().unique().all():
+	for th in threads:
 		text = _thread_dense_text(th)
 		if text.strip():
 			valid.append((th, text))
@@ -149,6 +140,45 @@ async def vectorize_all_threads(session: AsyncSession) -> int:
 		chunks.append(build_chunk(THREAD_SPEC, thread, emb, extra_metadata=acl))
 	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
 	return len(valid)
+
+
+async def vectorize_threads(thread_ids: Sequence[TypeID], session: AsyncSession) -> int:
+	"""vectorize specific threads by id from their title.
+
+	intended for freshly imported threads that have no catalog summary yet:
+	the dense text is the title alone (the spec appends a summary only once
+	one exists), so only threads with a non-empty title are vectorized.
+	thread maintenance later generates a catalog summary and re-vectorizes
+	with richer text. returns count.
+	"""
+	if not thread_ids:
+		return 0
+	stmt = (
+		select(Thread)
+		.where(
+			Thread.id.in_([str(tid) for tid in thread_ids]),
+			Thread.deleted_at.is_(None),
+			Thread.is_temporary.is_(False),
+		)
+		.options(selectinload(Thread.messages), selectinload(Thread.summaries))
+	)
+	result = await session.execute(stmt)
+	threads = [th for th in result.scalars().unique().all() if (th.title or "").strip()]
+	return await _vectorize_threads(threads, session)
+
+
+async def vectorize_all_threads(session: AsyncSession) -> int:
+	"""vectorize all non-deleted, non-temporary threads in bulk. returns count."""
+	stmt = (
+		select(Thread)
+		.where(
+			Thread.deleted_at.is_(None),
+			Thread.is_temporary.is_(False),
+		)
+		.options(selectinload(Thread.messages), selectinload(Thread.summaries))
+	)
+	result = await session.execute(stmt)
+	return await _vectorize_threads(list(result.scalars().unique().all()), session)
 
 
 async def _autocomplete_threads(

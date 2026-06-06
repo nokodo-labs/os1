@@ -1001,6 +1001,14 @@ class EmbeddingsSettings(BaseModel):
 		le=4096,
 		description="batch size for embedding generation during vectorization",
 	)
+	max_concurrency: int | None = settings_field(
+		default=100,
+		ge=1,
+		description=(
+			"max embedding batches sent concurrently during vectorization; "
+			"null means unbounded (all batches at once)"
+		),
+	)
 
 
 class RerankSettings(BaseModel):
@@ -1662,6 +1670,21 @@ class OpenWebUIIntegrationSettings(BaseModel):
 	deployments: list[OpenWebUIDeployment] = settings_field(
 		default_factory=list,
 		description="admin-allowlisted Open WebUI deployments users can import from",
+	)
+	fetch_concurrency: int = settings_field(
+		default=24,
+		ge=1,
+		description="max chats fetched concurrently from Open WebUI during "
+		"import. higher values speed up large imports but can overwhelm the "
+		"Open WebUI host or trip its rate limits; 24-64 is a sane range.",
+	)
+	db_write_concurrency: int = settings_field(
+		default=8,
+		ge=1,
+		description="max resources written to the database concurrently during "
+		"import. each worker holds its own pooled connection, so keep this below "
+		"DB_POOL_SIZE + DB_MAX_OVERFLOW or workers will block on connection "
+		"checkout. 8 is comfortable for the default pool of 15.",
 	)
 
 	@field_validator("deployments")

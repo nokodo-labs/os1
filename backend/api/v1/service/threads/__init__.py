@@ -43,6 +43,7 @@ from api.v1.service.threads.search import (
 	THREAD_SPEC,
 	search_threads,
 	vectorize_all_threads,
+	vectorize_threads,
 )
 
 
@@ -80,5 +81,6 @@ __all__ = [
 	"update_thread",
 	"update_user_message",
 	"vectorize_all_threads",
+	"vectorize_threads",
 	"walk_message_branch",
 ]
