@@ -312,8 +312,7 @@
 
 	<div class="flex flex-col gap-4">
 		<div class="flex items-center justify-between">
-			<div class="text-sm text-zinc-400">
-			</div>
+			<div class="text-sm text-zinc-400"></div>
 			{#if !searchQuery.trim()}
 				<div class="flex items-center gap-2">
 					<Button
@@ -400,7 +399,6 @@
 						</div>
 					{/each}
 				{/if}
-
 			{:else if isLoading && memories.length === 0}
 				<div
 					class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
