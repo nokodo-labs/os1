@@ -57,6 +57,7 @@
 	let pageIndex = $state(0)
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
+	let total = $state(0)
 	let listRequestId = 0
 
 	let searchResults = $state<SearchResultItem[]>([])
@@ -177,22 +178,31 @@
 		error = null
 		const requestId = ++listRequestId
 
-		api.GET('/v1/reminder-lists', {
-			params: {
-				query: {
-					owner_id: ownerIdFilter ?? undefined,
-					include_counts: true,
-					sort_by: sortKey,
-					sort_dir: sortDir,
-					skip: pageOffset(pageIndex),
-					limit: REMINDER_LIST_PAGE_LIMIT,
-				},
-			},
-		})
-			.then((r) => unwrap(r))
-			.then((listsResult) => {
+		Promise.all([
+			api
+				.GET('/v1/reminder-lists', {
+					params: {
+						query: {
+							owner_id: ownerIdFilter ?? undefined,
+							include_counts: true,
+							sort_by: sortKey,
+							sort_dir: sortDir,
+							skip: pageOffset(pageIndex),
+							limit: REMINDER_LIST_PAGE_LIMIT,
+						},
+					},
+				})
+				.then((r) => unwrap(r)),
+			api
+				.GET('/v1/reminder-lists/count', {
+					params: { query: { owner_id: ownerIdFilter ?? undefined } },
+				})
+				.then((r) => unwrap(r)),
+		])
+			.then(([listsResult, count]) => {
 				if (requestId !== listRequestId) return
 				lists = listsResult
+				total = count
 			})
 			.catch((e: unknown) => {
 				if (requestId !== listRequestId) return
@@ -288,7 +298,9 @@
 			<div class="text-sm text-zinc-400">
 				{searchQuery.trim()
 					? `${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`
-					: `page ${pageIndex + 1} · ${lists.length} list${lists.length === 1 ? '' : 's'}`}
+					: total > 0
+						? `items ${pageIndex * REMINDER_LIST_PAGE_LIMIT + 1}–${pageIndex * REMINDER_LIST_PAGE_LIMIT + lists.length} of ${total}`
+						: `${lists.length} list${lists.length === 1 ? '' : 's'}`}
 			</div>
 			{#if !searchQuery.trim()}
 				<div class="flex items-center gap-2">

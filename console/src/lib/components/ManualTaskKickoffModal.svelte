@@ -28,6 +28,10 @@
 	let isRunningBackfill = $state(false)
 	let backfillError = $state<string | null>(null)
 	let backfillResult = $state<unknown>(null)
+	let fileBatchSize = $state('')
+	let isRunningFileBackfill = $state(false)
+	let fileBackfillError = $state<string | null>(null)
+	let fileBackfillResult = $state<unknown>(null)
 	let owuiDeployments = $state<OpenWebUIDeployment[]>([])
 	let owuiDeploymentOrigin = $state('')
 	let owuiTargetUserId = $state('')
@@ -50,6 +54,7 @@
 	function close() {
 		open = false
 		backfillError = null
+		fileBackfillError = null
 		openWebUIError = null
 	}
 
@@ -114,6 +119,29 @@
 				err instanceof Error ? err.message : 'failed to load Open WebUI sources'
 		} finally {
 			isLoadingOpenWebUISources = false
+		}
+	}
+
+	async function runFileDescriptionBackfill() {
+		isRunningFileBackfill = true
+		fileBackfillError = null
+		fileBackfillResult = null
+		try {
+			const loaded = unwrap(
+				await api.POST('/v1/files/maintenance-backfill/run', {
+					params: {
+						query: {
+							batch_size: numberOrUndefined(fileBatchSize),
+						},
+					},
+				})
+			)
+			fileBackfillResult = loaded
+			onComplete?.()
+		} catch (err) {
+			fileBackfillError = err instanceof Error ? err.message : 'failed to start file backfill'
+		} finally {
+			isRunningFileBackfill = false
 		}
 	}
 
@@ -259,6 +287,68 @@
 						<Button onclick={runThreadMaintenanceBackfill} disabled={isRunningBackfill}>
 							<Play class="mr-1.5 h-4 w-4" />
 							{isRunningBackfill ? 'running...' : 'run batch'}
+						</Button>
+					</div>
+				</section>
+
+				<section class="rounded-xl border border-zinc-800 bg-zinc-900">
+					<div class="flex items-start gap-3 px-4 py-4">
+						<div
+							class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-950 text-zinc-300"
+						>
+							<Wrench class="h-4 w-4" />
+						</div>
+						<div class="min-w-0 flex-1">
+							<h3 class="text-sm font-medium text-zinc-100">
+								file description backfill
+							</h3>
+							<p class="mt-1 text-xs text-zinc-500">
+								dispatch one retroactive sweep for available files missing a
+								description.
+							</p>
+						</div>
+					</div>
+
+					<div class="border-t border-zinc-800 px-4 py-4">
+						<div class="max-w-xs space-y-2">
+							<Label for="manual_file_backfill_batch_size">batch size</Label>
+							<Input
+								id="manual_file_backfill_batch_size"
+								type="number"
+								min="1"
+								max="200"
+								placeholder="settings default"
+								bind:value={fileBatchSize}
+								class="rounded-xl"
+							/>
+						</div>
+					</div>
+
+					{#if fileBackfillError}
+						<div
+							class="border-t border-red-900/50 bg-red-900/10 px-4 py-3 text-sm text-red-200"
+						>
+							{fileBackfillError}
+						</div>
+					{/if}
+
+					{#if fileBackfillResult !== null}
+						<div class="border-t border-zinc-800">
+							<div class="px-4 py-3 text-sm font-medium text-zinc-100">result</div>
+							<pre
+								class="max-h-72 overflow-auto px-4 pb-4 font-mono text-xs whitespace-pre-wrap text-zinc-300">{resultText(
+									fileBackfillResult
+								)}</pre>
+						</div>
+					{/if}
+
+					<div class="flex justify-end border-t border-zinc-800 px-4 py-4">
+						<Button
+							onclick={runFileDescriptionBackfill}
+							disabled={isRunningFileBackfill}
+						>
+							<Play class="mr-1.5 h-4 w-4" />
+							{isRunningFileBackfill ? 'running...' : 'run batch'}
 						</Button>
 					</div>
 				</section>

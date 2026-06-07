@@ -51,6 +51,7 @@
 	let refreshToken = $state(0)
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
+	let total = $state(0)
 
 	let searchResults = $state<SearchResultItem[]>([])
 	let isSearching = $state(false)
@@ -205,21 +206,30 @@
 		isLoading = true
 		error = null
 
-		api.GET('/v1/calendars', {
-			params: {
-				query: {
-					owner_id: ownerIdFilter ?? undefined,
-					skip: pageOffset(pageIndex),
-					limit: CALENDAR_PAGE_LIMIT,
-					sort_by: sortKey,
-					sort_dir: sortDir,
-				},
-			},
-		})
-			.then((result) => unwrap(result))
-			.then((loaded) => {
+		Promise.all([
+			api
+				.GET('/v1/calendars', {
+					params: {
+						query: {
+							owner_id: ownerIdFilter ?? undefined,
+							skip: pageOffset(pageIndex),
+							limit: CALENDAR_PAGE_LIMIT,
+							sort_by: sortKey,
+							sort_dir: sortDir,
+						},
+					},
+				})
+				.then((result) => unwrap(result)),
+			api
+				.GET('/v1/calendars/count', {
+					params: { query: { owner_id: ownerIdFilter ?? undefined } },
+				})
+				.then((result) => unwrap(result)),
+		])
+			.then(([loaded, count]) => {
 				if (requestId !== listRequestId) return
 				calendars = loaded
+				total = count
 			})
 			.catch((err: unknown) => {
 				if (requestId !== listRequestId) return
@@ -373,8 +383,8 @@
 						prev
 					</Button>
 					<span class="text-xs text-zinc-400 tabular-nums">
-						page {currentPageLabel}{calendars.length > 0
-							? ` · ${calendars.length} items`
+						{total > 0
+							? `items ${pageIndex * CALENDAR_PAGE_LIMIT + 1}–${pageIndex * CALENDAR_PAGE_LIMIT + calendars.length} of ${total}`
 							: ''}
 					</span>
 					<Button

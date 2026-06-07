@@ -54,6 +54,7 @@
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
 	let hasNext = $state(false)
+	let total = $state(0)
 	let ownerIdFilter = $state<string | null>(null)
 
 	let deletingId = $state<string | null>(null)
@@ -93,22 +94,36 @@
 		isLoading = true
 		error = null
 
-		api.GET('/v1/files', {
-			params: {
-				query: {
-					skip,
-					limit,
-					include_deleted: true,
-					sort_by: sortKey,
-					sort_dir: sortDir,
-					...(ownerIdFilter ? { owner_id: ownerIdFilter } : {}),
-				},
-			},
-		})
-			.then((r) => unwrap(r))
-			.then((result) => {
+		Promise.all([
+			api
+				.GET('/v1/files', {
+					params: {
+						query: {
+							skip,
+							limit,
+							include_deleted: true,
+							sort_by: sortKey,
+							sort_dir: sortDir,
+							...(ownerIdFilter ? { owner_id: ownerIdFilter } : {}),
+						},
+					},
+				})
+				.then((r) => unwrap(r)),
+			api
+				.GET('/v1/files/count', {
+					params: {
+						query: {
+							include_deleted: true,
+							...(ownerIdFilter ? { owner_id: ownerIdFilter } : {}),
+						},
+					},
+				})
+				.then((r) => unwrap(r)),
+		])
+			.then(([result, count]) => {
 				files = result
-				hasNext = result.length === limit
+				total = count.total
+				hasNext = (pageIndex + 1) * limit < count.total
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load files'
@@ -246,7 +261,9 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{files.length > 0 ? ` \u00b7 ${files.length} items` : ''}
+					{total > 0
+						? `items ${pageIndex * limit + 1}–${pageIndex * limit + files.length} of ${total}`
+						: ''}
 				</span>
 				<Button
 					variant="outline"

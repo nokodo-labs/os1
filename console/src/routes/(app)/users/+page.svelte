@@ -71,6 +71,7 @@
 	let searchTimer: ReturnType<typeof setTimeout> | null = null
 	let isLoading = $state(false)
 	let hasNext = $state(false)
+	let total = $state(0)
 	let error = $state<string | null>(null)
 
 	let isCreateUserOpen = $state(false)
@@ -160,13 +161,18 @@
 		isLoading = true
 		error = null
 
-		api.GET('/v1/users', {
-			params: { query: { skip, limit, sort_by: sortKey, sort_dir: sortDir, q } },
-		})
-			.then((r) => unwrap(r))
-			.then((result) => {
+		Promise.all([
+			api
+				.GET('/v1/users', {
+					params: { query: { skip, limit, sort_by: sortKey, sort_dir: sortDir, q } },
+				})
+				.then((r) => unwrap(r)),
+			api.GET('/v1/users/count', { params: { query: { q } } }).then((r) => unwrap(r)),
+		])
+			.then(([result, count]) => {
 				users = result
-				hasNext = result.length === limit
+				total = count
+				hasNext = (pageIndex + 1) * limit < count
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load users'
@@ -270,7 +276,9 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{users.length > 0 ? ` \u00b7 ${users.length} items` : ''}
+					{total > 0
+						? `items ${pageIndex * limit + 1}–${pageIndex * limit + users.length} of ${total}`
+						: ''}
 				</span>
 				<Button
 					variant="outline"

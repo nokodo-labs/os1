@@ -82,6 +82,43 @@
 		}
 	}
 
+	async function resolveEntryLabels(loaded: AccessRuleResponse[]) {
+		const updates: Record<string, string> = {}
+		await Promise.allSettled(
+			loaded.map(async (entry) => {
+				const key = principalKey(entry)
+				if (entryLabels[key]) return
+				try {
+					if (entry.subject_user_id) {
+						const u = unwrap(
+							await api.GET('/v1/users/{user_id}', {
+								params: { path: { user_id: entry.subject_user_id } },
+							})
+						)
+						updates[key] = u.display_name || u.email
+					} else if (entry.subject_group_id) {
+						const g = unwrap(
+							await api.GET('/v1/groups/{group_id}', {
+								params: { path: { group_id: entry.subject_group_id } },
+							})
+						)
+						updates[key] = g.name
+					} else if (entry.subject_role_id) {
+						const r = unwrap(
+							await api.GET('/v1/roles/{role_id}', {
+								params: { path: { role_id: entry.subject_role_id } },
+							})
+						)
+						updates[key] = r.name
+					}
+				} catch {
+					// leave key unresolved - falls back to principalKey display
+				}
+			})
+		)
+		entryLabels = { ...entryLabels, ...updates }
+	}
+
 	async function loadAcl() {
 		isLoading = true
 		error = null
@@ -147,6 +184,7 @@
 		} finally {
 			isLoading = false
 		}
+		void resolveEntryLabels(entries)
 	}
 
 	$effect(() => {

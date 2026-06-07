@@ -70,6 +70,9 @@
 		backfillBatchSize?: string
 		backfillMaxLookbackDays?: string
 		backfillMinInactivityHours?: string
+		fileMaintenanceEnabled?: boolean
+		fileMaintenanceCron?: string
+		fileMaintenanceBatchSize?: string
 	}
 
 	let {
@@ -88,6 +91,9 @@
 		backfillBatchSize = $bindable(''),
 		backfillMaxLookbackDays = $bindable(''),
 		backfillMinInactivityHours = $bindable(''),
+		fileMaintenanceEnabled = $bindable(false),
+		fileMaintenanceCron = $bindable(''),
+		fileMaintenanceBatchSize = $bindable(''),
 	}: Props = $props()
 
 	let backfillFrequency = $state<BackfillFrequency>('daily')
@@ -638,6 +644,55 @@
 					/>
 				</div>
 			</div>
+		</CardContent>
+	</Card>
+
+	<Card class="border-zinc-800 bg-zinc-900">
+		<CardHeader>
+			<CardTitle>file maintenance</CardTitle>
+			<CardDescription>periodic sweep for orphaned and stale file records.</CardDescription>
+		</CardHeader>
+		<CardContent class="space-y-5">
+			<div class="flex items-center justify-between">
+				<div>
+					<Label for="file_maintenance_enabled">enabled</Label>
+					<p class="text-xs text-zinc-500">
+						enable the scheduled sweep for stale or orphaned files.
+					</p>
+				</div>
+				<Switch
+					id="file_maintenance_enabled"
+					checked={fileMaintenanceEnabled}
+					onCheckedChange={(value: boolean) => (fileMaintenanceEnabled = value)}
+				/>
+			</div>
+
+			{#if fileMaintenanceEnabled}
+				<div class="grid gap-4 md:grid-cols-2">
+					<div class="space-y-2">
+						<Label for="file_maintenance_cron">cron schedule</Label>
+						<p class="text-xs text-zinc-500">five-field cron expression in UTC.</p>
+						<Input
+							id="file_maintenance_cron"
+							bind:value={fileMaintenanceCron}
+							class="rounded-xl font-mono"
+							placeholder="0 3 * * *"
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="file_maintenance_batch">batch size</Label>
+						<p class="text-xs text-zinc-500">maximum files processed per sweep run.</p>
+						<Input
+							id="file_maintenance_batch"
+							type="number"
+							min="1"
+							placeholder="100"
+							bind:value={fileMaintenanceBatchSize}
+							class="rounded-xl"
+						/>
+					</div>
+				</div>
+			{/if}
 		</CardContent>
 	</Card>
 </div>

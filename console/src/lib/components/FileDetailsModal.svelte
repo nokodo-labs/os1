@@ -530,6 +530,22 @@
 						</div>
 					</div>
 
+					<!-- description -->
+					<div class="space-y-1.5">
+						<p class="text-xs font-medium tracking-wider text-zinc-500 uppercase">
+							description
+						</p>
+						<div class="rounded-xl border border-zinc-800 bg-zinc-900 p-3">
+							{#if file.description?.trim()}
+								<p class="text-xs whitespace-pre-wrap text-zinc-300">
+									{file.description.trim()}
+								</p>
+							{:else}
+								<p class="text-xs text-zinc-600">no description yet</p>
+							{/if}
+						</div>
+					</div>
+
 					<!-- storage -->
 					<div class="space-y-1.5">
 						<p class="text-xs font-medium tracking-wider text-zinc-500 uppercase">

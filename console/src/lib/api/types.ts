@@ -2835,6 +2835,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/files/maintenance-backfill/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run File Maintenance Backfill
+         * @description manually run one batch of the retroactive file maintenance sweep.
+         *
+         *     admin-only. this intentionally ignores the scheduled maintenance enabled
+         *     flag so admins can spot-check the sweep (currently description backfill for
+         *     imported files) without leaving the periodic schedule on.
+         */
+        post: operations["run_file_maintenance_backfill_v1_files_maintenance_backfill_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/files/{file_id}/maintenance/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run File Maintenance
+         * @description regenerate description and re-vectorize a single file.
+         *
+         *     caller must have admin-level access on the file (owner or higher). runs
+         *     the description and vectorization pipeline synchronously and returns the
+         *     updated file record.
+         */
+        post: operations["run_file_maintenance_v1_files__file_id__maintenance_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/files/{file_id}": {
         parameters: {
             query?: never;
@@ -4184,17 +4232,17 @@ export interface components {
         AIAttachmentSettingsPatch: {
             /**
              * Image Decay Iterations
-             * @description protection iterations for fetched image media before release
+             * @description iterations before image attachments decay to reference
              */
             image_decay_iterations?: number;
             /**
              * Audio Decay Iterations
-             * @description protection iterations for fetched audio media before release
+             * @description iterations before audio attachments decay to reference
              */
             audio_decay_iterations?: number;
             /**
              * Video Decay Iterations
-             * @description protection iterations for fetched video media before release
+             * @description iterations before video attachments decay to reference
              */
             video_decay_iterations?: number;
         };
@@ -4480,11 +4528,6 @@ export interface components {
              * @description number of relevant memories to retrieve
              */
             top_k?: number;
-            /**
-             * Post Processing Turns
-             * @description number of recent conversation turns fed to the dedicated memory maintenance agent
-             */
-            post_processing_turns?: number;
         };
         /**
          * AIPreferences
@@ -5603,20 +5646,10 @@ export interface components {
              */
             resource_payload_ttl_seconds?: number;
             /**
-             * Prompt Template Ttl Seconds
-             * @description TTL for prompt template cache entries
-             */
-            prompt_template_ttl_seconds?: number;
-            /**
              * Accessible Users Ttl Seconds
              * @description TTL for accessible user recipient cache entries
              */
             accessible_users_ttl_seconds?: number;
-            /**
-             * Mcp Snapshot Ttl Seconds
-             * @description TTL for MCP DB snapshot projection cache entries
-             */
-            mcp_snapshot_ttl_seconds?: number;
         };
         /**
          * Calendar
@@ -6372,6 +6405,12 @@ export interface components {
              * @default 64
              */
             batch_size: number;
+            /**
+             * Max Concurrency
+             * @description max embedding batches sent concurrently during vectorization; null means unbounded (all batches at once)
+             * @default 100
+             */
+            max_concurrency: number | null;
         };
         /** EmbeddingsSettingsPatch */
         EmbeddingsSettingsPatch: {
@@ -6385,6 +6424,11 @@ export interface components {
              * @description embedding batch size
              */
             batch_size?: number;
+            /**
+             * Max Concurrency
+             * @description max concurrent embedding batches; null means unbounded
+             */
+            max_concurrency?: number | null;
         };
         /**
          * Event
@@ -6609,6 +6653,58 @@ export interface components {
             size_bytes?: number | null;
             /** Checksum Sha256 */
             checksum_sha256?: string | null;
+        };
+        /**
+         * FileMaintenanceSettings
+         * @description knobs for the optional retroactive file maintenance sweep.
+         *
+         *     by default this is fully disabled. when enabled, a periodic background
+         *     task scans imported files for deferred upkeep and dispatches work in
+         *     bounded batches. the first maintenance job is generating the missing
+         *     description for imported files: bulk imports defer descriptions so a
+         *     large import never fans out hundreds of chat model calls at once and
+         *     trips provider rate limits, leaving files without one. each dispatched
+         *     task spends model tokens, so administrators must opt in explicitly and
+         *     set their own batch bounds. additional file upkeep can be folded into
+         *     this sweep later without renaming it.
+         */
+        FileMaintenanceSettings: {
+            /**
+             * Enabled
+             * @description enable the periodic file maintenance sweep. when False, the schedule is removed and imported files keep no description.
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Cron
+             * @description cron expression for the periodic sweep, evaluated in UTC. defaults to once per day at 04:00 UTC.
+             * @default 0 4 * * *
+             */
+            cron: string;
+            /**
+             * Batch Size
+             * @description maximum number of files dispatched per sweep run. each file results in one maintenance task and one model spend; keep this modest so the chat model provider is never flooded.
+             * @default 10
+             */
+            batch_size: number;
+        };
+        /** FileMaintenanceSettingsPatch */
+        FileMaintenanceSettingsPatch: {
+            /**
+             * Enabled
+             * @description enable the periodic file maintenance sweep
+             */
+            enabled?: boolean;
+            /**
+             * Cron
+             * @description cron expression for the periodic sweep, evaluated in UTC
+             */
+            cron?: string;
+            /**
+             * Batch Size
+             * @description maximum number of files dispatched per sweep run
+             */
+            batch_size?: number;
         };
         /**
          * FileSource
@@ -7268,6 +7364,8 @@ export interface components {
             schema_hash: string;
             /** Last Discovered At */
             last_discovered_at?: string | null;
+            /** Plugin Id */
+            plugin_id?: string | null;
         };
         /**
          * MCPDiscoveryResult
@@ -7476,6 +7574,8 @@ export interface components {
             discovered_resources?: components["schemas"]["MCPDiscoveredResource"][];
             /** Discovered Prompts */
             discovered_prompts?: components["schemas"]["MCPDiscoveredPrompt"][];
+            /** Tools Plugin Id */
+            tools_plugin_id?: string | null;
         };
         /**
          * MCPServerCreate
@@ -8691,6 +8791,18 @@ export interface components {
              * @description admin-allowlisted Open WebUI deployments users can import from
              */
             deployments?: components["schemas"]["OpenWebUIDeployment"][];
+            /**
+             * Fetch Concurrency
+             * @description max chats fetched concurrently from Open WebUI during import. higher values speed up large imports but can overwhelm the Open WebUI host or trip its rate limits; 24-64 is a sane range.
+             * @default 24
+             */
+            fetch_concurrency: number;
+            /**
+             * Db Write Concurrency
+             * @description max resources written to the database concurrently during import. each worker holds its own pooled connection, so keep this below DB_POOL_SIZE + DB_MAX_OVERFLOW or workers will block on connection checkout. 8 is comfortable for the default pool of 15.
+             * @default 8
+             */
+            db_write_concurrency: number;
         };
         /** OpenWebUIIntegrationSettingsPatch */
         OpenWebUIIntegrationSettingsPatch: {
@@ -8698,6 +8810,16 @@ export interface components {
             enabled?: boolean;
             /** Deployments */
             deployments?: components["schemas"]["OpenWebUIDeploymentPatch"][];
+            /**
+             * Fetch Concurrency
+             * @description max chats fetched concurrently from Open WebUI during import. higher values speed up large imports but can overwhelm the Open WebUI host or trip its rate limits; 24-64 is a sane range.
+             */
+            fetch_concurrency?: number;
+            /**
+             * Db Write Concurrency
+             * @description max resources written to the database concurrently during import. each worker holds its own pooled connection, so keep this below DB_POOL_SIZE + DB_MAX_OVERFLOW or workers will block on connection checkout. 8 is comfortable for the default pool of 15.
+             */
+            db_write_concurrency?: number;
         };
         /**
          * OpenWebUISourcesOut
@@ -9970,7 +10092,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "file" | "note" | "thread" | "project" | "reminder" | "calendar_event";
+            type: "file" | "note" | "thread" | "project" | "reminder" | "reminder_list" | "calendar_event" | "calendar";
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -11048,6 +11170,8 @@ export interface components {
             thread_maintenance?: components["schemas"]["ThreadMaintenanceSettings"];
             /** @description retroactive thread maintenance backfill settings. off by default; controls an optional periodic sweep that runs maintenance on stale threads in batches. */
             maintenance_backfill?: components["schemas"]["ThreadMaintenanceBackfillSettings"];
+            /** @description retroactive file maintenance settings. off by default; controls an optional periodic sweep that fills deferred upkeep (currently descriptions) for imported files in paced batches so bulk imports never flood the chat model. */
+            file_maintenance?: components["schemas"]["FileMaintenanceSettings"];
         };
         /** TasksSettingsPatch */
         TasksSettingsPatch: {
@@ -11057,6 +11181,8 @@ export interface components {
             thread_maintenance?: components["schemas"]["ThreadMaintenanceSettingsPatch"];
             /** Maintenance Backfill */
             maintenance_backfill?: components["schemas"]["ThreadMaintenanceBackfillSettingsPatch"];
+            /** File Maintenance */
+            file_maintenance?: components["schemas"]["FileMaintenanceSettingsPatch"];
         };
         /**
          * TavilySettings
@@ -24018,12 +24144,12 @@ export interface operations {
     };
     list_memories_v1_memories_get: {
         parameters: {
-            query: {
+            query?: {
                 skip?: number;
                 limit?: number;
                 sort_by?: components["schemas"]["CommonSortBy"] | ("tags" | "content_length" | "last_accessed_at" | "confidence");
                 sort_dir?: "asc" | "desc";
-                owner_id: string;
+                owner_id?: string | null;
                 search?: string | null;
             };
             header?: never;
@@ -24307,8 +24433,8 @@ export interface operations {
     };
     count_memories_v1_memories_count_get: {
         parameters: {
-            query: {
-                owner_id: string;
+            query?: {
+                owner_id?: string | null;
                 search?: string | null;
             };
             header?: never;
@@ -30511,6 +30637,194 @@ export interface operations {
                     "application/json": {
                         [key: string]: number;
                     };
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    run_file_maintenance_backfill_v1_files_maintenance_backfill_run_post: {
+        parameters: {
+            query?: {
+                batch_size?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JSONObject-Output"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    run_file_maintenance_v1_files__file_id__maintenance_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["File"];
                 };
             };
             /** @description bad request */

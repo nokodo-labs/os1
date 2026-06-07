@@ -59,6 +59,7 @@
 	let searchQuery = $state('')
 	let isLoading = $state(false)
 	let hasNext = $state(false)
+	let total = $state(0)
 	let error = $state<string | null>(null)
 
 	let searchResults = $state<SearchResultItem[]>([])
@@ -180,22 +181,33 @@
 		isLoading = true
 		error = null
 
-		api.GET('/v1/notes', {
-			params: {
-				query: {
-					owner_id: ownerIdFilter ?? undefined,
-					include_deleted: true,
-					skip,
-					limit,
-					sort_by: sortKey,
-					sort_dir: sortDir,
-				},
-			},
-		})
-			.then((r) => unwrap(r))
-			.then((result) => {
+		Promise.all([
+			api
+				.GET('/v1/notes', {
+					params: {
+						query: {
+							owner_id: ownerIdFilter ?? undefined,
+							include_deleted: true,
+							skip,
+							limit,
+							sort_by: sortKey,
+							sort_dir: sortDir,
+						},
+					},
+				})
+				.then((r) => unwrap(r)),
+			api
+				.GET('/v1/notes/count', {
+					params: {
+						query: { owner_id: ownerIdFilter ?? undefined, include_deleted: true },
+					},
+				})
+				.then((r) => unwrap(r)),
+		])
+			.then(([result, count]) => {
 				notes = result
-				hasNext = result.length === limit
+				total = count
+				hasNext = (pageIndex + 1) * limit < count
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load notes'
@@ -302,7 +314,9 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{notes.length > 0 ? ` \u00b7 ${notes.length} items` : ''}
+					{total > 0
+						? `items ${pageIndex * limit + 1}–${pageIndex * limit + notes.length} of ${total}`
+						: ''}
 				</span>
 				<Button
 					variant="outline"

@@ -58,6 +58,7 @@
 	let searchTimer: ReturnType<typeof setTimeout> | null = null
 	let isLoading = $state(false)
 	let hasNext = $state(false)
+	let total = $state(0)
 	let error = $state<string | null>(null)
 
 	let isUserDetailsOpen = $state(false)
@@ -157,22 +158,31 @@
 		isLoading = true
 		error = null
 
-		api.GET('/v1/groups', {
-			params: {
-				query: {
-					owner_id: ownerIdFilter ?? undefined,
-					skip,
-					limit,
-					sort_by: sortKey,
-					sort_dir: sortDir,
-					q,
-				},
-			},
-		})
-			.then((r) => unwrap(r))
-			.then((result) => {
+		Promise.all([
+			api
+				.GET('/v1/groups', {
+					params: {
+						query: {
+							owner_id: ownerIdFilter ?? undefined,
+							skip,
+							limit,
+							sort_by: sortKey,
+							sort_dir: sortDir,
+							q,
+						},
+					},
+				})
+				.then((r) => unwrap(r)),
+			api
+				.GET('/v1/groups/count', {
+					params: { query: { owner_id: ownerIdFilter ?? undefined, q } },
+				})
+				.then((r) => unwrap(r)),
+		])
+			.then(([result, count]) => {
 				groups = result
-				hasNext = result.length === limit
+				total = count
+				hasNext = (pageIndex + 1) * limit < count
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load groups'
@@ -280,7 +290,9 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{groups.length > 0 ? ` \u00b7 ${groups.length} items` : ''}
+					{total > 0
+						? `items ${pageIndex * limit + 1}–${pageIndex * limit + groups.length} of ${total}`
+						: ''}
 				</span>
 				<Button
 					variant="outline"

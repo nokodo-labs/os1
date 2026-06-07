@@ -423,8 +423,8 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{filteredServers.length > 0
-						? ` · ${visibleServers.length} of ${filteredServers.length}`
+					{filteredServers.length > 0
+						? `items ${pageIndex * limit + 1}–${pageIndex * limit + visibleServers.length} of ${filteredServers.length}`
 						: ''}
 				</span>
 				<Button

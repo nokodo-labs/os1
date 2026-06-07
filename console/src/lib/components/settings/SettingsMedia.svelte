@@ -17,6 +17,10 @@
 		faviconUrl?: string
 		appleTouchIconSource?: MediaAssetSource
 		appleTouchIconUrl?: string
+		sidebarLogoSource?: MediaAssetSource
+		sidebarLogoUrl?: string
+		splashLogoSource?: MediaAssetSource
+		splashLogoUrl?: string
 	}
 
 	let {
@@ -25,6 +29,10 @@
 		faviconUrl = $bindable(''),
 		appleTouchIconSource = $bindable<MediaAssetSource>('default'),
 		appleTouchIconUrl = $bindable(''),
+		sidebarLogoSource = $bindable<MediaAssetSource>('default'),
+		sidebarLogoUrl = $bindable(''),
+		splashLogoSource = $bindable<MediaAssetSource>('default'),
+		splashLogoUrl = $bindable(''),
 	}: Props = $props()
 
 	function stripTrailingSlash(url: string): string {
@@ -75,6 +83,28 @@
 				defaultUrl="https://nokodo.net/static/os1/icon-512-any.png"
 				cdnUrl={cdnUrl('static/os1/icon-512-any.png')}
 				customPlaceholder="https://cdn.example.com/static/os1/icon-512-any.png"
+			/>
+
+			<SettingsAssetSourceRow
+				id="media_sidebar_logo"
+				title="sidebar logo"
+				description="logo shown in the app sidebar"
+				bind:source={sidebarLogoSource}
+				bind:url={sidebarLogoUrl}
+				defaultUrl="https://nokodo.net/static/os1/logo.svg"
+				cdnUrl={cdnUrl('static/os1/logo.svg')}
+				customPlaceholder="https://cdn.example.com/static/os1/logo.svg"
+			/>
+
+			<SettingsAssetSourceRow
+				id="media_splash_logo"
+				title="splash logo"
+				description="logo shown on the loading/splash screen"
+				bind:source={splashLogoSource}
+				bind:url={splashLogoUrl}
+				defaultUrl="https://nokodo.net/static/os1/logo.svg"
+				cdnUrl={cdnUrl('static/os1/logo.svg')}
+				customPlaceholder="https://cdn.example.com/static/os1/logo.svg"
 			/>
 		</div>
 	</CardContent>

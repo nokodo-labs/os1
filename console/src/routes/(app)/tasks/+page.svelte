@@ -62,6 +62,7 @@
 	let liveError = $state<string | null>(null)
 	let historyError = $state<string | null>(null)
 	let hasNext = $state(false)
+	let total = $state(0)
 	let taskDetailsOpen = $state(false)
 	let selectedTaskId = $state<string | null>(null)
 	let selectedTask = $state<Task | null>(null)
@@ -197,24 +198,42 @@
 
 		isLoadingHistory = true
 		historyError = null
-		api.GET('/v1/tasks', {
-			params: {
-				query: {
-					owner_id: userId || undefined,
-					spawned_thread_id: threadId || undefined,
-					status_filter: historyStatusFilter === 'all' ? undefined : historyStatusFilter,
-					state_filter: 'ended',
-					skip: pageIndex * limit,
-					limit,
-					sort_by: sortKey,
-					sort_dir: sortDir,
-				},
-			},
-		})
-			.then((result) => unwrap(result))
-			.then((loaded) => {
+		Promise.all([
+			api
+				.GET('/v1/tasks', {
+					params: {
+						query: {
+							owner_id: userId || undefined,
+							spawned_thread_id: threadId || undefined,
+							status_filter:
+								historyStatusFilter === 'all' ? undefined : historyStatusFilter,
+							state_filter: 'ended',
+							skip: pageIndex * limit,
+							limit,
+							sort_by: sortKey,
+							sort_dir: sortDir,
+						},
+					},
+				})
+				.then((result) => unwrap(result)),
+			api
+				.GET('/v1/tasks/count', {
+					params: {
+						query: {
+							owner_id: userId || undefined,
+							spawned_thread_id: threadId || undefined,
+							status_filter:
+								historyStatusFilter === 'all' ? undefined : historyStatusFilter,
+							state_filter: 'ended',
+						},
+					},
+				})
+				.then((result) => unwrap(result)),
+		])
+			.then(([loaded, count]) => {
 				historyTasks = loaded
-				hasNext = loaded.length === limit
+				total = count
+				hasNext = (pageIndex + 1) * limit < count
 			})
 			.catch((err: unknown) => {
 				historyError = err instanceof Error ? err.message : 'failed to load task history'
@@ -411,8 +430,8 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{historyTasks.length > 0
-						? ` - ${historyTasks.length} items`
+					{total > 0
+						? `items ${pageIndex * limit + 1}–${pageIndex * limit + historyTasks.length} of ${total}`
 						: ''}
 				</span>
 				<Button

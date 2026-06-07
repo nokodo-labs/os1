@@ -21,6 +21,9 @@
 		e2bTemplate?: string
 		e2bAvailablePackages?: string
 		timeout?: string
+		maxFileDownloadMb?: string
+		maxOutputChars?: string
+		truncationLines?: string
 	}
 
 	let {
@@ -30,6 +33,9 @@
 		e2bTemplate = $bindable(''),
 		e2bAvailablePackages = $bindable(''),
 		timeout = $bindable(''),
+		maxFileDownloadMb = $bindable(''),
+		maxOutputChars = $bindable(''),
+		truncationLines = $bindable(''),
 	}: Props = $props()
 </script>
 
@@ -79,6 +85,46 @@
 						min="5"
 						placeholder="60"
 						bind:value={timeout}
+						class="rounded-xl"
+					/>
+				</div>
+				<div class="space-y-2">
+					<Label for="ci_max_file_download_mb">max file download (MB)</Label>
+					<p class="text-xs text-zinc-500">max file size downloadable from sandbox.</p>
+					<Input
+						id="ci_max_file_download_mb"
+						type="number"
+						min="1"
+						placeholder="50"
+						bind:value={maxFileDownloadMb}
+						class="rounded-xl"
+					/>
+				</div>
+				<div class="space-y-2">
+					<Label for="ci_max_output_chars">max output characters</Label>
+					<p class="text-xs text-zinc-500">
+						max characters returned from code execution.
+					</p>
+					<Input
+						id="ci_max_output_chars"
+						type="number"
+						min="1000"
+						placeholder="10000"
+						bind:value={maxOutputChars}
+						class="rounded-xl"
+					/>
+				</div>
+				<div class="space-y-2">
+					<Label for="ci_truncation_lines">truncation lines</Label>
+					<p class="text-xs text-zinc-500">
+						lines kept at head and tail when truncating long output.
+					</p>
+					<Input
+						id="ci_truncation_lines"
+						type="number"
+						min="5"
+						placeholder="10"
+						bind:value={truncationLines}
 						class="rounded-xl"
 					/>
 				</div>

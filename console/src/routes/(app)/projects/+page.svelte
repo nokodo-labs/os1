@@ -55,6 +55,7 @@
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
 	let hasNext = $state(false)
+	let total = $state(0)
 
 	let searchQuery = $state('')
 	let searchResults = $state<Project[]>([])
@@ -146,21 +147,30 @@
 		isLoading = true
 		error = null
 
-		api.GET('/v1/projects', {
-			params: {
-				query: {
-					owner_id: ownerIdFilter ?? undefined,
-					skip,
-					limit,
-					sort_by: sortKey,
-					sort_dir: sortDir,
-				},
-			},
-		})
-			.then((r) => unwrap(r))
-			.then((result) => {
+		Promise.all([
+			api
+				.GET('/v1/projects', {
+					params: {
+						query: {
+							owner_id: ownerIdFilter ?? undefined,
+							skip,
+							limit,
+							sort_by: sortKey,
+							sort_dir: sortDir,
+						},
+					},
+				})
+				.then((r) => unwrap(r)),
+			api
+				.GET('/v1/projects/count', {
+					params: { query: { owner_id: ownerIdFilter ?? undefined } },
+				})
+				.then((r) => unwrap(r)),
+		])
+			.then(([result, count]) => {
 				projects = result
-				hasNext = result.length === limit
+				total = count
+				hasNext = (pageIndex + 1) * limit < count
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load projects'
@@ -287,8 +297,8 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{projects.length > 0
-						? ` \u00b7 ${projects.length} items`
+					{total > 0
+						? `items ${pageIndex * limit + 1}–${pageIndex * limit + projects.length} of ${total}`
 						: ''}
 				</span>
 				<Button

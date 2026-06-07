@@ -46,6 +46,7 @@
 		memoryEnable?: boolean
 		memorySimilarityThreshold?: string
 		memoryTopK?: string
+		memoryPostProcessingTurns?: string
 		// chat context
 		chatContextEnabled?: boolean
 		chatContextMode?: ChatContextMode
@@ -62,6 +63,8 @@
 		taskSummarizationModelId?: string
 		taskMemoryPostProcessingModelId?: string
 		taskWebSearchModelId?: string
+		taskAssetDescriptionModelId?: string
+		taskAssetTextExtractionModelId?: string
 		taskMaintenanceMaxCharsPerMessage?: string
 		// media - images
 		mediaImagesEnabled?: boolean
@@ -108,6 +111,7 @@
 		memoryEnable = $bindable(false),
 		memorySimilarityThreshold = $bindable(''),
 		memoryTopK = $bindable(''),
+		memoryPostProcessingTurns = $bindable(''),
 		chatContextEnabled = $bindable(true),
 		chatContextMode = $bindable('recent'),
 		chatContextTopK = $bindable(''),
@@ -121,6 +125,8 @@
 		taskSummarizationModelId = $bindable(''),
 		taskMemoryPostProcessingModelId = $bindable(''),
 		taskWebSearchModelId = $bindable(''),
+		taskAssetDescriptionModelId = $bindable(''),
+		taskAssetTextExtractionModelId = $bindable(''),
 		taskMaintenanceMaxCharsPerMessage = $bindable(''),
 		mediaImagesEnabled = $bindable(true),
 		mediaImagesModel = $bindable(''),
@@ -307,6 +313,20 @@
 							min="1"
 							placeholder="15"
 							bind:value={memoryTopK}
+							class="rounded-xl"
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="ai_post_processing_turns">post processing turns</Label>
+						<p class="text-xs text-zinc-500">
+							recent turns fed to the memory maintenance agent after each turn.
+						</p>
+						<Input
+							id="ai_post_processing_turns"
+							type="number"
+							min="1"
+							placeholder="6"
+							bind:value={memoryPostProcessingTurns}
 							class="rounded-xl"
 						/>
 					</div>
@@ -562,6 +582,51 @@
 						<SelectTrigger id="task_web_search_model" class="rounded-xl">
 							<span class="truncate text-left"
 								>{getModelLabel(taskWebSearchModelId)}</span
+							>
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="">none</SelectItem>
+							{#each chatModels as model (model.id)}
+								<SelectItem value={model.id}>{modelLabel(model)}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
+				</div>
+				<div class="space-y-2">
+					<Label for="task_asset_description_model">asset description model</Label>
+					<p class="text-xs text-zinc-500">
+						model for generating asset summaries and descriptions.
+					</p>
+					<Select
+						value={taskAssetDescriptionModelId}
+						onValueChange={(v: string) => (taskAssetDescriptionModelId = v)}
+					>
+						<SelectTrigger id="task_asset_description_model" class="rounded-xl">
+							<span class="truncate text-left"
+								>{getModelLabel(taskAssetDescriptionModelId)}</span
+							>
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="">none</SelectItem>
+							{#each chatModels as model (model.id)}
+								<SelectItem value={model.id}>{modelLabel(model)}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
+				</div>
+				<div class="space-y-2">
+					<Label for="task_asset_text_extraction_model">asset text extraction model</Label
+					>
+					<p class="text-xs text-zinc-500">
+						model for file, document, and media text extraction.
+					</p>
+					<Select
+						value={taskAssetTextExtractionModelId}
+						onValueChange={(v: string) => (taskAssetTextExtractionModelId = v)}
+					>
+						<SelectTrigger id="task_asset_text_extraction_model" class="rounded-xl">
+							<span class="truncate text-left"
+								>{getModelLabel(taskAssetTextExtractionModelId)}</span
 							>
 						</SelectTrigger>
 						<SelectContent>

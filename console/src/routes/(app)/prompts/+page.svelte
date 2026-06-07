@@ -60,6 +60,7 @@
 	let error = $state<string | null>(null)
 	let modalError = $state<string | null>(null)
 	let hasNext = $state(false)
+	let total = $state(0)
 
 	let showModal = $state(false)
 	let modalMode = $state<'create' | 'edit'>('create')
@@ -129,13 +130,18 @@
 
 		isLoading = true
 		error = null
-		api.GET('/v1/prompts', {
-			params: { query: { skip, limit, sort_by: sortKey, sort_dir: sortDir } },
-		})
-			.then((r) => unwrap(r))
-			.then((result) => {
+		Promise.all([
+			api
+				.GET('/v1/prompts', {
+					params: { query: { skip, limit, sort_by: sortKey, sort_dir: sortDir } },
+				})
+				.then((r) => unwrap(r)),
+			api.GET('/v1/prompts/count').then((r) => unwrap(r)),
+		])
+			.then(([result, count]) => {
 				prompts = result
-				hasNext = result.length === limit
+				total = count
+				hasNext = (pageIndex + 1) * limit < count
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load prompts'
@@ -312,8 +318,8 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{prompts.length > 0
-						? ` \u00b7 ${prompts.length} items`
+					{total > 0
+						? `items ${pageIndex * limit + 1}–${pageIndex * limit + prompts.length} of ${total}`
 						: ''}
 				</span>
 				<Button

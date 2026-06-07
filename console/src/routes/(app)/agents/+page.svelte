@@ -1158,8 +1158,8 @@ user: {{ user_name }}.
 						prev
 					</Button>
 					<span class="text-xs text-zinc-400 tabular-nums">
-						page {pageIndex + 1}{agentTotal > 0
-							? ` · ${agents.length} of ${agentTotal}`
+						{agentTotal > 0
+							? `items ${pageIndex * limit + 1}–${pageIndex * limit + agents.length} of ${agentTotal}`
 							: ''}
 					</span>
 					<Button
