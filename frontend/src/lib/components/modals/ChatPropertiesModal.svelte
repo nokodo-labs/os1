@@ -248,7 +248,7 @@
 						<Sparkles class="h-4 w-4" />
 						{#if isGeneratingMetadata}<ShimmerText className="inline-block"
 								>generating</ShimmerText
-							>{:else}<span>generate</span>{/if}
+						>{:else}<span>generate missing data</span>{/if}
 					</button>
 				{/if}
 				{#if thread}

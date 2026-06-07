@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import { api } from '$lib/api/client'
 	import { getApiOrigin } from '$lib/api/origin'
 	import ImageLightbox from '$lib/components/chat/ImageLightbox.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
@@ -10,16 +11,23 @@
 	import Eye from '$lib/components/icons/Eye.svelte'
 	import MimeIcon from '$lib/components/icons/MimeIcon.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
+	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 	import { resourceAccentStyle } from '$lib/resources/resourceVisuals'
 	import { downloadFile, fetchAuthenticatedBlob, files } from '$lib/stores/files.svelte'
 	import type { FileDetailsPayload, ResourceAccessPayload } from '$lib/stores/modals.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
-	import { canDeleteAccessLevel, resourceAccess } from '$lib/stores/resourceAccess.svelte'
+	import { showError } from '$lib/stores/notifications.svelte'
+	import {
+		canDeleteAccessLevel,
+		canEditAccessLevel,
+		resourceAccess,
+	} from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { describeFileType, formatFileSize } from '$lib/utils/fileTypes'
 	import { byAuthor, metadataLine } from '$lib/utils/resourceAuthors'
+	import { untrack } from 'svelte'
 
 	interface Props {
 		open: boolean
@@ -34,11 +42,16 @@
 		file ? resourceAccess.level('file', file.id, file.owner_id) : null
 	)
 	const canDeleteFile = $derived(canDeleteAccessLevel(fileAccessLevel))
+	const canEditFile = $derived(canEditAccessLevel(fileAccessLevel))
 
 	// fetch fresh details with origin resolution when the modal opens.
+	// use untrack() so filesMap.get() inside ensure() is not tracked by this
+	// effect - without it, ensure's own write back to filesMap re-triggers the
+	// effect infinitely and causes /content endpoint spam via the blob effects.
 	$effect(() => {
 		if (open && payload?.fileId) {
-			void files.ensure(payload.fileId, { force: true, resolveOrigin: true })
+			const fileId = payload.fileId
+			void untrack(() => files.ensure(fileId, { force: true, resolveOrigin: true }))
 		}
 	})
 
@@ -65,6 +78,7 @@
 	let previewError = $state<string | null>(null)
 	let isDownloading = $state(false)
 	let isOpeningPreview = $state(false)
+	let isGeneratingMaintenance = $state(false)
 	const fileAccentStyle = resourceAccentStyle('file')
 
 	const mimeType = $derived(file?.mime_type ?? '')
@@ -83,6 +97,8 @@
 	const isPdf = $derived(mimeType.toLowerCase().split(';')[0]?.trim() === 'application/pdf')
 	const hasPreview = $derived(isImage || isVideo || isAudio)
 	const fileDescription = $derived(file?.description?.trim() ?? '')
+	const missingDescription = $derived(!fileDescription)
+	const canGenerate = $derived(canEditFile && missingDescription)
 	const threadId = $derived.by(() => {
 		const value = file?.origin_thread_id
 		return typeof value === 'string' && value.startsWith('thread_') ? value : undefined
@@ -179,6 +195,25 @@
 			}
 		}
 	})
+
+	async function generateMaintenance(): Promise<void> {
+		if (!file || isGeneratingMaintenance) return
+		isGeneratingMaintenance = true
+		try {
+			const { error } = await api.POST('/v1/files/{file_id}/maintenance/run', {
+				params: { path: { file_id: file.id } },
+			})
+			if (error) {
+				showError('could not generate file description')
+				return
+			}
+			await files.ensure(file.id, { force: true })
+		} catch {
+			showError('could not generate file description')
+		} finally {
+			isGeneratingMaintenance = false
+		}
+	}
 
 	async function handleDownload(): Promise<void> {
 		if (!file) return
@@ -371,6 +406,18 @@
 						view thread
 					</button>
 				{/if}
+				{#if canGenerate}
+					<button
+						class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
+						onclick={() => void generateMaintenance()}
+						disabled={isGeneratingMaintenance}
+					>
+						<Sparkles class="size-4" />
+						{#if isGeneratingMaintenance}<ShimmerText className="inline-block"
+								>generating</ShimmerText
+							>{:else}generate missing data{/if}
+					</button>
+				{/if}
 				{#if canDeleteFile}
 					<button
 						class="liquid-glass rounded-pill ml-auto flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm text-red-400 transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
@@ -407,18 +454,24 @@
 							</dd>
 						</div>
 					{/if}
-					{#if fileDescription}
-						<div class="min-w-0 sm:col-span-2">
-							<dt class="text-foreground/40 text-xs tracking-wide uppercase">
-								description
-							</dt>
-							<dd
-								class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word whitespace-pre-wrap"
-							>
+					<div class="min-w-0 sm:col-span-2">
+						<dt class="text-foreground/40 text-xs tracking-wide uppercase">
+							description
+						</dt>
+						<dd
+							class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word whitespace-pre-wrap"
+						>
+							{#if isGeneratingMaintenance}
+								<ShimmerText className="inline-block"
+									>generating description</ShimmerText
+								>
+							{:else if fileDescription}
 								{fileDescription}
-							</dd>
-						</div>
-					{/if}
+							{:else}
+								<span class="text-foreground/42">no description yet</span>
+							{/if}
+						</dd>
+					</div>
 					<div class="min-w-0">
 						<dt class="text-foreground/40 text-xs tracking-wide uppercase">type</dt>
 						<dd class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word">
