@@ -8,6 +8,13 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
+# pnpm v10+ blocks dependency build scripts by default and, in v11, even
+# `pnpm run` re-checks this gate. esbuild works without its postinstall (binary
+# comes from the @esbuild/* optional dep), so downgrade the ignored-build error
+# to a warning rather than running unreviewed scripts. scoped to the build stage,
+# so it never reaches the production image.
+ENV pnpm_config_strict_dep_builds=false
+
 # copy package files
 COPY package.json pnpm-lock.yaml ./
 
