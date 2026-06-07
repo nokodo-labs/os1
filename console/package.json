@@ -60,5 +60,10 @@
 		"openapi-fetch": "^0.17.0",
 		"tailwind-merge": "^3.6.0",
 		"tailwindcss-animate": "^1.0.7"
+	},
+	"pnpm": {
+		"onlyBuiltDependencies": [
+			"esbuild"
+		]
 	}
 }
