@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,22 +11,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.boot_settings import boot_settings
 from api.database import async_session_local
 from api.models.task import Task, TaskType
+from api.redis import on_invalidation
+from api.settings import settings
 from api.taskiq import broker, redis_schedule_source
 from api.v1.service import tasks as task_service
 from api.v1.service.auth import Principal, load_principal_for_user
 from api.v1.service.files.processing import (
+	list_files_due_for_description,
 	process_file,
 	process_file_content_vectorization,
 	process_file_description,
 )
-from nokodo_ai.types.json import JSONObject
+from nokodo_ai.types.json import JSONObject, JSONValue
 from nokodo_ai.utils.typeid import TypeID
+
+
+logger = logging.getLogger(__name__)
 
 
 FILE_PROCESSING_TASK = "file.process"
 FILE_CONTENT_VECTORIZATION_TASK = "file.content_vectorization"
 FILE_DESCRIPTION_TASK = "file.description"
 FILE_PROCESSING_DISPATCH_TASK = "file.processing.dispatch"
+FILE_MAINTENANCE_BACKFILL_TASK = "file.maintenance.backfill_sweep"
+FILE_MAINTENANCE_BACKFILL_SCHEDULE_ID = "file:maintenance-backfill"
+FILE_MAINTENANCE_BACKFILL_INVALIDATION_SIGNAL = "file_maintenance_backfill"
 _FILE_RUNNER_TIMEOUT_SECONDS = 30 * 60
 
 
@@ -172,9 +183,9 @@ async def run_file_description_task(context: task_service.TaskContext) -> JSONOb
 	"""run only file description generation for a file."""
 	file_id = _file_id_from_context(context)
 	await context.update(progress=10, stage="describing file")
-	async with async_session_local() as session:
-		result = await process_file_description(file_id, session)
-		await session.commit()
+	# process_file_description manages its own sessions and releases the DB
+	# connection between the load, LLM/embedding, and write phases.
+	result = await process_file_description(file_id, preserve_timestamps=True)
 	await context.update(progress=90, stage="finalizing")
 	return result
 
@@ -202,3 +213,177 @@ def _file_id_from_context(context: task_service.TaskContext) -> TypeID:
 	if not isinstance(file_id_value, str) or not file_id_value:
 		raise ValueError("file_id metadata is required")
 	return TypeID(file_id_value)
+
+
+# retroactive file maintenance backfill ----------------------------------------
+#
+# some files end up AVAILABLE without a description. imports are the usual
+# cause: they defer description generation to keep a bulk import from stampeding
+# the chat model provider into rate limits (see the Open WebUI import service).
+# the sweep below drains that backlog in bounded batches, dispatching one
+# description task per file regardless of source, so model spend stays paced.
+# description generation is its first job; more file upkeep can be folded in
+# later. all knobs come from `settings.tasks.file_maintenance`.
+
+
+async def run_file_maintenance_backfill_sweep(
+	batch_size: int | None = None,
+	respect_enabled: bool = True,
+) -> JSONObject:
+	"""dispatch deferred maintenance for files missing a description.
+
+	this is the shared core for both the scheduled task and any manual
+	trigger. callers control whether the master enabled flag is honored via
+	`respect_enabled`; set False to spot-check the feature without leaving the
+	schedule on.
+
+	the current maintenance job generates the missing description for any
+	settled file that lacks one; more upkeep can be folded in here later
+	without renaming the task.
+
+	args:
+		batch_size: override the configured batch size for this run.
+		respect_enabled: when True, returns immediately if the master toggle
+			is off.
+
+	returns a JSON-friendly result describing how many files were dispatched
+	and how many were skipped for already having an active maintenance task.
+	"""
+	if respect_enabled:
+		settings.reload()
+	backfill_settings = settings.tasks.file_maintenance
+	if respect_enabled and not backfill_settings.enabled:
+		logger.info(
+			"file maintenance backfill sweep skipped reason=disabled schedule_id=%s",
+			FILE_MAINTENANCE_BACKFILL_SCHEDULE_ID,
+		)
+		return {"skipped": True, "reason": "disabled", "dispatched": 0}
+
+	effective_batch = (
+		batch_size if batch_size is not None else backfill_settings.batch_size
+	)
+	if effective_batch <= 0:
+		logger.warning(
+			"file maintenance backfill sweep skipped reason=invalid_bounds "
+			"batch_size=%d",
+			effective_batch,
+		)
+		return {"skipped": True, "reason": "invalid_bounds", "dispatched": 0}
+
+	dispatched = 0
+	skipped_existing = 0
+	dispatched_file_ids: list[JSONValue] = []
+	async with async_session_local() as session:
+		files = await list_files_due_for_description(session, limit=effective_batch)
+		for file in files:
+			file_id = TypeID(file.id)
+			existing = await task_service.find_active_task(
+				session, FILE_DESCRIPTION_TASK, {"file_id": str(file_id)}
+			)
+			if existing is not None:
+				skipped_existing += 1
+				continue
+			principal = await load_principal_for_user(TypeID(file.owner_id), session)
+			await start_file_description_task(session, principal, file_id)
+			dispatched += 1
+			dispatched_file_ids.append(str(file_id))
+
+	logger.info(
+		"file maintenance backfill swept files=%d dispatched=%d skipped_existing=%d",
+		len(dispatched_file_ids) + skipped_existing,
+		dispatched,
+		skipped_existing,
+	)
+	return {
+		"dispatched": dispatched,
+		"skipped_existing": skipped_existing,
+		"batch_size": effective_batch,
+		"dispatched_file_ids": dispatched_file_ids,
+	}
+
+
+@broker.task(task_name=FILE_MAINTENANCE_BACKFILL_TASK)
+async def dispatch_file_maintenance_backfill_sweep() -> JSONObject:
+	"""scheduled entrypoint for the deferred file maintenance backfill.
+
+	running this task is gated on
+	`settings.tasks.file_maintenance.enabled`. when disabled it
+	returns a `skipped` result so the tick does no work and spends no model
+	tokens.
+	"""
+	return await run_file_maintenance_backfill_sweep(respect_enabled=True)
+
+
+async def reconcile_file_maintenance_backfill_schedule() -> bool:
+	"""install or remove the backfill cron schedule based on settings.
+
+	called at API boot and again whenever the cache invalidation signal
+	`file_maintenance_backfill` fires. the function is idempotent: it always
+	deletes the existing schedule first, then installs a new one when the
+	feature is enabled. returns True if a schedule is currently installed
+	after the reconcile, False otherwise.
+	"""
+	if boot_settings.TESTING:
+		return False
+	settings.reload()
+	await redis_schedule_source.delete_schedule(FILE_MAINTENANCE_BACKFILL_SCHEDULE_ID)
+	backfill_settings = settings.tasks.file_maintenance
+	if not backfill_settings.enabled:
+		logger.info("file maintenance backfill schedule cleared (disabled)")
+		return False
+	try:
+		await (
+			dispatch_file_maintenance_backfill_sweep.kicker()
+			.with_schedule_id(FILE_MAINTENANCE_BACKFILL_SCHEDULE_ID)
+			.schedule_by_cron(redis_schedule_source, backfill_settings.cron)
+		)
+	except ValueError as exc:
+		logger.warning(
+			"file maintenance backfill cron rejected by taskiq: %s (cron=%r)",
+			exc,
+			backfill_settings.cron,
+		)
+		return False
+	logger.info(
+		"file maintenance backfill schedule installed cron=%r batch_size=%d",
+		backfill_settings.cron,
+		backfill_settings.batch_size,
+	)
+	return True
+
+
+async def clear_disabled_file_maintenance_backfill_schedule() -> bool:
+	"""remove any persisted backfill schedule before TaskIQ startup when disabled."""
+	if boot_settings.TESTING:
+		return False
+	settings.reload()
+	backfill_settings = settings.tasks.file_maintenance
+	if backfill_settings.enabled:
+		return False
+	await redis_schedule_source.delete_schedule(FILE_MAINTENANCE_BACKFILL_SCHEDULE_ID)
+	logger.info(
+		"file maintenance backfill schedule cleared before taskiq startup "
+		"reason=disabled schedule_id=%s",
+		FILE_MAINTENANCE_BACKFILL_SCHEDULE_ID,
+	)
+	return True
+
+
+def _on_file_maintenance_backfill_settings_invalidation() -> None:
+	"""react to a settings update by reconciling the backfill schedule.
+
+	the cache invalidation pubsub handler is sync, so we hand the async
+	reconcile off to the running event loop without blocking the listener.
+	"""
+	try:
+		loop = asyncio.get_running_loop()
+	except RuntimeError:
+		logger.debug("backfill invalidation received outside an event loop; skipping")
+		return
+	loop.create_task(reconcile_file_maintenance_backfill_schedule())
+
+
+on_invalidation(
+	FILE_MAINTENANCE_BACKFILL_INVALIDATION_SIGNAL,
+	_on_file_maintenance_backfill_settings_invalidation,
+)

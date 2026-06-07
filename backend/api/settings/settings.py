@@ -2073,6 +2073,45 @@ class ThreadMaintenanceSettings(BaseModel):
 	)
 
 
+class FileMaintenanceSettings(BaseModel):
+	"""knobs for the optional retroactive file maintenance sweep.
+
+	by default this is fully disabled. when enabled, a periodic background
+	task scans imported files for deferred upkeep and dispatches work in
+	bounded batches. the first maintenance job is generating the missing
+	description for imported files: bulk imports defer descriptions so a
+	large import never fans out hundreds of chat model calls at once and
+	trips provider rate limits, leaving files without one. each dispatched
+	task spends model tokens, so administrators must opt in explicitly and
+	set their own batch bounds. additional file upkeep can be folded into
+	this sweep later without renaming it.
+	"""
+
+	enabled: bool = settings_field(
+		default=False,
+		description=(
+			"enable the periodic file maintenance sweep. when False, the "
+			"schedule is removed and imported files keep no description."
+		),
+	)
+	cron: str = settings_field(
+		default="0 4 * * *",
+		description=(
+			"cron expression for the periodic sweep, evaluated in UTC. "
+			"defaults to once per day at 04:00 UTC."
+		),
+	)
+	batch_size: int = settings_field(
+		default=10,
+		ge=1,
+		description=(
+			"maximum number of files dispatched per sweep run. each file "
+			"results in one maintenance task and one model spend; keep this "
+			"modest so the chat model provider is never flooded."
+		),
+	)
+
+
 class TasksSettings(BaseModel):
 	"""task execution settings."""
 
@@ -2091,6 +2130,15 @@ class TasksSettings(BaseModel):
 			"retroactive thread maintenance backfill settings. "
 			"off by default; controls an optional periodic sweep that "
 			"runs maintenance on stale threads in batches."
+		),
+	)
+	file_maintenance: FileMaintenanceSettings = settings_field(
+		default_factory=FileMaintenanceSettings,
+		description=(
+			"retroactive file maintenance settings. off by default; controls "
+			"an optional periodic sweep that fills deferred upkeep (currently "
+			"descriptions) for imported files in paced batches so bulk imports "
+			"never flood the chat model."
 		),
 	)
 

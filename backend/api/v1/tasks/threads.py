@@ -604,11 +604,6 @@ async def run_memory_post_processing_task(
 		await session.commit()
 	await context.update(progress=90, stage="finalizing")
 	if emit_activity:
-		activity_changes = (
-			_activity_count(result, "created")
-			+ _activity_count(result, "updated")
-			+ _activity_count(result, "deleted")
-		)
 		await _emit_memory_maintenance_activity(
 			result,
 			user_id=str(context.user_id),

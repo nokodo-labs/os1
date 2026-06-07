@@ -40,6 +40,10 @@ from api.v1.service.integrations.mcp import (
 	stop_mcp_list_change_listeners,
 )
 from api.v1.tasks.calendar import reconcile_calendar_event_notification_schedules
+from api.v1.tasks.files import (
+	clear_disabled_file_maintenance_backfill_schedule,
+	reconcile_file_maintenance_backfill_schedule,
+)
 from api.v1.tasks.reminders import reconcile_reminder_notification_schedules
 from api.v1.tasks.threads import (
 	clear_disabled_thread_maintenance_backfill_schedule,
@@ -73,11 +77,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 			await initialize_global_mcp_servers(session)
 		await redis_client.connect()
 		await clear_disabled_thread_maintenance_backfill_schedule()
+		await clear_disabled_file_maintenance_backfill_schedule()
 		await startup_taskiq()
 		await fail_stale_thread_related_tasks()
 		await reconcile_calendar_event_notification_schedules()
 		await reconcile_reminder_notification_schedules()
 		await reconcile_thread_maintenance_backfill_schedule()
+		await reconcile_file_maintenance_backfill_schedule()
 
 	# start the cross-worker cache invalidation subscriber. handlers are
 	# self-registered at import time by the modules that own resettable

@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.database import async_session_local
 from api.models.agent import Agent
 from api.models.model import Model, ModelType
 from api.models.provider import Provider
@@ -319,7 +320,7 @@ async def resolve_embedding_model(
 
 
 async def resolve_task_chat_model(
-	session: AsyncSession,
+	session: AsyncSession | None,
 	task: str,
 ) -> ChatModel:
 	"""resolve the ChatModel for a background task from settings."""
@@ -327,14 +328,15 @@ async def resolve_task_chat_model(
 
 
 async def resolve_task_chat_model_config(
-	session: AsyncSession,
+	session: AsyncSession | None,
 	task: str,
 ) -> TaskChatModel:
 	"""resolve the chat model for a background task from settings.
 
 	resolution: per-task model_id -> default_model_id -> error.
 	uses a process-local cache to avoid repeated DB lookups (task models
-	rarely change).
+	rarely change). when session is None and the cache is cold, opens its
+	own short-lived session for the DB lookup.
 	"""
 	now = time.monotonic()
 	cached = _task_model_cache.get(task)
@@ -342,6 +344,10 @@ async def resolve_task_chat_model_config(
 		chat_model_config, expiry = cached
 		if now < expiry:
 			return chat_model_config
+
+	if session is None:
+		async with async_session_local() as owned:
+			return await resolve_task_chat_model_config(owned, task)
 
 	task_settings = settings.ai.tasks
 

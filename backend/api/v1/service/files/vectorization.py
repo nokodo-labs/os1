@@ -80,14 +80,24 @@ async def remove_file_vectors(
 async def replace_file_description_vectors(
 	file: File,
 	session: AsyncSession,
+	precomputed_embedding: list[float] | None = None,
 ) -> int:
-	"""replace the filename/description vector chunk for a file."""
+	"""replace the filename/description vector chunk for a file.
+
+	when precomputed_embedding is supplied the embed_texts call is skipped so
+	callers can pre-compute the embedding outside a DB session and avoid
+	holding a connection during the embedding API round-trip.
+	"""
 	await remove_file_vectors(str(file.id), session, include_content_vectors=False)
 	text = file_searchable_text(file)
 	if not text:
 		return 0
 	acl_metadata = await fetch_acl_metadata(str(file.id), ResourceType.FILE, session)
-	embedding = (await embed_texts([text], session))[0]
+	embedding = (
+		precomputed_embedding
+		if precomputed_embedding is not None
+		else (await embed_texts([text], session))[0]
+	)
 	chunk = build_chunk(FILE_SPEC, file, embedding, extra_metadata=acl_metadata)
 	await vectorstore_service.upsert_chunks(chunks=[chunk], session=session)
 	return 1

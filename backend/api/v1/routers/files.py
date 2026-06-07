@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
 from api.database import get_db
+from api.models.access_rule import AccessLevel
 from api.models.file import File, FileSource
 from api.permissions import ResourceType
 from api.schemas.file import File as FileSchema
@@ -25,8 +26,10 @@ from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import files as file_service
 from api.v1.service.auth import Principal, get_current_principal
-from api.v1.service.authorization import require_admin
+from api.v1.service.authorization import require_admin, require_resource_access
 from api.v1.service.events import SessionId
+from api.v1.tasks.files import run_file_maintenance_backfill_sweep
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -148,6 +151,47 @@ async def revectorize_files(
 	require_admin(principal)
 	count = await file_service.vectorize_all_files(db)
 	return {"vectorized": count}
+
+
+@router.post("/maintenance-backfill/run")
+async def run_file_maintenance_backfill(
+	batch_size: Annotated[int | None, Query(ge=1, le=200)] = None,
+	principal: Principal = Depends(get_current_principal),
+) -> JSONObject:
+	"""manually run one batch of the retroactive file maintenance sweep.
+
+	admin-only. this intentionally ignores the scheduled maintenance enabled
+	flag so admins can spot-check the sweep (currently description backfill for
+	imported files) without leaving the periodic schedule on.
+	"""
+	require_admin(principal)
+	return await run_file_maintenance_backfill_sweep(
+		batch_size=batch_size,
+		respect_enabled=False,
+	)
+
+
+@router.post("/{file_id}/maintenance/run", response_model=FileSchema)
+async def run_file_maintenance(
+	file_id: TypeID,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> File:
+	"""regenerate description and re-vectorize a single file.
+
+	caller must have admin-level access on the file (owner or higher). runs
+	the description and vectorization pipeline synchronously and returns the
+	updated file record.
+	"""
+	await require_resource_access(
+		file_id,
+		db,
+		principal,
+		ResourceType.FILE,
+		required_level=AccessLevel.ADMIN,
+	)
+	await file_service.process_file_description(file_id)
+	return await file_service.get_file(file_id, db, principal=principal)
 
 
 @router.get("/{file_id}", response_model=FileSchema)

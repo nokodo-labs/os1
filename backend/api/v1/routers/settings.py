@@ -82,6 +82,7 @@ async def update_settings(
 		await publish_invalidation("embedding_model")
 		await publish_invalidation("task_models")
 		await publish_invalidation("thread_maintenance_backfill")
+		await publish_invalidation("file_maintenance_backfill")
 	except svc.VersionConflictError as e:
 		raise HTTPException(
 			status.HTTP_409_CONFLICT,

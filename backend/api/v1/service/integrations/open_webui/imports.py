@@ -46,7 +46,7 @@ from api.v1.service.integrations.open_webui.notes import _import_notes_chunk
 from api.v1.service.memories import vectorize_memories
 from api.v1.service.notes import vectorize_notes
 from api.v1.service.threads import vectorize_threads
-from api.v1.tasks.files import start_file_processing_task
+from api.v1.tasks.files import start_file_content_vectorization_task
 from nokodo_ai.utils.concurrency import gather_bounded
 from nokodo_ai.utils.typeid import TypeID
 
@@ -189,12 +189,18 @@ async def _enqueue_imported_file_processing(
 	principal: Principal,
 	summary: ImportSummary,
 ) -> None:
-	"""enqueue async processing for files created during this import.
+	"""enqueue content vectorization for files created during this import.
 
 	runs after the import transaction has committed so each task sees a
 	durably stored file. files whose nested transaction rolled back are
 	skipped. failures are logged, never raised - a missed processing
 	enqueue must not fail an otherwise successful import.
+
+	only content vectorization is enqueued here. LLM description generation
+	is deliberately NOT triggered inline: a large import creates hundreds of
+	files at once, and fanning out a description task per file stampedes the
+	chat model provider into rate limits. descriptions are instead filled in
+	gradually by the throttled file description backfill sweep.
 	"""
 	file_ids = summary.processing_file_ids
 	if not file_ids:
@@ -213,7 +219,7 @@ async def _enqueue_imported_file_processing(
 		if str(file_id) not in existing:
 			continue
 		try:
-			await start_file_processing_task(session, principal, file_id)
+			await start_file_content_vectorization_task(session, principal, file_id)
 		except Exception:
 			logger.exception(
 				"failed to enqueue processing for imported file %s", file_id
@@ -361,57 +367,122 @@ async def _import_chat_items(
 		_merge_import_summary(summary, result)
 
 
-async def _fetch_chat_batch(
+async def _import_chats_streaming(
+	chat_list: list[Any],
+	total_chats: int,
+	owner_id: TypeID,
+	deployment: OpenWebUIDeployment,
+	deployment_origin: str,
 	client: OpenWebUIClient,
-	batch_refs: list[dict[str, Any]],
-	batch_start: int,
+	folder_project_ids: dict[str, TypeID],
+	pinned_cache: _PinnedProjectCache,
+	model_resolver: ModelAgentResolver,
+	file_locks: _FileLockRegistry,
+	progress: _ProgressReporter,
 	fetch_concurrency: int,
+	write_concurrency: int,
 	summary: ImportSummary,
-) -> list[tuple[int, dict[str, Any], str]]:
-	"""fetch one batch of chat bodies, merging each with its ref."""
-	batch_items: list[tuple[int, dict[str, Any], str]] = []
-	for offset, chat_ref in enumerate(batch_refs):
+) -> None:
+	"""fetch and import chats in one overlapping producer/consumer pipeline.
+
+	the previous batched approach fetched a full window of chat bodies, then
+	imported that window, then fetched the next - so the network fetch pool
+	and the database write pool never ran at the same time and every batch
+	stalled on its slowest chat. here a fetch pool (sized by
+	``fetch_concurrency``) streams chat bodies into a bounded queue while a
+	write pool (sized by ``write_concurrency``) drains it, so both stages stay
+	saturated for the whole import.
+	"""
+	refs: list[tuple[int, dict[str, Any], str]] = []
+	for offset, chat_ref in enumerate(chat_list):
 		chat_id = _first_str(chat_ref, "id", "chat_id")
 		if chat_id is None:
 			summary.chats_skipped += 1
 			summary.add_error("chat skipped: missing Open WebUI id")
 			continue
-		batch_items.append((batch_start + offset + 1, chat_ref, chat_id))
-	if not batch_items:
-		return []
-	fetch_results = await gather_bounded(
-		(client.get_chat(chat_id) for _, _, chat_id in batch_items),
-		limit=fetch_concurrency,
-		return_exceptions=True,
+		refs.append((offset + 1, chat_ref, chat_id))
+	if not refs:
+		return
+
+	# a bounded queue applies backpressure so the fetch pool never races far
+	# ahead of the slower write pool and buffers the whole export in memory.
+	queue: asyncio.Queue[tuple[int, dict[str, Any], str] | None] = asyncio.Queue(
+		maxsize=max(fetch_concurrency, write_concurrency) * 2
 	)
-	chat_items: list[tuple[int, dict[str, Any], str]] = []
-	for (index, chat_ref, chat_id), fetch_result in zip(
-		batch_items, fetch_results, strict=True
-	):
-		if isinstance(fetch_result, OpenWebUIAuthError):
-			raise _client_error_to_http_exception(fetch_result) from fetch_result
-		if isinstance(fetch_result, asyncio.CancelledError):
-			raise fetch_result
-		if isinstance(fetch_result, OpenWebUIError):
-			summary.chats_skipped += 1
-			summary.add_error(f"chat {chat_id} fetch failed: {fetch_result}")
-			continue
-		if isinstance(fetch_result, BaseException):
-			summary.chats_skipped += 1
-			summary.add_error(
-				f"chat {chat_id} fetch failed: {type(fetch_result).__name__}"
-			)
-			continue
-		chat_body = fetch_result
+	merge_lock = asyncio.Lock()
+
+	async def _merge(local: ImportSummary) -> None:
+		async with merge_lock:
+			_merge_import_summary(summary, local)
+
+	async def _record_skip(detail: str) -> None:
+		local = ImportSummary(deployment_origin=deployment_origin)
+		local.chats_skipped += 1
+		local.add_error(detail)
+		await _merge(local)
+
+	async def _fetch_one(index: int, chat_ref: dict[str, Any], chat_id: str) -> None:
+		try:
+			chat_body = await client.get_chat(chat_id)
+		except OpenWebUIAuthError as exc:
+			# auth failures are fatal for the whole import; propagate so the
+			# fetch pool cancels and the caller surfaces a clear error.
+			raise _client_error_to_http_exception(exc) from exc
+		except OpenWebUIError as exc:
+			await _record_skip(f"chat {chat_id} fetch failed: {exc}")
+			return
 		if chat_body is None:
-			summary.chats_skipped += 1
-			summary.add_error(f"chat {chat_id} skipped: empty response")
-			continue
+			await _record_skip(f"chat {chat_id} skipped: empty response")
+			return
 		chat = {**chat_ref, **chat_body}
 		if chat_ref.get("archived") is True:
 			chat["archived"] = True
-		chat_items.append((index, chat, chat_id))
-	return chat_items
+		await queue.put((index, chat, chat_id))
+
+	async def _produce() -> None:
+		try:
+			await gather_bounded(
+				(_fetch_one(index, ref, cid) for index, ref, cid in refs),
+				limit=fetch_concurrency,
+			)
+		finally:
+			# wake every consumer exactly once so they drain and exit, even
+			# when a fatal fetch error short-circuits the fetch pool.
+			for _ in range(write_concurrency):
+				await queue.put(None)
+
+	async def _consume() -> None:
+		while True:
+			item = await queue.get()
+			if item is None:
+				return
+			index, chat, chat_id = item
+			local = await _import_one_chat_worker(
+				chat,
+				chat_id,
+				index,
+				total_chats,
+				owner_id=owner_id,
+				deployment=deployment,
+				deployment_origin=deployment_origin,
+				client=client,
+				folder_project_ids=folder_project_ids,
+				pinned_cache=pinned_cache,
+				model_resolver=model_resolver,
+				file_locks=file_locks,
+				progress=progress,
+			)
+			await _merge(local)
+
+	consumers = [asyncio.create_task(_consume()) for _ in range(write_concurrency)]
+	try:
+		await _produce()
+	finally:
+		# the producer's own finally enqueues one sentinel per consumer, so
+		# every consumer drains remaining committed work and exits cleanly even
+		# when the fetch pool short-circuited on a fatal error. awaiting here
+		# guarantees that, then any fatal fetch error re-raises after cleanup.
+		await asyncio.gather(*consumers)
 
 
 async def import_from_open_webui(
@@ -451,17 +522,96 @@ async def import_from_open_webui(
 	write_concurrency = settings.integrations.open_webui.db_write_concurrency
 
 	async with OpenWebUIClient(origin=origin, credential=credential) as client:
+		# phase 1: fetch all API data concurrently.
+		# list_* calls are independent HTTP requests to the OWUI server and
+		# typically dominate wall time, especially bulk chat export or large
+		# memory/note lists.
+		await _report_progress(progress_callback, 10, "fetching data from open webui")
+
+		_coro_keys: list[str] = []
+		_coros = []
+		if include_chats:
+			_coro_keys.append("folders")
+			_coros.append(client.list_folders())
+			_coro_keys.append("chat_list")
+			if chat_import_mode == "bulk":
+				_coros.append(
+					client.list_bulk_chats(
+						include_archived_chats=include_archived_chats
+					)
+				)
+			else:
+				_coros.append(
+					client.list_chat_refs(include_archived_chats=include_archived_chats)
+				)
+		if include_memories:
+			_coro_keys.append("memories")
+			_coros.append(client.list_memories())
+		if include_notes:
+			_coro_keys.append("notes")
+			_coros.append(client.list_notes())
+
+		_raw = await asyncio.gather(*_coros, return_exceptions=True) if _coros else []
+		_fetch = dict(zip(_coro_keys, _raw))
+
+		# re-raise any CancelledError captured by return_exceptions
+		for _v in _fetch.values():
+			if isinstance(_v, asyncio.CancelledError):
+				raise _v
+
+		folders: list[Any] = []
+		chat_list: list[Any] = []
+		memories: list[Any] = []
+		notes: list[Any] = []
+
+		if include_chats:
+			_fr = _fetch["folders"]
+			if isinstance(_fr, OpenWebUIAuthError):
+				raise _client_error_to_http_exception(_fr) from _fr
+			elif isinstance(_fr, OpenWebUIError):
+				summary.add_error(f"folders fetch failed: {_fr}")
+			elif isinstance(_fr, list):
+				folders = _fr
+
+			_cl = _fetch["chat_list"]
+			if isinstance(_cl, OpenWebUIError):
+				raise _client_error_to_http_exception(_cl) from _cl
+			elif isinstance(_cl, BaseException):
+				raise RuntimeError(f"chat list fetch failed: {_cl}") from _cl
+			elif isinstance(_cl, list):
+				chat_list = _cl
+
+		if include_memories:
+			_mr = _fetch["memories"]
+			if isinstance(_mr, OpenWebUIAuthError):
+				raise _client_error_to_http_exception(_mr) from _mr
+			elif isinstance(_mr, OpenWebUIError):
+				summary.add_error(f"memories fetch failed: {_mr}")
+			elif isinstance(_mr, list):
+				memories = _mr
+
+		if include_notes:
+			_nr = _fetch["notes"]
+			if isinstance(_nr, OpenWebUIAuthError):
+				raise _client_error_to_http_exception(_nr) from _nr
+			elif isinstance(_nr, OpenWebUIError):
+				summary.add_error(f"notes fetch failed: {_nr}")
+			elif isinstance(_nr, list):
+				notes = _nr
+
+		_parts: list[str] = []
+		if include_chats:
+			_parts.append(f"{len(chat_list)} chats")
+		if include_memories:
+			_parts.append(f"{len(memories)} memories")
+		if include_notes:
+			_parts.append(f"{len(notes)} notes")
+		await _report_progress(progress_callback, 20, f"found {', '.join(_parts)}")
+
+		# phase 2: import chats (dominant cost; workers emit progress in 40-75)
 		if include_chats:
 			model_resolver = ModelAgentResolver(session=session, client=client)
-			await _report_progress(progress_callback, 15, "loading folders")
-			try:
-				folders = await client.list_folders()
-			except OpenWebUIAuthError as exc:
-				raise _client_error_to_http_exception(exc) from exc
-			except OpenWebUIError as exc:
-				summary.add_error(f"folders fetch failed: {exc}")
-				folders = []
-			await _report_progress(progress_callback, 22, "importing folder projects")
+			await _report_progress(progress_callback, 22, "setting up folder projects")
 			projects_by_folder_id: dict[str, Project] = {}
 			try:
 				projects_by_folder_id = await _import_folder_projects(
@@ -480,41 +630,32 @@ async def import_from_open_webui(
 			pinned_cache = _PinnedProjectCache(owner_id=owner_id, deployment=deployment)
 			file_locks = _FileLockRegistry()
 			chat_progress = _ProgressReporter(progress_callback)
+			folder_project_ids = {
+				folder_id: TypeID(project.id)
+				for folder_id, project in projects_by_folder_id.items()
+			}
+			# durably persist principal and pre-created projects so per-chat
+			# worker sessions (separate connections) can see them.
+			await session.commit()
 
 			if chat_import_mode == "bulk":
-				await _report_progress(
-					progress_callback, 30, "loading chats via bulk export"
-				)
-				try:
-					chats = await client.list_bulk_chats(
-						include_archived_chats=include_archived_chats
-					)
-				except OpenWebUIError as exc:
-					raise _client_error_to_http_exception(exc) from exc
-				total_chats = len(chats)
-				await _report_progress(
-					progress_callback, 35, f"found {total_chats} chats"
-				)
 				bulk_items: list[tuple[int, dict[str, Any], str]] = []
-				for index, chat in enumerate(chats, start=1):
+				for index, chat in enumerate(chat_list, start=1):
 					chat_id = _chat_id(chat)
 					if chat_id is None:
 						summary.chats_skipped += 1
 						summary.add_error("chat skipped: missing Open WebUI id")
 						continue
 					bulk_items.append((index, chat, chat_id))
-				if total_chats:
+				total_bulk = len(bulk_items)
+				await _report_progress(
+					progress_callback, 25, f"importing {total_bulk} chats"
+				)
+				if total_bulk:
 					await model_resolver.prewarm()
-				folder_project_ids = {
-					folder_id: TypeID(project.id)
-					for folder_id, project in projects_by_folder_id.items()
-				}
-				# durably persist the principal and pre-created projects so the
-				# per-chat worker sessions (separate connections) can see them.
-				await session.commit()
 				await _import_chat_items(
 					bulk_items,
-					total_chats=total_chats,
+					total_chats=total_bulk,
 					owner_id=owner_id,
 					deployment=deployment,
 					deployment_origin=origin,
@@ -528,123 +669,91 @@ async def import_from_open_webui(
 					summary=summary,
 				)
 			else:
-				await _report_progress(progress_callback, 30, "loading chat list")
-				try:
-					chat_refs = await client.list_chat_refs(
-						include_archived_chats=include_archived_chats
-					)
-				except OpenWebUIError as exc:
-					raise _client_error_to_http_exception(exc) from exc
-				total_chats = len(chat_refs)
+				total_chats = len(chat_list)
 				await _report_progress(
-					progress_callback, 35, f"found {total_chats} chats"
+					progress_callback, 25, f"importing {total_chats} chats"
 				)
 				if total_chats:
 					await model_resolver.prewarm()
-				folder_project_ids = {
-					folder_id: TypeID(project.id)
-					for folder_id, project in projects_by_folder_id.items()
-				}
-				# durably persist the principal and pre-created projects so the
-				# per-chat worker sessions (separate connections) can see them.
-				await session.commit()
 				fetch_concurrency = settings.integrations.open_webui.fetch_concurrency
-				for batch_start in range(0, total_chats, fetch_concurrency):
-					batch_refs = chat_refs[
-						batch_start : batch_start + fetch_concurrency
-					]
-					batch_progress = 40 + int(batch_start / total_chats * 35)
-					await _report_progress(
-						progress_callback,
-						batch_progress,
-						(
-							"loading chats "
-							f"{batch_start + 1}-"
-							f"{batch_start + len(batch_refs)}/{total_chats}"
-						),
-					)
-					batch_items = await _fetch_chat_batch(
-						client=client,
-						batch_refs=batch_refs,
-						batch_start=batch_start,
-						fetch_concurrency=fetch_concurrency,
-						summary=summary,
-					)
-					await _import_chat_items(
-						batch_items,
-						total_chats=total_chats,
-						owner_id=owner_id,
-						deployment=deployment,
-						deployment_origin=origin,
-						client=client,
-						folder_project_ids=folder_project_ids,
-						pinned_cache=pinned_cache,
-						model_resolver=model_resolver,
-						file_locks=file_locks,
-						progress=chat_progress,
-						limit=write_concurrency,
-						summary=summary,
-					)
-			await _report_progress(progress_callback, 78, "chats imported")
+				await _import_chats_streaming(
+					chat_list,
+					total_chats=total_chats,
+					owner_id=owner_id,
+					deployment=deployment,
+					deployment_origin=origin,
+					client=client,
+					folder_project_ids=folder_project_ids,
+					pinned_cache=pinned_cache,
+					model_resolver=model_resolver,
+					file_locks=file_locks,
+					progress=chat_progress,
+					fetch_concurrency=fetch_concurrency,
+					write_concurrency=write_concurrency,
+					summary=summary,
+				)
+			await _report_progress(progress_callback, 85, "chats imported")
 
-		if include_memories:
-			await _report_progress(progress_callback, 82, "loading memories")
-			try:
-				memories = await client.list_memories()
-			except OpenWebUIAuthError as exc:
-				raise _client_error_to_http_exception(exc) from exc
-			except OpenWebUIError as exc:
-				summary.add_error(f"memories fetch failed: {exc}")
-				memories = []
-			await _report_progress(progress_callback, 86, "importing memories")
-			# durably persist the principal so worker sessions can see it.
-			await session.commit()
-			memory_results = await gather_bounded(
-				(
-					_import_memories_chunk(
-						chunk,
-						owner_id=owner_id,
-						deployment=deployment,
-						deployment_origin=origin,
-					)
-					for chunk in _chunked(list(memories), write_concurrency)
-				),
-				limit=write_concurrency,
+		# phase 3: write memories + notes in parallel; each chunk uses its own
+		# session internally so these are safe to run concurrently.
+		if include_memories or include_notes:
+			_mem_notes_start = 85 if include_chats else 25
+			_what = (
+				"importing memories and notes"
+				if include_memories and include_notes
+				else "importing memories"
+				if include_memories
+				else "importing notes"
 			)
-			for memory_result in memory_results:
-				_merge_import_summary(summary, memory_result)
-			await _report_progress(progress_callback, 88, "memories imported")
+			await _report_progress(progress_callback, _mem_notes_start, _what)
+			# durably persist principal so worker sessions can see it.
+			await session.commit()
 
-		if include_notes:
-			await _report_progress(progress_callback, 89, "loading notes")
-			try:
-				notes = await client.list_notes()
-			except OpenWebUIAuthError as exc:
-				raise _client_error_to_http_exception(exc) from exc
-			except OpenWebUIError as exc:
-				summary.add_error(f"notes fetch failed: {exc}")
-				notes = []
-			await _report_progress(progress_callback, 91, "importing notes")
-			# durably persist the principal so worker sessions can see it.
-			await session.commit()
-			note_results = await gather_bounded(
-				(
-					_import_notes_chunk(
-						chunk,
-						owner_id=owner_id,
-						deployment=deployment,
-						deployment_origin=origin,
-					)
-					for chunk in _chunked(list(notes), write_concurrency)
-				),
-				limit=write_concurrency,
+			async def _write_memories() -> list[ImportSummary]:
+				if not memories:
+					return []
+				return await gather_bounded(
+					(
+						_import_memories_chunk(
+							chunk,
+							owner_id=owner_id,
+							deployment=deployment,
+							deployment_origin=origin,
+						)
+						for chunk in _chunked(memories, write_concurrency)
+					),
+					limit=write_concurrency,
+				)
+
+			async def _write_notes() -> list[ImportSummary]:
+				if not notes:
+					return []
+				return await gather_bounded(
+					(
+						_import_notes_chunk(
+							chunk,
+							owner_id=owner_id,
+							deployment=deployment,
+							deployment_origin=origin,
+						)
+						for chunk in _chunked(notes, write_concurrency)
+					),
+					limit=write_concurrency,
+				)
+
+			mem_write_results, note_write_results = await asyncio.gather(
+				_write_memories(),
+				_write_notes(),
 			)
-			for note_result in note_results:
-				_merge_import_summary(summary, note_result)
-			await _report_progress(progress_callback, 93, "notes imported")
+			for r in mem_write_results:
+				_merge_import_summary(summary, r)
+			for r in note_write_results:
+				_merge_import_summary(summary, r)
+			await _report_progress(progress_callback, 88, "all resources imported")
 
 	await session.commit()
 	await _enqueue_imported_file_processing(session, principal, summary)
+	await _report_progress(progress_callback, 90, "vectorizing resources")
 	await _vectorize_imported_resources(session, summary)
-	await _report_progress(progress_callback, 95 if include_notes else 90, "finalizing")
+	await _report_progress(progress_callback, 99, "finalizing")
 	return summary

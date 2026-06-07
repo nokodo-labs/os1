@@ -5,16 +5,23 @@ from __future__ import annotations
 import logging
 
 from sqlalchemy import select
+from sqlalchemy import update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.database import async_session_local
 from api.models.event_types import EventType
 from api.models.file import File, FileStatus
 from api.permissions import ResourceType
+from api.v1.service.embeddings import embed_texts
 from api.v1.service.files.content_vectorization import (
+	load_file_content_chunks,
 	vectorize_file_content,
 )
-from api.v1.service.files.description import update_file_description
+from api.v1.service.files.description import (
+	build_file_description,
+	update_file_description,
+)
 from api.v1.service.files.events import emit_file_event
 from api.v1.service.files.vectorization import replace_file_description_vectors
 from api.v1.service.resource_payload_cache import invalidate_resource_payload_cache
@@ -76,13 +83,61 @@ async def process_file(
 
 async def process_file_description(
 	file_id: TypeID,
-	session: AsyncSession,
+	preserve_timestamps: bool = False,
 ) -> JSONObject:
-	"""repeat only the file-to-description-field pipeline."""
-	file = await _load_file(file_id, session)
-	description = await update_file_description(file, session)
-	await replace_file_description_vectors(file, session)
-	return {"file_id": str(file.id), "description_updated": description is not None}
+	"""run the description + vectorization pipeline for one file.
+
+	uses a single DB session with an intermediate commit to avoid holding a
+	connection during the LLM and embedding API calls:
+		phase 1 (connection held briefly) - load file and content chunks, then
+		commit to return the connection to the pool.
+		phase 2 (no connection) - LLM description generation; compute the
+		description embedding. both are external network calls that can take
+		several seconds each and must not hold a Postgres connection.
+		phase 3 (connection held briefly) - persist description and vector;
+		all DB operations here are quick writes with no external calls.
+	"""
+	async with async_session_local() as session:
+		# phase 1: load data, then release the connection
+		file = await _load_file(file_id, session)
+		batch = await load_file_content_chunks(file, session)
+		await session.commit()
+
+		# phase 2: external I/O - no Postgres connection held
+		# build_file_description and embed_texts both use process-level caches
+		# and open their own short-lived sessions if the cache is cold.
+		description = await build_file_description(file, batch.chunks)
+		# vector text must include the new description so search finds the file
+		desc_for_vector = description if description is not None else file.description
+		vector_parts = [p for p in [file.filename or "", desc_for_vector or ""] if p]
+		vector_text = " ".join(vector_parts).strip()
+		embedding: list[float] = (
+			(await embed_texts([vector_text]))[0] if vector_text else []
+		)
+
+		# phase 3: quick DB writes only - connection reacquired lazily
+		description_updated = False
+		if description is not None:
+			if preserve_timestamps:
+				await session.execute(
+					sql_update(File)
+					.where(File.id == file.id)
+					.values(description=description)
+					.execution_options(synchronize_session="evaluate")
+				)
+				file.description = description
+			else:
+				file.description = description
+				await session.flush()
+			description_updated = True
+		await replace_file_description_vectors(
+			file,
+			session,
+			precomputed_embedding=embedding if vector_text else None,
+		)
+		await session.commit()
+
+	return {"file_id": str(file_id), "description_updated": description_updated}
 
 
 async def process_file_content_vectorization(
@@ -98,6 +153,34 @@ async def process_file_content_vectorization(
 		"text_loadable": batch.text_loadable,
 		"skipped_reason": batch.skipped_reason,
 	}
+
+
+async def list_files_due_for_description(
+	session: AsyncSession,
+	limit: int,
+) -> list[File]:
+	"""return settled files that still need an LLM description.
+
+	any AVAILABLE, non-deleted file whose description never got generated is
+	eligible, regardless of how it was created. imports are the usual source
+	of this backlog because they defer description generation to keep a bulk
+	import from stampeding the chat model provider, but an upload whose
+	description generation failed belongs here too. this query feeds the
+	throttled backfill sweep that fills those descriptions in gradually.
+	results are ordered oldest-first and SQL-limited so each sweep drains at
+	most one batch.
+	"""
+	stmt = (
+		select(File)
+		.where(
+			File.deleted_at.is_(None),
+			File.status == FileStatus.AVAILABLE,
+			File.description.is_(None),
+		)
+		.order_by(File.created_at.asc())
+		.limit(limit)
+	)
+	return list((await session.execute(stmt)).scalars().all())
 
 
 async def _load_file(file_id: TypeID, session: AsyncSession) -> File:

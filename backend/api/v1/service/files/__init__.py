@@ -8,6 +8,7 @@ from api.v1.service.files.content_vectorization import (
 )
 from api.v1.service.files.description import update_file_description
 from api.v1.service.files.processing import (
+	list_files_due_for_description,
 	process_file,
 	process_file_content_vectorization,
 	process_file_description,
@@ -53,6 +54,7 @@ __all__ = [
 	"get_file_url",
 	"ingest_file",
 	"list_files",
+	"list_files_due_for_description",
 	"load_file_content_chunks",
 	"process_file",
 	"process_file_content_vectorization",

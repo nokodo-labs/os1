@@ -31,6 +31,7 @@ from api.v1.service import events as event_service
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import list_accessible_user_ids, require_permission
+from api.v1.service.authorization.predicates import resource_access_predicate
 from api.v1.service.chat.models import (
 	resolve_task_chat_model,
 	run_chat_model_json_schema,
@@ -424,12 +425,9 @@ def _apply_memory_filters(
 	principal: Principal,
 ) -> Select:
 	"""apply memory list filters."""
-	if not principal.is_admin and filters.owner_id != principal.user.id:
-		raise HTTPException(
-			status_code=status.HTTP_403_FORBIDDEN,
-			detail="forbidden",
-		)
-	stmt = stmt.where(Memory.user_id == filters.owner_id)
+	stmt = stmt.where(resource_access_predicate(principal, ResourceType.MEMORY))
+	if filters.owner_id is not None:
+		stmt = stmt.where(Memory.user_id == filters.owner_id)
 	if filters.search:
 		stmt = stmt.where(
 			Memory.content.ilike(contains_pattern(filters.search), escape="\\")

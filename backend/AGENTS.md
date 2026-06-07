@@ -19,7 +19,8 @@
 > 4.  NO use of getattr/setattr/delattr unless it's the only way. it defeats type checkers and is ugly.
 > 5.  AVOID direct cast() usage. use only when it's the only way.
 > 6.  AVOID use of Any type. only use when absolutely necessary.
-> 7.  patterns 1, 4, 5 and 6 can be used to **bypass typing issues**, which is **strictly forbidden**.
+> 7.  AVOID lazy imports. they can hide circular dependencies. only use when strictly NEEDED, and no other architectural changes can be made to avoid them.
+> 8.  patterns 1, 4, 5 and 6 can be used to **bypass typing issues**, which is **strictly forbidden**.
 
 ## backend codebase map
 

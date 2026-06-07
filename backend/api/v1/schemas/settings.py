@@ -613,25 +613,20 @@ class AITaskSettingsPatch(BaseModel):
 class AIAttachmentSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
-	image_decay_turns: int | MissingType = Field(
+	image_decay_iterations: int | MissingType = Field(
 		default=MISSING,
 		ge=1,
-		description="turns before image attachments decay to reference",
+		description="iterations before image attachments decay to reference",
 	)
-	audio_decay_turns: int | MissingType = Field(
+	audio_decay_iterations: int | MissingType = Field(
 		default=MISSING,
 		ge=1,
-		description="turns before audio attachments decay to reference",
+		description="iterations before audio attachments decay to reference",
 	)
-	video_decay_turns: int | MissingType = Field(
+	video_decay_iterations: int | MissingType = Field(
 		default=MISSING,
 		ge=1,
-		description="turns before video attachments decay to reference",
-	)
-	reveal_decay_turns: int | MissingType = Field(
-		default=MISSING,
-		ge=1,
-		description="turns before a revealed attachment decays again",
+		description="iterations before video attachments decay to reference",
 	)
 
 
@@ -1420,12 +1415,31 @@ class ThreadMaintenanceBackfillSettingsPatch(BaseModel):
 	)
 
 
+class FileMaintenanceSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	enabled: bool | MissingType = Field(
+		default=MISSING,
+		description="enable the periodic file maintenance sweep",
+	)
+	cron: str | MissingType = Field(
+		default=MISSING,
+		description="cron expression for the periodic sweep, evaluated in UTC",
+	)
+	batch_size: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="maximum number of files dispatched per sweep run",
+	)
+
+
 class TasksSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
 	taskiq: TaskiqSettingsPatch | MissingType = MISSING
 	thread_maintenance: ThreadMaintenanceSettingsPatch | MissingType = MISSING
 	maintenance_backfill: ThreadMaintenanceBackfillSettingsPatch | MissingType = MISSING
+	file_maintenance: FileMaintenanceSettingsPatch | MissingType = MISSING
 
 
 class SettingsPatch(BaseModel):

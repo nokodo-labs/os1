@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from sqlalchemy import update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.file import File
@@ -31,8 +32,16 @@ async def update_file_description(
 	file: File,
 	session: AsyncSession,
 	content_chunks: list[FileContentChunk] | None = None,
+	preserve_timestamps: bool = False,
 ) -> str | None:
-	"""generate and persist the file description field."""
+	"""generate and persist the file description field.
+
+	when preserve_timestamps=True the update is written via a targeted SQL
+	statement that touches only the description column, leaving updated_at
+	unchanged. use this for background backfill sweeps that should not surface
+	as a user-visible edit. the default (False) goes through the ORM and bumps
+	updated_at as usual.
+	"""
 	chunks = content_chunks
 	if chunks is None:
 		batch = await load_file_content_chunks(file, session)
@@ -40,15 +49,24 @@ async def update_file_description(
 	description = await build_file_description(file, chunks, session)
 	if description is None:
 		return file.description
-	file.description = description
-	await session.flush()
+	if preserve_timestamps:
+		# bypass ORM to avoid triggering the onupdate for updated_at
+		await session.execute(
+			sql_update(File)
+			.where(File.id == file.id)
+			.values(description=description)
+			.execution_options(synchronize_session="evaluate")
+		)
+	else:
+		file.description = description
+		await session.flush()
 	return description
 
 
 async def build_file_description(
 	file: File,
 	content_chunks: list[FileContentChunk],
-	session: AsyncSession,
+	session: AsyncSession | None = None,
 ) -> str | None:
 	"""build a summary/description using a task model when configured."""
 	fallback = _fallback_description(file, content_chunks)

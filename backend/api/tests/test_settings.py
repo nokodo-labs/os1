@@ -289,6 +289,11 @@ def test_settings_patch_accepts_web_search_and_integration_updates() -> None:
 					"max_lookback_days": 90,
 					"min_inactivity_hours": 12,
 				},
+				"file_maintenance": {
+					"enabled": True,
+					"cron": "*/15 * * * *",
+					"batch_size": 30,
+				},
 			},
 		}
 	)
@@ -301,6 +306,8 @@ def test_settings_patch_accepts_web_search_and_integration_updates() -> None:
 	assert dumped["tasks"]["thread_maintenance"]["runner_timeout_seconds"] == 1200
 	assert dumped["tasks"]["maintenance_backfill"]["enabled"] is True
 	assert dumped["tasks"]["maintenance_backfill"]["batch_size"] == 25
+	assert dumped["tasks"]["file_maintenance"]["enabled"] is True
+	assert dumped["tasks"]["file_maintenance"]["batch_size"] == 30
 
 
 def test_mcp_settings_origin_policy_and_transport_validation() -> None:

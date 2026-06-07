@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.database import async_session_local
 from api.models.model import Model, ModelType
 from api.models.provider import Provider
 from api.redis import on_invalidation
@@ -39,11 +40,20 @@ def reset_embedding_model_cache() -> None:
 on_invalidation("embedding_model", reset_embedding_model_cache)
 
 
-async def _get_embedding_model(session: AsyncSession) -> EmbeddingModel:
-	"""return the cached EmbeddingModel, resolving from DB on first call."""
+async def _get_embedding_model(session: AsyncSession | None = None) -> EmbeddingModel:
+	"""return the cached EmbeddingModel, resolving from DB on first call.
+
+	when session is None and the cache is cold, opens its own short-lived
+	session for the DB lookup. callers in long-running task code should pass
+	None after warming the cache in an earlier phase so no connection is held
+	during external I/O.
+	"""
 	global _cached_embedding_model
 	if _cached_embedding_model is not None:
 		return _cached_embedding_model
+	if session is None:
+		async with async_session_local() as owned:
+			return await _get_embedding_model(owned)
 	model = await resolve_embedding_model(session)
 	_cached_embedding_model = build_embedding_model(model)
 	logger.info(
@@ -54,7 +64,7 @@ async def _get_embedding_model(session: AsyncSession) -> EmbeddingModel:
 	return _cached_embedding_model
 
 
-async def embed_text(text: str, session: AsyncSession) -> list[float]:
+async def embed_text(text: str, session: AsyncSession | None = None) -> list[float]:
 	"""embed a single text string."""
 	model = await _get_embedding_model(session)
 	extra: dict[str, object] = {
@@ -82,7 +92,7 @@ async def embed_text(text: str, session: AsyncSession) -> list[float]:
 
 async def embed_texts(
 	texts: list[str],
-	session: AsyncSession,
+	session: AsyncSession | None = None,
 	batch_size: int | None = None,
 	parallel: bool = True,
 	max_concurrency: int | None = None,
