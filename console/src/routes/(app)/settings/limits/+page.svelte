@@ -65,6 +65,8 @@
 			accessibleUsersTtlSeconds,
 			scheduledItemsTtlSeconds,
 			resourcePayloadTtlSeconds,
+			promptTemplateTtlSeconds,
+			mcpSnapshotTtlSeconds,
 		}
 	})
 

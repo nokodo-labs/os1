@@ -69,7 +69,6 @@
 	let searchRequestId = 0
 
 	const isSearchMode = $derived(searchQuery.trim().length > 0)
-	const currentPageLabel = $derived(pageIndex + 1)
 
 	function refresh() {
 		refreshToken += 1

@@ -1,8 +1,8 @@
 <script lang="ts">
+	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { getSettingsContext } from '$lib/settings/context.svelte'
-	import { onMount } from 'svelte'
 	import {
 		Bell,
 		Brain,
@@ -21,6 +21,7 @@
 		Users,
 	} from '@lucide/svelte'
 	import type { Component } from 'svelte'
+	import { onMount } from 'svelte'
 
 	let { children } = $props()
 
@@ -35,8 +36,24 @@
 		])
 	})
 
+	type SettingsPath =
+		| '/settings/ui'
+		| '/settings/ai'
+		| '/settings/branding'
+		| '/settings/media'
+		| '/settings/assets'
+		| '/settings/limits'
+		| '/settings/soft-delete'
+		| '/settings/web-search'
+		| '/settings/code-interpreter'
+		| '/settings/tasks'
+		| '/settings/notifications'
+		| '/settings/security'
+		| '/settings/permissions'
+		| '/settings/integrations'
+
 	type SettingsSection = {
-		path: string
+		path: SettingsPath
 		label: string
 		keywords: string
 		icon: Component
@@ -46,7 +63,7 @@
 
 	const sections: SettingsSection[] = [
 		{
-			path: '/ui',
+			path: '/settings/ui',
 			label: 'UI',
 			keywords:
 				'theme color scheme light dark system background sidebar collapsed animated galaxy veil silk fog clouds grainient iridescence auth pages',
@@ -55,7 +72,7 @@
 			activeBg: 'bg-violet-500/10',
 		},
 		{
-			path: '/ai',
+			path: '/settings/ai',
 			label: 'AI',
 			keywords:
 				'agents default memory retrieval consolidation similarity threshold top-k chat context recent relevant pinned past chats context window mode turns pre-build embed filters task models thread metadata titles tags autocomplete summarization memory post-processing deduplication attachment decay image audio video iterations context compaction token-aware truncation model limits max messages trigger ratio token budget summary batch size headroom tool result media generation image model steps video audio',
@@ -64,7 +81,7 @@
 			activeBg: 'bg-indigo-500/10',
 		},
 		{
-			path: '/branding',
+			path: '/settings/branding',
 			label: 'branding',
 			keywords:
 				'site name display name browser tab emails app version primary color accent color hex analytics key support email admin email logo url sidebar favicon url public frontend origin oidc cdn origin console origin pwa manifest',
@@ -73,7 +90,7 @@
 			activeBg: 'bg-fuchsia-500/10',
 		},
 		{
-			path: '/media',
+			path: '/settings/media',
 			label: 'media',
 			keywords:
 				'base url favicon apple touch icon ios home screen cdn url overrides frontend media assets',
@@ -82,7 +99,7 @@
 			activeBg: 'bg-rose-500/10',
 		},
 		{
-			path: '/assets',
+			path: '/settings/assets',
 			label: 'assets',
 			keywords:
 				'default embedding model vector database provider qdrant chroma pinecone weaviate milvus pgvector redis opensearch endpoint grpc api key collection name template sparse vectors bm25 normalize scores fusion algorithm reciprocal rank distribution vector size dimensions batch size rerank strategy native external top-k storage backend local s3 root path bucket region access key secret key presigned url ttl multipart threshold chunk size max retries retry mode',
@@ -91,7 +108,7 @@
 			activeBg: 'bg-cyan-500/10',
 		},
 		{
-			path: '/limits',
+			path: '/settings/limits',
 			label: 'limits',
 			keywords:
 				'max threads per user cap messages per thread file size upload rate limit requests per minute authenticated',
@@ -100,7 +117,7 @@
 			activeBg: 'bg-amber-500/10',
 		},
 		{
-			path: '/soft-delete',
+			path: '/settings/soft-delete',
 			label: 'soft delete',
 			keywords:
 				'deleting marks deleted permanently removing database threads notes files retention restore cleanup',
@@ -109,7 +126,7 @@
 			activeBg: 'bg-red-500/10',
 		},
 		{
-			path: '/web-search',
+			path: '/settings/web-search',
 			label: 'web search',
 			keywords:
 				'web search agentic agent native perplexity sonar model prompt params iterations search engine blacklisted domains exclude searxng bing google instance url max results max chars concurrent requests timeout web loader tavily playwright user agent extract depth api key temperature image results',
@@ -118,7 +135,7 @@
 			activeBg: 'bg-emerald-500/10',
 		},
 		{
-			path: '/code-interpreter',
+			path: '/settings/code-interpreter',
 			label: 'code interpreter',
 			keywords:
 				'sandbox engine code execution enabled e2b api key template pre-installed packages python numpy pandas matplotlib timeout',
@@ -127,7 +144,7 @@
 			activeBg: 'bg-sky-500/10',
 		},
 		{
-			path: '/tasks',
+			path: '/settings/tasks',
 			label: 'tasks',
 			keywords:
 				'taskiq background task scheduling thread maintenance backfill cron batch lookback inactivity sweep metadata summaries timeout replacement cleanup',
@@ -136,7 +153,7 @@
 			activeBg: 'bg-lime-500/10',
 		},
 		{
-			path: '/notifications',
+			path: '/settings/notifications',
 			label: 'notifications',
 			keywords:
 				'notifications web push VAPID keys public key private key browser push ttl missed grace lookahead scheduling delivery',
@@ -145,7 +162,7 @@
 			activeBg: 'bg-yellow-500/10',
 		},
 		{
-			path: '/security',
+			path: '/settings/security',
 			label: 'security',
 			keywords:
 				'authentication session secret key jwt algorithm oauth cors origins access token expire refresh token session timeout idle allowed email domains register signup admins users manage auto-apply roles cookie secure require email verification oidc openid connect sso issuer client id client secret redirect uri scopes disable password login',
@@ -154,7 +171,7 @@
 			activeBg: 'bg-orange-500/10',
 		},
 		{
-			path: '/permissions',
+			path: '/settings/permissions',
 			label: 'permissions',
 			keywords:
 				'default permissions global defaults role explicit rule resource access thread project file note group reminder list action',
@@ -163,7 +180,7 @@
 			activeBg: 'bg-teal-500/10',
 		},
 		{
-			path: '/integrations',
+			path: '/settings/integrations',
 			label: 'integrations',
 			keywords:
 				'Open WebUI import deployments jwt chats memories enable allowed deployment name description origin url external services connections MCP servers tools discovery startup user limits allowed denied origins timeout',
@@ -183,7 +200,6 @@
 		)
 	})
 
-	const basePath = '/settings'
 	const currentPath = $derived(page.url.pathname)
 </script>
 
@@ -226,7 +242,7 @@
 						</div>
 						<nav class="flex max-h-[45vh] flex-col gap-1 overflow-y-auto lg:max-h-none">
 							{#each filteredSections as section (section.path)}
-								{@const href = `${basePath}${section.path}`}
+								{@const href = resolve(section.path)}
 								{@const isActive = currentPath === href}
 								<a
 									{href}

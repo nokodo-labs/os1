@@ -64,14 +64,6 @@
 		onClose?.()
 	}
 
-	function renderDebugText(text: string): string {
-		return text
-			.replace(/\r\n/g, '⏎\r\n')
-			.replace(/\n/g, '⏎\n')
-			.replace(/\r/g, '↵\r')
-			.replace(/\t/g, '→\t')
-	}
-
 	async function saveMemory() {
 		if (!memory) return
 		isSaving = true
