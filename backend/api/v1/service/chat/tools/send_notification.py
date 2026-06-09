@@ -43,8 +43,9 @@ class SendNotificationInput(BaseModel):
 	user_id: str | None = Field(
 		default=None,
 		description=(
-			"optional specific user ID. omit to notify all chat participants "
-			"including the chat owner."
+			"optional specific user ID. omit to notify all thread participants "
+			"including the thread owner. when provided, the target must be "
+			"accessible in the current thread unless the caller is an admin."
 		),
 	)
 
@@ -54,7 +55,8 @@ class SendNotificationTool(Tool[AppContext]):
 
 	by default, notifications are sent to all participants in the thread
 	(including the owner).
-	optionally, a specific user_id can be provided to target one user.
+	optionally, a specific user_id can be provided, but only when that user
+	is accessible in the current thread or the caller has admin privileges.
 	"""
 
 	name: str = Field(default="send_notification")
@@ -92,8 +94,27 @@ class SendNotificationTool(Tool[AppContext]):
 		# if any DB operation fails, only this session is affected.
 		try:
 			async with async_session_local() as tool_session:
-				if inp.user_id:
-					target_user_ids: list[TypeID] = [TypeID(inp.user_id)]
+				if inp.user_id is not None:
+					target_user_id = TypeID(inp.user_id)
+					if ctx.principal.is_admin:
+						target_user_ids = [target_user_id]
+					elif ctx.thread_id is None:
+						return self.error(
+							"forbidden: direct recipient targeting requires a thread",
+							__tool_call_context__,
+						)
+					else:
+						accessible_user_ids = await list_accessible_user_ids(
+							ResourceType.THREAD,
+							ctx.thread_id,
+							tool_session,
+						)
+						if target_user_id not in accessible_user_ids:
+							return self.error(
+								"forbidden: target user is not accessible in this thread",
+								__tool_call_context__,
+							)
+						target_user_ids = [target_user_id]
 				elif ctx.thread_id is not None:
 					target_user_ids = await list_accessible_user_ids(
 						ResourceType.THREAD,
