@@ -3,6 +3,7 @@
 	import type { components } from '$lib/api/types'
 	import { getSourceConfig } from '$lib/citations/config'
 	import Mermaid from '$lib/components/streamdown/Mermaid.svelte'
+	import TableBlock from '$lib/components/streamdown/TableBlock.svelte'
 	import CitationWidget from '$lib/components/widgets/CitationWidget.svelte'
 	import { tryUseDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { Streamdown, type Extension } from 'svelte-streamdown'
@@ -209,6 +210,16 @@
 				<CitationWidget citation={c} layout="grid" />
 			{/if}
 		{/each}
+	{/snippet}
+
+	{#snippet table({
+		token,
+		children,
+	}: {
+		token: { raw: string }
+		children: import('svelte').Snippet
+	})}
+		<TableBlock {token} {children} />
 	{/snippet}
 
 	{#snippet children({ token, children })}
