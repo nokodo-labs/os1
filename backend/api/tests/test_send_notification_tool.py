@@ -5,12 +5,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from nokodo_ai import AgentContext, AgentIterationSnapshot, AgentIterationState
-from nokodo_ai.chat_models import ChatModel
-from nokodo_ai.context import ToolCallContext
-from nokodo_ai.messages import ToolMessage
-from nokodo_ai.threads import Thread
-from nokodo_ai.utils.typeid import TypeID, new_typeid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.user import User
@@ -18,6 +12,12 @@ from api.v1.service.auth import Principal
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.tools import send_notification as send_notification_module
 from api.v1.service.chat.tools.send_notification import SendNotificationTool
+from nokodo_ai import AgentContext, AgentIterationSnapshot, AgentIterationState
+from nokodo_ai.chat_models import ChatModel
+from nokodo_ai.context import ToolCallContext
+from nokodo_ai.messages import ToolMessage
+from nokodo_ai.threads import Thread
+from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 def _state() -> AgentIterationSnapshot[AppContext]:
