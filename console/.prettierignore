@@ -2,6 +2,9 @@
 src/lib/api/types.ts
 src/lib/api/generated
 
+# generated lockfile
+pnpm-lock.yaml
+
 # build artifacts
 build/
 .svelte-kit/
