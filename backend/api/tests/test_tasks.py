@@ -70,7 +70,7 @@ class _FakeThreadMaintenanceKicker:
 		self.schedule_id: str | None = None
 		self.scheduled: list[tuple[str, datetime, str, str]] = []
 
-	def with_schedule_id(self, schedule_id: str) -> "_FakeThreadMaintenanceKicker":
+	def with_schedule_id(self, schedule_id: str) -> _FakeThreadMaintenanceKicker:
 		self.schedule_id = schedule_id
 		return self
 

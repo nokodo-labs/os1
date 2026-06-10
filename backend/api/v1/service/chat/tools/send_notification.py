@@ -109,13 +109,15 @@ class SendNotificationTool(Tool[AppContext]):
 					if inp.user_id is not None:
 						if accessible_user_ids is None:
 							return self.error(
-								"forbidden: targeting a specific user requires a chat context",
+								"forbidden: targeting a specific user"
+								" requires a chat context",
 								__tool_call_context__,
 							)
 						target_user_id = TypeID(inp.user_id)
 						if target_user_id not in accessible_user_ids:
 							return self.error(
-								"forbidden: target user is not a participant in this chat",
+								"forbidden: target user is not a"
+								" participant in this chat",
 								__tool_call_context__,
 							)
 						target_user_ids = [target_user_id]
@@ -130,7 +132,8 @@ class SendNotificationTool(Tool[AppContext]):
 				recipient_count = len(target_user_ids)
 
 				# emit tool event first so the emitter auto-assigns its id;
-				# each notification's event data then references it (notification -> tool event).
+				# each notification's event data then references it
+				# (notification -> tool event).
 				tool_event = Event(
 					scope=EventScope.THREAD if thread_id else EventScope.USER,
 					scope_id=thread_id or ctx.user_id,

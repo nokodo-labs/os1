@@ -55,7 +55,9 @@ def _mock_session_factory(session: AsyncSession) -> MagicMock:
 async def test_send_notification_rejects_cross_user_target_without_thread(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	"""Non-admin agent cannot target a user_id when there is no thread context (e.g. ephemeral run)."""
+	"""non-admin agent cannot target a user_id when there is no thread context
+	(e.g. ephemeral run).
+	"""
 	principal = _make_principal(is_superuser=False)
 	victim_id = str(new_typeid("user"))
 	tool_session = MagicMock(spec=AsyncSession)
@@ -115,7 +117,9 @@ async def test_send_notification_rejects_cross_user_target_without_thread(
 async def test_send_notification_rejects_non_participant_target(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	"""Non-admin agent cannot target a user_id absent from the thread's accessible set."""
+	"""non-admin agent cannot target a user_id absent from the thread's
+	accessible set.
+	"""
 	principal = _make_principal(is_superuser=False)
 	outsider_id = new_typeid("user")
 	thread_id = new_typeid("thread")
