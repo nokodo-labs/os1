@@ -69,10 +69,10 @@ async def render_prompt_content_map(
 				for ref in server_refs:
 					try:
 						result = await client.get_prompt(ref.name)
-					except (MCPError, OSError, TimeoutError, ValueError):
+					except MCPError, OSError, TimeoutError, ValueError:
 						continue
 					rendered[ref.command] = result.text
-		except (MCPError, OSError, TimeoutError, ValueError):
+		except MCPError, OSError, TimeoutError, ValueError:
 			continue
 	return rendered
 

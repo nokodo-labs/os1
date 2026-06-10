@@ -50,7 +50,7 @@ async def publish_invalidation(signal: str) -> None:
 	"""broadcast a cache invalidation signal to all workers."""
 	try:
 		await _CHANNEL.publish({"signal": signal})
-	except (RedisError, OSError):
+	except RedisError, OSError:
 		logger.debug("failed to publish cache invalidation: %s", signal)
 
 

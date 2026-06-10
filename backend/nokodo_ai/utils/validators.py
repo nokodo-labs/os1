@@ -76,7 +76,7 @@ def validate[T](
 		for arg in get_args(expected_type):
 			try:
 				return validate(value, arg)
-			except (TypeError, ValueError):
+			except TypeError, ValueError:
 				continue
 		raise TypeError(f"expected type {expected_type}, got {type(value)}")
 

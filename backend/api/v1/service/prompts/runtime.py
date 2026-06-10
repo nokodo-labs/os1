@@ -367,7 +367,7 @@ def _build_date_variables(
 		try:
 			tz = ZoneInfo(client_context.timezone)
 			user_now = utc_now.astimezone(tz)
-		except (KeyError, ValueError):
+		except KeyError, ValueError:
 			pass
 
 	if user_now is not None:
@@ -415,7 +415,7 @@ def _resolve_now(client_context: ClientContext | None) -> datetime:
 		try:
 			tz = ZoneInfo(client_context.timezone)
 			return utc_now.astimezone(tz)
-		except (KeyError, ValueError):
+		except KeyError, ValueError:
 			pass
 	return utc_now
 

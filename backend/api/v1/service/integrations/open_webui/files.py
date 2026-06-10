@@ -58,7 +58,7 @@ def _decode_data_url(url: str) -> tuple[bytes, str | None] | None:
 		if ";base64" in header:
 			return base64.b64decode(payload, validate=True), media_type
 		return unquote_to_bytes(payload), media_type
-	except (binascii.Error, ValueError):
+	except binascii.Error, ValueError:
 		return None
 
 

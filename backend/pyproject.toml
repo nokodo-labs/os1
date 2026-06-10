@@ -2,7 +2,7 @@
 name = "nokodo-ai"
 version = "1.0.0-rc.2"
 description = "Core library for nokodo AI"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [ # library-only dependencies
     "anthropic>=0.106.0",
     "google-genai>=2.8.0",
@@ -62,7 +62,7 @@ exclude = ["api", "api.*", "tests", "tests.*", "*.tests", "*.tests.*"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py313"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = [
@@ -87,7 +87,7 @@ force-single-line = false
 lines-after-imports = 2
 
 [tool.ty.environment]
-python-version = "3.13"
+python-version = "3.14"
 extra-paths = ["stubs"]
 
 [tool.ty.src]

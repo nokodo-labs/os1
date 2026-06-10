@@ -177,7 +177,7 @@ async def subscribe_remote_run(run_id: TypeID) -> AsyncIterator[bytes]:
 				continue
 			try:
 				yield base64.b64decode(raw_b64.encode("ascii"))
-			except (ValueError, TypeError):
+			except ValueError, TypeError:
 				logger.debug("dropping malformed remote sse frame for run %s", run_id)
 				continue
 	finally:
@@ -202,7 +202,7 @@ async def remote_run_known(run_id: TypeID) -> bool:
 		conn = redis_client.get()
 		exists = await conn.exists(_log_key(run_id))
 		return bool(exists)
-	except (RedisError, OSError):
+	except RedisError, OSError:
 		return False
 
 

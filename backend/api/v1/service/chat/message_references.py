@@ -46,7 +46,7 @@ def _decode_payload(raw: object) -> dict[str, str] | None:
 		return None
 	try:
 		decoded = json.loads(raw.decode("utf-8"))
-	except (UnicodeDecodeError, json.JSONDecodeError):
+	except UnicodeDecodeError, json.JSONDecodeError:
 		return None
 	if not isinstance(decoded, dict):
 		return None
@@ -75,7 +75,7 @@ async def _publish_reference(reference_id: str, payload: dict[str, str]) -> bool
 		pipe.expire(_ready_key(reference_id), _REFERENCE_TTL_SECONDS)
 		await pipe.execute()
 		return True
-	except (RedisError, OSError, RuntimeError):
+	except RedisError, OSError, RuntimeError:
 		logger.exception(
 			"failed to publish message reference",
 			extra={"message_ref": reference_id},
@@ -142,7 +142,7 @@ async def wait_message_reference(
 
 		raw = await conn.get(_value_key(reference_id))
 		return _resolved_message_id(_decode_payload(raw))
-	except (RedisError, OSError, RuntimeError):
+	except RedisError, OSError, RuntimeError:
 		logger.exception(
 			"failed to wait for message reference",
 			extra={"message_ref": reference_id},

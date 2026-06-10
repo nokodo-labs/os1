@@ -105,7 +105,7 @@ async def subscribe_task_stream(task_id: TypeID) -> AsyncIterator[bytes]:
 				continue
 			try:
 				yield base64.b64decode(raw_b64.encode("ascii"))
-			except (ValueError, TypeError):
+			except ValueError, TypeError:
 				logger.debug("dropping malformed task sse frame for task %s", task_id)
 				continue
 	finally:
@@ -125,5 +125,5 @@ async def task_log_known(task_id: TypeID) -> bool:
 		conn = redis_client.get()
 		exists = await conn.exists(_log_key(task_id))
 		return bool(exists)
-	except (RedisError, RuntimeError, OSError):
+	except RedisError, RuntimeError, OSError:
 		return False

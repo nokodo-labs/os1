@@ -211,10 +211,10 @@ async def test_admin_list_memories_for_other_user(db_session: AsyncSession) -> N
 
 
 @pytest.mark.asyncio
-async def test_non_admin_list_memories_rejects_other_owner(
+async def test_non_admin_list_memories_scopes_to_own_owner(
 	db_session: AsyncSession,
 ) -> None:
-	"""Non-admin list_memories should reject another owner_id."""
+	"""Non-admin list_memories filtered by another owner_id returns nothing."""
 	admin = await user_service.create_user(
 		UserCreate(
 			email="mem_guard_admin@example.com",
@@ -250,17 +250,29 @@ async def test_non_admin_list_memories_rejects_other_owner(
 			settings.default_permissions.action_permissions
 		),
 	)
+	admin_principal = Principal(
+		user=admin,
+		group_ids=(),
+		permissions=frozenset(),
+		global_action_permissions=frozenset(
+			settings.default_permissions.action_permissions
+		),
+	)
 
 	await memory_service.create_memory(
 		MemoryCreate(user_id=owner.id, content="owner-memory"),
 		db_session,
 		principal=principal,
 	)
+	await memory_service.create_memory(
+		MemoryCreate(user_id=other.id, content="other-memory"),
+		db_session,
+		principal=admin_principal,
+	)
 
-	with pytest.raises(HTTPException) as exc_info:
-		await memory_service.list_memories(
-			db_session,
-			principal=principal,
-			filters=MemoryListFilters(owner_id=TypeID(other.id)),
-		)
-	assert exc_info.value.status_code == 403
+	memories = await memory_service.list_memories(
+		db_session,
+		principal=principal,
+		filters=MemoryListFilters(owner_id=TypeID(other.id)),
+	)
+	assert memories == []

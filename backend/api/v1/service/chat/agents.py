@@ -975,7 +975,7 @@ async def run_agent(
 				if delta.tool is not None and message_id:
 					streaming_parent_id = message_id
 
-		except (GeneratorExit, asyncio.CancelledError):
+		except GeneratorExit, asyncio.CancelledError:
 			# explicit cancellation (cancel_run endpoint, task.cancel(), or
 			# producer driver torn down). this is the only path where the run
 			# does NOT complete naturally - finalize whatever assistant content

@@ -124,7 +124,7 @@ def _epoch_to_dt(value: Any) -> datetime | None:
 		elif abs(epoch) >= 100_000_000_000:
 			epoch = epoch / 1000
 		return datetime.fromtimestamp(epoch, tz=UTC)
-	except (TypeError, ValueError, OverflowError, OSError):
+	except TypeError, ValueError, OverflowError, OSError:
 		return None
 
 

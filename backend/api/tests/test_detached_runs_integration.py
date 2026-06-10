@@ -102,7 +102,7 @@ class _FakeAgent:
 						t.cancel()
 						try:
 							await t
-						except (asyncio.CancelledError, BaseException):
+						except asyncio.CancelledError, BaseException:
 							pass
 			if self.finish.is_set():
 				break

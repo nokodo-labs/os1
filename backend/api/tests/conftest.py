@@ -856,7 +856,7 @@ def _flush_isolated_test_redis() -> None:
 			client.flushdb()
 		finally:
 			client.close()
-	except (OSError, redis.exceptions.RedisError):
+	except OSError, redis.exceptions.RedisError:
 		return
 
 

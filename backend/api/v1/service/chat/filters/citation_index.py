@@ -319,7 +319,7 @@ async def _overfetch_nci(
 	if row is not None:
 		try:
 			return int(row.nci)
-		except (TypeError, ValueError):
+		except TypeError, ValueError:
 			pass
 	return None
 

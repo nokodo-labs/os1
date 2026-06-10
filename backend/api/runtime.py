@@ -11,9 +11,12 @@ import sys
 
 
 def configure_psycopg_asyncio_event_loop_policy() -> None:
-	"""ensure psycopg runs on a selector event loop on windows.
+	"""force a selector event loop for taskiq's CLI on windows.
 
-	psycopg async mode is not compatible with Windows' ProactorEventLoop.
+	taskiq creates its own loop with no way to inject a loop factory, so the
+	event loop policy is the only mechanism to keep it on a psycopg-compatible
+	selector loop. policies are deprecated in python 3.14 and removed in 3.16;
+	drop this once taskiq supports explicit event loops. no-op off windows.
 	"""
 	if sys.platform != "win32":
 		return

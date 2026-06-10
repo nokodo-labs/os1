@@ -55,13 +55,13 @@ class RedisCache:
 		"""fetch a cached value. returns None on miss or redis error."""
 		try:
 			raw = await self._conn().get(f"{_PREFIX}{key}")
-		except (RedisError, OSError):
+		except RedisError, OSError:
 			return None
 		if raw is None:
 			return None
 		try:
 			decoded: object = json.loads(raw)
-		except (json.JSONDecodeError, TypeError):
+		except json.JSONDecodeError, TypeError:
 			return None
 		return decoded
 
@@ -87,14 +87,14 @@ class RedisCache:
 					pipe.sadd(tag_key, full_key)
 					pipe.expire(tag_key, ttl + 60)
 				await pipe.execute()
-		except (RedisError, OSError):
+		except RedisError, OSError:
 			logger.debug("cache set failed for %s", key)
 
 	async def delete(self, key: str) -> None:
 		"""remove a single cache entry."""
 		try:
 			await self._conn().delete(f"{_PREFIX}{key}")
-		except (RedisError, OSError):
+		except RedisError, OSError:
 			pass
 
 	async def invalidate_tag(self, tag: str) -> None:
@@ -118,7 +118,7 @@ class RedisCache:
 				await pipe.execute()
 			else:
 				await conn.delete(tag_key)
-		except (RedisError, OSError):
+		except RedisError, OSError:
 			logger.debug("cache invalidate_tag failed for %s", tag)
 
 	async def get_or_set(

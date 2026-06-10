@@ -2,7 +2,7 @@
 
 ## code style
 
-- Python 3.13+ features, type hints everywhere
+- Python 3.14+ features, type hints everywhere
 - SQLAlchemy 2.0+ `Mapped` annotations
 - Pydantic v2.11+ for validation
 - tabs, unix line endings

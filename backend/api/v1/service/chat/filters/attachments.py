@@ -134,7 +134,7 @@ async def resolve_attachment_refs(
 			title, description = await _load_display(
 				ref_type, typed_id, session, principal
 			)
-		except (HTTPException, ValueError):
+		except HTTPException, ValueError:
 			resolved.append(entry)
 			continue
 		title_text = _title(title)
@@ -203,7 +203,7 @@ async def _catalog_entry(
 			summaries = await list_thread_summaries(
 				ref_id, session, principal, purpose=SummaryPurpose.CATALOG
 			)
-		except (HTTPException, ValueError):
+		except HTTPException, ValueError:
 			summaries = []
 		if summaries:
 			summary = summaries[0].content or None
@@ -248,7 +248,7 @@ async def _inline_ref_parts(
 		title, summary, tags = await _catalog_entry(
 			ref_type, ref_id, session, principal
 		)
-	except (HTTPException, ValueError):
+	except HTTPException, ValueError:
 		return []
 	if not title and not summary and not tags:
 		return []

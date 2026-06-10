@@ -87,7 +87,7 @@ async def authenticate_websocket_refresh_cookie(websocket: WebSocket) -> User | 
 		if not user_id_str:
 			return None
 		user_id = TypeID(assert_typeid(str(user_id_str), prefix="user"))
-	except (JoseError, ValueError):
+	except JoseError, ValueError:
 		return None
 
 	async with async_session_local() as session:

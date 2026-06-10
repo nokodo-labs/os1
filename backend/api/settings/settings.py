@@ -2200,7 +2200,7 @@ class _LenientEnvSettingsSource(EnvSettingsSource):
 	) -> Any:
 		try:
 			return json.loads(value)
-		except (json.JSONDecodeError, ValueError):
+		except json.JSONDecodeError, ValueError:
 			if field_name not in _CSV_FIELDS:
 				raise
 			return value
@@ -2214,7 +2214,7 @@ class _LenientDotEnvSettingsSource(DotEnvSettingsSource):
 	) -> Any:
 		try:
 			return json.loads(value)
-		except (json.JSONDecodeError, ValueError):
+		except json.JSONDecodeError, ValueError:
 			if field_name not in _CSV_FIELDS:
 				raise
 			return value

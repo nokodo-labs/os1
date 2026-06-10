@@ -34,7 +34,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 	"""Validate a plain-text password against an Argon2id hash."""
 	try:
 		_PASSWORD_HASHER.verify(hashed_password, plain_password)
-	except (VerifyMismatchError, InvalidHash):
+	except VerifyMismatchError, InvalidHash:
 		return False
 	return True
 

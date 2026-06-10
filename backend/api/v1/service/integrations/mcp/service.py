@@ -327,7 +327,7 @@ async def discover_server(
 	_require_server_manage(server, principal)
 	try:
 		capabilities = await discover_server_unchecked(server, session)
-	except (MCPDependencyError, MCPError, OSError, ValueError):
+	except MCPDependencyError, MCPError, OSError, ValueError:
 		capabilities = _capabilities_from_server(server)
 	return MCPDiscoveryResult(
 		server=MCPServerSchema.model_validate(server),

@@ -49,7 +49,7 @@ feat!: change API response format
 
 ### python (backend)
 
-- python 3.13+ features and type hints everywhere
+- python 3.14+ features and type hints everywhere
 - SQLAlchemy 2.0+ with `Mapped` annotations
 - Pydantic v2.11+ for validation
 - tabs for indentation, unix line endings

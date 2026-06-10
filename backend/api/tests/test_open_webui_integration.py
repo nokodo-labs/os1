@@ -713,10 +713,12 @@ async def test_open_webui_import_reports_progress(
 		progress_callback=progress_callback,
 	)
 
-	assert (15, "loading folders") in progress_updates
-	assert (30, "loading chat list") in progress_updates
+	assert (10, "fetching data from open webui") in progress_updates
+	assert (20, "found 1 chats") in progress_updates
+	assert (25, "importing 1 chats") in progress_updates
 	assert any(stage == "importing chat 1/1" for _, stage in progress_updates)
-	assert progress_updates[-1] == (90, "finalizing")
+	assert (85, "chats imported") in progress_updates
+	assert progress_updates[-1] == (99, "finalizing")
 
 
 @pytest.mark.asyncio

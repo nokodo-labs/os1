@@ -170,7 +170,7 @@ def _cache_namespace(session: AsyncSession) -> str:
 	"""derive a stable Redis namespace from the active database binding."""
 	try:
 		bind = session.get_bind()
-	except (AttributeError, UnboundExecutionError):
+	except AttributeError, UnboundExecutionError:
 		seed = f"{boot_settings.DATABASE_URL}:unbound:{id(session)}"
 		return sha256(seed.encode()).hexdigest()[:16]
 	url = getattr(bind, "url", None)

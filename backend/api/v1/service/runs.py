@@ -212,7 +212,7 @@ async def _start_run(
 		task.cancel()
 		try:
 			await task
-		except (asyncio.CancelledError, Exception):
+		except asyncio.CancelledError, Exception:
 			pass
 		await run_status_store.fail_run(run_id, reason="producer failed to start")
 		raise

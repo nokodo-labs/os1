@@ -27,7 +27,6 @@ from api.middleware import (
 from api.openapi import DEFAULT_RESPONSES
 from api.redis import redis_client, start_invalidation_subscriber
 from api.routers import system as system_router
-from api.runtime import configure_psycopg_asyncio_event_loop_policy
 from api.settings import settings
 from api.storage import close_all as close_storage
 from api.storage import configure_storage_backends
@@ -51,8 +50,6 @@ from api.v1.tasks.threads import (
 	reconcile_thread_maintenance_backfill_schedule,
 )
 
-
-configure_psycopg_asyncio_event_loop_policy()
 
 # configure logging early, before anything else logs
 configure_logging()

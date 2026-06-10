@@ -7,14 +7,21 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from collections.abc import Callable
 from pathlib import Path
+
+
+def pytest_asyncio_loop_factories() -> (
+	dict[str, Callable[[], asyncio.AbstractEventLoop]] | None
+):
+	# psycopg cannot run on the Windows Proactor loop, so force the selector loop
+	if sys.platform == "win32":
+		return {"selector": asyncio.SelectorEventLoop}
+	return None
 
 
 def pytest_configure(config: object) -> None:
 	_ = config
-	if sys.platform == "win32":
-		asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
 	# best-effort load of .env so local runs can pick up API keys
 	try:
 		from dotenv import load_dotenv

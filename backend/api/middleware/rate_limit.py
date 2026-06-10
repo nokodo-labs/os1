@@ -75,7 +75,7 @@ class RateLimitMiddleware:
 			count = await conn.incrby(rkey, weight)
 			if count == weight:
 				await conn.expire(rkey, 120)
-		except (RedisError, OSError, RuntimeError):
+		except RedisError, OSError, RuntimeError:
 			# redis down - fail open to avoid blocking all traffic
 			await self.app(scope, receive, send)
 			return
