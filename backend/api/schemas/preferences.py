@@ -42,7 +42,7 @@ class _PreferencesSection(BaseModel):
 class AppearancePreferences(_PreferencesSection):
 	"""user appearance preferences."""
 
-	theme_mode: Literal["light", "dark", "system"] | MissingType = Field(
+	theme_mode: Literal["light", "dark", "auto"] | MissingType = Field(
 		default=MISSING,
 		alias="themeMode",
 		description="theme mode preference",

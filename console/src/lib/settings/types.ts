@@ -47,7 +47,7 @@ export type RerankDefaultStrategy = NonNullable<RerankSettingsPatch['default_str
 export type StorageSettingsPatch = NonNullable<AssetsSettingsPatch['storage']>
 export type S3StorageConfigPatch = NonNullable<StorageSettingsPatch['s3']>
 
-export type ThemeMode = 'light' | 'dark' | 'system'
+export type ThemeMode = 'light' | 'dark' | 'auto'
 export type StorageBackend = 'local' | 's3'
 export type MediaAssetSource = 'default' | 'cdn' | 'custom'
 export type OptionalAssetSource = MediaAssetSource | 'disabled'

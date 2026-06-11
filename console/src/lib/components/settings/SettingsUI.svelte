@@ -12,7 +12,7 @@
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'
 
-	type ThemeMode = 'light' | 'dark' | 'system'
+	type ThemeMode = 'light' | 'dark' | 'auto'
 
 	const backgroundOptions: { value: BackgroundType; label: string }[] = [
 		{ value: 'galaxy', label: 'galaxy' },
@@ -38,7 +38,7 @@
 	function themeLabel(v: ThemeMode): string {
 		if (v === 'light') return 'light'
 		if (v === 'dark') return 'dark'
-		return 'system'
+		return 'auto'
 	}
 
 	type Props = {
@@ -49,7 +49,7 @@
 	}
 
 	let {
-		defaultTheme = $bindable('system'),
+		defaultTheme = $bindable('auto'),
 		defaultBackground = $bindable(null),
 		authPagesBackground = $bindable(null),
 		sidebarCollapsed = $bindable(false),
@@ -78,7 +78,7 @@
 					<span class="truncate text-left">{themeLabel(defaultTheme)}</span>
 				</SelectTrigger>
 				<SelectContent>
-					<SelectItem value="system">system</SelectItem>
+					<SelectItem value="auto">auto</SelectItem>
 					<SelectItem value="light">light</SelectItem>
 					<SelectItem value="dark">dark</SelectItem>
 				</SelectContent>

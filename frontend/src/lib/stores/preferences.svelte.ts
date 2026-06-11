@@ -33,7 +33,7 @@ export type {
 	NotificationPreferences,
 	PrivacyPreferences,
 	UserClientPreferences,
-	UserPreferences,
+	UserPreferences
 }
 
 export type ThemeMode = NonNullable<AppearancePreferences['themeMode']>
@@ -251,7 +251,7 @@ function createPreferencesStore() {
 	// defaults: admin settings → hardcoded fallbacks
 	const defaults: Resolved = $derived({
 		appearance: {
-			themeMode: (settingsState?.data?.ui?.default_theme as ThemeMode) ?? 'system',
+			themeMode: (settingsState?.data?.ui?.default_theme as ThemeMode) ?? 'auto',
 			accent: 'purple',
 			background:
 				(settingsState?.data?.ui?.default_background as BackgroundType) ?? 'lightrays',

@@ -1,5 +1,8 @@
 <script lang="ts">
 	import Eye from '$lib/components/icons/Eye.svelte'
+	import Moon from '$lib/components/icons/Moon.svelte'
+	import Sparkles from '$lib/components/icons/Sparkles.svelte'
+	import Sun from '$lib/components/icons/Sun.svelte'
 	import { RadioGroup, Switch } from '$lib/components/primitives'
 	import PreferenceScopeToggle from '$lib/components/settings/PreferenceScopeToggle.svelte'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
@@ -16,9 +19,9 @@
 	import { slide } from 'svelte/transition'
 
 	const themeModeOptions = [
-		{ value: 'light', label: 'light' },
-		{ value: 'dark', label: 'dark' },
-		{ value: 'system', label: 'auto' },
+		{ value: 'auto', label: 'auto', icon: Sparkles },
+		{ value: 'light', label: 'light', icon: Sun },
+		{ value: 'dark', label: 'dark', icon: Moon },
 	] as const
 
 	const backgrounds: { value: BackgroundType; label: string }[] = [
@@ -50,11 +53,11 @@
 		return bg === 'none' || bg === null ? 'lightrays' : bg
 	})
 
-	const selectedMode = $derived(preferences.data.appearance.themeMode ?? 'system')
+	const selectedMode = $derived(preferences.data.appearance.themeMode ?? 'auto')
 	const selectedAccent = $derived(preferences.data.appearance.accent)
 	const autoAccentColors = $derived(preferences.data.appearance.autoAccentColors ?? true)
 	const autoBackground = $derived(preferences.data.appearance.autoBackground ?? true)
-	const staticColor = $derived(preferences.data.appearance.staticColor ?? '#171717')
+	const staticColor = $derived(background.userStaticColor)
 	const selectedBubbleTailStyle = $derived(preferences.data.appearance.bubbleTailStyle ?? 'none')
 	const themeScope = $derived(preferences.themeScope)
 	const wallpaperScope = $derived(preferences.wallpaperScope)
@@ -112,7 +115,7 @@
 				<div>
 					<div class="text-foreground text-sm font-semibold">theme</div>
 					<div class="text-foreground/50 mt-1 text-sm">
-						choose between light, dark, or automatic theme based on system settings
+						choose light, dark, or auto which matches the theme to your wallpaper
 					</div>
 				</div>
 				<PreferenceScopeToggle scope={themeScope} onchange={setThemeScope} />

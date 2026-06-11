@@ -5,11 +5,11 @@
 	import { getSettingsContext } from '$lib/settings/context.svelte'
 	import { RefreshCw, RotateCcw, Save } from '@lucide/svelte'
 
-	type ThemeMode = 'light' | 'dark' | 'system'
+	type ThemeMode = 'light' | 'dark' | 'auto'
 
 	const ctx = getSettingsContext()
 
-	let defaultTheme = $state<ThemeMode>('system')
+	let defaultTheme = $state<ThemeMode>('auto')
 	let defaultBackground = $state<BackgroundType | null>(null)
 	let authPagesBackground = $state<BackgroundType | null>(null)
 	let sidebarCollapsed = $state(false)
@@ -26,7 +26,7 @@
 		const r = ctx.response
 		if (!r) return
 		const ui = r.data.ui
-		defaultTheme = (ui?.default_theme as ThemeMode) ?? 'system'
+		defaultTheme = (ui?.default_theme as ThemeMode) ?? 'auto'
 		defaultBackground = ui?.default_background ?? null
 		authPagesBackground = ui?.auth_pages_background ?? null
 		sidebarCollapsed = ui?.sidebar_collapsed ?? false

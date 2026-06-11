@@ -36,7 +36,7 @@ class UISettingsPatch(BaseModel):
 
 	default_theme: str | MissingType = Field(
 		default=MISSING,
-		description="'light', 'dark', or 'system'",
+		description="'light', 'dark', or 'auto'",
 	)
 	default_background: BackgroundType | MissingType = Field(
 		default=MISSING,

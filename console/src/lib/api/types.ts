@@ -5151,7 +5151,7 @@ export interface components {
              * @description theme mode preference
              * @enum {string}
              */
-            themeMode?: "light" | "dark" | "system";
+            themeMode?: "light" | "dark" | "auto";
             /**
              * Accent
              * @description accent color preference
@@ -11685,8 +11685,8 @@ export interface components {
         UISettings: {
             /**
              * Default Theme
-             * @description 'light', 'dark', or 'system'
-             * @default system
+             * @description 'light', 'dark', or 'auto'
+             * @default auto
              */
             default_theme: string;
             /**
@@ -11714,7 +11714,7 @@ export interface components {
         UISettingsPatch: {
             /**
              * Default Theme
-             * @description 'light', 'dark', or 'system'
+             * @description 'light', 'dark', or 'auto'
              */
             default_theme?: string;
             /**

@@ -173,7 +173,7 @@ def get_field_flags(schema: type[BaseModel], field_name: str) -> dict[FieldFlag,
 
 class UISettings(BaseModel):
 	default_theme: str = settings_field(
-		default="system", public=True, description="'light', 'dark', or 'system'"
+		default="auto", public=True, description="'light', 'dark', or 'auto'"
 	)
 	default_background: BackgroundType = settings_field(
 		default="darkveil",

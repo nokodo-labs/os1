@@ -5,12 +5,12 @@
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
 	import ChevronUp from '$lib/components/icons/ChevronUp.svelte'
-	import Computer from '$lib/components/icons/Computer.svelte'
 	import Eye from '$lib/components/icons/Eye.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import Map from '$lib/components/icons/Map.svelte'
 	import Moon from '$lib/components/icons/Moon.svelte'
 	import Pencil from '$lib/components/icons/Pencil.svelte'
+	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import Sun from '$lib/components/icons/Sun.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import Notification from '$lib/components/system/Notification.svelte'
@@ -126,7 +126,7 @@
 	}
 
 	function cycleTheme(): void {
-		const modes: ThemeMode[] = ['system', 'light', 'dark']
+		const modes: ThemeMode[] = ['auto', 'light', 'dark']
 		const idx = modes.indexOf(theme.mode)
 		theme.setMode(modes[(idx + 1) % modes.length])
 	}
@@ -137,7 +137,7 @@
 
 	function isActionActive(id: QuickActionId): boolean {
 		if (id === 'dnd') return isDnD
-		if (id === 'theme') return theme.mode !== 'system'
+		if (id === 'theme') return theme.mode !== 'auto'
 		if (id === 'location') return isLocationOn
 		if (id === 'offline') return isAppearOffline
 		return false
@@ -150,7 +150,7 @@
 		if (id === 'theme') {
 			if (theme.mode === 'light') return Sun as IconComp
 			if (theme.mode === 'dark') return Moon as IconComp
-			return Computer as IconComp
+			return Sparkles as IconComp
 		}
 		if (id === 'location') return Map as IconComp
 		if (id === 'offline') return isAppearOffline ? (EyeSlash as IconComp) : (Eye as IconComp)
@@ -376,7 +376,7 @@
 							appearance
 						</div>
 						<div class="grid grid-cols-3 gap-1.5">
-							{#each ['system', 'light', 'dark'] as ThemeMode[] as modeOpt (modeOpt)}
+							{#each ['auto', 'light', 'dark'] as ThemeMode[] as modeOpt (modeOpt)}
 								{@const isSelected = theme.mode === modeOpt}
 								<button
 									type="button"
@@ -386,8 +386,8 @@
 										: 'bg-muted/10 text-foreground/50 hover:bg-muted/20 hover:text-foreground/70'}"
 									onclick={() => setThemeMode(modeOpt)}
 								>
-									{#if modeOpt === 'system'}
-										<Computer class="h-5 w-5" />
+									{#if modeOpt === 'auto'}
+										<Sparkles class="h-5 w-5" />
 									{:else if modeOpt === 'light'}
 										<Sun class="h-5 w-5" />
 									{:else}

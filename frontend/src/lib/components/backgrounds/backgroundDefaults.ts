@@ -189,3 +189,52 @@ export const BACKGROUND_DEFAULTS: Record<BackgroundType, BackgroundConfig> = {
 
 	none: {},
 }
+
+/** which of black/white a background contrasts with more, used to match the theme */
+export type BackgroundLuminance = 'dark' | 'light'
+
+export const BACKGROUND_LUMINANCE: Record<BackgroundType, BackgroundLuminance> = {
+	galaxy: 'dark',
+	darkveil: 'dark',
+	lightbends: 'dark',
+	lightrays: 'dark',
+	silk: 'dark',
+	fog: 'dark',
+	clouds: 'light',
+	'clouds-dark': 'dark',
+	clouds2: 'light',
+	'clouds2-dark': 'dark',
+	grainient: 'light',
+	iridescence: 'light',
+	static: 'dark', // overridden at runtime from the resolved static color
+	none: 'dark',
+}
+
+/** convert one sRGB channel (0-1) to its linear-light value. */
+function linearize(channel: number): number {
+	return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+}
+
+/**
+ * decide whether a hex color contrasts more with black or with white,
+ * via WCAG contrast ratios. returns 'dark' when the color pairs better with
+ * white (so it wants a dark theme) and 'light' otherwise.
+ */
+export function colorLuminance(hex: string): BackgroundLuminance {
+	const normalized = hex.replace('#', '')
+	const full =
+		normalized.length === 3
+			? normalized
+					.split('')
+					.map((c) => c + c)
+					.join('')
+			: normalized
+	if (full.length !== 6) return 'dark'
+	const r = linearize(parseInt(full.slice(0, 2), 16) / 255)
+	const g = linearize(parseInt(full.slice(2, 4), 16) / 255)
+	const b = linearize(parseInt(full.slice(4, 6), 16) / 255)
+	const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+	const contrastWithWhite = 1.05 / (luminance + 0.05)
+	const contrastWithBlack = (luminance + 0.05) / 0.05
+	return contrastWithWhite >= contrastWithBlack ? 'dark' : 'light'
+}
