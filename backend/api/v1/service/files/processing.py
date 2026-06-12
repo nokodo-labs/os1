@@ -12,7 +12,10 @@ from sqlalchemy.orm import selectinload
 from api.database import async_session_local
 from api.models.event_types import EventType
 from api.models.file import File, FileStatus
+from api.models.task import Task, TaskType
 from api.permissions import ResourceType
+from api.v1.service import tasks as task_service
+from api.v1.service.auth import Principal
 from api.v1.service.embeddings import embed_texts
 from api.v1.service.files.content_vectorization import (
 	load_file_content_chunks,
@@ -30,6 +33,77 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
+
+
+# durable task names shared between the enqueue helpers below and the runners
+# that execute them in api.v1.tasks.files.
+FILE_PROCESSING_TASK = "file.process"
+FILE_CONTENT_VECTORIZATION_TASK = "file.content_vectorization"
+FILE_DESCRIPTION_TASK = "file.description"
+
+
+async def start_file_processing_task(
+	session: AsyncSession,
+	principal: Principal,
+	file_id: TypeID,
+	origin_session_id: str | None = None,
+) -> Task:
+	"""enqueue both fundamental file processing pipelines."""
+	metadata: JSONObject = {"file_id": str(file_id)}
+	if origin_session_id is not None:
+		metadata["origin_session_id"] = origin_session_id
+	existing = await task_service.find_active_task(
+		session,
+		FILE_PROCESSING_TASK,
+		{"file_id": str(file_id)},
+	)
+	if existing is not None:
+		return existing
+	return await task_service.start_task(
+		session,
+		principal,
+		task_type=TaskType.CUSTOM,
+		task_name=FILE_PROCESSING_TASK,
+		metadata=metadata,
+		stage="queued file processing",
+		progress=0,
+	)
+
+
+async def start_file_content_vectorization_task(
+	session: AsyncSession,
+	principal: Principal,
+	file_id: TypeID,
+) -> Task:
+	"""enqueue repeatable file content vectorization only."""
+	metadata: JSONObject = {"file_id": str(file_id)}
+	return await task_service.start_task(
+		session,
+		principal,
+		task_type=TaskType.CUSTOM,
+		task_name=FILE_CONTENT_VECTORIZATION_TASK,
+		metadata=metadata,
+		stage="queued content vectorization",
+		progress=0,
+	)
+
+
+async def start_file_description_task(
+	session: AsyncSession,
+	principal: Principal,
+	file_id: TypeID,
+) -> Task:
+	"""enqueue repeatable file description generation only."""
+	metadata: JSONObject = {"file_id": str(file_id)}
+	return await task_service.start_task(
+		session,
+		principal,
+		task_type=TaskType.CUSTOM,
+		task_name=FILE_DESCRIPTION_TASK,
+		metadata=metadata,
+		stage="queued file description",
+		progress=0,
+	)
 
 
 async def process_file(

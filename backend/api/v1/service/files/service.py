@@ -58,6 +58,7 @@ from api.v1.service.authorization import (
 	resource_access_predicate,
 )
 from api.v1.service.files.events import emit_file_event
+from api.v1.service.files.processing import start_file_processing_task
 from api.v1.service.files.vectorization import (
 	FILE_SPEC,
 	remove_file_vectors,
@@ -70,7 +71,6 @@ from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
 	invalidate_resource_payload_cache,
 )
-from api.v1.tasks.files import start_file_processing_task
 from nokodo_ai.utils.files import corrected_mime_type
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 

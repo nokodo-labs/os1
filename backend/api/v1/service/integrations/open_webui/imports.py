@@ -24,6 +24,7 @@ from api.settings import OpenWebUIDeployment, settings
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
 from api.v1.service.files.content_vectorization import filter_unvectorized_files
+from api.v1.service.files.processing import start_file_content_vectorization_task
 from api.v1.service.integrations.open_webui.chats import (
 	ModelAgentResolver,
 	_chat_folder_id,
@@ -51,7 +52,6 @@ from api.v1.service.memories import MEMORY_SPEC, vectorize_memories
 from api.v1.service.notes import NOTE_SPEC, vectorize_notes
 from api.v1.service.threads import vectorize_threads
 from api.v1.service.vectorize import filter_unvectorized
-from api.v1.tasks.files import start_file_content_vectorization_task
 from nokodo_ai.utils.concurrency import gather_bounded
 from nokodo_ai.utils.typeid import TypeID
 

@@ -18,7 +18,7 @@
 		{
 			"label": "backend: format",
 			"type": "shell",
-			"command": "uv run ruff format .",
+			"command": "uv run ruff check --select I --fix . && uv run ruff format .",
 			"options": {
 				"cwd": "${workspaceFolder}/backend"
 			},

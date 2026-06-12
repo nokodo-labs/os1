@@ -6,21 +6,23 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from api.boot_settings import boot_settings
 from api.database import async_session_local
-from api.models.task import Task, TaskType
 from api.redis import on_invalidation
 from api.settings import settings
 from api.taskiq import broker, redis_schedule_source
 from api.v1.service import tasks as task_service
-from api.v1.service.auth import Principal, load_principal_for_user
+from api.v1.service.auth import load_principal_for_user
 from api.v1.service.files.processing import (
+	FILE_CONTENT_VECTORIZATION_TASK,
+	FILE_DESCRIPTION_TASK,
+	FILE_PROCESSING_TASK,
 	list_files_due_for_description,
 	process_file,
 	process_file_content_vectorization,
 	process_file_description,
+	start_file_description_task,
+	start_file_processing_task,
 )
 from nokodo_ai.types.json import JSONObject, JSONValue
 from nokodo_ai.utils.typeid import TypeID
@@ -29,9 +31,6 @@ from nokodo_ai.utils.typeid import TypeID
 logger = logging.getLogger(__name__)
 
 
-FILE_PROCESSING_TASK = "file.process"
-FILE_CONTENT_VECTORIZATION_TASK = "file.content_vectorization"
-FILE_DESCRIPTION_TASK = "file.description"
 FILE_PROCESSING_DISPATCH_TASK = "file.processing.dispatch"
 FILE_MAINTENANCE_BACKFILL_TASK = "file.maintenance.backfill_sweep"
 FILE_MAINTENANCE_BACKFILL_SCHEDULE_ID = "file:maintenance-backfill"
@@ -47,70 +46,6 @@ def _ceil_to_minute(value: datetime) -> datetime:
 	if value.second == 0 and value.microsecond == 0:
 		return value
 	return value.replace(second=0, microsecond=0) + timedelta(minutes=1)
-
-
-async def start_file_processing_task(
-	session: AsyncSession,
-	principal: Principal,
-	file_id: TypeID,
-	origin_session_id: str | None = None,
-) -> Task:
-	"""enqueue both fundamental file processing pipelines."""
-	metadata: JSONObject = {"file_id": str(file_id)}
-	if origin_session_id is not None:
-		metadata["origin_session_id"] = origin_session_id
-	existing = await task_service.find_active_task(
-		session,
-		FILE_PROCESSING_TASK,
-		{"file_id": str(file_id)},
-	)
-	if existing is not None:
-		return existing
-	return await task_service.start_task(
-		session,
-		principal,
-		task_type=TaskType.CUSTOM,
-		task_name=FILE_PROCESSING_TASK,
-		metadata=metadata,
-		stage="queued file processing",
-		progress=0,
-	)
-
-
-async def start_file_content_vectorization_task(
-	session: AsyncSession,
-	principal: Principal,
-	file_id: TypeID,
-) -> Task:
-	"""enqueue repeatable file content vectorization only."""
-	metadata: JSONObject = {"file_id": str(file_id)}
-	return await task_service.start_task(
-		session,
-		principal,
-		task_type=TaskType.CUSTOM,
-		task_name=FILE_CONTENT_VECTORIZATION_TASK,
-		metadata=metadata,
-		stage="queued content vectorization",
-		progress=0,
-	)
-
-
-async def start_file_description_task(
-	session: AsyncSession,
-	principal: Principal,
-	file_id: TypeID,
-) -> Task:
-	"""enqueue repeatable file description generation only."""
-	metadata: JSONObject = {"file_id": str(file_id)}
-	return await task_service.start_task(
-		session,
-		principal,
-		task_type=TaskType.CUSTOM,
-		task_name=FILE_DESCRIPTION_TASK,
-		metadata=metadata,
-		stage="queued file description",
-		progress=0,
-	)
 
 
 async def schedule_file_processing_task(
