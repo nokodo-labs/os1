@@ -116,7 +116,7 @@
 		{
 			"label": "backend: run tests",
 			"type": "shell",
-			"command": "uv run pytest -q --tb=short --cov-report=term-missing:skip-covered",
+			"command": "uv run pytest",
 			"options": {
 				"cwd": "${workspaceFolder}/backend"
 			},
@@ -125,6 +125,22 @@
 				"kind": "test",
 				"isDefault": true
 			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "backend: run tests (coverage)",
+			"type": "shell",
+			"command": "uv run pytest --cov=api --cov=nokodo_ai --cov-report=term-missing:skip-covered --cov-report=html",
+			"options": {
+				"cwd": "${workspaceFolder}/backend"
+			},
+			"dependsOn": "Docker: ensure dev deps",
+			"group": "test",
 			"presentation": {
 				"reveal": "always",
 				"panel": "dedicated",

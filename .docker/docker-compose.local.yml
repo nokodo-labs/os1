@@ -30,6 +30,7 @@ services:
     image: postgres:17-alpine
     container_name: os1-db
     restart: unless-stopped
+    command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_USER: nokodo-ai-admin
       POSTGRES_PASSWORD: nokodo-ai
@@ -112,7 +113,7 @@ services:
       taskiq-scheduler:
         condition: service_started
     volumes: *backend-volumes
-    command: uvicorn api.main:app --host 0.0.0.0 --port 1383 --reload
+    command: uvicorn api.main:app --host 0.0.0.0 --port 1383 --reload --timeout-keep-alive 95
     profiles: ["local"]
 
   taskiq-worker:
@@ -181,7 +182,7 @@ services:
     volumes: *backend-volumes
     command: >-
       python -m debugpy --listen 0.0.0.0:5678 --wait-for-client
-      -m uvicorn api.main:app --host 0.0.0.0 --port 1383
+      -m uvicorn api.main:app --host 0.0.0.0 --port 1383 --timeout-keep-alive 95
     profiles: ["debug"]
 
   taskiq-worker-debug:

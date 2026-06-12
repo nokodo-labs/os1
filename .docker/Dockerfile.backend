@@ -35,4 +35,6 @@ COPY . .
 EXPOSE 1383
 
 # Run the application
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "1383"]
+# keep-alive must exceed the fronting proxy idle-reuse window so the proxy
+# (not uvicorn) closes idle sockets first, avoiding stale-socket reuse races.
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "1383", "--timeout-keep-alive", "95"]
