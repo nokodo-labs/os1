@@ -417,7 +417,9 @@ async def test_memory_post_processing_provider_timeout_is_skipped(
 	class APITimeoutError(Exception):
 		pass
 
-	async def fail_embed(text: str, session: AsyncSession) -> list[float]:
+	async def fail_embed(
+		text: str, session: AsyncSession, input_type: str | None = None
+	) -> list[float]:
 		_ = (text, session)
 		raise APITimeoutError("Request timed out.")
 

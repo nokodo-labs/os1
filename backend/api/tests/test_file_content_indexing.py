@@ -551,7 +551,12 @@ async def test_vectorize_file_content_upserts_content_chunks(monkeypatch) -> Non
 		_ = resource_type, session
 		return {"acl_resource_id": resource_id}
 
-	async def embed(texts: list[str], session: AsyncSession) -> list[list[float]]:
+	async def embed(
+		texts: list[str],
+		session: AsyncSession,
+		input_type: str | None = None,
+		**kwargs: object,
+	) -> list[list[float]]:
 		_ = session
 		return [[float(index), 0.0] for index, _text in enumerate(texts)]
 
