@@ -68,6 +68,22 @@ jobs:
             release:
               - 'tools/release/**'
 
+  # carryover gate: a component CI that failed must keep re-running in later
+  # runs on the same branch until it passes again. the most recent run where
+  # this gate decided (its job succeeded) is the single source of truth, since
+  # every decided run already carries outstanding failures forward. runs where
+  # the gate never decided (cancelled early, draft-skipped) ran no component CI
+  # and are stepped over. if the current gate cannot decide (API errors) it
+  # forces all components, re-anchoring the chain rather than laundering a fail.
+  #
+  # a component's outcome is read straight from its required CI leg. job names
+  # are static and tied to project architecture, so coupling to them is fine:
+  #   - `<component> CI / <required leg>` present => its conclusion is the truth
+  #     (success => clear, anything else => force re-run)
+  #   - absent => the component was skipped (no changes) => clear
+  # only the required leg is read; the experimental continue-on-error matrix
+  # legs (Python 3.15 / Node 25) are ignored, so they may fail freely.
+  # if any of these job names change, update REQUIRED_LEG_* below to match.
   ci-carryover:
     name: carryover CI gate
     runs-on: ubuntu-latest
@@ -87,19 +103,45 @@ jobs:
         run: |
           set -euo pipefail
 
+          # required CI leg names, prefixed by their main.yml caller job name.
+          # the GitHub jobs API lists a reusable-workflow caller only when it is
+          # skipped (as the bare name); when it runs, only these prefixed inner
+          # jobs appear. keep these in sync with backend/frontend/console-ci.yml.
+          REQUIRED_LEG_backend="backend ci / lint and test on python file"
+          REQUIRED_LEG_frontend="frontend ci / check quality on node file"
+          REQUIRED_LEG_console="console ci / check quality on node file"
+
           force_backend=false
           force_frontend=false
           force_console=false
+
+          # the gate must always emit outputs and exit 0: a gate failure would
+          # skip every component CI outright.
+          finish() {
+            echo "carryover: force_backend=${force_backend} force_frontend=${force_frontend} force_console=${force_console}"
+            echo "force_backend=${force_backend}" >> "$GITHUB_OUTPUT"
+            echo "force_frontend=${force_frontend}" >> "$GITHUB_OUTPUT"
+            echo "force_console=${force_console}" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          # the carryover decision cannot be made: force everything so this run
+          # records fresh outcomes for every component and re-anchors the
+          # chain. one redundant full CI run beats laundering a failure.
+          degrade() {
+            echo "::warning::carryover gate degraded ($1): forcing all component CI"
+            force_backend=true
+            force_frontend=true
+            force_console=true
+            finish
+          }
 
           # GitHub intentionally restricts access to the Actions API for `pull_request` workflows
           # coming from forks, and returns 404 even with correct requests.
           if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
             is_fork_pr=$(jq -r '.pull_request.head.repo.full_name != .repository.full_name' "${GITHUB_EVENT_PATH}" 2>/dev/null || echo "false")
             if [ "${is_fork_pr}" = "true" ]; then
-              echo "force_backend=false" >> "$GITHUB_OUTPUT"
-              echo "force_frontend=false" >> "$GITHUB_OUTPUT"
-              echo "force_console=false" >> "$GITHUB_OUTPUT"
-              exit 0
+              finish
             fi
           fi
 
@@ -107,69 +149,85 @@ jobs:
           current_run_id=$(printf "%s" "${GITHUB_RUN_ID}" | tr -d '\r')
           repo=$(printf "%s" "${GITHUB_REPOSITORY}" | tr -d '\r')
 
+          if ! echo "${current_run_id}" | grep -Eq '^[0-9]+$'; then
+            degrade "unexpected run id '${current_run_id}'"
+          fi
+
           branch_q=$(jq -rn --arg v "${branch}" '$v|@uri')
 
-          workflow_id=$(gh api "repos/${repo}/actions/runs/${current_run_id}" --jq '.workflow_id' | tr -d '\r')
+          workflow_id=$(gh api "repos/${repo}/actions/runs/${current_run_id}" --jq '.workflow_id' 2>/dev/null | tr -d '\r' || true)
           if ! echo "${workflow_id}" | grep -Eq '^[0-9]+$'; then
-            echo "unexpected workflow_id: ${workflow_id}" >&2
-            exit 1
+            degrade "could not resolve workflow id"
           fi
 
-          previous_run_id=$(gh api "repos/${repo}/actions/workflows/${workflow_id}/runs?branch=${branch_q}&status=completed&per_page=10" \
-            --jq ".workflow_runs | map(select(.id != ${current_run_id})) | first | .id // empty" \
-            | tr -d '\r')
-
-          if [ -z "${previous_run_id}" ]; then
-            echo "force_backend=false" >> "$GITHUB_OUTPUT"
-            echo "force_frontend=false" >> "$GITHUB_OUTPUT"
-            echo "force_console=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          # newest-first completed runs of this workflow on this branch
+          runs_json=$(gh api "repos/${repo}/actions/workflows/${workflow_id}/runs?branch=${branch_q}&status=completed&per_page=20" 2>/dev/null || true)
+          if [ -z "${runs_json}" ]; then
+            degrade "could not list previous runs"
           fi
 
-          if ! echo "${previous_run_id}" | grep -Eq '^[0-9]+$'; then
-            echo "unexpected previous_run_id: ${previous_run_id}" >&2
-            exit 1
+          # exclude the current run, and exclude fork runs: the branch filter
+          # above matches head_branch across repos, so a fork branch named like
+          # ours would otherwise pollute this branch's chain.
+          run_ids=$(jq -r --argjson current "${current_run_id}" --arg repo "${repo}" \
+            '.workflow_runs[]? | select(.id != $current) | select((.head_repository.full_name // $repo) == $repo) | .id' \
+            <<<"${runs_json}" 2>/dev/null || true)
+
+          # fresh branch with no history: nothing to carry over
+          if [ -z "${run_ids}" ]; then
+            finish
           fi
 
-          job_conclusion() {
-            local job_name="$1"
-            gh api "repos/${repo}/actions/runs/${previous_run_id}/jobs?per_page=100" \
-              --jq ".jobs[] | select((.name | ascii_downcase) == (\"${job_name}\" | ascii_downcase)) | .conclusion" \
-              | head -n 1 || true
+          gate_decided() {
+            jq -r '[.jobs[]? | select(((.name // "") | ascii_downcase) == "carryover ci gate") | .conclusion] | first == "success"' \
+              <<<"$1" 2>/dev/null || echo "false"
           }
 
-          is_failed_conclusion() {
-            case "$1" in
-              failure|cancelled|timed_out|action_required)
-                return 0
-                ;;
-              *)
-                return 1
-                ;;
-            esac
+          # required leg present => its conclusion decides (success => clear,
+          # anything else => force). absent => component was skipped (no
+          # changes) => clear. experimental legs are never inspected.
+          component_state() {
+            local jobs_json="$1"
+            local leg_name="$2"
+            jq -r --arg name "${leg_name}" '
+              ([.jobs[]? | select(((.name // "") | ascii_downcase) == $name) | .conclusion // ""] | first) as $c
+              | if $c == null or $c == "" or $c == "skipped" then "clear"
+                elif $c == "success" then "clear"
+                else "force"
+                end
+            ' <<<"${jobs_json}" 2>/dev/null || echo "force"
           }
 
-          # if the previous run ran a component CI and it failed, force re-run
-          # regardless of what triggered the current run.
-          backend_prev=$(job_conclusion "backend CI")
-          frontend_prev=$(job_conclusion "frontend CI")
-          console_prev=$(job_conclusion "console CI")
+          while IFS= read -r run_id; do
+            if ! echo "${run_id}" | grep -Eq '^[0-9]+$'; then
+              continue
+            fi
 
-          if is_failed_conclusion "${backend_prev}"; then
-            force_backend=true
-          fi
+            jobs_json=$(gh api "repos/${repo}/actions/runs/${run_id}/jobs?per_page=100" </dev/null 2>/dev/null || true)
+            if [ -z "${jobs_json}" ]; then
+              degrade "could not list jobs for run ${run_id}"
+            fi
 
-          if is_failed_conclusion "${frontend_prev}"; then
-            force_frontend=true
-          fi
+            if [ "$(gate_decided "${jobs_json}")" != "true" ]; then
+              echo "run ${run_id}: carryover gate did not decide, stepping over"
+              continue
+            fi
 
-          if is_failed_conclusion "${console_prev}"; then
-            force_console=true
-          fi
+            backend_state=$(component_state "${jobs_json}" "${REQUIRED_LEG_backend}")
+            frontend_state=$(component_state "${jobs_json}" "${REQUIRED_LEG_frontend}")
+            console_state=$(component_state "${jobs_json}" "${REQUIRED_LEG_console}")
+            echo "carrying over from run ${run_id}: backend=${backend_state} frontend=${frontend_state} console=${console_state}"
 
-          echo "force_backend=${force_backend}" >> "$GITHUB_OUTPUT"
-          echo "force_frontend=${force_frontend}" >> "$GITHUB_OUTPUT"
-          echo "force_console=${force_console}" >> "$GITHUB_OUTPUT"
+            if [ "${backend_state}" = "force" ]; then force_backend=true; fi
+            if [ "${frontend_state}" = "force" ]; then force_frontend=true; fi
+            if [ "${console_state}" = "force" ]; then force_console=true; fi
+
+            finish
+          done <<< "${run_ids}"
+
+          # recent history contains only runs where the gate never decided;
+          # those runs ran no component CI, so there is nothing to carry over.
+          finish
 
   backend-ci:
     name: backend CI

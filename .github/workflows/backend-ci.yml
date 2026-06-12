@@ -38,6 +38,8 @@ on:
 
 jobs:
   quality:
+    # the `file` matrix leg is the required leg; the carryover gate in main.yml
+    # references this job name (`backend CI / lint and test on Python file`).
     name: lint and test on Python ${{ matrix.python }}
     runs-on: ubuntu-latest
     services:

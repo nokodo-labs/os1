@@ -28,6 +28,8 @@ on:
 
 jobs:
   quality:
+    # the `file` matrix leg is the required leg; the carryover gate in main.yml
+    # references this job name (`console CI / check quality on Node file`).
     name: check quality on Node ${{ matrix.node }}
     runs-on: ubuntu-latest
     strategy:
