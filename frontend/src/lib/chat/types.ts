@@ -5,9 +5,9 @@
  */
 
 import type {
-    CreateAndRunStreamDelta,
-    ResourceAttachment,
-    RunAttachmentType,
+	CreateAndRunStreamDelta,
+	ResourceAttachment,
+	RunAttachmentType,
 } from '$lib/api/streaming/chatStream'
 import type { components } from '$lib/api/types'
 import type { ResourceItem } from '$lib/components/widgets/types'

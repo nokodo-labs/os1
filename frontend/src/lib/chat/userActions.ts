@@ -12,7 +12,11 @@ import { modals } from '$lib/stores/modals.svelte'
 import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 import { SvelteDate } from 'svelte/reactivity'
 import { syncCacheAfterRun } from './dataLoader'
-import { computeIsAtBottom, contentPartsToText, finalizeStreamingAssistantAsPartial } from './helpers'
+import {
+	computeIsAtBottom,
+	contentPartsToText,
+	finalizeStreamingAssistantAsPartial,
+} from './helpers'
 import { runThreadStream } from './streamProcessor'
 import { getLatestLeaf } from './treeNavigation'
 import type { ChatContext, PendingRunInput } from './types'

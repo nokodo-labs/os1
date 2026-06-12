@@ -33,7 +33,7 @@ export type {
 	NotificationPreferences,
 	PrivacyPreferences,
 	UserClientPreferences,
-	UserPreferences
+	UserPreferences,
 }
 
 export type ThemeMode = NonNullable<AppearancePreferences['themeMode']>

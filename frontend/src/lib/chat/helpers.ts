@@ -26,7 +26,7 @@ export type {
 	MediaContentPart,
 	RunBlock,
 	RunItem,
-	StreamingAssistantState
+	StreamingAssistantState,
 }
 
 // message helpers

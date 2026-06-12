@@ -1,10 +1,10 @@
 import { StreamHttpError, type ChatStreamDelta } from '$lib/api/streaming/chatStream'
 import {
-    consumeStream,
-    processDelta,
-    reconcileStreamedContent,
-    RunFailedError,
-    runThreadStream,
+	consumeStream,
+	processDelta,
+	reconcileStreamedContent,
+	RunFailedError,
+	runThreadStream,
 } from '$lib/chat/streamProcessor'
 import type { ChatContext, StreamDeltaContext } from '$lib/chat/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -147,7 +147,9 @@ describe('processDelta steering reconciliation', () => {
 	})
 })
 
-async function* asyncFrom(frames: ChatStreamDelta[]): AsyncGenerator<ChatStreamDelta, void, unknown> {
+async function* asyncFrom(
+	frames: ChatStreamDelta[]
+): AsyncGenerator<ChatStreamDelta, void, unknown> {
 	for (const f of frames) yield f
 }
 
@@ -250,7 +252,9 @@ function chatDelta(messageId: string, text: string, done = false): ChatStreamDel
 			agent_id: 'agent_1',
 			message_id: messageId,
 			parent_id: null,
-			delta: { chat: { message: { content: [{ type: 'text', text }], tool_calls: null }, done } },
+			delta: {
+				chat: { message: { content: [{ type: 'text', text }], tool_calls: null }, done },
+			},
 		},
 	} as unknown as ChatStreamDelta
 }
@@ -346,7 +350,7 @@ describe('runThreadStream recovery', () => {
 		streamMocks.resumeRunStream.mockReset()
 	})
 
-	it("silently resumes the run when the initial stream ends without a terminal event", async () => {
+	it('silently resumes the run when the initial stream ends without a terminal event', async () => {
 		streamMocks.runChatStream.mockImplementation(() => asyncFrom([]))
 		streamMocks.resumeRunStream.mockImplementation(() => asyncFrom([doneFrame]))
 		const ctx = makeRunCtx()
@@ -368,7 +372,10 @@ describe('runThreadStream recovery', () => {
 		const ctx = makeRunCtx()
 
 		await expect(
-			runThreadStream({ threadId: 'thread_1', agentId: 'agent_1', input: null, runId: 5 }, ctx)
+			runThreadStream(
+				{ threadId: 'thread_1', agentId: 'agent_1', input: null, runId: 5 },
+				ctx
+			)
 		).rejects.toBeInstanceOf(RunFailedError)
 		expect(streamMocks.resumeRunStream).not.toHaveBeenCalled()
 	})

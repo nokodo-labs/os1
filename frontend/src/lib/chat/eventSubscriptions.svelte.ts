@@ -12,9 +12,9 @@
 import { isOwnEvent } from '$lib/api/sessionId'
 import { resumeRunStream, StreamHttpError } from '$lib/api/streaming/chatStream'
 import {
-    eventStreamClient,
-    type StreamEvent,
-    type StreamMessage,
+	eventStreamClient,
+	type StreamEvent,
+	type StreamMessage,
 } from '$lib/api/streaming/eventStream.svelte'
 import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 import { parseToolEvent } from '$lib/tools'
@@ -22,10 +22,10 @@ import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { buildMessageChildren, contentPartsToText, type ApiMessage } from './helpers'
 import { parseRunActivityEvent, RUN_ACTIVITY_EVENT_PREFIX } from './runActivities'
 import {
-    getMessageClientSteeringId,
-    getMessageSteeringRunId,
-    getMessageSteeringState,
-    type SteeringState,
+	getMessageClientSteeringId,
+	getMessageSteeringRunId,
+	getMessageSteeringState,
+	type SteeringState,
 } from './steering'
 import { consumeStream } from './streamProcessor'
 import { getLatestLeaf } from './treeNavigation'

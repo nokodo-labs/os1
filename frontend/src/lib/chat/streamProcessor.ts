@@ -19,7 +19,13 @@ import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 import { hapticFeedback, throttledHapticFeedback } from '$lib/utils/haptics'
 import { SvelteDate } from 'svelte/reactivity'
 import { syncCacheAfterRun } from './dataLoader'
-import { extractAttachmentRefs, finalizeStreamingAssistantAsPartial, sdkPartsToText, upsertToolCalls, type ApiMessage } from './helpers'
+import {
+	extractAttachmentRefs,
+	finalizeStreamingAssistantAsPartial,
+	sdkPartsToText,
+	upsertToolCalls,
+	type ApiMessage,
+} from './helpers'
 import {
 	getMessageClientSteeringId,
 	getMessageSteeringRunId,

@@ -23,6 +23,7 @@ async def test_async_agentic_flow(
 	async def _fake_embed(
 		self: EmbeddingModel,
 		texts: list[str],
+		input_type: str | None = None,
 	) -> list[list[float]]:
 		_ = self
 		return [[0.0, 0.0, 0.0, 0.0] for _ in texts]

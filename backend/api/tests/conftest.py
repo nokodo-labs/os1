@@ -103,7 +103,9 @@ def _api_test_stub_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
 	vectorstores_service._vectorstore_adapter.cache_clear()
 	vectorstores_service._cached_collection_name = None
 
-	async def _fake_embed(self: EmbeddingModel, texts: list[str]) -> list[list[float]]:
+	async def _fake_embed(
+		self: EmbeddingModel, texts: list[str], input_type: str | None = None
+	) -> list[list[float]]:
 		_ = self
 		return [[0.0, 0.0, 0.0, 0.0] for _ in texts]
 
