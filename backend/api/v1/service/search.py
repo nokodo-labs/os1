@@ -69,7 +69,7 @@ async def search_stream(
 		SearchResultType.FILE,
 	}
 	query_embedding = (
-		await embed_text(text=q, session=db)
+		await embed_text(text=q, session=db, input_type="query")
 		if need_dense and any(result_type in dense_types for result_type in types)
 		else None
 	)

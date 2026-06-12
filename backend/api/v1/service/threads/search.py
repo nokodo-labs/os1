@@ -34,12 +34,11 @@ from api.v1.service.authorization import (
 	thread_access_predicate,
 	vector_acl_filter,
 )
-from api.v1.service.embeddings import embed_text, embed_texts
+from api.v1.service.embeddings import embed_text
 from api.v1.service.threads.summaries import latest_active_summary_text
 from api.v1.service.vectorize import (
 	VectorSpec,
-	build_chunk,
-	remove_vectorized_resource,
+	vectorize_resources,
 )
 from api.v1.service.vectorstores import VectorChunkResourceType
 from nokodo_ai.types.json import JSONObject
@@ -121,25 +120,16 @@ THREAD_SPEC: VectorSpec[Thread] = VectorSpec(
 
 async def _vectorize_threads(threads: list[Thread], session: AsyncSession) -> int:
 	"""embed and upsert the given threads (with acl metadata). returns count."""
-	valid: list[tuple[Thread, str]] = []
-	for th in threads:
-		text = _thread_dense_text(th)
-		if text.strip():
-			valid.append((th, text))
-	if not valid:
+	thread_ids = [str(t.id) for t in threads]
+	if not thread_ids:
 		return 0
-	embeddings = await embed_texts([text for _, text in valid], session)
-	thread_ids = [str(t.id) for t, _ in valid]
 	acl_by_id = await fetch_bulk_acl_metadata(thread_ids, ResourceType.THREAD, session)
-	chunks = []
-	for (thread, _), emb in zip(valid, embeddings):
-		await remove_vectorized_resource(
-			spec=THREAD_SPEC, resource_id=str(thread.id), session=session
-		)
-		acl = acl_by_id.get(str(thread.id))
-		chunks.append(build_chunk(THREAD_SPEC, thread, emb, extra_metadata=acl))
-	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
-	return len(valid)
+	return await vectorize_resources(
+		spec=THREAD_SPEC,
+		resources=threads,
+		session=session,
+		extra_metadata_by_id=acl_by_id,
+	)
 
 
 async def vectorize_threads(thread_ids: Sequence[TypeID], session: AsyncSession) -> int:
@@ -235,7 +225,11 @@ async def _hybrid_search_threads(
 	query_emb = (
 		query_embedding
 		if query_embedding is not None
-		else (await embed_text(text=query_text, session=db) if need_dense else None)
+		else (
+			await embed_text(text=query_text, session=db, input_type="query")
+			if need_dense
+			else None
+		)
 	)
 	text_query = query_text if need_sparse else None
 	query_filter = vector_acl_filter([VectorChunkResourceType.THREAD], principal)
@@ -246,6 +240,7 @@ async def _hybrid_search_threads(
 		limit=limit,
 		query_filter=query_filter,
 		normalize=params.normalize,
+		group_by="resource_id",
 	)
 	if not results:
 		return []
@@ -266,7 +261,6 @@ async def _hybrid_search_threads(
 	)
 	db_result = await db.execute(stmt)
 	by_id = {str(t.id): t for t in db_result.scalars().unique().all()}
-	score_by_rid = {str(r.metadata["resource_id"]): r.score for r in results}
 	items: list[SearchResultItem] = []
 	for r in results:
 		rid = str(r.metadata["resource_id"])
@@ -285,7 +279,7 @@ async def _hybrid_search_threads(
 				id=TypeID(thread.id),
 				title=thread.title or "",
 				preview=(str(summary)[:100] if summary else None),
-				score=score_by_rid.get(rid),
+				score=r.score,
 				created_at=thread.created_at,
 				updated_at=thread.updated_at,
 			)

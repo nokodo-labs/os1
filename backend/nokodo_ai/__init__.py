@@ -30,7 +30,7 @@ from .chat_models import ChatModel
 from .chunkers import Chunker
 from .context import AgentContext, ToolCallContext
 from .deltas import AgentDelta, ChatModelDelta
-from .embeddings import EmbeddingModel
+from .embeddings import EmbeddingInputType, EmbeddingModel
 from .exceptions import NokodoAIError
 from .filters import Filter
 from .hooks import Hook
@@ -62,6 +62,7 @@ __all__ = [
 	# high-level interfaces
 	"ChatModel",
 	"EmbeddingModel",
+	"EmbeddingInputType",
 	"ImageModel",
 	"Vectorstore",
 	"Loader",

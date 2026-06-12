@@ -541,7 +541,7 @@ class CodeInterpreterSettings(BaseModel):
 
 
 AssetContentLoader = Literal["auto", "plain", "markitdown", "chatmodel"]
-AssetChunkingAlgorithm = Literal["auto", "recursive", "markdown"]
+AssetChunkingAlgorithm = Literal["auto", "recursive", "markdown", "semantic"]
 
 
 class AssetContentVectorizationSettings(BaseModel):
@@ -574,6 +574,24 @@ class AssetContentVectorizationSettings(BaseModel):
 		default=200,
 		ge=1,
 		description="maximum content chunks per asset; null means unlimited",
+	)
+	semantic_breakpoint_percentile: float = settings_field(
+		default=95.0,
+		ge=50.0,
+		le=100.0,
+		description="percentile threshold for semantic breakpoint detection",
+	)
+	semantic_min_sentences: int = settings_field(
+		default=2,
+		ge=1,
+		description="minimum sentences per semantic chunk before merging",
+	)
+	semantic_buffer_size: int = settings_field(
+		default=1,
+		ge=0,
+		description=(
+			"neighbor sentence window size used when embedding for semantic splitting"
+		),
 	)
 
 

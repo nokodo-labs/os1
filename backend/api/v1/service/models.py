@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from api.models.model import InputModality, Model, ModelType
 from api.models.provider import Provider, ProviderStatus
+from api.redis import publish_invalidation
 from api.schemas.model import ModelCreate, ModelListFilters, ModelUpdate
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
@@ -698,10 +699,18 @@ async def update_model(
 		model_type = str(update_data.get("model_type", model.model_type))
 		_check_valid_adapter(model.provider.adapter_type, model_type, adapter)
 
+	affects_embedding = model.model_type == ModelType.EMBEDDING
+	affects_chat = model.model_type == ModelType.CHAT_MODEL
 	for key, value in update_data.items():
 		setattr(model, key, value)
+	affects_embedding = affects_embedding or model.model_type == ModelType.EMBEDDING
+	affects_chat = affects_chat or model.model_type == ModelType.CHAT_MODEL
 
 	await session.commit()
+	if affects_embedding:
+		await publish_invalidation("embedding_model")
+	if affects_chat:
+		await publish_invalidation("task_models")
 	return await _get_model(model_id, session, principal)
 
 
@@ -711,5 +720,11 @@ async def delete_model(
 	principal: Principal,
 ) -> None:
 	model = await _get_model(model_id, session, principal)
+	affects_embedding = model.model_type == ModelType.EMBEDDING
+	affects_chat = model.model_type == ModelType.CHAT_MODEL
 	await session.delete(model)
 	await session.commit()
+	if affects_embedding:
+		await publish_invalidation("embedding_model")
+	if affects_chat:
+		await publish_invalidation("task_models")

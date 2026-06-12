@@ -36,13 +36,13 @@ from api.v1.service.chat.models import (
 	resolve_task_chat_model,
 	run_chat_model_json_schema,
 )
-from api.v1.service.embeddings import embed_text, embed_texts
+from api.v1.service.embeddings import embed_text
 from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.vectorize import (
 	VectorSpec,
-	build_chunk,
 	remove_vectorized_resource,
 	vectorize_resource,
+	vectorize_resources,
 )
 from api.v1.service.vectorstores import VectorChunkResourceType
 from nokodo_ai.messages import SystemMessage, UserMessage
@@ -582,26 +582,6 @@ MEMORY_SPEC: VectorSpec[Memory] = VectorSpec(
 )
 
 
-async def _vectorize_memories(memories: list[Memory], session: AsyncSession) -> int:
-	"""embed and upsert the given memories in batches. returns count."""
-	valid: list[tuple[Memory, str]] = []
-	for m in memories:
-		text = _memory_dense_text(m)
-		if text.strip():
-			valid.append((m, text))
-	if not valid:
-		return 0
-	embeddings = await embed_texts([text for _, text in valid], session)
-	chunks = []
-	for (memory, _), emb in zip(valid, embeddings):
-		await remove_vectorized_resource(
-			spec=MEMORY_SPEC, resource_id=str(memory.id), session=session
-		)
-		chunks.append(build_chunk(MEMORY_SPEC, memory, emb))
-	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
-	return len(valid)
-
-
 async def vectorize_memories(
 	memory_ids: Sequence[TypeID], session: AsyncSession
 ) -> int:
@@ -611,13 +591,17 @@ async def vectorize_memories(
 	result = await session.execute(
 		select(Memory).where(Memory.id.in_([str(mid) for mid in memory_ids]))
 	)
-	return await _vectorize_memories(list(result.scalars().all()), session)
+	return await vectorize_resources(
+		spec=MEMORY_SPEC, resources=list(result.scalars().all()), session=session
+	)
 
 
 async def vectorize_all_memories(session: AsyncSession) -> int:
 	"""vectorize all memories in bulk. returns count."""
 	result = await session.execute(select(Memory))
-	return await _vectorize_memories(list(result.scalars().all()), session)
+	return await vectorize_resources(
+		spec=MEMORY_SPEC, resources=list(result.scalars().all()), session=session
+	)
 
 
 async def _autocomplete_memories(
@@ -670,7 +654,11 @@ async def _hybrid_search_memories(
 	query_emb = (
 		query_embedding
 		if query_embedding is not None
-		else (await embed_text(text=query_text, session=db) if need_dense else None)
+		else (
+			await embed_text(text=query_text, session=db, input_type="query")
+			if need_dense
+			else None
+		)
 	)
 	text_query = query_text if need_sparse else None
 	# memories are user-private (no sharing) - owner_id filter is efficient.
@@ -685,6 +673,7 @@ async def _hybrid_search_memories(
 		limit=limit,
 		query_filter=query_filter,
 		normalize=params.normalize,
+		group_by="resource_id",
 	)
 	if not results:
 		return []
@@ -694,7 +683,6 @@ async def _hybrid_search_memories(
 		stmt = stmt.where(Memory.user_id == principal.user.id)
 	db_result = await db.execute(stmt)
 	by_id = {str(m.id): m for m in db_result.scalars().all()}
-	score_by_rid = {str(r.metadata["resource_id"]): r.score for r in results}
 	items: list[SearchResultItem] = []
 	for r in results:
 		rid = str(r.metadata["resource_id"])
@@ -707,7 +695,7 @@ async def _hybrid_search_memories(
 				id=TypeID(mem.id),
 				title=mem.content[:80] if mem.content else "",
 				preview=", ".join(mem.tags) if mem.tags else None,
-				score=score_by_rid.get(rid),
+				score=r.score,
 				created_at=mem.created_at,
 				updated_at=mem.updated_at,
 			)
@@ -793,7 +781,9 @@ async def query_relevant_memories(
 	returns:
 		full Memory objects ordered by relevance (best first).
 	"""
-	query_emb = query_embedding or await embed_text(text=query_text, session=db)
+	query_emb = query_embedding or await embed_text(
+		text=query_text, session=db, input_type="query"
+	)
 	query_filter = vectorstore_service.resource_types_filter(
 		[VectorChunkResourceType.MEMORY],
 		owner_id=(str(principal.user.id) if not principal.is_admin else None),
@@ -805,6 +795,7 @@ async def query_relevant_memories(
 		limit=limit,
 		query_filter=query_filter,
 		normalize=True,
+		group_by="resource_id",
 	)
 	if not results:
 		return []
@@ -823,7 +814,7 @@ async def query_relevant_memories(
 	by_id = {str(m.id): m for m in db_result.scalars().all()}
 
 	# preserve relevance order from vector search.
-	return [by_id[rid] for rid in resource_ids if rid in by_id]
+	return [by_id[rid] for rid in resource_ids if rid in by_id][:limit]
 
 
 async def post_process_relevant_memories(
@@ -856,7 +847,7 @@ async def post_process_relevant_memories(
 		query_embedding = await _run_memory_stage(
 			"embedding memory query",
 			MEMORY_POST_PROCESSING_EMBED_TIMEOUT_SECONDS,
-			embed_text(text=query, session=session),
+			embed_text(text=query, session=session, input_type="query"),
 		)
 		await _notify_memory_post_processing_progress(
 			progress_callback,

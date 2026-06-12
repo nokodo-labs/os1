@@ -71,6 +71,8 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 		query_filter: ChunkFilter | None = None,
 		fusion: str = "rrf",
 		normalize: bool = True,
+		group_by: str | None = None,
+		group_size: int = 1,
 	) -> list[ChunkSearchResult]:
 		"""search with flexible mode selection.
 
@@ -81,6 +83,10 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 
 		scores are normalized to 0-1 by default. set normalize=False
 		for raw backend scores.
+
+		group_by collapses results per distinct value of the given payload
+		field, so limit bounds distinct groups. group_size sets how many
+		chunks to keep per group (default 1, the single best chunk).
 		"""
 		return await self.adapter.search(
 			self.collection,
@@ -91,6 +97,8 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 			query_filter=query_filter,
 			fusion=fusion,
 			normalize=normalize,
+			group_by=group_by,
+			group_size=group_size,
 		)
 
 	@overload
@@ -102,6 +110,20 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 	async def delete(self, target: list[str] | ChunkFilter) -> None:
 		"""remove chunks by their string ids or by filter."""
 		await self.adapter.delete(self.collection, target)
+
+	async def scroll(
+		self,
+		query_filter: ChunkFilter | None = None,
+		page_size: int = 256,
+	) -> list[Chunk]:
+		"""enumerate all chunks matching a filter, without scoring.
+
+		returns chunks with metadata and content but no vectors. drains every
+		match by paging internally. empty when the collection does not exist.
+		"""
+		return await self.adapter.scroll(
+			self.collection, query_filter=query_filter, page_size=page_size
+		)
 
 	@overload
 	async def update(

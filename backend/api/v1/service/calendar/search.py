@@ -24,11 +24,10 @@ from api.schemas.search import (
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import resource_access_predicate
-from api.v1.service.embeddings import embed_text, embed_texts
+from api.v1.service.embeddings import embed_text
 from api.v1.service.vectorize import (
 	VectorSpec,
-	build_chunk,
-	remove_vectorized_resource,
+	vectorize_resources,
 )
 from api.v1.service.vectorstores import VectorChunkResourceType
 from nokodo_ai.types import JSONObject
@@ -109,23 +108,11 @@ async def vectorize_calendar_events_for_calendar(
 		)
 	)
 	result = await session.execute(stmt)
-	valid: list[tuple[CalendarEvent, str]] = []
-	for calendar_event in result.scalars().all():
-		text = _calendar_event_dense_text(calendar_event)
-		if text.strip():
-			valid.append((calendar_event, text))
-	if not valid:
-		return
-	embeddings = await embed_texts([text for _, text in valid], session)
-	chunks = []
-	for (calendar_event, _text), embedding in zip(valid, embeddings):
-		await remove_vectorized_resource(
-			spec=CALENDAR_EVENT_SPEC,
-			resource_id=str(calendar_event.id),
-			session=session,
-		)
-		chunks.append(build_chunk(CALENDAR_EVENT_SPEC, calendar_event, embedding))
-	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
+	await vectorize_resources(
+		spec=CALENDAR_EVENT_SPEC,
+		resources=list(result.scalars().all()),
+		session=session,
+	)
 
 
 async def vectorize_all_calendar_events(session: AsyncSession) -> int:
@@ -134,24 +121,11 @@ async def vectorize_all_calendar_events(session: AsyncSession) -> int:
 		Calendar, CalendarEvent.calendar_id == Calendar.id
 	)
 	result = await session.execute(stmt)
-	valid: list[tuple[CalendarEvent, str]] = []
-	for calendar_event in result.scalars().all():
-		text = _calendar_event_dense_text(calendar_event)
-		if text.strip():
-			valid.append((calendar_event, text))
-	if not valid:
-		return 0
-	embeddings = await embed_texts([text for _, text in valid], session)
-	chunks = []
-	for (calendar_event, _text), embedding in zip(valid, embeddings):
-		await remove_vectorized_resource(
-			spec=CALENDAR_EVENT_SPEC,
-			resource_id=str(calendar_event.id),
-			session=session,
-		)
-		chunks.append(build_chunk(CALENDAR_EVENT_SPEC, calendar_event, embedding))
-	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
-	return len(valid)
+	return await vectorize_resources(
+		spec=CALENDAR_EVENT_SPEC,
+		resources=list(result.scalars().all()),
+		session=session,
+	)
 
 
 async def _autocomplete_calendar_events(
@@ -214,7 +188,11 @@ async def _hybrid_search_calendar_events(
 	query_emb = (
 		query_embedding
 		if query_embedding is not None
-		else (await embed_text(text=query_text, session=db) if need_dense else None)
+		else (
+			await embed_text(text=query_text, session=db, input_type="query")
+			if need_dense
+			else None
+		)
 	)
 	text_query = query_text if need_sparse else None
 	results = await vectorstore_service.search(
@@ -226,6 +204,7 @@ async def _hybrid_search_calendar_events(
 			[VectorChunkResourceType.CALENDAR_EVENT]
 		),
 		normalize=params.normalize,
+		group_by="resource_id",
 	)
 	if not results:
 		return []
@@ -243,9 +222,6 @@ async def _hybrid_search_calendar_events(
 		str(calendar_event.id): calendar_event
 		for calendar_event in db_result.scalars().all()
 	}
-	score_by_id = {
-		str(result.metadata["resource_id"]): result.score for result in results
-	}
 	items: list[SearchResultItem] = []
 	for result in results:
 		resource_id = str(result.metadata["resource_id"])
@@ -260,7 +236,7 @@ async def _hybrid_search_calendar_events(
 				preview=calendar_event.description[:100]
 				if calendar_event.description
 				else None,
-				score=score_by_id.get(resource_id),
+				score=result.score,
 				parent=SearchResultParent(
 					type=SearchResourceReferenceType.CALENDAR,
 					id=TypeID(calendar_event.calendar_id),

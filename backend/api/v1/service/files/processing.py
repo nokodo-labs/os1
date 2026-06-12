@@ -112,7 +112,9 @@ async def process_file_description(
 		vector_parts = [p for p in [file.filename or "", desc_for_vector or ""] if p]
 		vector_text = " ".join(vector_parts).strip()
 		embedding: list[float] = (
-			(await embed_texts([vector_text]))[0] if vector_text else []
+			(await embed_texts([vector_text], input_type="document"))[0]
+			if vector_text
+			else []
 		)
 
 		# phase 3: quick DB writes only - connection reacquired lazily

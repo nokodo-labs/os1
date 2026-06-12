@@ -1,5 +1,6 @@
 """tests for SDK content loading and chunking primitives."""
 
+import math
 from collections.abc import AsyncIterator, Awaitable
 from typing import Literal, overload
 
@@ -7,10 +8,14 @@ from pydantic import PrivateAttr
 
 from nokodo_ai import Chunker, Loader
 from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
+from nokodo_ai.adapters.base.chunkers import ChunkingParams
+from nokodo_ai.adapters.base.embeddings import BaseEmbeddingAdapter, EmbeddingInputType
 from nokodo_ai.adapters.markitdown.loader import MarkItDownLoaderAdapter
 from nokodo_ai.adapters.nokodo_ai.markdown import MarkdownChunkerAdapter
 from nokodo_ai.adapters.nokodo_ai.plain import PlainLoaderAdapter
+from nokodo_ai.adapters.nokodo_ai.semantic import SemanticChunkerAdapter
 from nokodo_ai.chat_models import ChatModel
+from nokodo_ai.embeddings import EmbeddingModel
 from nokodo_ai.loaders import File, LoaderConfig, Text
 from nokodo_ai.messages import (
 	AssistantMessage,
@@ -249,3 +254,154 @@ async def test_recursive_chunker_can_disable_chunk_cap() -> None:
 
 	assert len(capped) == 2
 	assert len(unlimited) > len(capped)
+
+
+# semantic chunker tests
+
+
+class _StubEmbeddingsAdapter(BaseEmbeddingAdapter):
+	"""deterministic stub: returns a unit vector keyed to text content."""
+
+	_call_count: int = 0
+
+	async def embed(
+		self,
+		texts: list[str],
+		model: str,
+		input_type: EmbeddingInputType | None = None,
+	) -> list[list[float]]:
+		self._call_count += 1
+		result: list[list[float]] = []
+		for text in texts:
+			# deterministic 4-dim unit vector based on first char
+			first = ord(text[0]) if text else 0
+			x = math.cos(first * 0.1)
+			y = math.sin(first * 0.1)
+			norm = math.sqrt(x * x + y * y) or 1.0
+			result.append([x / norm, y / norm, 0.0, 0.0])
+		return result
+
+
+def _make_embedder() -> tuple[EmbeddingModel, _StubEmbeddingsAdapter]:
+	adapter = _StubEmbeddingsAdapter()
+	model = EmbeddingModel.model_construct(model_name="stub", adapter=adapter)
+	return model, adapter
+
+
+def _topic_shift_text() -> str:
+	# two clearly distinct topic blocks separated by a sentence boundary
+	alpha = " ".join(["Alpha sentence about astronomy."] * 6)
+	beta = " ".join(["Beta sentence about cooking recipes."] * 6)
+	return alpha + " " + beta
+
+
+async def test_semantic_chunker_splits_topic_shift() -> None:
+	embedder, _ = _make_embedder()
+	adapter = SemanticChunkerAdapter(
+		embedder=embedder,
+		# default 95th percentile: threshold = the single high-distance gap value,
+		# so only the alpha->beta boundary fires (the other 10 gaps are distance 0)
+		buffer_size=0,  # no windowing so boundary vectors stay distinct
+	)
+	text = Text(
+		content=_topic_shift_text(),
+		status="loaded",
+		source="plain",
+		metadata={},
+	)
+	# target_tokens below total text size to skip short-circuit
+	chunks = await adapter.chunk(
+		text,
+		ChunkingParams(target_tokens=50, overlap_tokens=0, max_chunks=20),
+	)
+
+	assert len(chunks) >= 2
+
+
+async def test_semantic_chunker_single_sentence_no_embedding_call() -> None:
+	embedder, adapter_stub = _make_embedder()
+	adapter = SemanticChunkerAdapter(embedder=embedder)
+	# single sentence: no pairwise distance to compute
+	text = Text(
+		content="This is the only sentence here.",
+		status="loaded",
+		source="plain",
+		metadata={},
+	)
+	params = ChunkingParams(target_tokens=500, overlap_tokens=0, max_chunks=10)
+	chunks = await adapter.chunk(text, params)
+
+	assert len(chunks) == 1
+	assert adapter_stub._call_count == 0
+
+
+async def test_semantic_chunker_max_chunks_clamp() -> None:
+	embedder, _ = _make_embedder()
+	adapter = SemanticChunkerAdapter(
+		embedder=embedder,
+		breakpoint_percentile=10.0,  # very low -> many natural splits
+	)
+	# build a long multi-sentence text
+	sentences = " ".join(f"Sentence {i} about topic {i % 5}." for i in range(30))
+	text = Text(
+		content=sentences,
+		status="loaded",
+		source="plain",
+		metadata={},
+	)
+	params = ChunkingParams(target_tokens=10, overlap_tokens=0, max_chunks=3)
+	chunks = await adapter.chunk(text, params)
+
+	assert len(chunks) <= 3
+
+
+async def test_semantic_chunker_token_budget_enforced() -> None:
+	embedder, _ = _make_embedder()
+	adapter = SemanticChunkerAdapter(
+		embedder=embedder,
+		breakpoint_percentile=99.9,  # very high -> all in one semantic segment
+	)
+	# repeat enough sentences to blow past a small token budget
+	long_block = " ".join(["This sentence is about dogs."] * 40)
+	text = Text(
+		content=long_block,
+		status="loaded",
+		source="plain",
+		metadata={},
+	)
+	target = 30
+	params = ChunkingParams(target_tokens=target, overlap_tokens=0, max_chunks=None)
+	chunks = await adapter.chunk(text, params)
+
+	from nokodo_ai.utils.tokens import estimate_tokens
+
+	for chunk in chunks:
+		assert estimate_tokens(chunk.text) <= target * 2  # generous: sentence-aligned
+
+
+async def test_semantic_chunker_embedder_failure_falls_back() -> None:
+	class _BrokenAdapter(BaseEmbeddingAdapter):
+		async def embed(
+			self,
+			texts: list[str],
+			model: str,
+			input_type: EmbeddingInputType | None = None,
+		) -> list[list[float]]:
+			raise RuntimeError("network error")
+
+	broken_model = EmbeddingModel.model_construct(
+		model_name="broken", adapter=_BrokenAdapter()
+	)
+	adapter = SemanticChunkerAdapter(embedder=broken_model)
+	long_text = " ".join(["Fallback sentence here."] * 50)
+	text = Text(
+		content=long_text,
+		status="loaded",
+		source="plain",
+		metadata={},
+	)
+	params = ChunkingParams(target_tokens=20, overlap_tokens=0, max_chunks=20)
+	chunks = await adapter.chunk(text, params)
+
+	# must produce chunks via recursive fallback, never raise
+	assert len(chunks) >= 1

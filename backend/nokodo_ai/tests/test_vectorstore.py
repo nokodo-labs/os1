@@ -54,6 +54,76 @@ async def test_vectorstore_forwards_adapter_calls() -> None:
 
 
 @pytest.mark.asyncio
+async def test_group_by_returns_best_hit_per_resource() -> None:
+	store = make_store("group-by-test")
+	await store.ensure_collection(vector_size=2)
+	# resource A has two chunks: a1 close to the query, a2 far from it.
+	# resource B has a single chunk.
+	await store.add(
+		[
+			make_chunk(
+				"a1", [1.0, 0.0], content="alpha near", metadata={"resource_id": "A"}
+			),
+			make_chunk(
+				"a2", [0.0, 1.0], content="alpha far", metadata={"resource_id": "A"}
+			),
+			make_chunk(
+				"b1", [0.9, 0.1], content="bravo", metadata={"resource_id": "B"}
+			),
+		]
+	)
+
+	results = await store.search(query=[1.0, 0.0], limit=10, group_by="resource_id")
+
+	# exactly one hit per distinct resource_id, deduped by the backend.
+	resource_ids = [r.metadata.get("resource_id") for r in results]
+	assert sorted(resource_ids) == ["A", "B"]
+	# for resource A, the better-scoring chunk a1 must be the one returned.
+	by_resource = {r.metadata.get("resource_id"): r.id for r in results}
+	assert by_resource["A"] == "a1"
+
+
+@pytest.mark.asyncio
+async def test_group_by_limit_bounds_distinct_resources() -> None:
+	store = make_store("group-by-limit")
+	await store.ensure_collection(vector_size=2)
+	# three resources, two chunks each.
+	chunks = []
+	for rid in ("A", "B", "C"):
+		chunks.append(make_chunk(f"{rid}1", [1.0, 0.0], metadata={"resource_id": rid}))
+		chunks.append(make_chunk(f"{rid}2", [0.0, 1.0], metadata={"resource_id": rid}))
+	await store.add(chunks)
+
+	results = await store.search(query=[1.0, 0.0], limit=2, group_by="resource_id")
+
+	# limit bounds distinct resources, not raw chunks.
+	assert len(results) == 2
+	assert len({r.metadata.get("resource_id") for r in results}) == 2
+
+
+@pytest.mark.asyncio
+async def test_group_size_returns_multiple_chunks_per_group() -> None:
+	store = make_store("group-size-test")
+	await store.ensure_collection(vector_size=2)
+	# resource A has two chunks; resource B has one.
+	await store.add(
+		[
+			make_chunk("a1", [1.0, 0.0], metadata={"resource_id": "A"}),
+			make_chunk("a2", [0.9, 0.1], metadata={"resource_id": "A"}),
+			make_chunk("b1", [0.8, 0.2], metadata={"resource_id": "B"}),
+		]
+	)
+
+	results = await store.search(
+		query=[1.0, 0.0], limit=10, group_by="resource_id", group_size=2
+	)
+
+	# both of A's chunks come back plus B's single chunk.
+	ids = {r.id for r in results}
+	assert ids == {"a1", "a2", "b1"}
+
+
+@pytest.mark.asyncio
 async def test_vectorstore_collection_field() -> None:
 	store = make_store("my-namespace")
 

@@ -17,6 +17,10 @@ from api.v1.service.chat.models import (
 	resolve_task_chat_model_config,
 )
 from api.v1.service.embeddings import embed_texts
+from api.v1.service.files.metadata import (
+	FILE_CONTENT_RESOURCE_TYPE,
+	FILE_RESOURCE_TYPE,
+)
 from api.v1.service.files.modalities import (
 	file_input_modality,
 	is_direct_model_text_candidate,
@@ -26,7 +30,12 @@ from api.v1.service.files.vectorization import (
 	_build_file_content_chunk,
 	remove_file_vectors,
 )
+from api.v1.service.vectorize import (
+	chunks_match_fingerprint,
+	fingerprint_payload,
+)
 from nokodo_ai import Chunker, Loader
+from nokodo_ai.adapters.base.vectorstores import Chunk
 from nokodo_ai.chunkers import ContentChunk
 from nokodo_ai.loaders import File as SDKFile
 from nokodo_ai.loaders import Text
@@ -36,6 +45,23 @@ from nokodo_ai.utils.files import file_metadata
 
 FileContentChunk = ContentChunk
 _AUTO_LOCAL_LOADERS = ("plain", "markitdown")
+
+# stored on file.metadata_ so a file that extracted to zero chunks (media
+# without a model loader) still records that it was vectorized for its inputs.
+CONTENT_VECTOR_FINGERPRINT_KEY = "content_vector_fingerprint"
+
+
+def _record_content_fingerprint(file: File, fingerprint: str) -> None:
+	"""persist the content-vectorization fingerprint on the file row.
+
+	reassigns metadata_ rather than mutating in place so SQLAlchemy detects the
+	JSONB change. lets verify treat a file as current even when it stored no
+	chunks.
+	"""
+	file.metadata_ = {
+		**(file.metadata_ or {}),
+		CONTENT_VECTOR_FINGERPRINT_KEY: fingerprint,
+	}
 
 
 @dataclass(slots=True)
@@ -47,6 +73,83 @@ class FileContentChunkBatch:
 	loader: str
 	chunker: str
 	skipped_reason: str | None = None
+
+
+async def file_content_fingerprint(file: File, session: AsyncSession) -> str:
+	"""compute the content-vectorization fingerprint for a file.
+
+	the fingerprint digests the deterministic inputs to the content pipeline:
+	the file bytes (via checksum), the configured loader/chunker and their
+	parameters, and the loader chat model when one is configured. it is
+	computable without loading the file, so the same value is stamped on
+	stored chunks at write time and recomputed at verify time to detect
+	whether a file is already correctly vectorized.
+
+	model-backed loaders extract text non-deterministically, so the stored
+	text cannot be reverse-checked; fingerprinting the inputs instead means a
+	re-import is a no-op while a settings or model change correctly flags the
+	file for re-vectorization.
+	"""
+	cfg = settings.assets.content_vectorization
+	model = await resolve_content_loader_chat_model(session)
+	model_name = model.chat_model.model_name if model is not None else ""
+	# future: add a loader/chunker implementation version here so an extractor
+	# code change (not just config) also invalidates stored vectors.
+	return fingerprint_payload(
+		{
+			"checksum": file.checksum_sha256 or "",
+			"loader": cfg.loader,
+			"chunker": cfg.chunking_algorithm,
+			"target_tokens": cfg.target_tokens,
+			"overlap_tokens": cfg.overlap_tokens,
+			"max_chunks": cfg.max_chunks,
+			"max_bytes": cfg.max_bytes,
+			"model": model_name,
+		}
+	)
+
+
+async def filter_unvectorized_files(
+	files: list[File],
+	session: AsyncSession,
+) -> list[File]:
+	"""return files whose content vectors are missing or stale.
+
+	a file is kept (re-vectorized) unless its inputs match what was already
+	stored. currency is established two ways: the fingerprint recorded on the
+	file row after a successful run, or - for files vectorized before that was
+	recorded - a matching, complete stored chunk set. files that legitimately
+	yield no chunks (media without a model loader) rely on the row fingerprint,
+	so re-importing them is a no-op once recorded.
+	"""
+	if not files:
+		return []
+	expected = {
+		str(file.id): await file_content_fingerprint(file, session) for file in files
+	}
+	chunks = await vectorstore_service.scroll_chunks(
+		vectorstore_service.child_resource_filter(
+			FILE_RESOURCE_TYPE,
+			list(expected.keys()),
+			FILE_CONTENT_RESOURCE_TYPE,
+		),
+		session,
+	)
+	grouped: dict[str, list[Chunk]] = {}
+	for chunk in chunks:
+		parent_id = chunk.metadata.get("parent_resource_id")
+		if isinstance(parent_id, str):
+			grouped.setdefault(parent_id, []).append(chunk)
+	return [
+		file
+		for file in files
+		if (file.metadata_ or {}).get(CONTENT_VECTOR_FINGERPRINT_KEY)
+		!= expected[str(file.id)]
+		and not chunks_match_fingerprint(
+			grouped.get(str(file.id), []),
+			expected[str(file.id)],
+		)
+	]
 
 
 async def load_file_content_chunks(
@@ -103,11 +206,13 @@ async def vectorize_file_content(
 		session,
 		include_file_vector=False,
 	)
+	fingerprint = await file_content_fingerprint(file, session)
 	if not chunks:
+		_record_content_fingerprint(file, fingerprint)
 		return batch
 	acl_metadata = await fetch_acl_metadata(str(file.id), ResourceType.FILE, session)
 	texts = [_content_embedding_text(file, chunk) for chunk in chunks]
-	embeddings = await embed_texts(texts, session)
+	embeddings = await embed_texts(texts, session, input_type="document")
 	vector_chunks = [
 		_build_file_content_chunk(
 			file=file,
@@ -120,11 +225,13 @@ async def vectorize_file_content(
 				**chunk.metadata,
 				"text_loader": batch.loader,
 				"chunking_algorithm": batch.chunker,
+				"vec_fingerprint": fingerprint,
 			},
 		)
 		for index, (chunk, embedding) in enumerate(zip(chunks, embeddings))
 	]
 	await vectorstore_service.upsert_chunks(chunks=vector_chunks, session=session)
+	_record_content_fingerprint(file, fingerprint)
 	return batch
 
 

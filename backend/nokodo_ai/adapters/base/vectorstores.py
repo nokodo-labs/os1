@@ -142,6 +142,8 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		query_filter: ChunkFilter | None = None,
 		fusion: str = "rrf",
 		normalize: bool = True,
+		group_by: str | None = None,
+		group_size: int = 1,
 	) -> list[ChunkSearchResult]:
 		"""search the vectorstore with flexible mode selection.
 
@@ -162,6 +164,12 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 			query_filter: adapter-agnostic filter conditions
 			fusion: fusion algorithm for hybrid search ("rrf" or "dbsf")
 			normalize: normalize scores to 0-1 range (default True)
+			group_by: payload field to group results by. when set, limit
+				bounds distinct groups rather than raw chunks, and offset is
+				ignored. ignored when None.
+			group_size: max chunks to return per group when group_by is set.
+				defaults to 1 (the single best chunk per group). flattened in
+				group then score order.
 
 		returns:
 			list of results ordered by relevance score (descending)
@@ -226,6 +234,27 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		target may be:
 		- list[str]: raises ValueError if any id does not exist.
 		- ChunkFilter: silently skips when no chunks match.
+		"""
+		...
+
+	@abstractmethod
+	async def scroll(
+		self,
+		collection_name: str,
+		query_filter: ChunkFilter | None = None,
+		page_size: int = 256,
+	) -> list[Chunk]:
+		"""enumerate all chunks matching a filter, without scoring.
+
+		returns chunks with their metadata and content but no vectors, used
+		for existence checks and enumeration rather than relevance ranking.
+		drains every matching chunk by paging internally. returns an empty
+		list when the collection does not exist.
+
+		args:
+			collection_name: target collection/namespace
+			query_filter: adapter-agnostic filter conditions
+			page_size: number of chunks fetched per internal page
 		"""
 		...
 

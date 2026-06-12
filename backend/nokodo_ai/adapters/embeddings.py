@@ -6,7 +6,7 @@ from typing import Annotated
 
 from pydantic import Field
 
-from .base.embeddings import BaseEmbeddingAdapter
+from .base.embeddings import BaseEmbeddingAdapter, EmbeddingInputType
 from .ollama.embeddings import OllamaEmbeddingsAdapter
 from .openai.embeddings import OpenAIEmbeddingsAdapter
 
@@ -28,6 +28,7 @@ def resolve_embeddings_adapter(provider: str, adapter: str | None) -> str | None
 
 __all__ = [
 	"BaseEmbeddingAdapter",
+	"EmbeddingInputType",
 	"EmbeddingsAdapter",
 	"resolve_embeddings_adapter",
 ]

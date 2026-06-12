@@ -10,6 +10,7 @@ from api.v1.service import vectorstores as vectorstores_service
 from api.v1.service.vectorstores import (
 	VectorChunkResourceType,
 	acl_filter,
+	child_resource_filter,
 	parent_resource_filter,
 	resource_types_filter,
 )
@@ -117,6 +118,26 @@ def test_parent_resource_filter_with_child_types() -> None:
 		"parent_resource_type": "file",
 		"parent_resource_id": "file-1",
 	}
+
+
+def test_child_resource_filter_matches_many_parents() -> None:
+	f = child_resource_filter(
+		VectorChunkResourceType.FILE,
+		["file-1", "file-2"],
+		VectorChunkResourceType.FILE_CONTENT,
+	)
+	assert len(f.all_of) == 3
+	entries = {m.key: m.value for m in f.all_of if isinstance(m, FieldMatch)}
+	assert entries == {
+		"resource_type": "file_content",
+		"parent_resource_type": "file",
+	}
+	parent_ids = next(
+		m
+		for m in f.all_of
+		if isinstance(m, FieldMatchAny) and m.key == "parent_resource_id"
+	)
+	assert set(parent_ids.values) == {"file-1", "file-2"}
 
 
 # -- acl_filter - admin path -------------------------------------------------

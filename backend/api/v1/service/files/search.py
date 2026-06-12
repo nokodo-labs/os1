@@ -184,7 +184,11 @@ async def _hybrid_search_files(
 	query_emb = (
 		query_embedding
 		if query_embedding is not None
-		else (await embed_text(text=query_text, session=db) if need_dense else None)
+		else (
+			await embed_text(text=query_text, session=db, input_type="query")
+			if need_dense
+			else None
+		)
 	)
 	text_query = query_text if need_sparse else None
 	vector_limit = max(limit, limit * _VECTOR_OVERFETCH_FACTOR)

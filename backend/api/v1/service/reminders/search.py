@@ -24,11 +24,10 @@ from api.schemas.search import (
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import resource_access_predicate
-from api.v1.service.embeddings import embed_text, embed_texts
+from api.v1.service.embeddings import embed_text
 from api.v1.service.vectorize import (
 	VectorSpec,
-	build_chunk,
-	remove_vectorized_resource,
+	vectorize_resources,
 )
 from api.v1.service.vectorstores import VectorChunkResourceType
 from nokodo_ai.types import JSONObject
@@ -93,47 +92,22 @@ async def vectorize_reminders_for_list(
 	"""re-vectorize all reminders in a list."""
 	stmt = select(Reminder).where(Reminder.list_id == str(list_id))
 	result = await session.execute(stmt)
-	valid: list[tuple[Reminder, str]] = []
-	for reminder in result.scalars().all():
-		text = _reminder_dense_text(reminder)
-		if text.strip():
-			valid.append((reminder, text))
-	if not valid:
-		return
-	embeddings = await embed_texts([text for _, text in valid], session)
-	chunks = []
-	for (reminder, _text), embedding in zip(valid, embeddings):
-		await remove_vectorized_resource(
-			spec=REMINDER_SPEC,
-			resource_id=str(reminder.id),
-			session=session,
-		)
-		chunks.append(build_chunk(REMINDER_SPEC, reminder, embedding))
-	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
+	await vectorize_resources(
+		spec=REMINDER_SPEC,
+		resources=list(result.scalars().all()),
+		session=session,
+	)
 
 
 async def vectorize_all_reminders(session: AsyncSession) -> int:
 	"""vectorize all reminders in bulk. returns count."""
 	stmt = select(Reminder)
 	result = await session.execute(stmt)
-	valid: list[tuple[Reminder, str]] = []
-	for reminder in result.scalars().all():
-		text = _reminder_dense_text(reminder)
-		if text.strip():
-			valid.append((reminder, text))
-	if not valid:
-		return 0
-	embeddings = await embed_texts([text for _, text in valid], session)
-	chunks = []
-	for (reminder, _text), embedding in zip(valid, embeddings):
-		await remove_vectorized_resource(
-			spec=REMINDER_SPEC,
-			resource_id=str(reminder.id),
-			session=session,
-		)
-		chunks.append(build_chunk(REMINDER_SPEC, reminder, embedding))
-	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
-	return len(valid)
+	return await vectorize_resources(
+		spec=REMINDER_SPEC,
+		resources=list(result.scalars().all()),
+		session=session,
+	)
 
 
 async def _autocomplete_reminders(
@@ -199,7 +173,11 @@ async def _hybrid_search_reminders(
 	query_emb = (
 		query_embedding
 		if query_embedding is not None
-		else (await embed_text(text=query_text, session=db) if need_dense else None)
+		else (
+			await embed_text(text=query_text, session=db, input_type="query")
+			if need_dense
+			else None
+		)
 	)
 	text_query = query_text if need_sparse else None
 	query_filter = vectorstore_service.resource_types_filter(
@@ -212,6 +190,7 @@ async def _hybrid_search_reminders(
 		limit=limit,
 		query_filter=query_filter,
 		normalize=params.normalize,
+		group_by="resource_id",
 	)
 	if not results:
 		return []
@@ -230,9 +209,6 @@ async def _hybrid_search_reminders(
 	)
 	db_result = await db.execute(stmt)
 	by_id = {str(reminder.id): reminder for reminder in db_result.scalars().all()}
-	score_by_rid = {
-		str(result.metadata["resource_id"]): result.score for result in results
-	}
 	items: list[SearchResultItem] = []
 	for result in results:
 		resource_id = str(result.metadata["resource_id"])
@@ -245,7 +221,7 @@ async def _hybrid_search_reminders(
 				id=TypeID(reminder.id),
 				title=reminder.title or "",
 				preview=(reminder.description[:100] if reminder.description else None),
-				score=score_by_rid.get(resource_id),
+				score=result.score,
 				parent=SearchResultParent(
 					type=SearchResourceReferenceType.REMINDER_LIST,
 					id=TypeID(reminder.list_id),

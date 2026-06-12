@@ -43,7 +43,7 @@ from api.v1.service.authorization import (
 	resource_access_predicate,
 	vector_acl_filter,
 )
-from api.v1.service.embeddings import embed_text, embed_texts
+from api.v1.service.embeddings import embed_text
 from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.projects import invalidate_project_payload_caches, load_projects
 from api.v1.service.resource_payload_cache import (
@@ -52,9 +52,9 @@ from api.v1.service.resource_payload_cache import (
 )
 from api.v1.service.vectorize import (
 	VectorSpec,
-	build_chunk,
 	remove_vectorized_resource,
 	vectorize_resource,
+	vectorize_resources,
 )
 from api.v1.service.vectorstores import VectorChunkResourceType
 from nokodo_ai.types.json import JSONObject
@@ -489,32 +489,23 @@ NOTE_SPEC: VectorSpec[Note] = VectorSpec(
 	bm25_text=_note_searchable_text,
 	metadata=_note_metadata,
 	should_revectorize=_note_should_revectorize,
+	chunker="markdown",
 	sort_key="updated_at",
 )
 
 
 async def _vectorize_notes(notes: list[Note], session: AsyncSession) -> int:
 	"""embed and upsert the given notes (with acl metadata). returns count."""
-	valid: list[tuple[Note, str]] = []
-	for n in notes:
-		text = _note_searchable_text(n)
-		if text.strip():
-			valid.append((n, text))
-	if not valid:
+	note_ids = [str(n.id) for n in notes]
+	if not note_ids:
 		return 0
-	# fetch all acl metadata in one query
-	note_ids = [str(n.id) for n, _ in valid]
 	acl_by_id = await fetch_bulk_acl_metadata(note_ids, ResourceType.NOTE, session)
-	embeddings = await embed_texts([text for _, text in valid], session)
-	chunks = []
-	for (note, _), emb in zip(valid, embeddings):
-		await remove_vectorized_resource(
-			spec=NOTE_SPEC, resource_id=str(note.id), session=session
-		)
-		acl = acl_by_id.get(str(note.id))
-		chunks.append(build_chunk(NOTE_SPEC, note, emb, extra_metadata=acl))
-	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
-	return len(valid)
+	return await vectorize_resources(
+		spec=NOTE_SPEC,
+		resources=notes,
+		session=session,
+		extra_metadata_by_id=acl_by_id,
+	)
 
 
 async def vectorize_notes(note_ids: Sequence[TypeID], session: AsyncSession) -> int:
@@ -595,7 +586,11 @@ async def _hybrid_search_notes(
 	query_emb = (
 		query_embedding
 		if query_embedding is not None
-		else (await embed_text(text=query_text, session=db) if need_dense else None)
+		else (
+			await embed_text(text=query_text, session=db, input_type="query")
+			if need_dense
+			else None
+		)
 	)
 	text_query = query_text if need_sparse else None
 	query_filter = vector_acl_filter([VectorChunkResourceType.NOTE], principal)
@@ -606,6 +601,7 @@ async def _hybrid_search_notes(
 		limit=limit,
 		query_filter=query_filter,
 		normalize=params.normalize,
+		group_by="resource_id",
 	)
 	if not results:
 		return []
@@ -617,7 +613,6 @@ async def _hybrid_search_notes(
 	)
 	db_result = await db.execute(stmt)
 	by_id = {str(n.id): n for n in db_result.scalars().all()}
-	score_by_rid = {str(r.metadata["resource_id"]): r.score for r in results}
 	items: list[SearchResultItem] = []
 	for r in results:
 		rid = str(r.metadata["resource_id"])
@@ -630,7 +625,7 @@ async def _hybrid_search_notes(
 				id=TypeID(note.id),
 				title=note.title or "",
 				preview=(note.content[:100] if note.content else None),
-				score=score_by_rid.get(rid),
+				score=r.score,
 				created_at=note.created_at,
 				updated_at=note.updated_at,
 			)

@@ -16,6 +16,7 @@ from qdrant_client.models import (
 	FilterSelector,
 	Fusion,
 	FusionQuery,
+	GroupsResult,
 	MatchAny,
 	MatchValue,
 	Modifier,
@@ -174,6 +175,8 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		query_filter: ChunkFilter | None = None,
 		fusion: str = "rrf",
 		normalize: bool = True,
+		group_by: str | None = None,
+		group_size: int = 1,
 	) -> list[ChunkSearchResult]:
 		"""search with mode determined by argument combinations."""
 		qf = self._to_qdrant_filter(query_filter) if query_filter else None
@@ -187,6 +190,8 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 				query_filter=qf,
 				fusion=fusion,
 				normalize=normalize,
+				group_by=group_by,
+				group_size=group_size,
 			)
 		if query is not None:
 			return await self._search_dense(
@@ -196,6 +201,8 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 				offset=offset,
 				query_filter=qf,
 				normalize=normalize,
+				group_by=group_by,
+				group_size=group_size,
 			)
 		if text_query is not None:
 			return await self._search_sparse(
@@ -205,6 +212,8 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 				offset=offset,
 				query_filter=qf,
 				normalize=normalize,
+				group_by=group_by,
+				group_size=group_size,
 			)
 		raise ValueError("at least one of query or text_query must be provided")
 
@@ -247,6 +256,40 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 				points_selector=FilterSelector(filter=self._to_qdrant_filter(target)),
 			)
 
+	async def scroll(
+		self,
+		collection_name: str,
+		query_filter: ChunkFilter | None = None,
+		page_size: int = 256,
+	) -> list[Chunk]:
+		"""enumerate all chunks matching a filter, paging until drained."""
+		exists = await self._collection_exists(collection_name)
+		if not exists:
+			return []
+		qf = self._to_qdrant_filter(query_filter) if query_filter else None
+		chunks: list[Chunk] = []
+		offset = None
+		while True:
+			points, offset = await self._client.scroll(
+				collection_name=collection_name,
+				scroll_filter=qf,
+				limit=page_size,
+				offset=offset,
+				with_payload=True,
+				with_vectors=False,
+			)
+			for point in points:
+				payload = dict(point.payload or {})
+				point_id = str(payload.pop("id", point.id))
+				content = str(payload.pop("content", ""))
+				nested = payload.pop("metadata", None)
+				if isinstance(nested, dict):
+					payload.update(nested)
+				chunks.append(Chunk(id=point_id, content=content, metadata=payload))
+			if offset is None:
+				break
+		return chunks
+
 	async def _search_dense(
 		self,
 		collection_name: str,
@@ -255,8 +298,22 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		offset: int | None,
 		query_filter: Filter | None,
 		normalize: bool,
+		group_by: str | None = None,
+		group_size: int = 1,
 	) -> list[ChunkSearchResult]:
 		"""dense cosine similarity search."""
+		if group_by is not None:
+			groups = await self._client.query_points_groups(
+				collection_name=collection_name,
+				query=query,
+				group_by=group_by,
+				group_size=group_size,
+				limit=limit,
+				with_payload=True,
+				with_vectors=True,
+				query_filter=query_filter,
+			)
+			return self._dense_batch(self._flatten_groups(groups), normalize)
 		response = await self._client.query_points(
 			collection_name=collection_name,
 			query=query,
@@ -266,15 +323,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 			with_vectors=True,
 			query_filter=query_filter,
 		)
-		if normalize:
-			return [
-				self._build_result(p, score=normalize_cosine_score(p.score))
-				for p in response.points
-			]
-		return [
-			self._build_result(p, score=p.score if p.score is not None else 0.0)
-			for p in response.points
-		]
+		return self._dense_batch(response.points, normalize)
 
 	async def _search_sparse(
 		self,
@@ -284,8 +333,25 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		offset: int | None,
 		query_filter: Filter | None,
 		normalize: bool,
+		group_by: str | None = None,
+		group_size: int = 1,
 	) -> list[ChunkSearchResult]:
 		"""BM25 sparse text search."""
+		if group_by is not None:
+			groups = await self._client.query_points_groups(
+				collection_name=collection_name,
+				query=Document(text=text_query, model="Qdrant/bm25"),
+				using="bm25",
+				group_by=group_by,
+				group_size=group_size,
+				limit=limit,
+				with_payload=True,
+				query_filter=query_filter,
+			)
+			points = self._flatten_groups(groups)
+			return (
+				self._normalize_batch(points) if normalize else self._raw_batch(points)
+			)
 		response = await self._client.query_points(
 			collection_name=collection_name,
 			query=Document(text=text_query, model="Qdrant/bm25"),
@@ -309,28 +375,46 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		query_filter: Filter | None,
 		fusion: str,
 		normalize: bool,
+		group_by: str | None = None,
+		group_size: int = 1,
 	) -> list[ChunkSearchResult]:
 		"""hybrid fusion of dense + BM25 search."""
 		fusion_mode = Fusion.DBSF if fusion == "dbsf" else Fusion.RRF
 		# qdrant runs prefetch stages in parallel; give each enough
 		# candidates for the fusion algorithm to work well.
 		prefetch_n = max(limit * 3, 30)
+		prefetch = [
+			Prefetch(
+				query=query,
+				using="dense",
+				limit=prefetch_n,
+				filter=query_filter,
+			),
+			Prefetch(
+				query=Document(text=text_query, model="Qdrant/bm25"),
+				using="bm25",
+				limit=prefetch_n,
+				filter=query_filter,
+			),
+		]
+		if group_by is not None:
+			groups = await self._client.query_points_groups(
+				collection_name=collection_name,
+				prefetch=prefetch,
+				query=FusionQuery(fusion=fusion_mode),
+				group_by=group_by,
+				group_size=group_size,
+				limit=limit,
+				with_payload=True,
+				query_filter=query_filter,
+			)
+			points = self._flatten_groups(groups)
+			return (
+				self._normalize_batch(points) if normalize else self._raw_batch(points)
+			)
 		response = await self._client.query_points(
 			collection_name=collection_name,
-			prefetch=[
-				Prefetch(
-					query=query,
-					using="dense",
-					limit=prefetch_n,
-					filter=query_filter,
-				),
-				Prefetch(
-					query=Document(text=text_query, model="Qdrant/bm25"),
-					using="bm25",
-					limit=prefetch_n,
-					filter=query_filter,
-				),
-			],
+			prefetch=prefetch,
 			query=FusionQuery(fusion=fusion_mode),
 			limit=limit,
 			offset=offset,
@@ -339,6 +423,33 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		if normalize:
 			return self._normalize_batch(response.points)
 		return self._raw_batch(response.points)
+
+	@staticmethod
+	def _flatten_groups(groups: GroupsResult) -> list[ScoredPoint]:
+		"""flatten grouped results into a single score-ordered point list.
+
+		groups arrive in descending order of their top hit's score and hits
+		within a group are score-descending, so the flattened list keeps a
+		sensible relevance order. the group key stays in each point's payload
+		for callers that need to regroup.
+		"""
+		return [hit for group in groups.groups for hit in group.hits]
+
+	def _dense_batch(
+		self,
+		points: list[ScoredPoint],
+		normalize: bool,
+	) -> list[ChunkSearchResult]:
+		"""convert dense points, applying per-point cosine normalization."""
+		if normalize:
+			return [
+				self._build_result(p, score=normalize_cosine_score(p.score))
+				for p in points
+			]
+		return [
+			self._build_result(p, score=p.score if p.score is not None else 0.0)
+			for p in points
+		]
 
 	@staticmethod
 	def _build_payload(chunk: Chunk) -> dict[str, object]:

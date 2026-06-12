@@ -96,7 +96,7 @@ async def replace_file_description_vectors(
 	embedding = (
 		precomputed_embedding
 		if precomputed_embedding is not None
-		else (await embed_texts([text], session))[0]
+		else (await embed_texts([text], session, input_type="document"))[0]
 	)
 	chunk = build_chunk(FILE_SPEC, file, embedding, extra_metadata=acl_metadata)
 	await vectorstore_service.upsert_chunks(chunks=[chunk], session=session)
@@ -148,7 +148,9 @@ async def vectorize_file_descriptions_bulk(session: AsyncSession) -> int:
 		return 0
 	file_ids = [str(file.id) for file, _text in valid]
 	acl_by_id = await fetch_bulk_acl_metadata(file_ids, ResourceType.FILE, session)
-	embeddings = await embed_texts([text for _file, text in valid], session)
+	embeddings = await embed_texts(
+		[text for _file, text in valid], session, input_type="document"
+	)
 	chunks = [
 		build_chunk(
 			FILE_SPEC,

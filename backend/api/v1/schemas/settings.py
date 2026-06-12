@@ -895,7 +895,9 @@ class AssetContentVectorizationSettingsPatch(BaseModel):
 		default=MISSING,
 		description="asset content text loader",
 	)
-	chunking_algorithm: Literal["auto", "recursive", "markdown"] | MissingType = Field(
+	chunking_algorithm: (
+		Literal["auto", "recursive", "markdown", "semantic"] | MissingType
+	) = Field(
 		default=MISSING,
 		description="asset content chunking algorithm",
 	)
@@ -918,6 +920,24 @@ class AssetContentVectorizationSettingsPatch(BaseModel):
 		default=MISSING,
 		ge=1,
 		description="maximum content chunks per asset; null means unlimited",
+	)
+	semantic_breakpoint_percentile: float | MissingType = Field(
+		default=MISSING,
+		ge=50.0,
+		le=100.0,
+		description="percentile threshold for semantic breakpoint detection",
+	)
+	semantic_min_sentences: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="minimum sentences per semantic chunk before merging",
+	)
+	semantic_buffer_size: int | MissingType = Field(
+		default=MISSING,
+		ge=0,
+		description=(
+			"neighbor sentence window size used when embedding for semantic splitting"
+		),
 	)
 
 

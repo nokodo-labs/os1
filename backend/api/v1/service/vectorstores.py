@@ -363,6 +363,64 @@ async def delete(
 	await vs.delete(target)
 
 
+async def scroll_resource_chunks(
+	resource_type: VectorChunkResourceType,
+	resource_ids: Sequence[str],
+	session: AsyncSession,
+	collection: str | None = None,
+	store: Vectorstore | None = None,
+) -> list[Chunk]:
+	"""fetch every stored chunk for the given resource ids.
+
+	used by verification to decide which resources are already correctly
+	vectorized: the caller compares the returned chunks against the expected
+	fingerprint and chunk set. empty when the collection does not exist yet.
+	"""
+	ids = list(resource_ids)
+	if not ids:
+		return []
+	query_filter = ChunkFilter(
+		all_of=[
+			_resource_type_condition([resource_type]),
+			FieldMatchAny(key="resource_id", values=ids),
+		]
+	)
+	return await scroll_chunks(query_filter, session, collection, store)
+
+
+def child_resource_filter(
+	parent_resource_type: VectorChunkResourceType,
+	parent_resource_ids: Sequence[str],
+	child_resource_type: VectorChunkResourceType,
+) -> ChunkFilter:
+	"""build a filter for child chunks of one or more parent resources."""
+	return ChunkFilter(
+		all_of=[
+			_resource_type_condition([child_resource_type]),
+			FieldMatch(
+				key="parent_resource_type",
+				value=parent_resource_type.value,
+			),
+			FieldMatchAny(
+				key="parent_resource_id",
+				values=list(parent_resource_ids),
+			),
+		]
+	)
+
+
+async def scroll_chunks(
+	query_filter: ChunkFilter,
+	session: AsyncSession,
+	collection: str | None = None,
+	store: Vectorstore | None = None,
+) -> list[Chunk]:
+	"""enumerate all chunks matching a filter from the default collection."""
+	coll = collection or await get_collection(session)
+	vs = store or get_vectorstore(collection=coll)
+	return await vs.scroll(query_filter=query_filter)
+
+
 async def search(
 	session: AsyncSession,
 	query: list[float] | None = None,
@@ -373,10 +431,16 @@ async def search(
 	normalize: bool | None = None,
 	collection: str | None = None,
 	store: Vectorstore | None = None,
+	group_by: str | None = None,
+	group_size: int = 1,
 ) -> list[ChunkSearchResult]:
 	"""search the given or default collection via the vectorstore facade.
 
 	fusion and normalize default to settings values when not set.
+
+	group_by collapses results per distinct value of the given payload field
+	(e.g. "resource_id"), so limit bounds distinct resources rather than raw
+	chunks. group_size sets how many chunks to keep per group (default 1).
 	"""
 	coll = collection or await get_collection(session)
 	vs = store or get_vectorstore(collection=coll)
@@ -391,6 +455,8 @@ async def search(
 			if normalize is not None
 			else settings.assets.vector.normalize_scores
 		),
+		group_by=group_by,
+		group_size=group_size,
 	)
 
 

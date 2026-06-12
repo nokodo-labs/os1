@@ -752,7 +752,7 @@ async def run_agent(
 			if _turns:
 				ctx.retrieval.query_text = "\n".join(_turns)
 				ctx.retrieval.query_embedding = await embed_text(
-					text=ctx.retrieval.query_text, session=session
+					text=ctx.retrieval.query_text, session=session, input_type="query"
 				)
 
 		streaming_parent_id: TypeID | None = initial_parent_id

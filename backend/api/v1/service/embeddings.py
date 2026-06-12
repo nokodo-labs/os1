@@ -16,7 +16,7 @@ from api.models.model import Model, ModelType
 from api.models.provider import Provider
 from api.redis import on_invalidation
 from api.settings import settings
-from nokodo_ai.embeddings import EmbeddingModel
+from nokodo_ai.embeddings import EmbeddingInputType, EmbeddingModel
 from nokodo_ai.utils.concurrency import gather_bounded
 from nokodo_ai.utils.typeid import TypeID
 
@@ -26,12 +26,19 @@ logger = logging.getLogger(__name__)
 # process-level cache - resolved once, reused for every embed call.
 # avoids a DB round-trip + object construction on every search.
 _cached_embedding_model: EmbeddingModel | None = None
+_cached_embedding_input_limit: int | None = None
+
+# input token limit used when the embedding model row has no context_window.
+# conservative default below the common 8192 cap to leave room for the
+# chars/4 estimate's error when an adapter exposes no exact tokenizer.
+DEFAULT_EMBEDDING_INPUT_LIMIT = 8192
 
 
 def reset_embedding_model_cache() -> None:
 	"""invalidate the cached embedding model (e.g. after settings change)."""
-	global _cached_embedding_model
+	global _cached_embedding_model, _cached_embedding_input_limit
 	_cached_embedding_model = None
+	_cached_embedding_input_limit = None
 
 
 # self-register for cross-worker invalidation when the embedding settings
@@ -56,6 +63,12 @@ async def _get_embedding_model(session: AsyncSession | None = None) -> Embedding
 			return await _get_embedding_model(owned)
 	model = await resolve_embedding_model(session)
 	_cached_embedding_model = build_embedding_model(model)
+	global _cached_embedding_input_limit
+	_cached_embedding_input_limit = (
+		model.context_window
+		if model.context_window is not None and model.context_window > 0
+		else DEFAULT_EMBEDDING_INPUT_LIMIT
+	)
 	logger.info(
 		"cached embedding model: %s (provider=%s)",
 		model.name,
@@ -64,8 +77,31 @@ async def _get_embedding_model(session: AsyncSession | None = None) -> Embedding
 	return _cached_embedding_model
 
 
-async def embed_text(text: str, session: AsyncSession | None = None) -> list[float]:
-	"""embed a single text string."""
+async def get_embedding_input_limit(session: AsyncSession | None = None) -> int:
+	"""return the embedding model's max input tokens (context_window).
+
+	falls back to DEFAULT_EMBEDDING_INPUT_LIMIT when the model row stores no
+	context window. resolves and caches the model on first call.
+	"""
+	await _get_embedding_model(session)
+	return _cached_embedding_input_limit or DEFAULT_EMBEDDING_INPUT_LIMIT
+
+
+async def count_input_tokens(
+	texts: list[str],
+	session: AsyncSession | None = None,
+) -> list[int] | None:
+	"""exact token counts per text, or None when the adapter has no tokenizer."""
+	model = await _get_embedding_model(session)
+	return model.count_tokens(texts)
+
+
+async def embed_text(
+	text: str,
+	session: AsyncSession | None = None,
+	input_type: EmbeddingInputType = "query",
+) -> list[float]:
+	"""embed a single text string. defaults to the query retrieval role."""
 	model = await _get_embedding_model(session)
 	extra: dict[str, object] = {
 		"model": model.model_name,
@@ -75,7 +111,7 @@ async def embed_text(text: str, session: AsyncSession | None = None) -> list[flo
 	started = time.perf_counter()
 	logger.info("embedding call started", extra=extra)
 	try:
-		vector = (await model.embed([text]))[0]
+		vector = (await model.embed([text], input_type=input_type))[0]
 	except Exception:
 		logger.exception("embedding call failed", extra=extra)
 		raise
@@ -96,9 +132,11 @@ async def embed_texts(
 	batch_size: int | None = None,
 	parallel: bool = True,
 	max_concurrency: int | None = None,
+	input_type: EmbeddingInputType = "document",
 ) -> list[list[float]]:
 	"""embed a list of texts in batches. preserves input order.
 
+	defaults to the document retrieval role (this is the bulk indexing path).
 	batch_size defaults to settings.assets.embeddings.batch_size when not set.
 	parallel=True (default): batches are embedded concurrently, capped by
 	max_concurrency.
@@ -132,14 +170,14 @@ async def embed_texts(
 	try:
 		if parallel:
 			nested = await gather_bounded(
-				(model.embed(b) for b in batches),
+				(model.embed(b, input_type=input_type) for b in batches),
 				limit=actual_concurrency,
 			)
 			vectors = [vec for batch in nested for vec in batch]
 		else:
 			vectors = []
 			for batch in batches:
-				vectors.extend(await model.embed(batch))
+				vectors.extend(await model.embed(batch, input_type=input_type))
 	except Exception:
 		logger.exception("embedding batch failed", extra=extra)
 		raise

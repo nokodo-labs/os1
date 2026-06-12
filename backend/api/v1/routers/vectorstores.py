@@ -89,7 +89,7 @@ async def search_collection(
 	"""
 	require_admin(principal)
 	coll = collection or await vectorstore_service.get_collection(db)
-	query_emb = await embed_text(q, db)
+	query_emb = await embed_text(q, db, input_type="query")
 
 	text_query: str | None = q
 	query_vec: list[float] | None = query_emb
