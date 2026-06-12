@@ -153,18 +153,21 @@ def _file_entry_fallback_filename(
 	owui_file_id: str | None,
 	url: str | None,
 	media_type: str | None,
-) -> str | None:
+) -> str:
 	url_name = (
 		_filename_from_value(url) if url and not url.startswith("data:") else None
 	)
 	if url_name and url_name != "content":
 		return url_name
-	if owui_file_id is None:
-		return None
 	extension = mimetypes.guess_extension(media_type or "") or ""
 	if extension == ".jpe":
 		extension = ".jpg"
-	return f"open-webui-{owui_file_id}{extension}"[:255]
+	stem = (
+		f"open-webui-{owui_file_id}"
+		if owui_file_id is not None
+		else "open-webui-attachment"
+	)
+	return f"{stem}{extension}"[:255]
 
 
 def _file_entry_media_type(
@@ -376,10 +379,11 @@ async def _append_file_parts(
 				seen.add(url)
 	for file_entry in raw_files:
 		key = _file_entry_id(file_entry) or _file_entry_url(file_entry)
-		if key is not None:
-			if key in seen:
-				continue
-			seen.add(key)
+		# re-import must still run _import_file_entry for files already on the
+		# message so its dedup path can repair rows from older imports (NULL
+		# filename or message_id) without re-downloading; only the duplicate
+		# content part is suppressed.
+		already_present = key is not None and key in seen
 		file_part = await _import_file_entry(
 			file_entry,
 			client=client,
@@ -390,5 +394,7 @@ async def _append_file_parts(
 			deployment=deployment,
 			summary=summary,
 		)
-		if file_part is not None:
+		if key is not None:
+			seen.add(key)
+		if file_part is not None and not already_present:
 			message.content = [*(message.content or []), file_part]

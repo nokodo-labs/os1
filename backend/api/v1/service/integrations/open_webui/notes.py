@@ -9,7 +9,6 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.database.main import async_session_local, safe_rollback
 from api.models.note import Note
 from api.settings import OpenWebUIDeployment
 from api.v1.service.integrations.open_webui.common import (
@@ -138,6 +137,9 @@ async def _import_notes(
 				existing.created_at = created_at
 			if updated_at:
 				existing.updated_at = updated_at
+			# include in vectorization so a re-import fills any gap from a
+			# previous run where the note was stored but not vectorized.
+			summary.note_ids.append(existing.id)
 			summary.notes_skipped += 1
 			continue
 		note = Note(
@@ -155,28 +157,3 @@ async def _import_notes(
 			note.updated_at = updated_at
 		summary.note_ids.append(note.id)
 		summary.notes_imported += 1
-
-
-async def _import_notes_chunk(
-	notes: list[dict[str, Any]],
-	owner_id: TypeID,
-	deployment: OpenWebUIDeployment,
-	deployment_origin: str,
-) -> ImportSummary:
-	"""import a slice of notes in a dedicated session and commit it."""
-	local = ImportSummary(deployment_origin=deployment_origin)
-	async with async_session_local() as session:
-		try:
-			await _import_notes(
-				notes,
-				session=session,
-				owner_id=owner_id,
-				deployment=deployment,
-				summary=local,
-			)
-			await session.commit()
-		except Exception as exc:
-			await safe_rollback(session)
-			logger.exception("failed to import Open WebUI notes")
-			local.add_error(f"notes import failed: {type(exc).__name__}")
-	return local

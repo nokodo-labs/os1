@@ -125,6 +125,26 @@ def _api_test_stub_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _api_test_cap_import_write_concurrency(monkeypatch: pytest.MonkeyPatch) -> None:
+	"""Bound the Open WebUI import fan-out so the suite can't exhaust Postgres.
+
+	the import fans out ``db_write_concurrency`` consumer sessions on top of the
+	caller's own connection, each a distinct connection (the per-test engine
+	uses NullPool, so connections track live work). pytest-xdist runs workers as
+	separate processes, so an in-process semaphore cannot coordinate them - the
+	only cross-process ceiling is the server's ``max_connections``. this product
+	(workers * per-import connections) is the one thing that scales with both
+	test- and process-level concurrency, so an unbounded fan-out overruns the
+	ceiling regardless of how the suite is launched. pinning it to 1 keeps each
+	worker's import peak at two connections (caller + one consumer), so the
+	worst case stays far below the server limit at any ``-n``. the dedicated
+	concurrency test overrides this with a higher value to still exercise the
+	overlapping write path on a single worker.
+	"""
+	monkeypatch.setattr(settings.integrations.open_webui, "db_write_concurrency", 1)
+
+
+@pytest.fixture(autouse=True)
 def _api_test_neutralize_durable_tasks(monkeypatch: pytest.MonkeyPatch) -> None:
 	"""prevent durable task enqueues from hitting the (unstarted) Redis broker.
 
@@ -811,9 +831,21 @@ async def _create_async_engine_with_fallback(url: URL) -> AsyncEngine:
 	candidates = _deduplicate_urls(candidates)
 	errors: list[Exception] = []
 	for candidate in candidates:
+		# a small bounded pool, not NullPool. NullPool opens a fresh socket per
+		# operation; across the whole suite that churn exhausts the Windows
+		# ephemeral TCP port range (connections linger in TIME_WAIT) and raises
+		# "Address already in use". a QueuePool reuses connections so socket
+		# churn stays low, while a low pool_size + max_overflow caps each
+		# worker's connections so workers * pool-total stays under the server's
+		# max_connections at any -n concurrency. the import fan-out is bounded
+		# separately (see _api_test_cap_import_write_concurrency) so a single
+		# test never needs more than this pool provides.
 		engine = create_async_engine(
 			candidate.render_as_string(hide_password=False),
 			echo=False,
+			pool_size=2,
+			max_overflow=5,
+			pool_timeout=30,
 		)
 		try:
 			async with engine.connect() as conn:

@@ -17,7 +17,7 @@ from nokodo_ai import (
 	tool,
 )
 from nokodo_ai.adapters.chat import BaseChatAdapter, ChatGenerationParams
-from nokodo_ai.adapters.embeddings import BaseEmbeddingAdapter
+from nokodo_ai.adapters.embeddings import BaseEmbeddingAdapter, EmbeddingInputType
 from nokodo_ai.context import ToolCallContext
 from nokodo_ai.tool import ToolDefinition
 
@@ -208,9 +208,15 @@ class _StubEmbeddingAdapter(BaseEmbeddingAdapter):
 		self.seen: list[list[str]] = []
 		self.seen_models: list[str] = []
 
-	async def embed(self, texts: list[str], model: str) -> list[list[float]]:
+	async def embed(
+		self,
+		texts: list[str],
+		model: str,
+		input_type: EmbeddingInputType | None = None,
+	) -> list[list[float]]:
 		self.seen.append(texts)
 		self.seen_models.append(model)
+		_ = input_type
 		return [[float(len(t))] for t in texts]
 
 

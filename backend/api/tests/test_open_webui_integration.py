@@ -26,11 +26,14 @@ from api.permissions import ActionPermission, DefaultResourceAccess
 from api.settings import OpenWebUIDeployment, settings
 from api.v1.routers.integrations import open_webui as owui_router
 from api.v1.service import tasks as task_service
+from api.v1.service import vectorstores as vectorstores_service
 from api.v1.service.auth import Principal
 from api.v1.service.integrations import open_webui
 from api.v1.service.integrations.open_webui import files as owui_files
 from api.v1.service.integrations.open_webui import imports as owui_imports
+from api.v1.service.vectorstores import VectorChunkResourceType
 from api.v1.tasks import open_webui as owui_tasks
+from nokodo_ai.adapters.base.vectorstores import Chunk
 
 
 def _owui_meta(metadata: Mapping[str, object]) -> dict[str, object]:
@@ -1149,6 +1152,52 @@ async def test_open_webui_import_downloads_generated_image_files(
 
 
 @pytest.mark.asyncio
+async def test_open_webui_import_names_inline_data_url_attachment(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	_allow_test_deployment(monkeypatch)
+	_install_fake_open_webui_client(
+		monkeypatch,
+		chats=[
+			_chat_with_messages(
+				current_id="m1",
+				messages={
+					"m1": {
+						"id": "m1",
+						"role": "user",
+						"content": "inline image",
+						"files": [
+							{
+								"type": "image",
+								"url": "data:image/png;base64,iVBORwQK",
+							}
+						],
+					}
+				},
+			)
+		],
+	)
+	principal = await _persisted_principal(db_session, *_all_import_permissions())
+
+	summary = await open_webui.import_from_open_webui(
+		deployment_origin="https://open-webui.example.com",
+		credential="token",
+		include_chats=True,
+		include_memories=False,
+		session=db_session,
+		principal=principal,
+	)
+
+	assert summary.files_imported == 1
+	file = (await db_session.scalars(select(File))).one()
+	# inline data-url files carry no Open WebUI id, so a usable fallback name is
+	# generated instead of leaving the filename NULL.
+	assert file.filename == "open-webui-attachment.png"
+	assert file.mime_type == "image/png"
+
+
+@pytest.mark.asyncio
 async def test_open_webui_import_skips_failed_file_storage_without_skipping_chat(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
@@ -1353,6 +1402,79 @@ async def test_open_webui_import_deduplicates_chats_projects_messages_and_files(
 
 
 @pytest.mark.asyncio
+async def test_open_webui_reimport_repairs_broken_file_filename_and_message_link(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	_allow_test_deployment(monkeypatch)
+	_install_fake_open_webui_client(
+		monkeypatch,
+		files={
+			"file_1": (
+				{
+					"id": "file_1",
+					"filename": "notes.txt",
+					"meta": {"content_type": "text/plain"},
+				},
+				b"hello from owui",
+				"text/plain",
+			)
+		},
+		chats=[
+			_chat_with_messages(
+				chat_id="chat_1",
+				current_id="m1",
+				messages={
+					"m1": {
+						"id": "m1",
+						"role": "user",
+						"content": "see attached",
+						"files": [{"id": "file_1", "name": "notes.txt"}],
+					}
+				},
+			)
+		],
+	)
+	principal = await _persisted_principal(db_session, *_all_import_permissions())
+
+	await open_webui.import_from_open_webui(
+		deployment_origin="https://open-webui.example.com",
+		credential="token",
+		include_chats=True,
+		include_memories=False,
+		session=db_session,
+		principal=principal,
+	)
+
+	# simulate a row left broken by an older import: NULL filename and an
+	# unresolvable thread reference (NULL message link). commit so the import's
+	# separate per-chat worker session observes the broken row.
+	imported = (await db_session.scalars(select(File))).one()
+	imported.filename = None
+	imported.message_id = None
+	await db_session.commit()
+
+	await open_webui.import_from_open_webui(
+		deployment_origin="https://open-webui.example.com",
+		credential="token",
+		include_chats=True,
+		include_memories=False,
+		session=db_session,
+		principal=principal,
+	)
+
+	# drop identity-map copies so the reads observe the worker session's commit.
+	db_session.expire_all()
+	files = (await db_session.scalars(select(File))).all()
+	messages = (await db_session.scalars(select(Message))).all()
+	# re-import repairs in place without creating a duplicate row.
+	assert len(files) == 1
+	repaired = files[0]
+	assert repaired.filename == "notes.txt"
+	assert repaired.message_id == messages[0].id
+
+
+@pytest.mark.asyncio
 async def test_open_webui_import_deduplicates_memories(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
@@ -1442,6 +1564,101 @@ async def test_open_webui_import_deduplicates_notes(
 	assert notes[0].updated_at == datetime(2023, 11, 14, 22, 15, tzinfo=UTC)
 	assert _owui_meta(notes[0].metadata_)["id"] == "note_1"
 	assert _owui_meta(notes[0].metadata_)["is_pinned"] is True
+
+
+@pytest.mark.asyncio
+async def test_open_webui_reimport_skips_already_vectorized(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""a re-import re-vectorizes nothing when stored vectors are current.
+
+	the autouse stub drops upserts on the floor, so here we keep an in-memory
+	chunk store and serve it back through scroll. that lets filter_unvectorized
+	observe the first run's vectors; the second import must drop every
+	already-current memory and note before vectorizing, upserting nothing.
+	"""
+	_allow_test_deployment(monkeypatch)
+	stored_chunks: list[Chunk] = []
+	upsert_batches: list[int] = []
+
+	async def _fake_upsert(*, chunks: list[Chunk], session: object) -> None:
+		_ = session
+		stored_chunks.extend(chunks)
+		upsert_batches.append(len(chunks))
+
+	async def _fake_scroll_resource_chunks(
+		resource_type: VectorChunkResourceType,
+		resource_ids: list[str],
+		session: object,
+		*args: object,
+		**kwargs: object,
+	) -> list[Chunk]:
+		_ = (session, args, kwargs)
+		wanted = {str(rid) for rid in resource_ids}
+		return [
+			chunk
+			for chunk in stored_chunks
+			if chunk.metadata.get("resource_type") == resource_type.value
+			and chunk.metadata.get("resource_id") in wanted
+		]
+
+	monkeypatch.setattr(vectorstores_service, "upsert_chunks", _fake_upsert)
+	monkeypatch.setattr(
+		vectorstores_service,
+		"scroll_resource_chunks",
+		_fake_scroll_resource_chunks,
+	)
+
+	_install_fake_open_webui_client(
+		monkeypatch,
+		memories=[{"id": "memory_1", "content": "likes concise imports"}],
+		notes=[
+			{
+				"id": "note_1",
+				"title": "weekly plan",
+				"data": {"content": {"md": "- ship imports"}},
+			}
+		],
+	)
+	principal = await _persisted_principal(
+		db_session,
+		ActionPermission.MEMORIES_CREATE,
+		ActionPermission.NOTES_CREATE,
+	)
+
+	first = await open_webui.import_from_open_webui(
+		deployment_origin="https://open-webui.example.com",
+		credential="token",
+		include_chats=False,
+		include_memories=True,
+		include_notes=True,
+		session=db_session,
+		principal=principal,
+	)
+
+	assert first.memories_imported == 1
+	assert first.notes_imported == 1
+	# one memory chunk + one note chunk were vectorized on the first run.
+	chunks_after_first = len(stored_chunks)
+	assert chunks_after_first == 2
+
+	upsert_batches.clear()
+	second = await open_webui.import_from_open_webui(
+		deployment_origin="https://open-webui.example.com",
+		credential="token",
+		include_chats=False,
+		include_memories=True,
+		include_notes=True,
+		session=db_session,
+		principal=principal,
+	)
+
+	assert second.memories_imported == 0
+	assert second.notes_imported == 0
+	# the filter dropped every already-current resource: nothing re-vectorized.
+	assert upsert_batches == []
+	assert len(stored_chunks) == chunks_after_first
 
 
 def _bulk_concurrency_dataset(

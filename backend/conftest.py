@@ -10,6 +10,9 @@ from collections.abc import Callable
 from pathlib import Path
 
 
+pytest_plugins = ("tests.live_progress",)
+
+
 def pytest_asyncio_loop_factories() -> dict[
 	str, Callable[[], asyncio.AbstractEventLoop]
 ]:

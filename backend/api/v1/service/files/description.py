@@ -89,17 +89,10 @@ async def build_file_description(
 
 def _description_prompt(file: File, content_chunks: list[FileContentChunk]) -> str:
 	"""build the user prompt for file description generation."""
-	metadata = [
-		f"filename: {file.filename or 'file'}",
-		f"mime type: {file.mime_type or 'unknown'}",
-		f"size bytes: {file.size_bytes if file.size_bytes is not None else 'unknown'}",
-	]
 	if content_chunks:
 		excerpt = _content_excerpt(content_chunks)
-		metadata.append("contents excerpt:\n" + excerpt)
-	else:
-		metadata.append("contents excerpt: unavailable")
-	return "\n".join(metadata)
+		return "contents excerpt:\n" + excerpt
+	return "contents excerpt: unavailable"
 
 
 def _content_excerpt(content_chunks: list[FileContentChunk]) -> str:

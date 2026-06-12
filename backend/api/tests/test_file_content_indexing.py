@@ -238,8 +238,8 @@ def test_file_vector_metadata_uses_file_resource_identity() -> None:
 	assert chunk.metadata["resource_type"] == FILE_RESOURCE_TYPE
 	assert chunk.metadata["resource_id"] == str(file_id)
 	assert chunk.metadata["owner_id"] == str(owner_id)
-	assert "chunk_index" not in chunk.metadata
-	assert "chunk_count" not in chunk.metadata
+	assert chunk.metadata["chunk_index"] == 0
+	assert chunk.metadata["chunk_count"] == 1
 	assert "chunk_source" not in chunk.metadata
 	assert "parent_resource_type" not in chunk.metadata
 	assert "parent_resource_id" not in chunk.metadata
@@ -611,6 +611,14 @@ async def test_vectorize_file_content_upserts_content_chunks(monkeypatch) -> Non
 		settings.assets.content_vectorization.chunking_algorithm
 	)
 	assert metadata["acl_resource_id"] == str(file.id)
+	# the same fingerprint is stamped on chunks and recorded on the file row so
+	# a later verify pass can treat the file as already vectorized.
+	assert isinstance(metadata["vec_fingerprint"], str)
+	assert metadata["vec_fingerprint"]
+	assert (
+		file.metadata_[content_vectorization_service.CONTENT_VECTOR_FINGERPRINT_KEY]
+		== metadata["vec_fingerprint"]
+	)
 
 
 def test_document_model_fallback_uses_extracted_text_density() -> None:
@@ -679,3 +687,208 @@ async def test_markdown_chunker_keeps_markdown_metadata(monkeypatch) -> None:
 	assert len(chunks) > 1
 	assert {chunk.metadata["text_format"] for chunk in chunks} == {"markdown"}
 	assert chunks[0].text.startswith("# first")
+
+
+# content vectorization fingerprint + idempotency
+
+
+def _content_file(checksum: str | None = "sum-1") -> File:
+	file = _file_record("doc.txt", "text/plain", b"body")
+	file.checksum_sha256 = checksum
+	return file
+
+
+def _stub_no_loader_model(monkeypatch) -> None:
+	async def _resolve(session: AsyncSession) -> TaskChatModel | None:
+		_ = session
+		return None
+
+	monkeypatch.setattr(
+		content_vectorization_service,
+		"resolve_content_loader_chat_model",
+		_resolve,
+	)
+
+
+def _content_chunk(
+	file_id: str,
+	fingerprint: str,
+	chunk_index: int = 0,
+	chunk_count: int = 1,
+) -> VectorChunk:
+	return VectorChunk(
+		id=f"{file_id}-{chunk_index}",
+		content="body",
+		embedding=[0.0, 0.0],
+		metadata={
+			"parent_resource_id": file_id,
+			"vec_fingerprint": fingerprint,
+			"chunk_index": chunk_index,
+			"chunk_count": chunk_count,
+		},
+	)
+
+
+async def test_file_content_fingerprint_is_stable(monkeypatch) -> None:
+	_stub_no_loader_model(monkeypatch)
+	file = _content_file()
+	async with AsyncSession() as session:
+		first = await content_vectorization_service.file_content_fingerprint(
+			file, session
+		)
+		second = await content_vectorization_service.file_content_fingerprint(
+			file, session
+		)
+	assert first == second
+
+
+async def test_file_content_fingerprint_changes_with_checksum(monkeypatch) -> None:
+	_stub_no_loader_model(monkeypatch)
+	async with AsyncSession() as session:
+		base = await content_vectorization_service.file_content_fingerprint(
+			_content_file("sum-1"), session
+		)
+		other = await content_vectorization_service.file_content_fingerprint(
+			_content_file("sum-2"), session
+		)
+	assert base != other
+
+
+async def test_file_content_fingerprint_changes_with_settings(monkeypatch) -> None:
+	_stub_no_loader_model(monkeypatch)
+	file = _content_file()
+	async with AsyncSession() as session:
+		base = await content_vectorization_service.file_content_fingerprint(
+			file, session
+		)
+		monkeypatch.setattr(settings.assets.content_vectorization, "target_tokens", 999)
+		after_tokens = await content_vectorization_service.file_content_fingerprint(
+			file, session
+		)
+		monkeypatch.setattr(settings.assets.content_vectorization, "loader", "plain")
+		after_loader = await content_vectorization_service.file_content_fingerprint(
+			file, session
+		)
+	assert base != after_tokens
+	assert after_tokens != after_loader
+
+
+async def test_file_content_fingerprint_changes_with_model(monkeypatch) -> None:
+	file = _content_file()
+
+	async def _no_model(session: AsyncSession) -> TaskChatModel | None:
+		_ = session
+		return None
+
+	monkeypatch.setattr(
+		content_vectorization_service,
+		"resolve_content_loader_chat_model",
+		_no_model,
+	)
+	async with AsyncSession() as session:
+		without_model = await content_vectorization_service.file_content_fingerprint(
+			file, session
+		)
+
+	model, _adapter = _task_chat_model("extracted")
+
+	async def _with_model(session: AsyncSession) -> TaskChatModel | None:
+		_ = session
+		return model
+
+	monkeypatch.setattr(
+		content_vectorization_service,
+		"resolve_content_loader_chat_model",
+		_with_model,
+	)
+	async with AsyncSession() as session:
+		with_model = await content_vectorization_service.file_content_fingerprint(
+			file, session
+		)
+	assert without_model != with_model
+
+
+async def test_filter_unvectorized_files_uses_recorded_fingerprint(monkeypatch) -> None:
+	_stub_no_loader_model(monkeypatch)
+	file = _content_file()
+
+	async def _empty_scroll(*args: object, **kwargs: object) -> list[VectorChunk]:
+		# no stored chunks (media file) - currency must come from the row.
+		return []
+
+	monkeypatch.setattr(
+		content_vectorization_service.vectorstore_service,
+		"scroll_chunks",
+		_empty_scroll,
+	)
+	async with AsyncSession() as session:
+		fingerprint = await content_vectorization_service.file_content_fingerprint(
+			file, session
+		)
+		content_vectorization_service._record_content_fingerprint(file, fingerprint)
+		pending = await content_vectorization_service.filter_unvectorized_files(
+			[file], session
+		)
+	assert pending == []
+
+
+async def test_filter_unvectorized_files_falls_back_to_chunks(monkeypatch) -> None:
+	_stub_no_loader_model(monkeypatch)
+	current = _content_file("sum-current")
+	stale = _content_file("sum-stale")
+	missing = _content_file("sum-missing")
+
+	async with AsyncSession() as session:
+		current_fp = await content_vectorization_service.file_content_fingerprint(
+			current, session
+		)
+
+		stored = [
+			_content_chunk(str(current.id), current_fp, chunk_index=0, chunk_count=2),
+			_content_chunk(str(current.id), current_fp, chunk_index=1, chunk_count=2),
+			_content_chunk(str(stale.id), "old-fingerprint"),
+		]
+
+		async def _scroll(*args: object, **kwargs: object) -> list[VectorChunk]:
+			return stored
+
+		monkeypatch.setattr(
+			content_vectorization_service.vectorstore_service,
+			"scroll_chunks",
+			_scroll,
+		)
+		pending = await content_vectorization_service.filter_unvectorized_files(
+			[current, stale, missing], session
+		)
+	pending_ids = {str(file.id) for file in pending}
+	assert pending_ids == {str(stale.id), str(missing.id)}
+
+
+async def test_filter_unvectorized_files_keeps_incomplete_chunk_set(
+	monkeypatch,
+) -> None:
+	_stub_no_loader_model(monkeypatch)
+	file = _content_file()
+
+	async with AsyncSession() as session:
+		fingerprint = await content_vectorization_service.file_content_fingerprint(
+			file, session
+		)
+
+		# only one of two expected chunks made it to the store (partial upsert).
+		stored = [
+			_content_chunk(str(file.id), fingerprint, chunk_index=0, chunk_count=2),
+		]
+
+		async def _scroll(*args: object, **kwargs: object) -> list[VectorChunk]:
+			return stored
+
+		monkeypatch.setattr(
+			content_vectorization_service.vectorstore_service,
+			"scroll_chunks",
+			_scroll,
+		)
+		pending = await content_vectorization_service.filter_unvectorized_files(
+			[file], session
+		)
+	assert [str(f.id) for f in pending] == [str(file.id)]

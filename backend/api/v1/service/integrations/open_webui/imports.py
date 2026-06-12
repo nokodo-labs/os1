@@ -11,15 +11,19 @@ from typing import Any, Literal
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from api.database.main import async_session_local, safe_rollback
 from api.models.file import File
+from api.models.memory import Memory
+from api.models.note import Note
 from api.models.project import Project
 from api.open_webui import OpenWebUIAuthError, OpenWebUIClient, OpenWebUIError
 from api.permissions import ActionPermission
 from api.settings import OpenWebUIDeployment, settings
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
+from api.v1.service.files.content_vectorization import filter_unvectorized_files
 from api.v1.service.integrations.open_webui.chats import (
 	ModelAgentResolver,
 	_chat_folder_id,
@@ -41,11 +45,12 @@ from api.v1.service.integrations.open_webui.folders import (
 	_import_folder_projects,
 	_import_pinned_chats_project,
 )
-from api.v1.service.integrations.open_webui.memories import _import_memories_chunk
-from api.v1.service.integrations.open_webui.notes import _import_notes_chunk
-from api.v1.service.memories import vectorize_memories
-from api.v1.service.notes import vectorize_notes
+from api.v1.service.integrations.open_webui.memories import _import_memories
+from api.v1.service.integrations.open_webui.notes import _import_notes
+from api.v1.service.memories import MEMORY_SPEC, vectorize_memories
+from api.v1.service.notes import NOTE_SPEC, vectorize_notes
 from api.v1.service.threads import vectorize_threads
+from api.v1.service.vectorize import filter_unvectorized
 from api.v1.tasks.files import start_file_content_vectorization_task
 from nokodo_ai.utils.concurrency import gather_bounded
 from nokodo_ai.utils.typeid import TypeID
@@ -85,15 +90,6 @@ def _merge_import_summary(target: ImportSummary, source: ImportSummary) -> None:
 	target.thread_ids.extend(source.thread_ids)
 	for error in source.errors or ():
 		target.add_error(error)
-
-
-def _chunked[ItemT](items: list[ItemT], chunks: int) -> list[list[ItemT]]:
-	"""split items into at most ``chunks`` contiguous, near-even slices."""
-	if not items:
-		return []
-	chunk_count = max(1, min(chunks, len(items)))
-	size = -(-len(items) // chunk_count)
-	return [items[start : start + size] for start in range(0, len(items), size)]
 
 
 class _ProgressReporter:
@@ -205,24 +201,33 @@ async def _enqueue_imported_file_processing(
 	file_ids = summary.processing_file_ids
 	if not file_ids:
 		return
-	existing = set(
+	files = list(
 		(
 			await session.scalars(
-				select(File.id).where(
+				select(File).where(
 					File.id.in_([str(file_id) for file_id in file_ids]),
 					File.deleted_at.is_(None),
 				)
 			)
 		).all()
 	)
-	for file_id in file_ids:
-		if str(file_id) not in existing:
-			continue
+	if not files:
+		return
+	# skip files whose content vectors already match the current pipeline
+	# inputs so a re-import only fills gaps left by a prior run.
+	try:
+		pending = await filter_unvectorized_files(files, session)
+	except Exception:
+		logger.exception("failed to check imported file vectorization state")
+		pending = files
+	for file in pending:
 		try:
-			await start_file_content_vectorization_task(session, principal, file_id)
+			await start_file_content_vectorization_task(
+				session, principal, TypeID(file.id)
+			)
 		except Exception:
 			logger.exception(
-				"failed to enqueue processing for imported file %s", file_id
+				"failed to enqueue processing for imported file %s", file.id
 			)
 
 
@@ -237,19 +242,68 @@ async def _vectorize_imported_resources(
 	vectorized from their title only - thread maintenance later generates a
 	catalog summary and re-vectorizes. failures are logged, never raised - a
 	vectorization gap must not fail an otherwise successful import.
+
+	memories and notes are filtered to those whose stored vectors are missing
+	or stale (fingerprint mismatch) first, so a re-import only fills gaps left
+	by a prior run and is a no-op when everything is already current. threads
+	only ever contain freshly created rows here (re-imported chats are
+	skipped), so they need no such filter.
 	"""
 	try:
-		await vectorize_memories(summary.memory_ids, session)
+		memory_ids = await _pending_memory_ids(summary.memory_ids, session)
+		await vectorize_memories(memory_ids, session)
 	except Exception:
 		logger.exception("failed to vectorize imported memories")
 	try:
-		await vectorize_notes(summary.note_ids, session)
+		note_ids = await _pending_note_ids(summary.note_ids, session)
+		await vectorize_notes(note_ids, session)
 	except Exception:
 		logger.exception("failed to vectorize imported notes")
 	try:
 		await vectorize_threads(summary.thread_ids, session)
 	except Exception:
 		logger.exception("failed to vectorize imported threads")
+
+
+async def _pending_memory_ids(
+	memory_ids: list[TypeID],
+	session: AsyncSession,
+) -> list[TypeID]:
+	"""return imported memory ids whose vectors are missing or stale."""
+	if not memory_ids:
+		return []
+	rows = list(
+		(
+			await session.scalars(
+				select(Memory).where(Memory.id.in_([str(mid) for mid in memory_ids]))
+			)
+		).all()
+	)
+	pending = await filter_unvectorized(MEMORY_SPEC, rows, session)
+	return [TypeID(memory.id) for memory in pending]
+
+
+async def _pending_note_ids(
+	note_ids: list[TypeID],
+	session: AsyncSession,
+) -> list[TypeID]:
+	"""return imported note ids whose vectors are missing or stale."""
+	if not note_ids:
+		return []
+	rows = list(
+		(
+			await session.scalars(
+				select(Note)
+				.where(
+					Note.id.in_([str(nid) for nid in note_ids]),
+					Note.deleted_at.is_(None),
+				)
+				.options(selectinload(Note.projects))
+			)
+		).all()
+	)
+	pending = await filter_unvectorized(NOTE_SPEC, rows, session)
+	return [TypeID(note.id) for note in pending]
 
 
 async def _import_one_chat_worker(
@@ -694,8 +748,10 @@ async def import_from_open_webui(
 				)
 			await _report_progress(progress_callback, 85, "chats imported")
 
-		# phase 3: write memories + notes in parallel; each chunk uses its own
-		# session internally so these are safe to run concurrently.
+		# phase 3: write memories and notes sequentially through the main session.
+		# each batch is committed independently so a notes failure leaves memories
+		# durable. using the caller's session avoids opening extra pool connections,
+		# which prevents connection exhaustion on deployments near max_connections.
 		if include_memories or include_notes:
 			_mem_notes_start = 85 if include_chats else 25
 			_what = (
@@ -706,49 +762,28 @@ async def import_from_open_webui(
 				else "importing notes"
 			)
 			await _report_progress(progress_callback, _mem_notes_start, _what)
-			# durably persist principal so worker sessions can see it.
 			await session.commit()
 
-			async def _write_memories() -> list[ImportSummary]:
-				if not memories:
-					return []
-				return await gather_bounded(
-					(
-						_import_memories_chunk(
-							chunk,
-							owner_id=owner_id,
-							deployment=deployment,
-							deployment_origin=origin,
-						)
-						for chunk in _chunked(memories, write_concurrency)
-					),
-					limit=write_concurrency,
+			if include_memories and memories:
+				await _import_memories(
+					memories,
+					session=session,
+					owner_id=owner_id,
+					deployment=deployment,
+					summary=summary,
 				)
+				await session.commit()
 
-			async def _write_notes() -> list[ImportSummary]:
-				if not notes:
-					return []
-				return await gather_bounded(
-					(
-						_import_notes_chunk(
-							chunk,
-							owner_id=owner_id,
-							deployment=deployment,
-							deployment_origin=origin,
-						)
-						for chunk in _chunked(notes, write_concurrency)
-					),
-					limit=write_concurrency,
+			if include_notes and notes:
+				await _import_notes(
+					notes,
+					session=session,
+					owner_id=owner_id,
+					deployment=deployment,
+					summary=summary,
 				)
+				await session.commit()
 
-			mem_write_results, note_write_results = await asyncio.gather(
-				_write_memories(),
-				_write_notes(),
-			)
-			for r in mem_write_results:
-				_merge_import_summary(summary, r)
-			for r in note_write_results:
-				_merge_import_summary(summary, r)
 			await _report_progress(progress_callback, 88, "all resources imported")
 
 	await session.commit()

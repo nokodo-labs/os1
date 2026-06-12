@@ -71,6 +71,7 @@ from api.v1.service.resource_payload_cache import (
 	invalidate_resource_payload_cache,
 )
 from api.v1.tasks.files import start_file_processing_task
+from nokodo_ai.utils.files import corrected_mime_type
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -175,6 +176,35 @@ async def _stream_upload(upload: UploadFile) -> AsyncIterator[bytes]:
 		yield chunk
 
 
+async def _peek_stream(
+	source: AsyncIterator[bytes], peek_bytes: int
+) -> tuple[bytes, AsyncIterator[bytes]]:
+	"""read the leading bytes of a byte stream without consuming it.
+
+	returns the first peek_bytes (fewer if the stream is shorter) and a new
+	iterator that re-emits the buffered chunks followed by the remainder of
+	the source, so the stream can still be written in full.
+	"""
+	it = aiter(source)
+	buffered: list[bytes] = []
+	head = bytearray()
+	while len(head) < peek_bytes:
+		try:
+			chunk = await anext(it)
+		except StopAsyncIteration:
+			break
+		buffered.append(chunk)
+		head.extend(chunk)
+
+	async def rechained() -> AsyncIterator[bytes]:
+		for chunk in buffered:
+			yield chunk
+		async for chunk in it:
+			yield chunk
+
+	return bytes(head[:peek_bytes]), rechained()
+
+
 # low-level storage primitives (no auth, no HTTP deps)
 
 
@@ -212,6 +242,19 @@ async def store_file(
 
 	file_id = new_typeid("file")
 	key = _new_storage_key(prefix=key_prefix)
+
+	# a declared (often client-supplied) content type can disagree with the
+	# actual bytes - e.g. a jpeg labeled image/png - which downstream model
+	# providers reject. trust the content signature when it is authoritative.
+	# for streamed uploads, peek the leading bytes and re-chain them so the
+	# stream is still written in full.
+	if isinstance(data, (bytes, bytearray, memoryview)):
+		head = bytes(data[:4096])
+	else:
+		head, data = await _peek_stream(data, 4096)
+	corrected = corrected_mime_type(content_type, head)
+	if corrected:
+		content_type = corrected
 
 	await backend.put(key, data, content_type)
 

@@ -9,7 +9,6 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.database.main import async_session_local, safe_rollback
 from api.models.memory import Memory
 from api.settings import OpenWebUIDeployment
 from api.v1.service.integrations.open_webui.common import (
@@ -84,6 +83,9 @@ async def _import_memories(
 				existing.created_at = created_at
 			if updated_at:
 				existing.updated_at = updated_at
+			# include in vectorization so a re-import fills any gap from a
+			# previous run where the memory was stored but not vectorized.
+			summary.memory_ids.append(existing.id)
 			summary.memories_skipped += 1
 			continue
 		memory = Memory(
@@ -99,28 +101,3 @@ async def _import_memories(
 			memory.updated_at = updated_at
 		summary.memory_ids.append(memory.id)
 		summary.memories_imported += 1
-
-
-async def _import_memories_chunk(
-	memories: list[dict[str, Any]],
-	owner_id: TypeID,
-	deployment: OpenWebUIDeployment,
-	deployment_origin: str,
-) -> ImportSummary:
-	"""import a slice of memories in a dedicated session and commit it."""
-	local = ImportSummary(deployment_origin=deployment_origin)
-	async with async_session_local() as session:
-		try:
-			await _import_memories(
-				memories,
-				session=session,
-				owner_id=owner_id,
-				deployment=deployment,
-				summary=local,
-			)
-			await session.commit()
-		except Exception as exc:
-			await safe_rollback(session)
-			logger.exception("failed to import Open WebUI memories")
-			local.add_error(f"memories import failed: {type(exc).__name__}")
-	return local
