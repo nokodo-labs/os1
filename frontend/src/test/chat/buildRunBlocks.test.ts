@@ -513,4 +513,61 @@ describe('buildRunBlocks', () => {
 			'streaming_tool',
 		])
 	})
+
+	it('renders the text placeholder again after a streaming tool call resolves', () => {
+		const firstUser = message({
+			id: 'u1',
+			type: 'user',
+			parent_id: null,
+			sender_user_id: userId,
+			created_at: at(1),
+		})
+		const firstAssistant = message({
+			id: 'a1',
+			type: 'assistant',
+			parent_id: 'u1',
+			sender_user_id: null,
+			sender_agent_id: agentId,
+			content: [{ type: 'text', text: 'checking' }],
+			created_at: at(2),
+		})
+		// tool result already arrived for tc_live
+		const toolResult = message({
+			id: 't1',
+			type: 'tool',
+			parent_id: 'a1',
+			sender_user_id: null,
+			content: [{ type: 'text', text: 'results' }],
+			tool_call_id: 'tc_live',
+			is_error: false,
+			created_at: at(3),
+		})
+
+		const result = buildRunBlocks({
+			messages: [firstUser, firstAssistant, toolResult],
+			userId,
+			streamingAssistant: {
+				runId,
+				messageId: 'streaming_1',
+				content: '',
+				timestamp: new Date(at(4)),
+				senderAgentId: agentId,
+				// the resolved tool call is still present on the streaming
+				// message before the model emits its next text token
+				toolCalls: [{ id: 'tc_live', name: 'agentic_web_search', arguments: {} }],
+				isError: false,
+				errorMessage: null,
+			},
+			optimisticUserMessage: null,
+			viewingStreamingBranch: true,
+		})
+
+		expect(result.blocks).toHaveLength(1)
+		expect(result.blocks[0].items.map((item) => item.kind)).toEqual([
+			'user',
+			'assistant',
+			'streaming_assistant',
+			'streaming_tool',
+		])
+	})
 })

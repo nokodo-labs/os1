@@ -12,9 +12,9 @@
 import { isOwnEvent } from '$lib/api/sessionId'
 import { resumeRunStream, StreamHttpError } from '$lib/api/streaming/chatStream'
 import {
-	eventStreamClient,
-	type StreamEvent,
-	type StreamMessage,
+    eventStreamClient,
+    type StreamEvent,
+    type StreamMessage,
 } from '$lib/api/streaming/eventStream.svelte'
 import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 import { parseToolEvent } from '$lib/tools'
@@ -22,10 +22,10 @@ import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { buildMessageChildren, contentPartsToText, type ApiMessage } from './helpers'
 import { parseRunActivityEvent, RUN_ACTIVITY_EVENT_PREFIX } from './runActivities'
 import {
-	getMessageClientSteeringId,
-	getMessageSteeringRunId,
-	getMessageSteeringState,
-	type SteeringState,
+    getMessageClientSteeringId,
+    getMessageSteeringRunId,
+    getMessageSteeringState,
+    type SteeringState,
 } from './steering'
 import { consumeStream } from './streamProcessor'
 import { getLatestLeaf } from './treeNavigation'
@@ -191,6 +191,23 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 				}
 				ctx.messageTree.set(newMsg.id, newMsg)
 				seedMessageCitations(newMsg)
+				// re-parent the not-yet-streamed assistant placeholder onto this
+				// just-persisted user message. without this, a WS message.created
+				// that beats the POST stream's own message_created frame leaves
+				// the placeholder parented at the previous leaf, so the new user
+				// message counts as its sibling and flashes a "2/2" branch badge.
+				// idempotent: the later SSE frame sets the same parent.
+				if (
+					ownEvent &&
+					newMsg.type === 'user' &&
+					ctx.isGenerating &&
+					ctx.streamingAssistant &&
+					!ctx.messageTree.has(ctx.streamingAssistant.messageId) &&
+					newMsg.parent_id != null &&
+					newMsg.parent_id === ctx.streamingAssistantParentId
+				) {
+					ctx.streamingAssistantParentId = newMsg.id
+				}
 				// if a steering event arrived before this message.created,
 				// re-apply the stashed state now that the message is known.
 				const stashed = pendingSteeringStates.get(newMsg.id)

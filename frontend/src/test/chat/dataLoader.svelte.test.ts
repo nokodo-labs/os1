@@ -43,6 +43,8 @@ vi.mock('$lib/stores/activeRuns.svelte', () => ({
 		init: vi.fn(),
 		cleanup: vi.fn(),
 		getRunsForThread: vi.fn(() => []),
+		hasActiveRuns: vi.fn(() => false),
+		refresh: vi.fn(async () => {}),
 	},
 }))
 

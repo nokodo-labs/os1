@@ -43,6 +43,7 @@ export interface InitResult {
 
 const EXECUTION_GAP_STALE_MS = 15_000
 let cacheLifecycleStarted = false
+let authSessionStarted = false
 let lastExecutionTick = Date.now()
 
 function hasSession(): boolean {
@@ -77,6 +78,54 @@ function startCacheLifecycle(): void {
 		if (now - lastExecutionTick > EXECUTION_GAP_STALE_MS) invalidateCachedData()
 		lastExecutionTick = now
 	}, 5_000)
+}
+
+/**
+ * starts every authenticated-session service: critical data load, event
+ * stream, preference sync, user client, push notifications, cache lifecycle,
+ * and geolocation. safe to call once after startup token-restore (initApp) or
+ * after an interactive login. re-entrant: a second call is a no-op so the
+ * stream/sync are not started twice.
+ *
+ * throws BackendUnreachableError if the initial data load fails on a network
+ * error so callers can show the reconnect screen.
+ */
+export async function initAuthenticatedSession(): Promise<void> {
+	if (!browser || authSessionStarted) return
+	authSessionStarted = true
+
+	try {
+		// concurrently load critical data (user + settings)
+		await Promise.all([session.refreshUser(), loadSettings()])
+	} catch (err) {
+		// allow a later retry to start the session if the load failed
+		authSessionStarted = false
+		throw err
+	}
+
+	// event stream + preferences (needs user data from the load above)
+	eventStreamClient.connect()
+	preferences.startSync()
+	initUserClient()
+	initPushNotifications()
+
+	// invalidate all caches when WS drops (missed events = stale data)
+	startCacheLifecycle()
+
+	// request geolocation if user has useLocation enabled
+	if (preferences.data.privacy.useLocation) {
+		requestGeolocation()
+	}
+}
+
+/**
+ * resets the authenticated-session guard so a subsequent interactive login
+ * re-runs initAuthenticatedSession in full. call on logout: the SPA stays
+ * mounted across logout -> login, so without this the guard stays latched and
+ * the next login never refetches the user or settings.
+ */
+export function resetAuthenticatedSession(): void {
+	authSessionStarted = false
 }
 
 /**
@@ -129,26 +178,12 @@ export async function initApp(options?: { skipAuthRestore?: boolean }): Promise<
 		//    user data + event stream only when authenticated.
 		if (token) {
 			try {
-				await Promise.all([session.refreshUser(), loadSettings()])
+				await initAuthenticatedSession()
 			} catch (err) {
 				if (err instanceof BackendUnreachableError) {
 					return { authenticated: false, token: null, backendUnreachable: true }
 				}
 				throw err
-			}
-
-			// 6. event stream + preferences (needs user data from step 5)
-			eventStreamClient.connect()
-			preferences.startSync()
-			initUserClient()
-			initPushNotifications()
-
-			// 7. invalidate all caches when WS drops (missed events = stale data)
-			startCacheLifecycle()
-
-			// 8. request geolocation if user has useLocation enabled
-			if (preferences.data.privacy.useLocation) {
-				requestGeolocation()
 			}
 		} else {
 			await loadSettings()

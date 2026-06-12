@@ -1,16 +1,46 @@
-import { processDelta } from '$lib/chat/streamProcessor'
+import { StreamHttpError, type ChatStreamDelta } from '$lib/api/streaming/chatStream'
+import {
+    consumeStream,
+    processDelta,
+    reconcileStreamedContent,
+    RunFailedError,
+    runThreadStream,
+} from '$lib/chat/streamProcessor'
 import type { ChatContext, StreamDeltaContext } from '$lib/chat/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeApiMessage } from './fixtures'
 
 const activeRunsMocks = vi.hoisted(() => ({
 	forgetRun: vi.fn(),
+	refresh: vi.fn(async () => {}),
+	getRunsForThread: vi.fn(() => [] as { runId: string }[]),
 }))
 
 vi.mock('$lib/stores/activeRuns.svelte', () => ({
 	activeRunsStore: {
 		forgetRun: activeRunsMocks.forgetRun,
+		refresh: activeRunsMocks.refresh,
+		getRunsForThread: activeRunsMocks.getRunsForThread,
 	},
+}))
+
+const streamMocks = vi.hoisted(() => ({
+	runChatStream: vi.fn(),
+	resumeRunStream: vi.fn(),
+}))
+
+vi.mock('$lib/api/streaming/chatStream', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/api/streaming/chatStream')>()
+	return {
+		...actual,
+		runChatStream: streamMocks.runChatStream,
+		resumeRunStream: streamMocks.resumeRunStream,
+	}
+})
+
+vi.mock('$lib/utils/haptics', () => ({
+	hapticFeedback: vi.fn(),
+	throttledHapticFeedback: vi.fn(),
 }))
 
 function makeDelta(message = makeApiMessage()) {
@@ -114,5 +144,247 @@ describe('processDelta steering reconciliation', () => {
 			)
 		).toThrow('generation failed')
 		expect(activeRunsMocks.forgetRun).toHaveBeenCalledWith('run_failed')
+	})
+})
+
+async function* asyncFrom(frames: ChatStreamDelta[]): AsyncGenerator<ChatStreamDelta, void, unknown> {
+	for (const f of frames) yield f
+}
+
+const doneFrame: ChatStreamDelta = {
+	event: 'delta',
+	data: {
+		run_id: 'run_x',
+		agent_id: 'agent_1',
+		message_id: null,
+		parent_id: null,
+		delta: { done: true },
+	},
+} as unknown as ChatStreamDelta
+
+function makeConsumeCtx(activeRun: number): ChatContext {
+	return {
+		activeRun,
+		streamingAssistantParentId: null,
+		runAbortController: new AbortController(),
+	} as unknown as ChatContext
+}
+
+describe('consumeStream outcomes', () => {
+	beforeEach(() => {
+		activeRunsMocks.forgetRun.mockReset()
+	})
+
+	it("returns 'ended' when the generator exhausts without a terminal event", async () => {
+		const ctx = makeConsumeCtx(1)
+		const outcome = await consumeStream(
+			asyncFrom([]),
+			{ runId: 1, threadId: 'thread_1', parentId: null },
+			ctx
+		)
+		expect(outcome).toBe('ended')
+	})
+
+	it("returns 'done' when a terminal done sentinel is processed", async () => {
+		const ctx = makeConsumeCtx(1)
+		const outcome = await consumeStream(
+			asyncFrom([doneFrame]),
+			{ runId: 1, threadId: 'thread_1', parentId: null },
+			ctx
+		)
+		expect(outcome).toBe('done')
+	})
+
+	it("returns 'superseded' when the active run changes mid-stream", async () => {
+		const ctx = makeConsumeCtx(2)
+		const outcome = await consumeStream(
+			asyncFrom([doneFrame]),
+			{ runId: 1, threadId: 'thread_1', parentId: null },
+			ctx
+		)
+		expect(outcome).toBe('superseded')
+		expect(ctx.runAbortController?.signal.aborted).toBe(true)
+	})
+})
+
+describe('RunFailedError', () => {
+	beforeEach(() => {
+		activeRunsMocks.forgetRun.mockReset()
+	})
+
+	it('is thrown (not a plain Error) on a stream error event so callers can skip resume', () => {
+		const ctx = {} as ChatContext
+		expect(() =>
+			processDelta(
+				{ event: 'error', data: { run_id: 'run_e', message: 'boom' } },
+				{} as StreamDeltaContext,
+				ctx
+			)
+		).toThrow(RunFailedError)
+	})
+})
+
+describe('reconcileStreamedContent', () => {
+	it('keeps the rendered text while the replay is still catching up (invisible)', () => {
+		expect(reconcileStreamedContent('Hello world', 'Hello ')).toBe('Hello world')
+	})
+
+	it('adopts the replay once it reaches past the rendered text (appends the tail)', () => {
+		expect(reconcileStreamedContent('Hello wo', 'Hello world')).toBe('Hello world')
+	})
+
+	it('replaces the rendered text only when the replay diverges (incorrect)', () => {
+		expect(reconcileStreamedContent('Hello XYZ', 'Hello world')).toBe('Hello world')
+	})
+
+	it('is a no-op when the replay matches exactly', () => {
+		expect(reconcileStreamedContent('Hello world', 'Hello world')).toBe('Hello world')
+	})
+})
+
+function chatDelta(messageId: string, text: string, done = false): ChatStreamDelta {
+	return {
+		event: 'delta',
+		data: {
+			run_id: 'run_x',
+			agent_id: 'agent_1',
+			message_id: messageId,
+			parent_id: null,
+			delta: { chat: { message: { content: [{ type: 'text', text }], tool_calls: null }, done } },
+		},
+	} as unknown as ChatStreamDelta
+}
+
+function makeStreamingCtx(content: string): ChatContext {
+	return {
+		activeRun: 1,
+		runAbortController: new AbortController(),
+		streamingAssistantParentId: null,
+		streamingAssistant: {
+			runId: 'run_x',
+			messageId: 'msg_1',
+			content,
+			timestamp: new Date(),
+			senderAgentId: 'agent_1',
+			toolCalls: [],
+			isError: false,
+			errorMessage: null,
+		},
+	} as unknown as ChatContext
+}
+
+describe('consumeStream reconcile mode (resume)', () => {
+	beforeEach(() => {
+		activeRunsMocks.forgetRun.mockReset()
+	})
+
+	it('rebuilds resumed content in place without duplicating rendered text', async () => {
+		const ctx = makeStreamingCtx('Hello wo')
+		await consumeStream(
+			asyncFrom([chatDelta('msg_1', 'Hello '), chatDelta('msg_1', 'world')]),
+			{ runId: 1, threadId: 'thread_1', parentId: null },
+			ctx,
+			{ reconcile: true }
+		)
+		expect(ctx.streamingAssistant?.content).toBe('Hello world')
+	})
+
+	it('corrects the rendered text when the replay diverges from it', async () => {
+		const ctx = makeStreamingCtx('Hello XYZ')
+		await consumeStream(
+			asyncFrom([chatDelta('msg_1', 'Hello '), chatDelta('msg_1', 'world')]),
+			{ runId: 1, threadId: 'thread_1', parentId: null },
+			ctx,
+			{ reconcile: true }
+		)
+		expect(ctx.streamingAssistant?.content).toBe('Hello world')
+	})
+})
+
+const errorFrame: ChatStreamDelta = {
+	event: 'error',
+	data: { run_id: 'run_x', message: 'boom' },
+} as unknown as ChatStreamDelta
+
+// eslint-disable-next-line require-yield
+async function* throwing404Stream(): AsyncGenerator<ChatStreamDelta, void, unknown> {
+	throw new StreamHttpError(404)
+}
+
+function makeRunCtx(): ChatContext {
+	return {
+		activeRun: 5,
+		runAbortController: undefined,
+		currentLeafId: null,
+		viewingStreamingBranch: true,
+		streamingAssistantParentId: null,
+		streamingLeafId: null,
+		citationTargetMessageId: null,
+		thread: null,
+		messageTree: new Map(),
+		citationSources: new Map(),
+		rebuildRunBlocks: vi.fn(),
+		streamingAssistant: {
+			runId: 'run_x',
+			messageId: 'msg_1',
+			content: 'Hi',
+			timestamp: new Date(),
+			senderAgentId: 'agent_1',
+			toolCalls: [],
+			isError: false,
+			errorMessage: null,
+		},
+	} as unknown as ChatContext
+}
+
+describe('runThreadStream recovery', () => {
+	beforeEach(() => {
+		activeRunsMocks.forgetRun.mockReset()
+		activeRunsMocks.refresh.mockClear()
+		activeRunsMocks.getRunsForThread.mockReturnValue([])
+		streamMocks.runChatStream.mockReset()
+		streamMocks.resumeRunStream.mockReset()
+	})
+
+	it("silently resumes the run when the initial stream ends without a terminal event", async () => {
+		streamMocks.runChatStream.mockImplementation(() => asyncFrom([]))
+		streamMocks.resumeRunStream.mockImplementation(() => asyncFrom([doneFrame]))
+		const ctx = makeRunCtx()
+
+		await runThreadStream(
+			{ threadId: 'thread_1', agentId: 'agent_1', input: null, runId: 5 },
+			ctx
+		)
+
+		expect(streamMocks.runChatStream).toHaveBeenCalledTimes(1)
+		expect(streamMocks.resumeRunStream).toHaveBeenCalledTimes(1)
+		expect(streamMocks.resumeRunStream).toHaveBeenCalledWith(
+			expect.objectContaining({ runId: 'run_x' })
+		)
+	})
+
+	it('does not resume a backend-declared run failure', async () => {
+		streamMocks.runChatStream.mockImplementation(() => asyncFrom([errorFrame]))
+		const ctx = makeRunCtx()
+
+		await expect(
+			runThreadStream({ threadId: 'thread_1', agentId: 'agent_1', input: null, runId: 5 }, ctx)
+		).rejects.toBeInstanceOf(RunFailedError)
+		expect(streamMocks.resumeRunStream).not.toHaveBeenCalled()
+	})
+
+	it('preserves the partial as a clean completion when the resumed run is already finished (404)', async () => {
+		streamMocks.runChatStream.mockImplementation(() => asyncFrom([]))
+		streamMocks.resumeRunStream.mockImplementation(() => throwing404Stream())
+		const ctx = makeRunCtx()
+
+		await runThreadStream(
+			{ threadId: 'thread_1', agentId: 'agent_1', input: null, runId: 5 },
+			ctx
+		)
+
+		const persisted = ctx.messageTree.get('msg_1')
+		expect(persisted?.metadata_?.partial).toBe(true)
+		expect(activeRunsMocks.forgetRun).toHaveBeenCalledWith('run_x')
 	})
 })

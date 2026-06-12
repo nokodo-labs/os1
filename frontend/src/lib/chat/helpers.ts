@@ -4,9 +4,11 @@
  */
 
 import { parseToolCalls, parseToolResult, type ToolCall, type ToolResult } from '$lib/tools'
+import { SvelteDate } from 'svelte/reactivity'
 import type {
 	ApiCitation,
 	ApiMessage,
+	ChatContext,
 	FileContentPart,
 	MediaContentPart,
 	OptimisticUserMessage,
@@ -24,7 +26,7 @@ export type {
 	MediaContentPart,
 	RunBlock,
 	RunItem,
-	StreamingAssistantState,
+	StreamingAssistantState
 }
 
 // message helpers
@@ -54,6 +56,59 @@ export function contentPartsToText(parts: ApiMessage['content']): string {
 		})
 		.filter((v): v is string => v !== null)
 		.join('\n')
+}
+
+/**
+ * persist the current streaming assistant's partial content into the message
+ * tree (marked partial) so a transport failure or stop keeps whatever text was
+ * already rendered instead of discarding it. callers typically follow this
+ * with a fresh error bubble in a separate placeholder.
+ */
+export function finalizeStreamingAssistantAsPartial(ctx: ChatContext): void {
+	const streaming = ctx.streamingAssistant
+	if (!streaming) return
+
+	const existingMessage = ctx.messageTree.get(streaming.messageId)
+	const content = streaming.content.trim() || contentPartsToText(existingMessage?.content).trim()
+	const createdAt = existingMessage?.created_at ?? new SvelteDate().toISOString()
+	const updatedAt = new SvelteDate().toISOString()
+	const parentId = existingMessage?.parent_id ?? ctx.streamingAssistantParentId
+	const streamCitations = ctx.citationSources.get(streaming.messageId)
+	const citedIndices = new Set(
+		[...content.matchAll(/\[\^?(\d+)\]/g)].map((match) => Number(match[1]))
+	)
+	const citedSources = streamCitations?.filter((citation) => citedIndices.has(citation.index))
+	const metadata: NonNullable<ApiMessage['metadata_']> = {
+		...(existingMessage?.metadata_ ?? {}),
+		partial: true,
+		partial_reason: 'cancelled',
+	}
+	if (streaming.runId) metadata.run_id = streaming.runId
+
+	const finalized = {
+		id: streaming.messageId,
+		thread_id: existingMessage?.thread_id ?? ctx.thread?.id ?? '',
+		parent_id: parentId,
+		type: 'assistant',
+		content: content ? [{ type: 'text', text: content }] : [],
+		tool_calls: streaming.toolCalls.map((toolCall) => ({
+			id: toolCall.id,
+			name: toolCall.name,
+			arguments: toolCall.arguments,
+		})),
+		citations: citedSources?.length ? citedSources : existingMessage?.citations,
+		metadata_: metadata,
+		sender_agent_id: streaming.senderAgentId,
+		sender_user_id: null,
+		created_at: createdAt,
+		updated_at: updatedAt,
+	} satisfies ApiMessage
+
+	ctx.messageTree.set(finalized.id, finalized)
+	ctx.citationTargetMessageId = finalized.id
+	ctx.streamingLeafId = finalized.id
+	if (ctx.viewingStreamingBranch) ctx.currentLeafId = finalized.id
+	ctx.streamingAssistantParentId = finalized.id
 }
 
 // content part extraction
@@ -581,8 +636,16 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		const hasUnresolvedPreviousToolCalls = Array.from(targetBlockState.seenToolCalls).some(
 			(toolCallId) => !completedToolCallIds.has(toolCallId)
 		)
-		const hasNewStreamingToolCalls = streamingAssistant.toolCalls.length > 0
-		if (hasStreamingText || (!hasUnresolvedPreviousToolCalls && !hasNewStreamingToolCalls)) {
+		// only unresolved streaming tool calls suppress the text placeholder.
+		// once a tool result arrives, the placeholder must reappear so the
+		// "thinking" animation shows again before the model's next token.
+		const hasUnresolvedStreamingToolCalls = streamingAssistant.toolCalls.some(
+			(toolCall) => !completedToolCallIds.has(toolCall.id)
+		)
+		if (
+			hasStreamingText ||
+			(!hasUnresolvedPreviousToolCalls && !hasUnresolvedStreamingToolCalls)
+		) {
 			targetBlock.items.push({ kind: 'streaming_assistant' })
 		}
 		for (const tc of streamingAssistant.toolCalls) {

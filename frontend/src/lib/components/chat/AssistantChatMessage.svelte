@@ -56,8 +56,11 @@
 	let isHovered = $state(false)
 	let avatarError = $state(false)
 
-	// derived visibility - keeps the template readable
-	let actionsVisible = $derived(!isStreaming && !isRunActive && (isLastMessage || showActions))
+	// derived visibility - keeps the template readable.
+	// hover (showActions) reveals actions on any settled message, even while a
+	// run is generating below it. the auto-show on the last message is still
+	// suppressed during an active run so the in-flight bubble stays clean.
+	let actionsVisible = $derived(!isStreaming && (showActions || (isLastMessage && !isRunActive)))
 	// tree/branch switcher is always visible when multiple siblings exist
 	let branchNavVisible = $derived(siblingCount > 1)
 

@@ -4,6 +4,7 @@
 
 import { api } from '$lib/api/client'
 import type { components } from '$lib/api/types'
+import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 import { chat as chatStore, type Thread } from '$lib/stores/chat.svelte'
 import { resolveResourceAccessLevels } from '$lib/stores/resourceAccess.svelte'
 import { session } from '$lib/stores/session.svelte'
@@ -356,11 +357,21 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 	)
 	if (!isCurrent()) return false
 	// safety net: any tool calls still pending/running after load are
-	// orphans from an interrupted run. close them as errored so we don't
-	// render permanent shimmer. if a matching run is still active, the
-	// subsequent resume stream (via subscribeToChatEvents catch-up) will
-	// overwrite their status back to completed via registerResult.
-	ctx.toolTracker.closeAllActive()
+	// orphans from an interrupted run. close them so we don't render
+	// permanent shimmer - UNLESS a run is still active for this thread, in
+	// which case the resume stream owns those tool calls and they must keep
+	// shimmering until a tool result actually arrives. closing them here
+	// would make an in-flight tool look completed (registerToolCall on
+	// resume does not reset status, and registerResult only fires on real
+	// completion). only confirm with the backend when we actually have open
+	// tool calls but the store has no run yet (avoids the common-case fetch).
+	if (ctx.toolTracker.hasActive && !activeRunsStore.hasActiveRuns(threadId)) {
+		await activeRunsStore.refresh()
+		if (!isCurrent()) return false
+	}
+	if (!activeRunsStore.hasActiveRuns(threadId)) {
+		ctx.toolTracker.closeAllActive()
+	}
 	ctx.rebuildRunBlocks()
 	return true
 }

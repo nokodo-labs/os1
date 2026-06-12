@@ -6,6 +6,7 @@
 	import { api } from '$lib/api/client'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte'
+	import { initAuthenticatedSession } from '$lib/init'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { settingsState } from '$lib/stores/settings.svelte'
@@ -169,7 +170,11 @@
 			}
 
 			session.setToken(data.access_token)
-			void session.refresh()
+			// start the authenticated session (user data, event stream, preference
+			// sync, etc.) before navigating. initApp only ran the unauthenticated
+			// branch at startup, so without this the preference sync never starts
+			// and settings toggles no-op until a manual reload.
+			await initAuthenticatedSession()
 			const target = nextTargetFromNextValue(next)
 			if (target.type === 'chat') {
 				await goto(resolve('/c/[id]', { id: target.id }))

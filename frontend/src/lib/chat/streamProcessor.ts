@@ -3,7 +3,9 @@
  */
 
 import {
+	resumeRunStream,
 	runChatStream,
+	StreamHttpError,
 	type ChatStreamDelta,
 	type CreateAndRunStreamDelta,
 	type RunInput,
@@ -17,13 +19,49 @@ import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 import { hapticFeedback, throttledHapticFeedback } from '$lib/utils/haptics'
 import { SvelteDate } from 'svelte/reactivity'
 import { syncCacheAfterRun } from './dataLoader'
-import { extractAttachmentRefs, sdkPartsToText, upsertToolCalls, type ApiMessage } from './helpers'
+import { extractAttachmentRefs, finalizeStreamingAssistantAsPartial, sdkPartsToText, upsertToolCalls, type ApiMessage } from './helpers'
 import {
 	getMessageClientSteeringId,
 	getMessageSteeringRunId,
 	getMessageSteeringState,
 } from './steering'
 import type { ChatContext, StreamDeltaContext } from './types'
+
+/**
+ * a backend-declared terminal run failure (SSE `error` event). distinct from
+ * a transport drop so callers can choose never to auto-resume these.
+ */
+export class RunFailedError extends Error {
+	constructor(message: string) {
+		super(message)
+		this.name = 'RunFailedError'
+	}
+}
+
+/** outcome of consuming a stream to completion. */
+type StreamOutcome = 'done' | 'superseded' | 'ended'
+
+/** max silent resume attempts after a mid-run transport drop. */
+const MAX_RESUME_ATTEMPTS = 2
+/** base backoff between resume attempts (ms), scaled by attempt number. */
+const RESUME_BACKOFF_MS = 600
+
+/**
+ * reconcile already-rendered streamed text against a catchup replay buffer.
+ *
+ * the resume stream replays frames from the start, so `shadow` reconstructs the
+ * message from scratch while `displayed` holds whatever was rendered before the
+ * drop. the goal is to keep the failure invisible:
+ * - shadow still behind displayed and agrees -> keep displayed (no flicker)
+ * - shadow reached/passed displayed and agrees -> adopt shadow (appends the tail)
+ * - shadow diverges -> the rendered text is wrong, adopt shadow to correct it
+ */
+export function reconcileStreamedContent(displayed: string, shadow: string): string {
+	if (displayed === shadow) return displayed
+	if (shadow.startsWith(displayed)) return shadow
+	if (displayed.startsWith(shadow)) return displayed
+	return shadow
+}
 
 /**
  * process a single SSE delta event.
@@ -40,7 +78,7 @@ export function processDelta(
 				const runId = delta.data.run_id ?? ctx.streamingAssistant?.runId
 				if (runId) activeRunsStore.forgetRun(runId)
 			}
-			throw new Error(delta.data.message || 'generation failed')
+			throw new RunFailedError(delta.data.message || 'generation failed')
 		case 'done':
 			if (ctx.streamingAssistant?.runId) {
 				activeRunsStore.forgetRun(ctx.streamingAssistant.runId)
@@ -246,7 +284,16 @@ export function processDelta(
 				if (!streaming) return 'continue'
 
 				if (chunkText) {
-					streaming.content += chunkText
+					if (sctx.replayContent) {
+						// catchup replay: reconstruct this message from frame 0 into a
+						// shadow buffer and reconcile against what is rendered so the
+						// drop stays invisible (see reconcileStreamedContent).
+						const shadow = (sctx.replayContent.get(messageId) ?? '') + chunkText
+						sctx.replayContent.set(messageId, shadow)
+						streaming.content = reconcileStreamedContent(streaming.content, shadow)
+					} else {
+						streaming.content += chunkText
+					}
 					throttledHapticFeedback()
 				}
 
@@ -355,8 +402,9 @@ export function processDelta(
 export async function consumeStream(
 	stream: AsyncGenerator<ChatStreamDelta, void, unknown>,
 	opts: { runId: number; threadId: string; parentId: string | null; agentId?: string | null },
-	ctx: ChatContext
-): Promise<void> {
+	ctx: ChatContext,
+	options?: { reconcile?: boolean }
+): Promise<StreamOutcome> {
 	let assistantParentId = opts.parentId
 	ctx.streamingAssistantParentId = assistantParentId
 
@@ -368,17 +416,134 @@ export async function consumeStream(
 		setAssistantParentId: (id: string | null) => {
 			assistantParentId = id
 		},
+		replayContent: options?.reconcile ? new Map<string, string>() : undefined,
 	}
 
 	for await (const delta of stream) {
 		if (opts.runId !== ctx.activeRun) {
 			ctx.runAbortController?.abort()
-			return
+			return 'superseded'
 		}
 
 		const result = processDelta(delta, sctx, ctx)
-		if (result === 'done') return
+		if (result === 'done') return 'done'
 	}
+	// generator exhausted without a terminal `done`/`error`: the transport
+	// closed mid-run (proxy idle kill, EOF). NOT a success - the caller must
+	// attempt to recover so already-streamed content is not silently dropped.
+	return 'ended'
+}
+
+/** true when the error is an intentional client-side abort, not a transport drop. */
+function isAbortError(err: unknown, ctx: ChatContext): boolean {
+	if (err instanceof DOMException && err.name === 'AbortError') return true
+	return ctx.runAbortController?.signal.aborted ?? false
+}
+
+/** abort-aware delay used between resume attempts. */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+	return new Promise((resolve) => {
+		if (signal.aborted) {
+			resolve()
+			return
+		}
+		const timer = setTimeout(() => {
+			signal.removeEventListener('abort', onAbort)
+			resolve()
+		}, ms)
+		const onAbort = () => {
+			clearTimeout(timer)
+			resolve()
+		}
+		signal.addEventListener('abort', onAbort, { once: true })
+	})
+}
+
+/**
+ * resolve the server-side run id for the active stream so a dropped transport
+ * can be rejoined. falls back to the global run store (refreshing it over HTTP
+ * if needed). returns null when no run was ever started server-side.
+ */
+async function resolveServerRunId(ctx: ChatContext, threadId: string): Promise<string | null> {
+	const fromStreaming = ctx.streamingAssistant?.runId
+	if (fromStreaming) return fromStreaming
+	const fromStore = activeRunsStore.getRunsForThread(threadId).at(-1)?.runId
+	if (fromStore) return fromStore
+	await activeRunsStore.refresh()
+	return activeRunsStore.getRunsForThread(threadId).at(-1)?.runId ?? null
+}
+
+/**
+ * after a mid-run transport drop, silently rejoin the run's SSE stream via
+ * GET /runs/{id}/stream. the backend replays a catchup log, which consumeStream
+ * reconciles against the already-rendered bubble (reconcile mode) so the drop
+ * stays invisible - the placeholder is never blanked.
+ *
+ * returns the final outcome, or rethrows the originating transport error when
+ * the run cannot be resolved or all attempts are exhausted. a 404 means the run
+ * finished while we were gone: the partial is persisted (so it stays visible
+ * until WS sync upserts the canonical message) and we report a clean completion.
+ */
+async function recoverRunStream(
+	opts: { runId: number; threadId: string; parentId: string | null; agentId?: string | null },
+	ctx: ChatContext,
+	cause?: unknown
+): Promise<StreamOutcome> {
+	const runId = await resolveServerRunId(ctx, opts.threadId)
+	if (!runId) {
+		// nothing started server-side; surface the real transport error.
+		throw cause ?? new Error('lost connection to the run')
+	}
+
+	// preserve any already-streamed content. only seed a placeholder when
+	// nothing was streaming yet (drop happened before the first delta).
+	if (!ctx.streamingAssistant) {
+		ctx.streamingAssistant = {
+			runId,
+			messageId: `resume-${runId}`,
+			content: '',
+			timestamp: new SvelteDate(),
+			senderAgentId: opts.agentId ?? selectedAgent.id ?? null,
+			toolCalls: [],
+			isError: false,
+			errorMessage: null,
+		}
+		ctx.rebuildRunBlocks()
+	}
+
+	let lastError: unknown = null
+
+	for (let attempt = 1; attempt <= MAX_RESUME_ATTEMPTS; attempt++) {
+		if (opts.runId !== ctx.activeRun) return 'superseded'
+		const signal = ctx.runAbortController?.signal
+		if (!signal || signal.aborted) return 'superseded'
+
+		await sleep(RESUME_BACKOFF_MS * attempt, signal)
+		if (opts.runId !== ctx.activeRun || signal.aborted) return 'superseded'
+
+		try {
+			const outcome = await consumeStream(resumeRunStream({ runId, signal }), opts, ctx, {
+				reconcile: true,
+			})
+			if (outcome === 'done' || outcome === 'superseded') return outcome
+			// 'ended' again: connection dropped during resume too - retry.
+		} catch (err) {
+			if (isAbortError(err, ctx)) return 'superseded'
+			if (err instanceof RunFailedError) throw err
+			if (err instanceof StreamHttpError && err.status === 404) {
+				// run finished while disconnected. keep whatever we rendered by
+				// persisting it; the canonical message upserts over it via WS.
+				if (ctx.streamingAssistant?.content.trim()) {
+					finalizeStreamingAssistantAsPartial(ctx)
+				}
+				activeRunsStore.forgetRun(runId)
+				return 'done'
+			}
+			lastError = err
+		}
+	}
+
+	throw lastError ?? cause ?? new Error('lost connection to the run')
 }
 
 /** run a chat stream for an existing thread */
@@ -415,11 +580,29 @@ export async function runThreadStream(
 		signal: ctx.runAbortController.signal,
 	})
 
-	await consumeStream(
-		stream,
-		{ runId: opts.runId, threadId: opts.threadId, parentId, agentId: opts.agentId },
-		ctx
-	)
+	const consumeOpts = {
+		runId: opts.runId,
+		threadId: opts.threadId,
+		parentId,
+		agentId: opts.agentId,
+	}
+
+	let outcome: StreamOutcome
+	try {
+		outcome = await consumeStream(stream, consumeOpts, ctx)
+	} catch (err) {
+		// backend-declared failure or intentional abort: do not resume.
+		if (err instanceof RunFailedError || isAbortError(err, ctx)) throw err
+		// transport error before/while streaming: try to rejoin the run, keeping
+		// the original error so an unrecoverable failure surfaces its real cause.
+		await recoverRunStream(consumeOpts, ctx, err)
+		return
+	}
+
+	// transport closed mid-run without a terminal event: rejoin.
+	if (outcome === 'ended') {
+		await recoverRunStream(consumeOpts, ctx)
+	}
 }
 
 /**
@@ -509,11 +692,18 @@ export async function resumeCreateAndRun(
 
 		// remaining events are ChatStreamDelta (thread_created consumed above)
 		const chatStream = stream as unknown as AsyncGenerator<ChatStreamDelta, void, unknown>
-		await consumeStream(
-			chatStream,
-			{ runId, threadId: resolvedId, parentId: ctx.currentLeafId, agentId: selectedAgent.id },
-			ctx
-		)
+		const consumeOpts = {
+			runId,
+			threadId: resolvedId,
+			parentId: ctx.currentLeafId,
+			agentId: selectedAgent.id,
+		}
+		const outcome = await consumeStream(chatStream, consumeOpts, ctx)
+		// transport closed mid-run without a terminal event: rejoin the run so
+		// streamed content is not lost (same recovery path as runThreadStream).
+		if (outcome === 'ended') {
+			await recoverRunStream(consumeOpts, ctx)
+		}
 		if (runId !== ctx.activeRun) return
 		ctx.optimisticUserMessage = null
 		ctx.streamingAssistant = null
@@ -521,9 +711,17 @@ export async function resumeCreateAndRun(
 		syncCacheAfterRun(ctx)
 	} catch (e) {
 		console.error('failed to resume create_and_run stream', e)
-		if (runId === ctx.activeRun && ctx.streamingAssistant) {
+		if (runId === ctx.activeRun) {
+			// preserve any streamed text as a partial message in the tree so the
+			// error bubble renders alongside it instead of deleting it.
+			finalizeStreamingAssistantAsPartial(ctx)
 			ctx.streamingAssistant = {
-				...ctx.streamingAssistant,
+				runId: ctx.streamingAssistant?.runId ?? null,
+				messageId: `error-${runId}`,
+				content: '',
+				timestamp: new SvelteDate(),
+				senderAgentId: selectedAgent.id,
+				toolCalls: [],
 				isError: true,
 				errorMessage: e instanceof Error ? e.message : 'something went wrong',
 			}

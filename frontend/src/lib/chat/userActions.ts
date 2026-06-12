@@ -12,10 +12,10 @@ import { modals } from '$lib/stores/modals.svelte'
 import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 import { SvelteDate } from 'svelte/reactivity'
 import { syncCacheAfterRun } from './dataLoader'
-import { computeIsAtBottom, contentPartsToText } from './helpers'
+import { computeIsAtBottom, contentPartsToText, finalizeStreamingAssistantAsPartial } from './helpers'
 import { runThreadStream } from './streamProcessor'
 import { getLatestLeaf } from './treeNavigation'
-import type { ApiMessage, ChatContext, PendingRunInput } from './types'
+import type { ChatContext, PendingRunInput } from './types'
 
 function resolveLeafAfterDelete(startParentId: string | null, ctx: ChatContext): string | null {
 	if (startParentId && ctx.messageTree.has(startParentId)) {
@@ -88,53 +88,6 @@ function resolveRunParentId(ctx: ChatContext, preferredParentId: string | null):
 		if (ctx.messageTree.has(candidate)) return candidate
 	}
 	return null
-}
-
-function finalizeStreamingAssistantAsPartial(ctx: ChatContext): void {
-	const streaming = ctx.streamingAssistant
-	if (!streaming) return
-
-	const existingMessage = ctx.messageTree.get(streaming.messageId)
-	const content = streaming.content.trim() || contentPartsToText(existingMessage?.content).trim()
-	const createdAt = existingMessage?.created_at ?? new SvelteDate().toISOString()
-	const updatedAt = new SvelteDate().toISOString()
-	const parentId = existingMessage?.parent_id ?? ctx.streamingAssistantParentId
-	const streamCitations = ctx.citationSources.get(streaming.messageId)
-	const citedIndices = new Set(
-		[...content.matchAll(/\[\^?(\d+)\]/g)].map((match) => Number(match[1]))
-	)
-	const citedSources = streamCitations?.filter((citation) => citedIndices.has(citation.index))
-	const metadata: NonNullable<ApiMessage['metadata_']> = {
-		...(existingMessage?.metadata_ ?? {}),
-		partial: true,
-		partial_reason: 'cancelled',
-	}
-	if (streaming.runId) metadata.run_id = streaming.runId
-
-	const finalized = {
-		id: streaming.messageId,
-		thread_id: existingMessage?.thread_id ?? ctx.thread?.id ?? '',
-		parent_id: parentId,
-		type: 'assistant',
-		content: content ? [{ type: 'text', text: content }] : [],
-		tool_calls: streaming.toolCalls.map((toolCall) => ({
-			id: toolCall.id,
-			name: toolCall.name,
-			arguments: toolCall.arguments,
-		})),
-		citations: citedSources?.length ? citedSources : existingMessage?.citations,
-		metadata_: metadata,
-		sender_agent_id: streaming.senderAgentId,
-		sender_user_id: null,
-		created_at: createdAt,
-		updated_at: updatedAt,
-	} satisfies ApiMessage
-
-	ctx.messageTree.set(finalized.id, finalized)
-	ctx.citationTargetMessageId = finalized.id
-	ctx.streamingLeafId = finalized.id
-	if (ctx.viewingStreamingBranch) ctx.currentLeafId = finalized.id
-	ctx.streamingAssistantParentId = finalized.id
 }
 
 function stagePendingSteeringMessage(
@@ -300,9 +253,17 @@ export async function handleSendMessage(
 		// no error UI needed. backend will broadcast run.completed.
 		if (e instanceof DOMException && e.name === 'AbortError') return
 		console.error('failed to run thread', e)
-		if (runId === ctx.activeRun && ctx.streamingAssistant) {
+		if (runId === ctx.activeRun) {
+			// preserve any streamed text as a partial message in the tree so
+			// the error bubble renders alongside it instead of deleting it.
+			finalizeStreamingAssistantAsPartial(ctx)
 			ctx.streamingAssistant = {
-				...ctx.streamingAssistant,
+				runId: ctx.streamingAssistant?.runId ?? null,
+				messageId: `error-${runId}`,
+				content: '',
+				timestamp: new SvelteDate(),
+				senderAgentId: selectedAgent.id,
+				toolCalls: [],
 				isError: true,
 				errorMessage: e instanceof Error ? e.message : 'something went wrong',
 			}
@@ -375,9 +336,17 @@ export async function handleRegenerateMessage(
 		// intentional abort (e.g. clearThread on navigate-away) - run is over.
 		if (e instanceof DOMException && e.name === 'AbortError') return
 		console.error('failed to retry run', e)
-		if (runId === ctx.activeRun && ctx.streamingAssistant) {
+		if (runId === ctx.activeRun) {
+			// preserve any streamed text as a partial message in the tree so
+			// the error bubble renders alongside it instead of deleting it.
+			finalizeStreamingAssistantAsPartial(ctx)
 			ctx.streamingAssistant = {
-				...ctx.streamingAssistant,
+				runId: ctx.streamingAssistant?.runId ?? null,
+				messageId: `error-${runId}`,
+				content: '',
+				timestamp: new SvelteDate(),
+				senderAgentId: selectedAgent.id,
+				toolCalls: [],
 				isError: true,
 				errorMessage: e instanceof Error ? e.message : 'something went wrong',
 			}

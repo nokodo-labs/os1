@@ -5,9 +5,9 @@
  */
 
 import type {
-	CreateAndRunStreamDelta,
-	ResourceAttachment,
-	RunAttachmentType,
+    CreateAndRunStreamDelta,
+    ResourceAttachment,
+    RunAttachmentType,
 } from '$lib/api/streaming/chatStream'
 import type { components } from '$lib/api/types'
 import type { ResourceItem } from '$lib/components/widgets/types'
@@ -306,4 +306,12 @@ export interface StreamDeltaContext {
 	agentId: string | null
 	getAssistantParentId(): string | null
 	setAssistantParentId(id: string | null): void
+	/**
+	 * when set, this stream is a catchup replay (resume after a transport drop)
+	 * that re-sends frames from the start. assistant text is reconstructed into
+	 * `replayContent` per message and reconciled against the already-rendered
+	 * content so the bubble is never blanked - it only changes when the replay
+	 * extends past or diverges from what is shown.
+	 */
+	replayContent?: Map<string, string>
 }

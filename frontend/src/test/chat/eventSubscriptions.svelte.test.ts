@@ -1,3 +1,4 @@
+import { isOwnEvent } from '$lib/api/sessionId'
 import type { ApiMessage, ChatContext, QueuedSteeringMessage } from '$lib/chat/types'
 import { ToolExecutionTracker } from '$lib/tools'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
@@ -152,6 +153,7 @@ function dispatch(msg: unknown): void {
 describe('subscribeToChatEvents', () => {
 	afterEach(() => {
 		capturedHandler = null
+		vi.mocked(isOwnEvent).mockReturnValue(false)
 	})
 
 	it('dispatches live run activity events', () => {
@@ -283,6 +285,45 @@ describe('subscribeToChatEvents', () => {
 			clientSteeringId: 'local-steering-1',
 			deliveryState: 'queued',
 		})
+		unsubscribe()
+	})
+
+	it('re-parents the streaming placeholder onto a user message that wins the WS race', () => {
+		const ctx = makeContext()
+		// own POST run is in flight with a placeholder still parented at the old
+		// leaf, not yet in the tree (SSE message_created has not arrived).
+		ctx.streamingAssistant = {
+			runId: null,
+			messageId: 'pending-assistant',
+			content: '',
+			timestamp: new Date(),
+			senderAgentId: null,
+			toolCalls: [],
+			isError: false,
+			errorMessage: null,
+		}
+		ctx.streamingAssistantParentId = 'assistant_1'
+		vi.mocked(isOwnEvent).mockReturnValue(true)
+		const unsubscribe = subscribeToChatEvents('thread_1', ctx)
+
+		dispatch(
+			makeStreamMessage(
+				'message.created',
+				{
+					...makeApiMessage({
+						id: 'user_new',
+						thread_id: 'thread_1',
+						type: 'user',
+						parent_id: 'assistant_1',
+					}),
+				},
+				{ thread_id: 'thread_1' }
+			)
+		)
+
+		// placeholder now hangs off the new user message so it is not flagged
+		// as a sibling branch (no "2/2" flash).
+		expect(ctx.streamingAssistantParentId).toBe('user_new')
 		unsubscribe()
 	})
 })
