@@ -368,7 +368,7 @@
 <svelte:head>
 	<title>{pageTitleStore.pageFullTitle}</title>
 	{#if mediaUrls.manifest}
-		<link rel="manifest" href={mediaUrls.manifest} />
+		<link rel="manifest" href={mediaUrls.manifest} crossorigin="use-credentials" />
 	{/if}
 	{#if mediaUrls.favicon}
 		<link rel="icon" href={mediaUrls.favicon} />

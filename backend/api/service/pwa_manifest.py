@@ -27,19 +27,15 @@ from __future__ import annotations
 import hashlib
 import json
 from typing import Any, TypedDict
-from urllib.parse import urlsplit, urlunsplit
 
 from api.service.web_assets import (
 	STATIC_ASSET_PATH,
-	app_url,
 	cdn_asset_url,
 	default_asset_url,
 	resolve_asset_source,
 )
 from api.settings import settings
 from api.settings.settings import (
-	DEFAULT_API_PORT,
-	DEFAULT_FRONTEND_PORT,
 	ManifestAssetSettings,
 	PwaManifestAssetsSettings,
 )
@@ -53,12 +49,13 @@ class ManifestCacheEntry(TypedDict):
 	etag: str
 
 
-_cache: dict[str, ManifestCacheEntry] = {}
+_cache: ManifestCacheEntry | None = None
 
 
 def invalidate_cache() -> None:
 	"""clear cached manifest so the next request recompiles."""
-	_cache.clear()
+	global _cache
+	_cache = None
 
 
 # -- public API --
@@ -66,14 +63,13 @@ def invalidate_cache() -> None:
 
 def get_manifest_response(request_origin: str | None = None) -> tuple[bytes, str]:
 	"""return (body_bytes, etag) for the current manifest."""
-	frontend = _resolve_frontend_origin(request_origin)
-	if frontend not in _cache:
-		manifest = _compile(frontend)
+	global _cache
+	if _cache is None:
+		manifest = _compile()
 		body = json.dumps(manifest, separators=(",", ":")).encode()
 		etag = hashlib.sha256(body).hexdigest()[:16]
-		_cache[frontend] = {"body": body, "etag": etag}
-	entry = _cache[frontend]
-	return entry["body"], entry["etag"]
+		_cache = {"body": body, "etag": etag}
+	return _cache["body"], _cache["etag"]
 
 
 # -- internals --
@@ -155,26 +151,6 @@ _WIDE_SCREENSHOTS = 8
 _WIDE_SIZE = "3840x2160"
 
 
-def _resolve_frontend_origin(request_origin: str | None) -> str:
-	if settings.branding.public_frontend_origin:
-		return str(settings.branding.public_frontend_origin).rstrip("/")
-	return _frontend_origin_from_api_origin(
-		request_origin or f"http://localhost:{DEFAULT_API_PORT}"
-	)
-
-
-def _frontend_origin_from_api_origin(origin: str) -> str:
-	parsed = urlsplit(origin.rstrip("/"))
-	if not parsed.scheme or not parsed.netloc:
-		parsed = urlsplit(f"http://localhost:{DEFAULT_API_PORT}")
-	host = parsed.hostname or "localhost"
-	if ":" in host and not host.startswith("["):
-		host = f"[{host}]"
-	return urlunsplit(
-		(parsed.scheme, f"{host}:{DEFAULT_FRONTEND_PORT}", "", "", "")
-	).rstrip("/")
-
-
 def _guess_mime(filename: str) -> str:
 	lower = filename.lower()
 	if lower.endswith(".svg"):
@@ -227,7 +203,6 @@ def _build_icons(
 
 
 def _build_shortcuts(
-	frontend: str,
 	cdn: str | None,
 	assets: PwaManifestAssetsSettings,
 ) -> list[dict[str, Any]]:
@@ -245,14 +220,14 @@ def _build_shortcuts(
 	for spec, asset, file in shortcut_specs:
 		icon_src = _resolve_manifest_asset(
 			asset,
-			app_url(frontend, spec["icon_file"]),
+			spec["icon_file"],
 			cdn_asset_url(cdn, STATIC_ASSET_PATH, "shortcuts", file) if cdn else None,
 		)
 		entry: dict[str, Any] = {
 			"name": spec["name"],
 			"short_name": spec["short_name"],
 			"description": spec["description"],
-			"url": app_url(frontend, spec["url"]),
+			"url": spec["url"],
 		}
 		if icon_src:
 			entry["icons"] = [
@@ -327,7 +302,7 @@ def _build_screenshots(
 	return shots
 
 
-def _compile(frontend: str) -> dict[str, Any]:
+def _compile() -> dict[str, Any]:
 	"""build a complete PWA manifest from current settings."""
 	branding = settings.branding
 	cdn = (
@@ -343,8 +318,8 @@ def _compile(frontend: str) -> dict[str, Any]:
 		"short_name": branding.site_name,
 		"description": "your interface with AI",
 		"orientation": "natural",
-		"start_url": f"{frontend}/",
-		"scope": f"{frontend}/",
+		"start_url": "/",
+		"scope": "/",
 		"display_override": ["window-controls-overlay", "standalone"],
 		"display": "standalone",
 		"theme_color": branding.primary_color,
@@ -358,7 +333,7 @@ def _compile(frontend: str) -> dict[str, Any]:
 		"protocol_handlers": [
 			{
 				"protocol": "web+nokodo",
-				"url": f"{frontend}/?protocol=%s",
+				"url": "/?protocol=%s",
 			},
 		],
 	}
@@ -369,6 +344,6 @@ def _compile(frontend: str) -> dict[str, Any]:
 	screenshots = _build_screenshots(cdn, pwa_assets)
 	if screenshots:
 		manifest["screenshots"] = screenshots
-	manifest["shortcuts"] = _build_shortcuts(frontend, cdn, pwa_assets)
+	manifest["shortcuts"] = _build_shortcuts(cdn, pwa_assets)
 
 	return manifest
