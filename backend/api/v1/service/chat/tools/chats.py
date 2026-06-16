@@ -7,10 +7,10 @@ import json
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.models.message import Message
+from api.models.message import Message, MessageType
 from api.models.thread import Thread
 from api.models.thread_summary import SummaryPurpose, ThreadSummary
-from api.schemas.search import SearchMode, SearchParams, SearchResultItem
+from api.schemas.search import Page, SearchMode, SearchParams
 from api.schemas.thread import ThreadListFilters
 from api.v1.service import threads as chat_service
 from api.v1.service.chat.context import AppContext
@@ -51,9 +51,10 @@ class ChatGetInput(BaseModel):
 		min_length=1,
 		max_length=500,
 	)
-	cursor: str | None = Field(
-		default=None,
-		description="cursor returned by a previous search page.",
+	offset: int = Field(
+		default=0,
+		description="number of search results to skip before this page.",
+		ge=0,
 	)
 	skip: int = Field(
 		default=0,
@@ -65,7 +66,7 @@ class ChatGetInput(BaseModel):
 	)
 	limit: int = Field(
 		default=_DEFAULT_PAGE_LIMIT,
-		description="maximum items to return per page. use skip or cursor to continue.",
+		description="maximum items to return per page. use skip or offset to continue.",
 		ge=1,
 		le=_MAX_PAGE_LIMIT,
 	)
@@ -142,12 +143,30 @@ def _summary_payload(summary: ThreadSummary) -> dict[str, object]:
 	return payload
 
 
-def _search_item_payload(item: SearchResultItem) -> dict[str, object]:
-	data = item.model_dump(mode="json")
-	if data.get("type") == "thread":
-		data["type"] = "chat"
-		data["chat_id"] = data.pop("id")
-	return data
+def _thread_search_result(thread: Thread) -> dict[str, object]:
+	"""summarize a chat thread for agent search results."""
+	summary = chat_summary_service.latest_active_summary_text(
+		thread, SummaryPurpose.CATALOG
+	)
+	if summary is None:
+		summary = (thread.metadata_ or {}).get("summary")
+	payload: dict[str, object] = {
+		"type": "chat",
+		"chat_id": str(thread.id),
+		"title": thread.title or "",
+	}
+	if summary:
+		payload["preview"] = str(summary)[:100]
+	elif thread.messages:
+		# no catalog summary yet - use last 3 user/assistant turns as preview
+		turns = [
+			m.text_content[:80]
+			for m in sorted(thread.messages, key=lambda m: m.created_at)
+			if m.type in (MessageType.USER, MessageType.ASSISTANT) and m.text_content
+		][-3:]
+		if turns:
+			payload["preview"] = " | ".join(turns)
+	return payload
 
 
 def _chat_error(exc: HTTPException) -> str:
@@ -292,22 +311,26 @@ class ChatGetTool(Tool[AppContext]):
 			return self.error(
 				"query is required when searching chats", tool_call_context
 			)
-		page = await chat_service.search_threads(
+		scored = await chat_service.search_threads(
 			inp.query,
 			app_context.session,
 			principal=app_context.principal,
-			limit=inp.limit,
-			cursor=inp.cursor,
+			limit=inp.limit + 1,
+			offset=inp.offset,
 			search_params=_HYBRID_SEARCH,
 		)
-		results = [_search_item_payload(item) for item in page.items]
+		page = Page(
+			items=[hit.item for hit in scored[: inp.limit]],
+			has_more=len(scored) > inp.limit,
+		)
+		results = [_thread_search_result(item) for item in page.items]
+		next_offset = inp.offset + inp.limit if page.has_more else None
 		out = {
 			"status": "success",
 			"message": f"found {len(results)} chats",
 			"count": len(results),
 			"results": results,
-			"next_cursor": page.next_cursor,
-			"has_more": page.has_more,
+			"next_offset": next_offset,
 		}
 		return self.success(json.dumps(out), tool_call_context)
 

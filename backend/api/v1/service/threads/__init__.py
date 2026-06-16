@@ -42,6 +42,7 @@ from api.v1.service.threads.participants import (
 from api.v1.service.threads.search import (
 	THREAD_SPEC,
 	search_threads,
+	thread_to_search_item,
 	vectorize_all_threads,
 	vectorize_threads,
 )
@@ -73,6 +74,7 @@ __all__ = [
 	"mark_thread_read",
 	"restore_thread",
 	"search_threads",
+	"thread_to_search_item",
 	"switch_branch",
 	"thread_metadata_missing",
 	"thread_needs_deferred_maintenance",

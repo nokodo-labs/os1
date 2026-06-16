@@ -11,8 +11,14 @@ from api.database import get_db
 from api.models.note import Note
 from api.permissions import ResourceType
 from api.schemas.note import Note as NoteSchema
-from api.schemas.note import NoteCreate, NoteListFilters, NoteSortBy, NoteUpdate
-from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
+from api.schemas.note import (
+	NoteCreate,
+	NoteListFilters,
+	NoteSearchFilters,
+	NoteSortBy,
+	NoteUpdate,
+)
+from api.schemas.search import Page, SearchMode, SearchParams
 from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import notes as note_service
@@ -74,23 +80,29 @@ async def count_notes(
 	return await note_service.count_notes(db, principal=principal, filters=filters)
 
 
-@router.get("/search", response_model=CursorPage[SearchResultItem])
+@router.get("/search", response_model=Page[NoteSchema])
 async def search_notes(
+	filters: Annotated[NoteSearchFilters, Depends()],
 	q: str = Query(min_length=1, max_length=500),
 	limit: int = Query(default=10, ge=1, le=50),
-	cursor: str | None = Query(default=None),
+	offset: int = Query(default=0, ge=0),
 	mode: SearchMode = Query(default=SearchMode.FULL),
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> CursorPage[SearchResultItem]:
-	"""search notes with cursor-based pagination."""
-	return await note_service.search_notes(
+) -> Page[NoteSchema]:
+	"""search notes returning ranked note objects."""
+	scored = await note_service.search_notes(
 		q,
 		db,
 		principal=principal,
-		limit=limit,
-		cursor=cursor,
+		limit=limit + 1,
+		offset=offset,
 		search_params=SearchParams(mode=mode),
+		filters=filters,
+	)
+	return Page(
+		items=[NoteSchema.model_validate(hit.item) for hit in scored[:limit]],
+		has_more=len(scored) > limit,
 	)
 
 

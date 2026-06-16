@@ -261,7 +261,7 @@ async def search_reminder_lists(
 	query_text: str,
 	session: AsyncSession,
 	principal: Principal,
-	skip: int = 0,
+	offset: int = 0,
 	limit: int = 50,
 ) -> list[ReminderListWithCounts]:
 	"""search accessible reminder lists by name and description."""
@@ -301,7 +301,7 @@ async def search_reminder_lists(
 			),
 		)
 		.order_by(ReminderList.position.asc(), ReminderList.name.asc())
-		.offset(skip)
+		.offset(offset)
 		.limit(limit)
 		.options(selectinload(ReminderList.projects))
 	)
@@ -326,6 +326,14 @@ def _apply_reminder_list_filters(
 	"""apply reminder-list list/count filters."""
 	if filters.owner_id is not None:
 		stmt = stmt.where(ReminderList.owner_id == filters.owner_id)
+	if filters.q is not None and filters.q.strip():
+		pattern = contains_pattern(filters.q.strip())
+		stmt = stmt.where(
+			or_(
+				ReminderList.name.ilike(pattern, escape="\\"),
+				ReminderList.description.ilike(pattern, escape="\\"),
+			)
+		)
 	return stmt
 
 

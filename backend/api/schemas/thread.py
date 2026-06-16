@@ -36,6 +36,17 @@ class ThreadListFilters(BaseModel):
 	owner_id: TypeID | None = None
 	include_hidden: bool = False
 	is_archived: bool | None = None
+	include_deleted: bool = False
+	q: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+class ThreadSearchFilters(BaseModel):
+	"""structured filters applied to thread search (vector + autocomplete)."""
+
+	owner_id: TypeID | None = None
+	is_archived: bool | None = None
+	include_hidden: bool = False
+	include_deleted: bool = False
 
 
 def _populate_project_ids(data: Any) -> Any:

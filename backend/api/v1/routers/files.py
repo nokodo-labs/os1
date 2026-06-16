@@ -18,10 +18,11 @@ from api.schemas.file import (
 	FileCounts,
 	FileCreate,
 	FileListFilters,
+	FileSearchFilters,
 	FileSortBy,
 	FileUpdate,
 )
-from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
+from api.schemas.search import Page, SearchMode, SearchParams
 from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import files as file_service
@@ -122,23 +123,29 @@ async def count_files(
 	return await file_service.count_files(db, principal=principal, filters=filters)
 
 
-@router.get("/search", response_model=CursorPage[SearchResultItem])
+@router.get("/search", response_model=Page[FileSchema])
 async def search_files(
+	filters: Annotated[FileSearchFilters, Depends()],
 	q: str = Query(min_length=1, max_length=500),
 	limit: int = Query(default=10, ge=1, le=50),
-	cursor: str | None = Query(default=None),
+	offset: int = Query(default=0, ge=0),
 	mode: SearchMode = Query(default=SearchMode.FULL),
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> CursorPage[SearchResultItem]:
-	"""search files by description and filename autocomplete."""
-	return await file_service.search_files(
+) -> Page[FileSchema]:
+	"""search files returning ranked file objects."""
+	scored = await file_service.search_files(
 		q,
 		db,
 		principal=principal,
-		limit=limit,
-		cursor=cursor,
+		limit=limit + 1,
+		offset=offset,
 		search_params=SearchParams(mode=mode),
+		filters=filters,
+	)
+	return Page(
+		items=[FileSchema.model_validate(hit.item) for hit in scored[:limit]],
+		has_more=len(scored) > limit,
 	)
 
 

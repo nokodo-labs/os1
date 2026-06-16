@@ -27,6 +27,7 @@ from api.v1.service.reminders.lists import (
 )
 from api.v1.service.reminders.search import (
 	REMINDER_SPEC,
+	reminder_to_search_item,
 	search_reminders,
 	vectorize_all_reminders,
 	vectorize_reminders_for_list,
@@ -57,6 +58,7 @@ __all__ = [
 	"list_scheduled_reminders",
 	"move_reminder",
 	"search_reminder_lists",
+	"reminder_to_search_item",
 	"search_reminders",
 	"update_reminder",
 	"update_reminder_list",

@@ -14,23 +14,29 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
-from api.database import build_cursor_page, decode_cursor
+from api.database.main import session_scope
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.memory import Memory
 from api.permissions import ResourceType
-from api.schemas.memory import MemoryCreate, MemoryListFilters, MemoryUpdate
+from api.schemas.memory import (
+	MemoryCreate,
+	MemoryListFilters,
+	MemorySearchFilters,
+	MemoryUpdate,
+)
 from api.schemas.search import (
-	CursorPage,
 	SearchMode,
 	SearchParams,
-	SearchResultItem,
-	SearchResultType,
 )
 from api.v1.service import events as event_service
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
-from api.v1.service.authorization import list_accessible_user_ids, require_permission
+from api.v1.service.authorization import (
+	list_accessible_user_ids,
+	require_permission,
+	vector_acl_filter,
+)
 from api.v1.service.authorization.predicates import resource_access_predicate
 from api.v1.service.chat.models import (
 	resolve_task_chat_model,
@@ -38,6 +44,7 @@ from api.v1.service.chat.models import (
 )
 from api.v1.service.embeddings import embed_text
 from api.v1.service.listing import SortDir, apply_sort
+from api.v1.service.search.primitives import ScoredResult, merge_scored
 from api.v1.service.vectorize import (
 	VectorSpec,
 	remove_vectorized_resource,
@@ -59,6 +66,7 @@ MEMORY_POST_PROCESSING_MEMORY_MAX_CHARS = 1200
 MEMORY_POST_PROCESSING_EMBED_TIMEOUT_SECONDS = 45
 MEMORY_POST_PROCESSING_SEARCH_TIMEOUT_SECONDS = 20
 MEMORY_POST_PROCESSING_MODEL_TIMEOUT_SECONDS = 60
+
 
 type MemoryPostProcessingProgress = Callable[[int, str], Awaitable[None]]
 
@@ -432,6 +440,8 @@ def _apply_memory_filters(
 		stmt = stmt.where(
 			Memory.content.ilike(contains_pattern(filters.search), escape="\\")
 		)
+	if filters.tags:
+		stmt = stmt.where(Memory.tags.op("&&")(filters.tags))
 	return stmt
 
 
@@ -578,7 +588,6 @@ MEMORY_SPEC: VectorSpec[Memory] = VectorSpec(
 	bm25_text=_memory_dense_text,
 	metadata=_memory_metadata,
 	should_revectorize=_memory_should_revectorize,
-	sort_key="updated_at",
 )
 
 
@@ -604,39 +613,65 @@ async def vectorize_all_memories(session: AsyncSession) -> int:
 	)
 
 
+def _memory_search_conditions(
+	filters: MemorySearchFilters | None,
+) -> list[vectorstore_service.FieldCondition]:
+	"""vector-layer narrowing conditions derived from memory search filters."""
+	conditions: list[vectorstore_service.FieldCondition] = []
+	if filters is None:
+		return conditions
+	if filters.owner_id is not None:
+		conditions.append(
+			vectorstore_service.FieldMatch(key="owner_id", value=str(filters.owner_id))
+		)
+	if filters.tags:
+		conditions.append(
+			vectorstore_service.FieldMatchAny(key="tags", values=filters.tags)
+		)
+	return conditions
+
+
+def _apply_memory_search_filters(
+	stmt: Select,
+	filters: MemorySearchFilters | None,
+) -> Select:
+	"""SQL-layer narrowing mirroring _memory_search_conditions."""
+	if filters is None:
+		return stmt
+	if filters.owner_id is not None:
+		stmt = stmt.where(Memory.user_id == filters.owner_id)
+	if filters.tags:
+		stmt = stmt.where(Memory.tags.op("&&")(filters.tags))
+	return stmt
+
+
 async def _autocomplete_memories(
 	q: str,
 	db: AsyncSession,
 	principal: Principal,
 	limit: int = 5,
-) -> list[SearchResultItem]:
-	"""pg_trgm autocomplete for memories on content."""
+	offset: int = 0,
+	filters: MemorySearchFilters | None = None,
+) -> list[ScoredResult[Memory]]:
+	"""pg_trgm autocomplete tier for memories, scored by content similarity."""
 	pattern = contains_pattern(q)
+	sim = func.similarity(Memory.content, q)
 	stmt = (
-		select(Memory)
+		select(Memory, sim.label("sim"))
 		.where(
 			or_(
-				func.similarity(Memory.content, q) > 0.1,
+				sim > 0.1,
 				Memory.content.ilike(pattern, escape="\\"),
 			),
 		)
-		.order_by(func.similarity(Memory.content, q).desc())
+		.where(resource_access_predicate(principal, ResourceType.MEMORY))
+		.order_by(sim.desc())
+		.offset(offset)
 		.limit(limit)
 	)
-	if not principal.is_admin:
-		stmt = stmt.where(Memory.user_id == principal.user.id)
+	stmt = _apply_memory_search_filters(stmt, filters)
 	result = await db.execute(stmt)
-	return [
-		SearchResultItem(
-			type=SearchResultType.MEMORY,
-			id=TypeID(mem.id),
-			title=mem.content[:80] if mem.content else "",
-			preview=", ".join(mem.tags) if mem.tags else None,
-			created_at=mem.created_at,
-			updated_at=mem.updated_at,
-		)
-		for mem in result.scalars().all()
-	]
+	return [ScoredResult(item=mem, score=float(score)) for mem, score in result.all()]
 
 
 async def _hybrid_search_memories(
@@ -646,8 +681,9 @@ async def _hybrid_search_memories(
 	limit: int = 10,
 	search_params: SearchParams | None = None,
 	query_embedding: list[float] | None = None,
-) -> list[SearchResultItem]:
-	"""qdrant hybrid search for memories (dense + BM25)."""
+	filters: MemorySearchFilters | None = None,
+) -> list[ScoredResult[Memory]]:
+	"""qdrant hybrid tier for memories (dense + BM25), scored by fused rank."""
 	params = search_params or SearchParams()
 	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
@@ -661,10 +697,10 @@ async def _hybrid_search_memories(
 		)
 	)
 	text_query = query_text if need_sparse else None
-	# memories are user-private (no sharing) - owner_id filter is efficient.
-	query_filter = vectorstore_service.resource_types_filter(
-		[VectorChunkResourceType.MEMORY],
-		owner_id=(str(principal.user.id) if not principal.is_admin else None),
+	# ACL prefilter (owner + admin handled inside), narrowed by search filters.
+	query_filter = vectorstore_service.with_conditions(
+		vector_acl_filter([VectorChunkResourceType.MEMORY], principal),
+		_memory_search_conditions(filters),
 	)
 	results = await vectorstore_service.search(
 		session=db,
@@ -678,29 +714,20 @@ async def _hybrid_search_memories(
 	if not results:
 		return []
 	resource_ids: list[str] = [str(r.metadata["resource_id"]) for r in results]
-	stmt = select(Memory).where(Memory.id.in_(resource_ids))
-	if not principal.is_admin:
-		stmt = stmt.where(Memory.user_id == principal.user.id)
+	stmt = select(Memory).where(
+		Memory.id.in_(resource_ids),
+		resource_access_predicate(principal, ResourceType.MEMORY),
+	)
+	stmt = _apply_memory_search_filters(stmt, filters)
 	db_result = await db.execute(stmt)
 	by_id = {str(m.id): m for m in db_result.scalars().all()}
-	items: list[SearchResultItem] = []
+	scored: list[ScoredResult[Memory]] = []
 	for r in results:
-		rid = str(r.metadata["resource_id"])
-		mem = by_id.get(rid)
-		if not mem:
+		mem = by_id.get(str(r.metadata["resource_id"]))
+		if mem is None:
 			continue
-		items.append(
-			SearchResultItem(
-				type=SearchResultType.MEMORY,
-				id=TypeID(mem.id),
-				title=mem.content[:80] if mem.content else "",
-				preview=", ".join(mem.tags) if mem.tags else None,
-				score=r.score,
-				created_at=mem.created_at,
-				updated_at=mem.updated_at,
-			)
-		)
-	return items
+		scored.append(ScoredResult(item=mem, score=r.score))
+	return scored
 
 
 async def search_memories(
@@ -708,13 +735,28 @@ async def search_memories(
 	db: AsyncSession,
 	principal: Principal,
 	limit: int = 10,
-	cursor: str | None = None,
+	offset: int = 0,
 	search_params: SearchParams | None = None,
 	query_embedding: list[float] | None = None,
-) -> CursorPage[SearchResultItem]:
-	"""parallel pg_trgm + qdrant hybrid search with cursor pagination."""
+	filters: MemorySearchFilters | None = None,
+	score_threshold: float = 0.0,
+) -> list[ScoredResult[Memory]]:
+	"""relevance-ordered, deduped memory hits with internal scores.
+
+	hybrid tier ranks first; autocomplete-only matches are appended.
+	"""
 	params = search_params or SearchParams()
-	coros: list[Coroutine[None, None, list[SearchResultItem]]] = []
+	if params.mode == SearchMode.AUTOCOMPLETE:
+		return await _autocomplete_memories(
+			query_text,
+			db,
+			principal=principal,
+			limit=limit,
+			offset=offset,
+			filters=filters,
+		)
+	fetch = offset + limit
+	coros: list[Coroutine[None, None, list[ScoredResult[Memory]]]] = []
 	run_autocomplete = params.mode in (
 		SearchMode.AUTOCOMPLETE,
 		SearchMode.FULL,
@@ -725,96 +767,39 @@ async def search_memories(
 		SearchMode.SPARSE,
 		SearchMode.FULL,
 	)
-	# hybrid first - wins on deduplication (higher quality than autocomplete)
-	if run_hybrid:
-		coros.append(
-			_hybrid_search_memories(
+
+	async def _run_hybrid() -> list[ScoredResult[Memory]]:
+		async with session_scope(None) as s:
+			return await _hybrid_search_memories(
 				query_text,
-				db,
+				s,
 				principal=principal,
-				limit=limit + 1,
+				limit=fetch,
 				search_params=params,
 				query_embedding=query_embedding,
+				filters=filters,
 			)
-		)
+
+	async def _run_autocomplete() -> list[ScoredResult[Memory]]:
+		async with session_scope(None) as s:
+			return await _autocomplete_memories(
+				query_text,
+				s,
+				principal=principal,
+				limit=fetch,
+				filters=filters,
+			)
+
+	# hybrid first - wins on deduplication (higher quality than autocomplete)
+	if run_hybrid:
+		coros.append(_run_hybrid())
 	if run_autocomplete:
-		coros.append(
-			_autocomplete_memories(query_text, db, principal=principal, limit=limit + 1)
-		)
+		coros.append(_run_autocomplete())
 	results = await asyncio.gather(*coros, return_exceptions=True)
-	items = vectorstore_service.merge_deduplicate(
-		results, limit + 1, resource_name="memories"
-	)
-	if cursor:
-		ts, cid = decode_cursor(cursor)
-		_sk = MEMORY_SPEC.sort_key
-		items = [i for i in items if (getattr(i, _sk), str(i.id)) < (ts, cid)]
-	_sk = MEMORY_SPEC.sort_key
-	items.sort(key=lambda r: (getattr(r, _sk), str(r.id)), reverse=True)
-	return build_cursor_page(items, limit, sort_key=MEMORY_SPEC.sort_key)
-
-
-async def query_relevant_memories(
-	query_text: str,
-	db: AsyncSession,
-	principal: Principal,
-	limit: int = 10,
-	score_threshold: float = 0.0,
-	query_embedding: list[float] | None = None,
-) -> list[Memory]:
-	"""hybrid search returning full Memory objects in relevance order.
-
-	intended for internal consumers (filters, tools) that need full
-	memory content rather than the truncated SearchResultItem used by
-	UI search endpoints.
-
-	args:
-		query_text: natural-language search text.
-		db: async database session.
-		principal: authenticated user.
-		limit: max memories to return.
-		score_threshold: minimum normalized score (0-1). results below
-			this threshold are dropped.
-		query_embedding: pre-computed embedding vector. when provided
-			the function skips the embed_text call and uses this directly.
-
-	returns:
-		full Memory objects ordered by relevance (best first).
-	"""
-	query_emb = query_embedding or await embed_text(
-		text=query_text, session=db, input_type="query"
-	)
-	query_filter = vectorstore_service.resource_types_filter(
-		[VectorChunkResourceType.MEMORY],
-		owner_id=(str(principal.user.id) if not principal.is_admin else None),
-	)
-	results = await vectorstore_service.search(
-		session=db,
-		query=query_emb,
-		text_query=query_text,
-		limit=limit,
-		query_filter=query_filter,
-		normalize=True,
-		group_by="resource_id",
-	)
-	if not results:
-		return []
-
-	# apply score threshold.
-	results = [r for r in results if r.score >= score_threshold]
-	if not results:
-		return []
-
-	# fetch full Memory objects.
-	resource_ids: list[str] = [str(r.metadata["resource_id"]) for r in results]
-	stmt = select(Memory).where(Memory.id.in_(resource_ids))
-	if not principal.is_admin:
-		stmt = stmt.where(Memory.user_id == principal.user.id)
-	db_result = await db.execute(stmt)
-	by_id = {str(m.id): m for m in db_result.scalars().all()}
-
-	# preserve relevance order from vector search.
-	return [by_id[rid] for rid in resource_ids if rid in by_id][:limit]
+	merged = merge_scored(results, resource_name="memories")
+	if score_threshold > 0.0:
+		merged = [s for s in merged if s.score >= score_threshold]
+	return merged[offset : offset + limit]
 
 
 async def post_process_relevant_memories(
@@ -854,17 +839,20 @@ async def post_process_relevant_memories(
 			30,
 			"searching relevant memories",
 		)
-		memories = await _run_memory_stage(
+		memories_scored = await _run_memory_stage(
 			"searching relevant memories",
 			MEMORY_POST_PROCESSING_SEARCH_TIMEOUT_SECONDS,
-			query_relevant_memories(
+			search_memories(
 				query,
 				session,
 				principal=principal,
 				limit=max_related_memories,
+				search_params=SearchParams(mode=SearchMode.HYBRID),
 				query_embedding=query_embedding,
+				filters=MemorySearchFilters(owner_id=principal.user.id),
 			),
 		)
+		memories = [s.item for s in memories_scored]
 	except _MemoryPostProcessingTimeoutError as exc:
 		logger.warning(
 			"memory post-processing skipped after timeout stage=%s error=%s",

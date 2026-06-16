@@ -20,7 +20,7 @@ from api.schemas.reminder import (
 	ReminderWithSubtasks,
 )
 from api.schemas.scheduled_item import Recurrence
-from api.schemas.search import SearchMode, SearchParams
+from api.schemas.search import Page, SearchMode, SearchParams
 from api.v1.service import reminders as reminder_service
 from api.v1.service.chat.context import AppContext
 from nokodo_ai.agents import AgentIterationSnapshot
@@ -63,9 +63,10 @@ class ReminderGetInput(BaseModel):
 		min_length=1,
 		max_length=500,
 	)
-	cursor: str | None = Field(
-		default=None,
-		description="cursor returned by a previous reminder search page.",
+	offset: int = Field(
+		default=0,
+		description="offset for reminder search pages.",
+		ge=0,
 	)
 	skip: int = Field(
 		default=0,
@@ -74,7 +75,7 @@ class ReminderGetInput(BaseModel):
 	)
 	limit: int = Field(
 		default=_DEFAULT_LIMIT,
-		description="maximum items to return per page. use skip or cursor to continue.",
+		description="maximum items to return per page. use skip or offset to continue.",
 		ge=1,
 		le=_MAX_LIMIT,
 	)
@@ -119,7 +120,9 @@ class ReminderWriteInput(BaseModel):
 	)
 	position: float | None = Field(
 		default=None,
-		description="position for ordering within the reminder list.",
+		description=(
+			"position for ordering within the reminder list. omit to append last."
+		),
 	)
 	due_at: datetime | None = Field(
 		default=None,
@@ -283,38 +286,36 @@ class ReminderGetTool(Tool[AppContext]):
 				inp.query,
 				app_context.session,
 				principal=app_context.principal,
-				skip=inp.skip,
+				offset=inp.offset,
 				limit=inp.limit,
 			)
 			list_results = [
 				await _reminder_list_payload(reminder_list, app_context)
 				for reminder_list in lists
 			]
-			page = await reminder_service.search_reminders(
+			scored = await reminder_service.search_reminders(
 				inp.query,
 				app_context.session,
 				principal=app_context.principal,
-				limit=inp.limit,
-				cursor=inp.cursor,
+				limit=inp.limit + 1,
+				offset=inp.offset,
 				search_params=_HYBRID_SEARCH,
 			)
 		except HTTPException as exc:
 			return self.error(str(exc.detail), tool_call_context)
+		page = Page(
+			items=[hit.item for hit in scored[: inp.limit]],
+			has_more=len(scored) > inp.limit,
+		)
 		reminder_items = page.items
 		if not inp.include_completed:
 			reminder_items = [
 				item
 				for item in reminder_items
-				if item.metadata.get("status") != ReminderStatus.COMPLETED.value
+				if item.status != ReminderStatus.COMPLETED
 			]
-		reminder_results = [
-			{
-				"id": str(item.id),
-				"title": item.title,
-				**({"description": item.preview} if item.preview else {}),
-			}
-			for item in reminder_items
-		]
+		reminder_results = [_reminder_search_result(item) for item in reminder_items]
+		next_offset = inp.offset + inp.limit if page.has_more else None
 		out = {
 			"status": "success",
 			"message": "reminder search complete",
@@ -322,8 +323,7 @@ class ReminderGetTool(Tool[AppContext]):
 			"reminders": reminder_results,
 			"list_count": len(list_results),
 			"reminder_count": len(reminder_results),
-			"next_cursor": page.next_cursor,
-			"has_more_reminders": page.has_more,
+			"next_offset": next_offset,
 		}
 		return self.success(json.dumps(out), tool_call_context)
 
@@ -459,17 +459,19 @@ class ReminderWriteTool(Tool[AppContext]):
 				tool_call_context,
 			)
 		try:
+			create_kwargs: dict[str, object] = {
+				"title": inp.title,
+				"description": inp.description,
+				"due_at": inp.due_at,
+				"remind_at": inp.remind_at,
+				"recurrence": inp.recurrence,
+				"list_id": inp.list_id,
+				"parent_id": inp.parent_id,
+			}
+			if inp.position is not None:
+				create_kwargs["position"] = inp.position
 			reminder = await reminder_service.create_reminder(
-				ReminderCreate(
-					title=inp.title,
-					description=inp.description,
-					due_at=inp.due_at,
-					remind_at=inp.remind_at,
-					recurrence=inp.recurrence,
-					list_id=inp.list_id,
-					parent_id=inp.parent_id,
-					position=inp.position or 0.0,
-				),
+				ReminderCreate.model_validate(create_kwargs),
 				app_context.session,
 				principal=app_context.principal,
 			)
@@ -482,6 +484,15 @@ class ReminderWriteTool(Tool[AppContext]):
 			"list_id": str(reminder.list_id),
 		}
 		return self.success(json.dumps(out), tool_call_context)
+
+
+def _reminder_search_result(reminder: ReminderModel) -> dict[str, object]:
+	"""summarize a reminder for agent search results."""
+	return {
+		"id": str(reminder.id),
+		"title": reminder.title,
+		**({"description": reminder.description} if reminder.description else {}),
+	}
 
 
 def _reminder_payload(

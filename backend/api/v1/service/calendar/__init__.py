@@ -22,6 +22,7 @@ from api.v1.service.calendar.events import (
 )
 from api.v1.service.calendar.search import (
 	CALENDAR_EVENT_SPEC,
+	calendar_event_to_search_item,
 	search_calendar_events,
 	vectorize_all_calendar_events,
 	vectorize_calendar_events_for_calendar,
@@ -47,6 +48,7 @@ __all__ = [
 	"get_calendar_event",
 	"list_calendar_events",
 	"list_calendars",
+	"calendar_event_to_search_item",
 	"search_calendar_events",
 	"update_calendar",
 	"update_calendar_event",

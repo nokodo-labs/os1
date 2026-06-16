@@ -34,9 +34,7 @@ from api.v1.service.authorization.metadata import (
 	vector_acl_filter,
 )
 from api.v1.service.authorization.predicates import (
-	project_access_predicate,
 	resource_access_predicate,
-	thread_access_predicate,
 )
 from api.v1.service.authorization.resolve import (
 	get_effective_access_level,
@@ -74,7 +72,6 @@ __all__ = [
 	"load_descendant_resource_ids",
 	"load_parent_resource_refs",
 	"merge_acl_metadata",
-	"project_access_predicate",
 	"require_admin",
 	"require_permission",
 	"require_project_access",
@@ -82,7 +79,6 @@ __all__ = [
 	"require_thread_access",
 	"resolve_effective_level",
 	"resource_access_predicate",
-	"thread_access_predicate",
 	"unique_resource_types",
 	"vector_acl_filter",
 ]

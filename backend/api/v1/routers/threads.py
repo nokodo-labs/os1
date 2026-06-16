@@ -21,7 +21,7 @@ from api.schemas.message import MessageCreate, MessageUpdate
 from api.schemas.runs import (
 	ThreadCreateAndRunRequest,
 )
-from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
+from api.schemas.search import Page, SearchMode, SearchParams
 from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.thread import (
 	Thread as ThreadSchema,
@@ -30,6 +30,7 @@ from api.schemas.thread import (
 	ThreadCreate,
 	ThreadListFilters,
 	ThreadMaintenanceRunRequest,
+	ThreadSearchFilters,
 	ThreadSortBy,
 	ThreadSwitchRequest,
 	ThreadSwitchResponse,
@@ -170,23 +171,29 @@ async def count_threads(
 	)
 
 
-@router.get("/search", response_model=CursorPage[SearchResultItem])
+@router.get("/search", response_model=Page[ThreadSchema])
 async def search_threads(
+	filters: Annotated[ThreadSearchFilters, Depends()],
 	q: str = Query(min_length=1, max_length=500),
 	limit: int = Query(default=10, ge=1, le=50),
-	cursor: str | None = Query(default=None),
+	offset: int = Query(default=0, ge=0),
 	mode: SearchMode = Query(default=SearchMode.FULL),
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> CursorPage[SearchResultItem]:
-	"""search threads with cursor-based pagination."""
-	return await thread_service.search_threads(
+) -> Page[ThreadSchema]:
+	"""search threads returning ranked thread objects."""
+	scored = await thread_service.search_threads(
 		q,
 		db,
 		principal=principal,
-		limit=limit,
-		cursor=cursor,
+		limit=limit + 1,
+		offset=offset,
 		search_params=SearchParams(mode=mode),
+		filters=filters,
+	)
+	return Page(
+		items=[ThreadSchema.model_validate(hit.item) for hit in scored[:limit]],
+		has_more=len(scored) > limit,
 	)
 
 

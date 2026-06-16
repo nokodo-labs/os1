@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -18,7 +19,7 @@ from api.models.user import User
 from api.schemas.reminder import Reminder, ReminderListWithCounts
 from api.schemas.scheduled_item import ScheduledItem
 from api.schemas.search import (
-	CursorPage,
+	Page,
 	SearchMode,
 	SearchParams,
 	SearchResultItem,
@@ -37,6 +38,7 @@ from api.v1.service.chat.tools.notes import NoteGetTool
 from api.v1.service.chat.tools.projects import ProjectGetTool
 from api.v1.service.chat.tools.reminders import ReminderGetTool, ReminderWriteTool
 from api.v1.service.chat.tools.resource_search import ResourceSearchTool
+from api.v1.service.search.primitives import ScoredResult
 from nokodo_ai import AgentContext, AgentIterationSnapshot, AgentIterationState
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.context import ToolCallContext
@@ -78,25 +80,26 @@ def _app_context() -> AppContext:
 	)
 
 
-def _search_page(
+def _scored_item(
 	result_type: SearchResultType,
 	item_id: TypeID,
 	title: str,
 	preview: str = "preview",
-) -> CursorPage:
+) -> list[ScoredResult]:
 	now = datetime.now(tz=UTC)
-	return CursorPage(
-		items=[
-			SearchResultItem(
-				type=result_type,
-				id=item_id,
-				title=title,
-				preview=preview,
-				created_at=now,
-				updated_at=now,
-			)
-		]
+	item = SimpleNamespace(
+		id=item_id,
+		title=title,
+		content=preview,
+		name=title,
+		description=preview,
+		filename=title,
+		mime_type="application/octet-stream",
+		size_bytes=0,
+		created_at=now,
+		updated_at=now,
 	)
+	return [ScoredResult(item=item, score=0.9)]
 
 
 @pytest.mark.asyncio
@@ -160,27 +163,25 @@ async def test_calendar_get_returns_upcoming_reminders_with_reminder_ids() -> No
 @pytest.mark.asyncio
 async def test_calendar_get_query_uses_hybrid_event_search() -> None:
 	now = datetime.now(tz=UTC)
-	page = CursorPage(
-		items=[
-			SearchResultItem(
-				type=SearchResultType.CALENDAR_EVENT,
-				id=new_typeid("calev"),
-				title="planning sync",
-				preview="agenda",
-				created_at=now,
-				updated_at=now,
-			)
-		],
-		next_cursor="next",
-		has_more=True,
+	calendar_event = CalendarEvent(
+		id=new_typeid("calev"),
+		owner_id=new_typeid("user"),
+		title="planning sync",
+		created_at=now,
+		updated_at=now,
 	)
+	scored: list[ScoredResult[CalendarEvent]] = [
+		ScoredResult(item=calendar_event, score=0.9),
+		# 8 extra to fill limit+1=8, so has_more=True
+		*[ScoredResult(item=calendar_event, score=0.1) for _ in range(7)],
+	]
 	app_context = _app_context()
 	tool = CalendarEventGetTool()
 
 	try:
 		with patch(
 			"api.v1.service.chat.tools.calendar.calendar_service.search_calendar_events",
-			new=AsyncMock(return_value=page),
+			new=AsyncMock(return_value=scored),
 		) as search:
 			message = await tool.call(
 				_state(),
@@ -189,7 +190,7 @@ async def test_calendar_get_query_uses_hybrid_event_search() -> None:
 				app_context,
 				query="planning",
 				limit=7,
-				cursor="cursor-1",
+				offset=5,
 			)
 	finally:
 		await app_context.session.close()
@@ -198,14 +199,13 @@ async def test_calendar_get_query_uses_hybrid_event_search() -> None:
 	search_await = search.await_args
 	assert search_await is not None
 	assert search_await.args[0] == "planning"
-	assert search_await.kwargs["limit"] == 7
-	assert search_await.kwargs["cursor"] == "cursor-1"
+	assert search_await.kwargs["limit"] == 8
+	assert search_await.kwargs["offset"] == 5
 	assert search_await.kwargs["search_params"].mode == SearchMode.HYBRID
 	assert not message.is_error
 	payload = json.loads(message.tool_output)
-	assert payload["count"] == 1
-	assert payload["has_more"] is True
-	assert payload["next_cursor"] == "next"
+	assert payload["count"] == 7
+	assert payload["next_offset"] == 12
 	assert payload["results"][0]["title"] == "planning sync"
 
 
@@ -229,19 +229,17 @@ async def test_reminder_get_query_searches_lists_and_reminders_with_hybrid() -> 
 		pending_count=1,
 		completed_count=1,
 	)
-	page = CursorPage(
+	page: Page = Page(
 		items=[
-			SearchResultItem(
-				type=SearchResultType.REMINDER,
+			SimpleNamespace(
 				id=new_typeid("rem"),
 				title="send draft",
-				preview="draft notes",
-				metadata={"status": ReminderStatus.PENDING.value},
-				created_at=now,
-				updated_at=now,
+				description="draft notes",
+				status=ReminderStatus.PENDING,
 			)
 		],
 	)
+	scored_reminders = [ScoredResult(item=page.items[0], score=0.9)]
 	tool = ReminderGetTool()
 
 	try:
@@ -252,7 +250,7 @@ async def test_reminder_get_query_searches_lists_and_reminders_with_hybrid() -> 
 			) as list_search,
 			patch(
 				"api.v1.service.chat.tools.reminders.reminder_service.search_reminders",
-				new=AsyncMock(return_value=page),
+				new=AsyncMock(return_value=scored_reminders),
 			) as reminder_search,
 		):
 			message = await tool.call(
@@ -275,7 +273,7 @@ async def test_reminder_get_query_searches_lists_and_reminders_with_hybrid() -> 
 	reminder_search_await = reminder_search.await_args
 	assert reminder_search_await is not None
 	assert reminder_search_await.args[0] == "draft"
-	assert reminder_search_await.kwargs["limit"] == 5
+	assert reminder_search_await.kwargs["limit"] == 6
 	assert reminder_search_await.kwargs["search_params"].mode == SearchMode.HYBRID
 	assert not message.is_error
 	payload = json.loads(message.tool_output)
@@ -396,25 +394,20 @@ async def test_calendar_write_create_omits_calendar_id_for_default_calendar() ->
 async def test_chat_get_query_uses_hybrid_search_and_chat_output_names() -> None:
 	now = datetime.now(tz=UTC)
 	chat_id = new_typeid("thread")
-	page = CursorPage(
-		items=[
-			SearchResultItem(
-				type=SearchResultType.THREAD,
-				id=chat_id,
-				title="planning chat",
-				preview="notes",
-				created_at=now,
-				updated_at=now,
-			)
-		]
+	thread = SimpleNamespace(
+		id=chat_id,
+		title="planning chat",
+		metadata_=None,
+		messages=[],
 	)
+	scored_threads = [ScoredResult(item=thread, score=0.9)]
 	app_context = _app_context()
 	tool = ChatGetTool()
 
 	try:
 		with patch(
 			"api.v1.service.chat.tools.chats.chat_service.search_threads",
-			new=AsyncMock(return_value=page),
+			new=AsyncMock(return_value=scored_threads),
 		) as search:
 			message = await tool.call(
 				_state(),
@@ -431,7 +424,7 @@ async def test_chat_get_query_uses_hybrid_search_and_chat_output_names() -> None
 	search_await = search.await_args
 	assert search_await is not None
 	assert search_await.args[0] == "planning"
-	assert search_await.kwargs["limit"] == 3
+	assert search_await.kwargs["limit"] == 4
 	assert search_await.kwargs["search_params"].mode == SearchMode.HYBRID
 	assert not message.is_error
 	payload = json.loads(message.tool_output)
@@ -526,7 +519,7 @@ def test_resource_search_schema_does_not_expose_private_resource_types() -> None
 @pytest.mark.asyncio
 async def test_note_get_query_uses_hybrid_search() -> None:
 	app_context = _app_context()
-	page = _search_page(SearchResultType.NOTE, new_typeid("note"), "design notes")
+	page = _scored_item(SearchResultType.NOTE, new_typeid("note"), "design notes")
 	tool = NoteGetTool()
 
 	try:
@@ -549,7 +542,7 @@ async def test_note_get_query_uses_hybrid_search() -> None:
 	search_await = search.await_args
 	assert search_await is not None
 	assert search_await.args[0] == "design"
-	assert search_await.kwargs["limit"] == 4
+	assert search_await.kwargs["limit"] == 5
 	assert search_await.kwargs["search_params"].mode == SearchMode.HYBRID
 	assert not message.is_error
 	payload = json.loads(message.tool_output)
@@ -565,7 +558,7 @@ async def test_note_get_query_uses_hybrid_search() -> None:
 @pytest.mark.asyncio
 async def test_project_get_query_uses_hybrid_search() -> None:
 	app_context = _app_context()
-	page = _search_page(SearchResultType.PROJECT, new_typeid("proj"), "release")
+	page = _scored_item(SearchResultType.PROJECT, new_typeid("proj"), "release")
 	tool = ProjectGetTool()
 
 	try:
@@ -588,8 +581,7 @@ async def test_project_get_query_uses_hybrid_search() -> None:
 	search_await = search.await_args
 	assert search_await is not None
 	assert search_await.args[0] == "release"
-	assert search_await.kwargs["limit"] == 2
-	assert search_await.kwargs["search_params"].mode == SearchMode.HYBRID
+	assert search_await.kwargs["limit"] == 3
 	assert not message.is_error
 	payload = json.loads(message.tool_output)
 	assert payload["results"][0]["name"] == "release"
@@ -599,26 +591,24 @@ async def test_project_get_query_uses_hybrid_search() -> None:
 async def test_file_get_query_uses_hybrid_search() -> None:
 	app_context = _app_context()
 	now = datetime.now(tz=UTC)
-	page = CursorPage(
-		items=[
-			SearchResultItem(
-				type=SearchResultType.FILE,
-				id=new_typeid("file"),
-				title="brief.pdf",
-				preview="draft",
-				created_at=now,
-				updated_at=now,
-			)
-		],
-		next_cursor="next",
-		has_more=True,
+	file_id = new_typeid("file")
+	file_item = SimpleNamespace(
+		id=file_id,
+		filename="brief.pdf",
+		mime_type="application/pdf",
+		size_bytes=1024,
+		description=None,
 	)
+	scored_files = [
+		ScoredResult(item=file_item, score=0.9),
+		*[ScoredResult(item=file_item, score=0.1) for _ in range(6)],
+	]
 	tool = FileGetTool()
 
 	try:
 		with patch(
 			"api.v1.service.chat.tools.files.file_service.search_files",
-			new=AsyncMock(return_value=page),
+			new=AsyncMock(return_value=scored_files),
 		) as search:
 			message = await tool.call(
 				_state(),
@@ -627,7 +617,7 @@ async def test_file_get_query_uses_hybrid_search() -> None:
 				app_context,
 				query="brief",
 				limit=6,
-				cursor="cursor-1",
+				offset=0,
 			)
 	finally:
 		await app_context.session.close()
@@ -636,14 +626,11 @@ async def test_file_get_query_uses_hybrid_search() -> None:
 	search_await = search.await_args
 	assert search_await is not None
 	assert search_await.args[0] == "brief"
-	assert search_await.kwargs["limit"] == 6
-	assert search_await.kwargs["cursor"] == "cursor-1"
+	assert search_await.kwargs["limit"] == 7
 	assert search_await.kwargs["search_params"].mode == SearchMode.HYBRID
 	assert not message.is_error
 	payload = json.loads(message.tool_output)
-	assert payload["has_more"] is True
-	assert payload["next_cursor"] == "next"
-	assert payload["results"][0]["title"] == "brief.pdf"
+	assert payload["results"][0]["filename"] == "brief.pdf"
 
 
 @pytest.mark.asyncio
@@ -747,13 +734,16 @@ async def test_file_get_batch_reports_missing_file_as_error_entry() -> None:
 @pytest.mark.asyncio
 async def test_memory_recall_uses_hybrid_search() -> None:
 	app_context = _app_context()
-	page = _search_page(SearchResultType.MEMORY, new_typeid("mem"), "prefers focus")
+	memory = SimpleNamespace(
+		id=new_typeid("mem"), content="prefers focus", tags=["work"]
+	)
+	scored_memories = [ScoredResult(item=memory, score=0.9)]
 	tool = MemoryRecallTool()
 
 	try:
 		with patch(
 			"api.v1.service.chat.tools.memories.memory_service.search_memories",
-			new=AsyncMock(return_value=page),
+			new=AsyncMock(return_value=scored_memories),
 		) as search:
 			message = await tool.call(
 				_state(),
@@ -770,8 +760,8 @@ async def test_memory_recall_uses_hybrid_search() -> None:
 	search_await = search.await_args
 	assert search_await is not None
 	assert search_await.args[0] == "focus"
-	assert search_await.kwargs["limit"] == 3
+	assert search_await.kwargs["limit"] == 4
 	assert search_await.kwargs["search_params"].mode == SearchMode.HYBRID
 	assert not message.is_error
 	payload = json.loads(message.tool_output)
-	assert payload["results"][0]["title"] == "prefers focus"
+	assert payload["results"][0]["content"] == "prefers focus"

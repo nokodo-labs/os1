@@ -18,11 +18,10 @@ from api.v1.service.authorization import (
 	VECTOR_CHUNK_ACCESS_RESOURCE_TYPES,
 	VECTOR_CHUNK_PARENT_RESOURCE_TYPES,
 	allowed_levels,
-	project_access_predicate,
 	require_permission,
 	require_project_access,
 	require_thread_access,
-	thread_access_predicate,
+	resource_access_predicate,
 )
 from api.v1.service.authorization import cache as authorization_cache
 from api.v1.service.authorization import resolve as authorization_resolve
@@ -330,10 +329,8 @@ async def test_authorization_admin_predicates(db_session: AsyncSession) -> None:
 	)
 
 	assert allowed_levels(AccessLevel.ADMIN) == (AccessLevel.ADMIN,)
-	visibility = Thread.deleted_at.is_(None)
-	assert thread_access_predicate(principal).compare(visibility)
-	assert thread_access_predicate(principal, include_hidden=True).compare(true())
-	assert project_access_predicate(principal).compare(true())
+	assert resource_access_predicate(principal, ResourceType.THREAD).compare(true())
+	assert resource_access_predicate(principal, ResourceType.PROJECT).compare(true())
 
 
 @pytest.mark.asyncio

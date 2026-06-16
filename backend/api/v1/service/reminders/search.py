@@ -7,13 +7,13 @@ from collections.abc import Coroutine
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
-from api.database import build_cursor_page, decode_cursor
+from api.database.main import session_scope
 from api.models.reminder import Reminder, ReminderList
 from api.permissions import ResourceType
-from api.schemas.reminder import ReminderUpdate
+from api.schemas.reminder import ReminderSearchFilters, ReminderUpdate
 from api.schemas.search import (
-	CursorPage,
 	SearchMode,
 	SearchParams,
 	SearchResourceReferenceType,
@@ -25,6 +25,7 @@ from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import resource_access_predicate
 from api.v1.service.embeddings import embed_text
+from api.v1.service.search.primitives import ScoredResult, merge_scored
 from api.v1.service.vectorize import (
 	VectorSpec,
 	vectorize_resources,
@@ -75,6 +76,26 @@ async def _reminder_should_revectorize(
 	return bool(_fields & update_data.keys())
 
 
+def reminder_to_search_item(
+	reminder: Reminder, score: float | None = None
+) -> SearchResultItem:
+	"""projection from a reminder (and optional score) to a SearchResultItem."""
+	return SearchResultItem(
+		type=SearchResultType.REMINDER,
+		id=TypeID(reminder.id),
+		title=reminder.title or "",
+		preview=(reminder.description[:100] if reminder.description else None),
+		score=score,
+		parent=SearchResultParent(
+			type=SearchResourceReferenceType.REMINDER_LIST,
+			id=TypeID(reminder.list_id),
+		),
+		metadata=_reminder_metadata(reminder),
+		created_at=reminder.created_at,
+		updated_at=reminder.updated_at,
+	)
+
+
 REMINDER_SPEC: VectorSpec[Reminder] = VectorSpec(
 	resource_type=VectorChunkResourceType.REMINDER,
 	resource_id=lambda reminder: str(reminder.id),
@@ -82,7 +103,6 @@ REMINDER_SPEC: VectorSpec[Reminder] = VectorSpec(
 	bm25_text=_reminder_dense_text,
 	metadata=_reminder_metadata,
 	should_revectorize=_reminder_should_revectorize,
-	sort_key="updated_at",
 )
 
 
@@ -110,51 +130,102 @@ async def vectorize_all_reminders(session: AsyncSession) -> int:
 	)
 
 
+def _reminder_search_conditions(
+	filters: ReminderSearchFilters | None,
+) -> list[vectorstore_service.FieldCondition]:
+	"""vector-layer narrowing conditions derived from reminder search filters."""
+	conditions: list[vectorstore_service.FieldCondition] = []
+	if filters is None:
+		return conditions
+	if filters.owner_id is not None:
+		conditions.append(
+			vectorstore_service.FieldMatch(key="owner_id", value=str(filters.owner_id))
+		)
+	if filters.list_id is not None:
+		conditions.append(
+			vectorstore_service.FieldMatch(key="list_id", value=str(filters.list_id))
+		)
+	if filters.status is not None:
+		conditions.append(
+			vectorstore_service.FieldMatch(key="status", value=filters.status.value)
+		)
+	if filters.due_after is not None or filters.due_before is not None:
+		conditions.append(
+			vectorstore_service.FieldRange(
+				key="due_at",
+				gte=filters.due_after.isoformat() if filters.due_after else None,
+				lte=filters.due_before.isoformat() if filters.due_before else None,
+			)
+		)
+	if filters.remind_after is not None or filters.remind_before is not None:
+		conditions.append(
+			vectorstore_service.FieldRange(
+				key="remind_at",
+				gte=filters.remind_after.isoformat() if filters.remind_after else None,
+				lte=filters.remind_before.isoformat()
+				if filters.remind_before
+				else None,
+			)
+		)
+	return conditions
+
+
+def _apply_reminder_search_filters(
+	stmt: Select,
+	filters: ReminderSearchFilters | None,
+) -> Select:
+	"""SQL-layer narrowing mirroring _reminder_search_conditions."""
+	if filters is None:
+		return stmt
+	if filters.owner_id is not None:
+		stmt = stmt.where(Reminder.owner_id == filters.owner_id)
+	if filters.list_id is not None:
+		stmt = stmt.where(Reminder.list_id == str(filters.list_id))
+	if filters.status is not None:
+		stmt = stmt.where(Reminder.status == filters.status)
+	if filters.due_after is not None:
+		stmt = stmt.where(Reminder.due_at >= filters.due_after)
+	if filters.due_before is not None:
+		stmt = stmt.where(Reminder.due_at <= filters.due_before)
+	if filters.remind_after is not None:
+		stmt = stmt.where(Reminder.remind_at >= filters.remind_after)
+	if filters.remind_before is not None:
+		stmt = stmt.where(Reminder.remind_at <= filters.remind_before)
+	return stmt
+
+
 async def _autocomplete_reminders(
 	q: str,
 	db: AsyncSession,
 	principal: Principal,
 	limit: int = 5,
-) -> list[SearchResultItem]:
-	"""pg_trgm autocomplete for reminders on title/description/list."""
+	offset: int = 0,
+	filters: ReminderSearchFilters | None = None,
+) -> list[ScoredResult[Reminder]]:
+	"""pg_trgm autocomplete tier scored by title similarity."""
 	pattern = contains_pattern(q)
+	sim = func.similarity(Reminder.title, q)
 	stmt = (
-		select(Reminder)
+		select(Reminder, sim.label("sim"))
 		.outerjoin(ReminderList, Reminder.list_id == ReminderList.id)
 		.where(
 			or_(
-				func.similarity(Reminder.title, q) > 0.1,
+				sim > 0.1,
 				Reminder.title.ilike(pattern, escape="\\"),
 				Reminder.description.ilike(pattern, escape="\\"),
 				ReminderList.name.ilike(pattern, escape="\\"),
 			),
 		)
-		.order_by(func.similarity(Reminder.title, q).desc())
+		.where(resource_access_predicate(principal, ResourceType.REMINDER_LIST))
+		.order_by(sim.desc())
+		.offset(offset)
 		.limit(limit)
 	)
-	list_access = resource_access_predicate(principal, ResourceType.REMINDER_LIST)
-	stmt = stmt.where(
-		or_(
-			Reminder.owner_id == principal.user_id,
-			list_access,
-		)
-	)
+	stmt = _apply_reminder_search_filters(stmt, filters)
 	result = await db.execute(stmt)
 	return [
-		SearchResultItem(
-			type=SearchResultType.REMINDER,
-			id=TypeID(reminder.id),
-			title=reminder.title or "",
-			preview=(reminder.description[:100] if reminder.description else None),
-			parent=SearchResultParent(
-				type=SearchResourceReferenceType.REMINDER_LIST,
-				id=TypeID(reminder.list_id),
-			),
-			metadata=_reminder_metadata(reminder),
-			created_at=reminder.created_at,
-			updated_at=reminder.updated_at,
-		)
-		for reminder in result.scalars().all()
+		ScoredResult(item=reminder, score=float(score))
+		for reminder, score in result.all()
 	]
 
 
@@ -165,8 +236,9 @@ async def _hybrid_search_reminders(
 	limit: int = 10,
 	search_params: SearchParams | None = None,
 	query_embedding: list[float] | None = None,
-) -> list[SearchResultItem]:
-	"""qdrant hybrid search for reminders."""
+	filters: ReminderSearchFilters | None = None,
+) -> list[ScoredResult[Reminder]]:
+	"""qdrant hybrid tier (dense + BM25), scored by fused rank."""
 	params = search_params or SearchParams()
 	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
@@ -180,8 +252,12 @@ async def _hybrid_search_reminders(
 		)
 	)
 	text_query = query_text if need_sparse else None
-	query_filter = vectorstore_service.resource_types_filter(
-		[VectorChunkResourceType.REMINDER]
+	# reminder access is inherited from the parent list (not on the chunk), so
+	# the vector layer only narrows by resource type + structured filters; the
+	# SQL leg below is the authoritative ACL gate.
+	query_filter = vectorstore_service.with_conditions(
+		vectorstore_service.resource_types_filter([VectorChunkResourceType.REMINDER]),
+		_reminder_search_conditions(filters),
 	)
 	results = await vectorstore_service.search(
 		session=db,
@@ -199,39 +275,18 @@ async def _hybrid_search_reminders(
 		select(Reminder)
 		.outerjoin(ReminderList, Reminder.list_id == ReminderList.id)
 		.where(Reminder.id.in_(resource_ids))
+		.where(resource_access_predicate(principal, ResourceType.REMINDER_LIST))
 	)
-	list_access = resource_access_predicate(principal, ResourceType.REMINDER_LIST)
-	stmt = stmt.where(
-		or_(
-			Reminder.owner_id == principal.user_id,
-			list_access,
-		)
-	)
+	stmt = _apply_reminder_search_filters(stmt, filters)
 	db_result = await db.execute(stmt)
 	by_id = {str(reminder.id): reminder for reminder in db_result.scalars().all()}
-	items: list[SearchResultItem] = []
+	scored: list[ScoredResult[Reminder]] = []
 	for result in results:
-		resource_id = str(result.metadata["resource_id"])
-		reminder = by_id.get(resource_id)
-		if not reminder:
+		reminder = by_id.get(str(result.metadata["resource_id"]))
+		if reminder is None:
 			continue
-		items.append(
-			SearchResultItem(
-				type=SearchResultType.REMINDER,
-				id=TypeID(reminder.id),
-				title=reminder.title or "",
-				preview=(reminder.description[:100] if reminder.description else None),
-				score=result.score,
-				parent=SearchResultParent(
-					type=SearchResourceReferenceType.REMINDER_LIST,
-					id=TypeID(reminder.list_id),
-				),
-				metadata=_reminder_metadata(reminder),
-				created_at=reminder.created_at,
-				updated_at=reminder.updated_at,
-			)
-		)
-	return items
+		scored.append(ScoredResult(item=reminder, score=result.score))
+	return scored
 
 
 async def search_reminders(
@@ -239,13 +294,28 @@ async def search_reminders(
 	db: AsyncSession,
 	principal: Principal,
 	limit: int = 10,
-	cursor: str | None = None,
+	offset: int = 0,
 	search_params: SearchParams | None = None,
 	query_embedding: list[float] | None = None,
-) -> CursorPage[SearchResultItem]:
-	"""parallel pg_trgm + qdrant hybrid search with cursor pagination."""
+	filters: ReminderSearchFilters | None = None,
+	score_threshold: float = 0.0,
+) -> list[ScoredResult[Reminder]]:
+	"""relevance-ordered, deduped reminder hits with internal scores.
+
+	hybrid tier ranks first; autocomplete-only matches are appended.
+	"""
 	params = search_params or SearchParams()
-	coros: list[Coroutine[None, None, list[SearchResultItem]]] = []
+	if params.mode == SearchMode.AUTOCOMPLETE:
+		return await _autocomplete_reminders(
+			query_text,
+			db,
+			principal=principal,
+			limit=limit,
+			offset=offset,
+			filters=filters,
+		)
+	fetch = offset + limit
+	coros: list[Coroutine[None, None, list[ScoredResult[Reminder]]]] = []
 	run_autocomplete = params.mode in (
 		SearchMode.AUTOCOMPLETE,
 		SearchMode.FULL,
@@ -256,40 +326,35 @@ async def search_reminders(
 		SearchMode.SPARSE,
 		SearchMode.FULL,
 	)
-	if run_hybrid:
-		coros.append(
-			_hybrid_search_reminders(
+
+	async def _run_hybrid() -> list[ScoredResult[Reminder]]:
+		async with session_scope(None) as s:
+			return await _hybrid_search_reminders(
 				query_text,
-				db,
+				s,
 				principal=principal,
-				limit=limit + 1,
+				limit=fetch,
 				search_params=params,
 				query_embedding=query_embedding,
+				filters=filters,
 			)
-		)
-	if run_autocomplete:
-		coros.append(
-			_autocomplete_reminders(
+
+	async def _run_autocomplete() -> list[ScoredResult[Reminder]]:
+		async with session_scope(None) as s:
+			return await _autocomplete_reminders(
 				query_text,
-				db,
+				s,
 				principal=principal,
-				limit=limit + 1,
+				limit=fetch,
+				filters=filters,
 			)
-		)
+
+	if run_hybrid:
+		coros.append(_run_hybrid())
+	if run_autocomplete:
+		coros.append(_run_autocomplete())
 	results = await asyncio.gather(*coros, return_exceptions=True)
-	items = vectorstore_service.merge_deduplicate(
-		results,
-		limit + 1,
-		resource_name="reminders",
-	)
-	if cursor:
-		timestamp, cursor_id = decode_cursor(cursor)
-		sort_key = REMINDER_SPEC.sort_key
-		items = [
-			item
-			for item in items
-			if (getattr(item, sort_key), str(item.id)) < (timestamp, cursor_id)
-		]
-	sort_key = REMINDER_SPEC.sort_key
-	items.sort(key=lambda item: (getattr(item, sort_key), str(item.id)), reverse=True)
-	return build_cursor_page(items, limit, sort_key=REMINDER_SPEC.sort_key)
+	merged = merge_scored(results, resource_name="reminders")
+	if score_threshold > 0.0:
+		merged = [s for s in merged if s.score >= score_threshold]
+	return merged[offset : offset + limit]

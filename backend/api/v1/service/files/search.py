@@ -4,19 +4,20 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable
-from dataclasses import dataclass, field
 
+from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import Select
 
-from api.database import build_cursor_page, decode_cursor
 from api.database.main import session_scope
 from api.models.access_rule import AccessLevel
 from api.models.file import File
+from api.models.project import Project
 from api.permissions import ResourceType
+from api.schemas.file import FileSearchFilters
 from api.schemas.search import (
-	CursorPage,
 	SearchMode,
 	SearchParams,
 	SearchResultItem,
@@ -31,6 +32,8 @@ from api.v1.service.authorization import (
 from api.v1.service.embeddings import embed_text
 from api.v1.service.files.metadata import FILE_CONTENT_RESOURCE_TYPE, file_metadata
 from api.v1.service.files.vectorization import FILE_SPEC
+from api.v1.service.search.grouping import group_resource_hits
+from api.v1.service.search.primitives import ScoredResult, merge_scored
 from nokodo_ai.adapters.base.vectorstores import ChunkSearchResult
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.search import contains_pattern
@@ -39,26 +42,66 @@ from nokodo_ai.utils.typeid import TypeID
 
 _VECTOR_OVERFETCH_FACTOR = 4
 _MAX_MATCHED_CHUNKS = 3
-_PREVIEW_CHARS = 300
 _MATCHED_CHUNK_PREVIEW_CHARS = 500
 
 
-@dataclass(slots=True)
-class _FileHitGroup:
-	resource_id: str
-	hits: list[ChunkSearchResult] = field(default_factory=list)
+def _file_search_conditions(
+	filters: FileSearchFilters | None,
+) -> list[vectorstore_service.FieldCondition]:
+	"""vector-layer narrowing conditions derived from file search filters."""
+	conditions: list[vectorstore_service.FieldCondition] = []
+	if filters is None:
+		return conditions
+	if filters.owner_id is not None:
+		conditions.append(
+			vectorstore_service.FieldMatch(key="owner_id", value=str(filters.owner_id))
+		)
+	if filters.source is not None:
+		conditions.append(
+			vectorstore_service.FieldMatch(key="source", value=filters.source.value)
+		)
+	if filters.project_id is not None:
+		conditions.append(
+			vectorstore_service.FieldMatch(
+				key="project_ids", value=str(filters.project_id)
+			)
+		)
+	return conditions
 
-	@property
-	def best_score(self) -> float | None:
-		if not self.hits:
-			return None
-		return max(hit.score for hit in self.hits)
 
-	@property
-	def best_hit(self) -> ChunkSearchResult | None:
-		if not self.hits:
-			return None
-		return max(self.hits, key=lambda hit: hit.score)
+def _apply_file_search_filters(
+	stmt: Select,
+	filters: FileSearchFilters | None,
+) -> Select:
+	"""SQL-layer narrowing mirroring _file_search_conditions."""
+	if filters is None:
+		return stmt
+	if filters.include_deleted:
+		stmt = stmt.execution_options(include_deleted=True)
+	if filters.owner_id is not None:
+		stmt = stmt.where(File.owner_id == str(filters.owner_id))
+	if filters.source is not None:
+		stmt = stmt.where(File.source == filters.source)
+	if filters.project_id is not None:
+		stmt = stmt.where(File.projects.any(Project.id == str(filters.project_id)))
+	return stmt
+
+
+def file_to_search_item(
+	file: File,
+	score: float | None = None,
+) -> SearchResultItem:
+	"""projection from a file (and optional score) to a SearchResultItem."""
+	return SearchResultItem(
+		type=SearchResultType.FILE,
+		id=TypeID(file.id),
+		title=file.filename or "file",
+		preview=file.description[:100] if file.description else None,
+		score=score,
+		metadata=file_metadata(file),
+		created_at=file.created_at,
+		updated_at=file.updated_at,
+	)
 
 
 async def search_files(
@@ -66,12 +109,40 @@ async def search_files(
 	db: AsyncSession,
 	principal: Principal,
 	limit: int = 10,
-	cursor: str | None = None,
+	offset: int = 0,
 	search_params: SearchParams | None = None,
 	query_embedding: list[float] | None = None,
-) -> CursorPage[SearchResultItem]:
+	score_threshold: float = 0.0,
+	filters: FileSearchFilters | None = None,
+) -> list[ScoredResult[File]]:
+	"""relevance-ordered, deduped file hits with internal scores.
+
+	hybrid tier ranks first; autocomplete-only matches are appended.
+	"""
 	params = search_params or SearchParams()
-	coros: list[Awaitable[list[SearchResultItem]]] = []
+	if filters and filters.include_deleted:
+		if not principal.is_admin:
+			raise HTTPException(
+				status_code=status.HTTP_403_FORBIDDEN,
+				detail="forbidden",
+			)
+		if params.mode != SearchMode.AUTOCOMPLETE:
+			raise HTTPException(
+				status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+				detail="include_deleted requires autocomplete search mode",
+			)
+	if params.mode == SearchMode.AUTOCOMPLETE:
+		async with session_scope(None) as search_session:
+			return await _autocomplete_files(
+				query_text,
+				search_session,
+				principal=principal,
+				limit=limit,
+				offset=offset,
+				filters=filters,
+			)
+	fetch = offset + limit
+	coros: list[Awaitable[list[ScoredResult[File]]]] = []
 	should_run_autocomplete = params.mode in (
 		SearchMode.AUTOCOMPLETE,
 		SearchMode.FULL,
@@ -83,24 +154,26 @@ async def search_files(
 		SearchMode.FULL,
 	)
 
-	async def run_hybrid() -> list[SearchResultItem]:
+	async def run_hybrid() -> list[ScoredResult[File]]:
 		async with session_scope(None) as search_session:
 			return await _hybrid_search_files(
 				query_text,
 				search_session,
 				principal=principal,
-				limit=limit + 1,
+				limit=fetch,
 				search_params=params,
 				query_embedding=query_embedding,
+				filters=filters,
 			)
 
-	async def run_autocomplete() -> list[SearchResultItem]:
+	async def run_autocomplete() -> list[ScoredResult[File]]:
 		async with session_scope(None) as search_session:
 			return await _autocomplete_files(
 				query_text,
 				search_session,
 				principal=principal,
-				limit=limit + 1,
+				limit=fetch,
+				filters=filters,
 			)
 
 	if should_run_hybrid:
@@ -108,21 +181,10 @@ async def search_files(
 	if should_run_autocomplete:
 		coros.append(run_autocomplete())
 	results = await asyncio.gather(*coros, return_exceptions=True)
-	items = vectorstore_service.merge_deduplicate(
-		results,
-		limit + 1,
-		resource_name="files",
-	)
-	if cursor:
-		timestamp, cursor_id = decode_cursor(cursor)
-		items = [
-			item
-			for item in items
-			if (item.updated_at, str(item.id)) < (timestamp, cursor_id)
-		]
-	if params.mode == SearchMode.AUTOCOMPLETE:
-		items.sort(key=lambda item: (item.updated_at, str(item.id)), reverse=True)
-	return build_cursor_page(items, limit, sort_key=FILE_SPEC.sort_key)
+	merged = merge_scored(results, resource_name="files")
+	if score_threshold > 0.0:
+		merged = [s for s in merged if s.score >= score_threshold]
+	return merged[offset : offset + limit]
 
 
 async def _autocomplete_files(
@@ -130,44 +192,37 @@ async def _autocomplete_files(
 	db: AsyncSession,
 	principal: Principal,
 	limit: int = 5,
-) -> list[SearchResultItem]:
+	offset: int = 0,
+	filters: FileSearchFilters | None = None,
+) -> list[ScoredResult[File]]:
+	"""pg_trgm autocomplete tier scored by filename/description similarity."""
 	pattern = contains_pattern(q)
-	score = func.greatest(
+	sim = func.greatest(
 		func.similarity(func.coalesce(File.filename, ""), q),
 		func.similarity(func.coalesce(File.description, ""), q),
 	)
 	stmt = (
-		select(File)
+		select(File, sim.label("sim"))
 		.where(
-			File.deleted_at.is_(None),
 			resource_access_predicate(
 				principal,
 				ResourceType.FILE,
 				required_level=AccessLevel.READER,
 			),
 			or_(
-				score > 0.1,
+				sim > 0.1,
 				File.filename.ilike(pattern, escape="\\"),
 				File.description.ilike(pattern, escape="\\"),
 			),
 		)
-		.order_by(score.desc(), File.updated_at.desc())
+		.order_by(sim.desc(), File.updated_at.desc())
+		.offset(offset)
 		.limit(limit)
 		.options(selectinload(File.projects))
 	)
+	stmt = _apply_file_search_filters(stmt, filters)
 	result = await db.execute(stmt)
-	return [
-		SearchResultItem(
-			type=SearchResultType.FILE,
-			id=TypeID(file.id),
-			title=file.filename or "file",
-			preview=file.description[:100] if file.description else None,
-			metadata=file_metadata(file),
-			created_at=file.created_at,
-			updated_at=file.updated_at,
-		)
-		for file in result.scalars().all()
-	]
+	return [ScoredResult(item=file, score=float(score)) for file, score in result.all()]
 
 
 async def _hybrid_search_files(
@@ -177,7 +232,8 @@ async def _hybrid_search_files(
 	limit: int = 10,
 	search_params: SearchParams | None = None,
 	query_embedding: list[float] | None = None,
-) -> list[SearchResultItem]:
+	filters: FileSearchFilters | None = None,
+) -> list[ScoredResult[File]]:
 	params = search_params or SearchParams()
 	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
@@ -197,21 +253,23 @@ async def _hybrid_search_files(
 		query=query_emb,
 		text_query=text_query,
 		limit=vector_limit,
-		query_filter=vector_acl_filter(
-			[FILE_SPEC.resource_type, FILE_CONTENT_RESOURCE_TYPE],
-			principal,
+		query_filter=vectorstore_service.with_conditions(
+			vector_acl_filter(
+				[FILE_SPEC.resource_type, FILE_CONTENT_RESOURCE_TYPE],
+				principal,
+			),
+			_file_search_conditions(filters),
 		),
 		normalize=params.normalize,
 	)
 	if not results:
 		return []
-	groups = _group_file_hits(results)
+	groups = group_resource_hits(results, _file_id_for_hit)
 	resource_ids = list(groups.keys())
 	stmt = (
 		select(File)
 		.where(
 			File.id.in_(resource_ids),
-			File.deleted_at.is_(None),
 			resource_access_predicate(
 				principal,
 				ResourceType.FILE,
@@ -220,43 +278,29 @@ async def _hybrid_search_files(
 		)
 		.options(selectinload(File.projects))
 	)
+	stmt = _apply_file_search_filters(stmt, filters)
 	db_result = await db.execute(stmt)
 	by_id = {str(file.id): file for file in db_result.scalars().all()}
-	items: list[SearchResultItem] = []
+	scored: list[ScoredResult[File]] = []
 	for resource_id in resource_ids:
 		file = by_id.get(resource_id)
 		if file is None:
 			continue
-		group = groups[resource_id]
-		items.append(
-			SearchResultItem(
-				type=SearchResultType.FILE,
-				id=TypeID(file.id),
-				title=file.filename or "file",
-				preview=_preview_for_group(file, group),
-				score=group.best_score,
-				metadata=_metadata_for_group(file, group),
-				created_at=file.created_at,
-				updated_at=file.updated_at,
+		extra: JSONObject = {
+			"matched_chunks": groups[resource_id].matched_chunks(
+				_MAX_MATCHED_CHUNKS, _MATCHED_CHUNK_PREVIEW_CHARS
+			)
+		}
+		scored.append(
+			ScoredResult(
+				item=file,
+				score=groups[resource_id].best_score,
+				extra=extra,
 			)
 		)
-		if len(items) >= limit:
+		if len(scored) >= limit:
 			break
-	return items
-
-
-def _group_file_hits(results: list[ChunkSearchResult]) -> dict[str, _FileHitGroup]:
-	groups: dict[str, _FileHitGroup] = {}
-	for result in results:
-		resource_id_value = _file_id_for_hit(result)
-		if not isinstance(resource_id_value, str) or not resource_id_value:
-			continue
-		group = groups.setdefault(
-			resource_id_value,
-			_FileHitGroup(resource_id=resource_id_value),
-		)
-		group.hits.append(result)
-	return groups
+	return scored
 
 
 def _file_id_for_hit(hit: ChunkSearchResult) -> str | None:
@@ -266,52 +310,3 @@ def _file_id_for_hit(hit: ChunkSearchResult) -> str | None:
 		return parent_id if isinstance(parent_id, str) else None
 	resource_id = hit.metadata.get("resource_id")
 	return resource_id if isinstance(resource_id, str) else None
-
-
-def _preview_for_group(file: File, group: _FileHitGroup) -> str | None:
-	best_hit = group.best_hit
-	if best_hit is not None and best_hit.content:
-		return best_hit.content[:_PREVIEW_CHARS]
-	if file.description:
-		return file.description[:_PREVIEW_CHARS]
-	return None
-
-
-def _metadata_for_group(file: File, group: _FileHitGroup) -> JSONObject:
-	metadata = file_metadata(file)
-	metadata["matched_chunks"] = [
-		_matched_chunk_payload(hit)
-		for hit in sorted(group.hits, key=lambda item: item.score, reverse=True)[
-			:_MAX_MATCHED_CHUNKS
-		]
-	]
-	return metadata
-
-
-def _matched_chunk_payload(hit: ChunkSearchResult) -> JSONObject:
-	chunk_metadata = hit.metadata
-	payload: JSONObject = {
-		"score": hit.score,
-		"preview": hit.content[:_MATCHED_CHUNK_PREVIEW_CHARS],
-	}
-	for key in (
-		"resource_type",
-		"chunk_index",
-		"chunk_count",
-		"page_number",
-		"slide_number",
-		"section_label",
-		"paragraph_index",
-		"line_start",
-		"line_end",
-		"column_start",
-		"column_end",
-		"char_start",
-		"char_end",
-		"text_loader",
-		"chunking_algorithm",
-	):
-		value = chunk_metadata.get(key)
-		if value is not None:
-			payload[key] = value
-	return payload

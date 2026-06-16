@@ -25,6 +25,13 @@ class ProjectListFilters(BaseModel):
 	"""filters for listing projects."""
 
 	owner_id: TypeID | None = None
+	q: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+class ProjectSearchFilters(BaseModel):
+	"""structured filters applied to project search."""
+
+	owner_id: TypeID | None = None
 
 
 class ProjectBase(MetadataModel):

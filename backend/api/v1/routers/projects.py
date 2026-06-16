@@ -14,10 +14,11 @@ from api.schemas.project import (
 	ProjectCreate,
 	ProjectListFilters,
 	ProjectResourceCounts,
+	ProjectSearchFilters,
 	ProjectSortBy,
 	ProjectUpdate,
 )
-from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
+from api.schemas.search import Page, SearchMode
 from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import projects as project_service
@@ -82,23 +83,28 @@ async def count_projects(
 	)
 
 
-@router.get("/search", response_model=CursorPage[SearchResultItem])
+@router.get("/search", response_model=Page[ProjectSchema])
 async def search_projects(
+	filters: Annotated[ProjectSearchFilters, Depends()],
 	q: str = Query(min_length=1, max_length=500),
 	limit: int = Query(default=10, ge=1, le=50),
-	cursor: str | None = Query(default=None),
+	offset: int = Query(default=0, ge=0),
 	mode: SearchMode = Query(default=SearchMode.FULL),
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> CursorPage[SearchResultItem]:
+) -> Page[ProjectSchema]:
 	"""search projects accessible by the caller."""
-	return await project_service.search_projects(
+	scored = await project_service.search_projects(
 		q,
 		db,
 		principal=principal,
-		limit=limit,
-		cursor=cursor,
-		search_params=SearchParams(mode=mode),
+		limit=limit + 1,
+		offset=offset,
+		filters=filters,
+	)
+	return Page(
+		items=[ProjectSchema.model_validate(hit.item) for hit in scored[:limit]],
+		has_more=len(scored) > limit,
 	)
 
 

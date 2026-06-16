@@ -11,7 +11,6 @@ from pydantic import (
 	ConfigDict,
 	Field,
 	TypeAdapter,
-	field_serializer,
 	field_validator,
 	model_validator,
 )
@@ -29,7 +28,6 @@ from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.messages import ToolMessage as SDKToolMessage
 from nokodo_ai.messages import UserMessage as SDKUserMessage
-from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -160,28 +158,6 @@ ContentPartAdapter: TypeAdapter[ContentPart] = TypeAdapter(ContentPart)
 
 # type adapter for content validation
 ContentPartList = Annotated[list[ContentPart], Field(default_factory=list)]
-
-
-def is_private_metadata_key(key: str) -> bool:
-	"""return True for backend-private metadata keys that must not leave the api.
-
-	the single source of truth for message-metadata redaction: any key prefixed
-	with ``_`` is private. used by both ``public_message_metadata`` (complete
-	messages on REST + the ``message`` SSE event) and the streaming ``delta``
-	gate, so every wire path strips identical keys.
-	"""
-	return key.startswith("_")
-
-
-def public_message_metadata(metadata: JSONObject | None) -> JSONObject:
-	"""return metadata safe to include in API/SSE message payloads."""
-	if not metadata:
-		return {}
-	return {
-		key: value
-		for key, value in metadata.items()
-		if not is_private_metadata_key(key)
-	}
 
 
 class MessageBase(MetadataModel):
@@ -361,8 +337,3 @@ class Message(MessageBase, TimestampedModel):
 	task_id: TypeID | None = None
 	sender_agent_id: TypeID | None = None
 	sender_user_id: TypeID | None = None
-
-	@field_serializer("metadata")
-	def serialize_public_metadata(self, metadata: JSONObject) -> JSONObject:
-		"""serialize only metadata that belongs on the public message surface."""
-		return public_message_metadata(metadata)

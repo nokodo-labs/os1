@@ -8,7 +8,8 @@ import logging
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.schemas.search import SearchMode, SearchParams
+from api.models.project import Project
+from api.schemas.search import Page
 from api.v1.service import projects as project_service
 from api.v1.service.chat.context import AppContext
 from nokodo_ai.agents import AgentIterationSnapshot
@@ -20,7 +21,15 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
-_HYBRID_SEARCH = SearchParams(mode=SearchMode.HYBRID)
+
+
+def _project_search_result(project: Project) -> dict[str, object]:
+	"""summarize a project for agent search results."""
+	return {
+		"id": str(project.id),
+		"name": project.name,
+		**({"description": project.description[:100]} if project.description else {}),
+	}
 
 
 class ProjectGetInput(BaseModel):
@@ -48,6 +57,11 @@ class ProjectGetInput(BaseModel):
 		description="max projects to return when searching",
 		ge=1,
 		le=20,
+	)
+	offset: int = Field(
+		default=0,
+		description="number of search results to skip before this page.",
+		ge=0,
 	)
 
 
@@ -105,16 +119,20 @@ class ProjectGetTool(Tool[AppContext]):
 			)
 
 		try:
-			page = await project_service.search_projects(
+			scored = await project_service.search_projects(
 				inp.query,
 				__app_context__.session,
 				principal=__app_context__.principal,
-				limit=inp.limit,
-				search_params=_HYBRID_SEARCH,
+				limit=inp.limit + 1,
+				offset=inp.offset,
 			)
 		except HTTPException as exc:
 			return self.error(str(exc.detail), __tool_call_context__)
 
+		page = Page(
+			items=[hit.item for hit in scored[: inp.limit]],
+			has_more=len(scored) > inp.limit,
+		)
 		if not page.items:
 			out = {
 				"status": "success",
@@ -124,20 +142,15 @@ class ProjectGetTool(Tool[AppContext]):
 			}
 			return self.success(json.dumps(out), __tool_call_context__)
 
-		results = [
-			{
-				"id": str(item.id),
-				"name": item.title,
-				**({"description": item.preview} if item.preview else {}),
-			}
-			for item in page.items
-		]
+		results = [_project_search_result(item) for item in page.items]
 		count = len(results)
 		message = f"found {count} {'project' if count == 1 else 'projects'}"
+		next_offset = inp.offset + inp.limit if page.has_more else None
 		out = {
 			"status": "success",
 			"message": message,
 			"count": count,
 			"results": results,
+			"next_offset": next_offset,
 		}
 		return self.success(json.dumps(out), __tool_call_context__)

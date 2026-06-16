@@ -7,11 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.schemas.search import SearchMode
-from api.v1.service import search as search_service
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.authorization import require_admin
 from api.v1.service.embeddings import embed_text
+from api.v1.service.search import aggregator as search_service
 
 
 router = APIRouter(prefix="/vectorstores", tags=["vectorstores"])

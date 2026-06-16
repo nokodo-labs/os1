@@ -19,7 +19,7 @@ from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	list_accessible_user_ids,
 	require_thread_access,
-	thread_access_predicate,
+	resource_access_predicate,
 )
 from nokodo_ai.utils.typeid import TypeID
 
@@ -165,8 +165,9 @@ async def get_unread_counts(
 	accessible_q = (
 		select(Thread.id)
 		.where(
-			thread_access_predicate(
+			resource_access_predicate(
 				principal,
+				ResourceType.THREAD,
 				required_level=AccessLevel.READER,
 			)
 		)

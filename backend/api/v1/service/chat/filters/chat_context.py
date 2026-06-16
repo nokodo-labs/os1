@@ -13,12 +13,13 @@ from sqlalchemy.orm import selectinload
 from api.models.access_rule import AccessLevel
 from api.models.thread import Thread
 from api.models.thread_summary import SummaryPurpose
+from api.permissions import ResourceType
 from api.schemas.preferences import AIPreferences
 from api.schemas.search import SearchMode, SearchParams
 from api.settings import settings as app_settings
 from api.settings.settings import AIChatContextSettings
 from api.v1.service import threads as thread_service
-from api.v1.service.authorization import thread_access_predicate
+from api.v1.service.authorization import resource_access_predicate
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.listing import apply_sort
 from api.v1.service.prompts import SENTINEL_CHAT_CONTEXT
@@ -115,7 +116,7 @@ class ChatContextFilter(Filter):
 		self._replace_sentinel(thread, SENTINEL_CHAT_CONTEXT, content)
 		return state
 
-	# -- mode implementations --
+	# mode implementations
 
 	async def _fetch_recent(
 		self,
@@ -131,8 +132,9 @@ class ChatContextFilter(Filter):
 			select(Thread)
 			.options(selectinload(Thread.summaries))
 			.where(
-				thread_access_predicate(
+				resource_access_predicate(
 					principal,
+					ResourceType.THREAD,
 					required_level=AccessLevel.READER,
 				),
 				Thread.is_temporary.is_(False),
@@ -179,7 +181,7 @@ class ChatContextFilter(Filter):
 			query_text = "\n".join(_turns)
 
 		try:
-			page = await thread_service.search_threads(
+			scored = await thread_service.search_threads(
 				query_text,
 				session,
 				principal=principal,
@@ -191,29 +193,24 @@ class ChatContextFilter(Filter):
 			logger.exception("chat context: relevant search failed")
 			return []
 
-		if not page.items:
+		if not scored:
 			return []
 
-		# split by score presence: vector results have a score, autocomplete do not.
-		scored = [
-			item
-			for item in page.items
-			if item.score is not None and item.score >= cfg.similarity_threshold
-		]
-		unscored = [item for item in page.items if item.score is None]
+		# above-threshold hits first, then weaker matches fill remaining slots.
+		above = [s for s in scored if s.score >= cfg.similarity_threshold]
+		below = [s for s in scored if s.score < cfg.similarity_threshold]
 
-		# scored results first, then fill remaining slots with unscored.
-		merged: list = []
+		merged: list[Thread] = []
 		seen: set[str] = set()
-		for item in (*scored, *unscored):
-			sid = str(item.id)
+		for s in (*above, *below):
+			sid = str(s.item.id)
 			if sid not in seen:
-				merged.append(item)
+				merged.append(s.item)
 				seen.add(sid)
 			if len(merged) >= cfg.top_k:
 				break
 
-		result_ids = [item.id for item in merged]
+		result_ids = [thread.id for thread in merged]
 		# exclude current thread
 		if exclude_id is not None:
 			result_ids = [rid for rid in result_ids if str(rid) != str(exclude_id)]
@@ -231,7 +228,7 @@ class ChatContextFilter(Filter):
 		# preserve relevance order
 		return [by_id[str(rid)] for rid in result_ids if str(rid) in by_id]
 
-	# -- helpers --
+	# helpers
 
 	def _format_threads(self, threads: list[Thread]) -> str:
 		"""serialize thread context as a JSON document."""

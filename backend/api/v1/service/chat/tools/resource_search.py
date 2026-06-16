@@ -13,8 +13,8 @@ from api.schemas.search import (
 	SearchResultItem,
 	SearchResultType,
 )
-from api.v1.service import search as search_service
 from api.v1.service.chat.context import AppContext
+from api.v1.service.search import aggregator as search_service
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage

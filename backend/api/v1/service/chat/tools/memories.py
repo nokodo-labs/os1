@@ -10,9 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from api.database import async_session_local
 from api.local_tasks import create_background_task
+from api.models.memory import Memory
 from api.schemas.memory import MemoryCreate
 from api.schemas.preferences import AIPreferences
-from api.schemas.search import SearchMode, SearchParams
+from api.schemas.search import Page, SearchMode, SearchParams
 from api.v1.service import memories as memory_service
 from api.v1.service.auth import Principal
 from api.v1.service.chat.context import AppContext
@@ -20,12 +21,23 @@ from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
-from nokodo_ai.types.json import JSONArray, JSONObject
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
 _HYBRID_SEARCH = SearchParams(mode=SearchMode.HYBRID)
+
+
+def _memory_search_result(memory: Memory) -> dict[str, object]:
+	"""summarize a memory for agent search results."""
+	result: dict[str, object] = {
+		"id": str(memory.id),
+		"content": memory.content,
+	}
+	if memory.tags:
+		result["tags"] = list(memory.tags)
+	return result
 
 
 class MemorySearchInput(BaseModel):
@@ -44,6 +56,11 @@ class MemorySearchInput(BaseModel):
 		description="maximum number of relevant memories to return",
 		ge=1,
 		le=30,
+	)
+	offset: int = Field(
+		default=0,
+		description="number of search results to skip before this page.",
+		ge=0,
 	)
 
 
@@ -100,16 +117,21 @@ class MemoryRecallTool(Tool[AppContext]):
 			return self.success(json.dumps(out), __tool_call_context__)
 		inp = MemorySearchInput.model_validate(kwargs)
 		try:
-			page = await memory_service.search_memories(
+			scored = await memory_service.search_memories(
 				inp.query,
 				__app_context__.session,
 				principal=__app_context__.principal,
-				limit=inp.limit,
+				limit=inp.limit + 1,
+				offset=inp.offset,
 				search_params=_HYBRID_SEARCH,
 			)
 		except HTTPException as exc:
 			return self.error(str(exc.detail), __tool_call_context__)
 
+		page = Page(
+			items=[hit.item for hit in scored[: inp.limit]],
+			has_more=len(scored) > inp.limit,
+		)
 		if not page.items:
 			out = {
 				"status": "success",
@@ -119,17 +141,17 @@ class MemoryRecallTool(Tool[AppContext]):
 			}
 			return self.success(json.dumps(out), __tool_call_context__)
 
-		results: JSONArray = [
-			{
-				"id": item.id,
-				"title": item.title,
-				**({"tags": item.preview} if item.preview else {}),
-			}
-			for item in page.items
-		]
+		results = [_memory_search_result(m) for m in page.items]
 		n = len(results)
 		msg = f"recalled {n} {'memory' if n == 1 else 'memories'}"
-		out = {"status": "success", "message": msg, "count": n, "results": results}
+		next_offset = inp.offset + inp.limit if page.has_more else None
+		out = {
+			"status": "success",
+			"message": msg,
+			"count": n,
+			"results": results,
+			"next_offset": next_offset,
+		}
 		return self.success(json.dumps(out), __tool_call_context__)
 
 

@@ -14,7 +14,7 @@ from api.schemas.calendar import (
 	CalendarEventUpdate,
 )
 from api.schemas.scheduled_item import Recurrence, ScheduledItem
-from api.schemas.search import SearchMode, SearchParams
+from api.schemas.search import Page, SearchMode, SearchParams
 from api.v1.service import calendar as calendar_service
 from api.v1.service.calendar.events import list_calendar_scheduled_items
 from api.v1.service.chat.context import AppContext
@@ -59,9 +59,10 @@ class CalendarEventGetInput(BaseModel):
 		default=None,
 		description="optional inclusive scheduled-items window end in ISO 8601 format",
 	)
-	cursor: str | None = Field(
-		default=None,
-		description="cursor returned by a previous calendar event search page.",
+	offset: int = Field(
+		default=0,
+		description="number of calendar event search results to skip before this page.",
+		ge=0,
 	)
 	skip: int = Field(
 		default=0,
@@ -70,7 +71,7 @@ class CalendarEventGetInput(BaseModel):
 	)
 	limit: int = Field(
 		default=_DEFAULT_LIMIT,
-		description="maximum items to return per page. use skip or cursor to continue.",
+		description="maximum items to return per page. use skip or offset to continue.",
 		ge=1,
 		le=_MAX_LIMIT,
 	)
@@ -154,6 +155,15 @@ class CalendarEventWriteInput(BaseModel):
 		if self.location and self.virtual_url:
 			raise ValueError("location and virtual_url are mutually exclusive")
 		return self
+
+
+def _calendar_event_search_result(event: CalendarEvent) -> dict[str, object]:
+	"""summarize a calendar event for agent search results."""
+	return {
+		"id": str(event.id),
+		"title": event.title or "",
+		**({"preview": event.description[:100]} if event.description else {}),
+	}
 
 
 def _event_payload(calendar_event: CalendarEvent) -> dict[str, object]:
@@ -320,28 +330,27 @@ class CalendarEventGetTool(Tool[AppContext]):
 				)
 
 			if inp.query:
-				page = await calendar_service.search_calendar_events(
+				scored = await calendar_service.search_calendar_events(
 					inp.query,
 					__app_context__.session,
 					principal=__app_context__.principal,
-					limit=inp.limit,
-					cursor=inp.cursor,
+					limit=inp.limit + 1,
+					offset=inp.offset,
 					search_params=_HYBRID_SEARCH,
 				)
+				page = Page(
+					items=[hit.item for hit in scored[: inp.limit]],
+					has_more=len(scored) > inp.limit,
+				)
 				search_results = [
-					{
-						"id": str(item.id),
-						"title": item.title,
-						**({"preview": item.preview} if item.preview else {}),
-					}
-					for item in page.items
+					_calendar_event_search_result(item) for item in page.items
 				]
+				next_offset = inp.offset + inp.limit if page.has_more else None
 				search_out: dict[str, object] = {
 					"status": "success",
 					"message": f"found {len(search_results)} calendar events",
 					"count": len(search_results),
-					"next_cursor": page.next_cursor,
-					"has_more": page.has_more,
+					"next_offset": next_offset,
 					"results": search_results,
 				}
 				return _success_with_citations(

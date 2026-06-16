@@ -6,35 +6,34 @@ import asyncio
 import logging
 from collections.abc import Coroutine, Sequence
 
+from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import Select
 
-from api.database import (
-	build_cursor_page,
-	decode_cursor,
-)
+from api.database.main import session_scope
 from api.models.access_rule import AccessLevel
 from api.models.message import MessageType
 from api.models.thread import Thread
 from api.models.thread_summary import SummaryPurpose
 from api.permissions import ResourceType
 from api.schemas.search import (
-	CursorPage,
 	SearchMode,
 	SearchParams,
 	SearchResultItem,
 	SearchResultType,
 )
-from api.schemas.thread import ThreadUpdate
+from api.schemas.thread import ThreadSearchFilters, ThreadUpdate
 from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import (
 	fetch_bulk_acl_metadata,
-	thread_access_predicate,
+	resource_access_predicate,
 	vector_acl_filter,
 )
 from api.v1.service.embeddings import embed_text
+from api.v1.service.search.primitives import ScoredResult, merge_scored
 from api.v1.service.threads.summaries import latest_active_summary_text
 from api.v1.service.vectorize import (
 	VectorSpec,
@@ -88,6 +87,7 @@ def _thread_metadata(thread: Thread) -> JSONObject:
 		"title": thread.title or "",
 		"tags": list(thread.tags or []),
 		"is_archived": thread.is_archived,
+		"project_ids": [str(p.id) for p in (thread.projects or [])],
 		# acl fields - populated at vectorize time from access_rules table
 		"allowed_user_ids": [],
 		"allowed_group_ids": [],
@@ -107,6 +107,24 @@ async def _thread_should_revectorize(
 	return bool(_fields & update_data.keys())
 
 
+def thread_to_search_item(
+	thread: Thread, score: float | None = None
+) -> SearchResultItem:
+	"""projection from a thread (and optional score) to a SearchResultItem."""
+	summary = latest_active_summary_text(thread, SummaryPurpose.CATALOG)
+	if summary is None:
+		summary = (thread.metadata_ or {}).get("summary")
+	return SearchResultItem(
+		type=SearchResultType.THREAD,
+		id=TypeID(thread.id),
+		title=thread.title or "",
+		preview=str(summary)[:100] if summary else None,
+		score=score,
+		created_at=thread.created_at,
+		updated_at=thread.updated_at,
+	)
+
+
 THREAD_SPEC: VectorSpec[Thread] = VectorSpec(
 	resource_type=VectorChunkResourceType.THREAD,
 	resource_id=lambda t: str(t.id),
@@ -114,7 +132,6 @@ THREAD_SPEC: VectorSpec[Thread] = VectorSpec(
 	bm25_text=_thread_bm25_text,
 	metadata=_thread_metadata,
 	should_revectorize=_thread_should_revectorize,
-	sort_key="updated_at",
 )
 
 
@@ -150,7 +167,11 @@ async def vectorize_threads(thread_ids: Sequence[TypeID], session: AsyncSession)
 			Thread.deleted_at.is_(None),
 			Thread.is_temporary.is_(False),
 		)
-		.options(selectinload(Thread.messages), selectinload(Thread.summaries))
+		.options(
+			selectinload(Thread.messages),
+			selectinload(Thread.summaries),
+			selectinload(Thread.projects),
+		)
 	)
 	result = await session.execute(stmt)
 	threads = [th for th in result.scalars().unique().all() if (th.title or "").strip()]
@@ -165,10 +186,50 @@ async def vectorize_all_threads(session: AsyncSession) -> int:
 			Thread.deleted_at.is_(None),
 			Thread.is_temporary.is_(False),
 		)
-		.options(selectinload(Thread.messages), selectinload(Thread.summaries))
+		.options(
+			selectinload(Thread.messages),
+			selectinload(Thread.summaries),
+			selectinload(Thread.projects),
+		)
 	)
 	result = await session.execute(stmt)
 	return await _vectorize_threads(list(result.scalars().unique().all()), session)
+
+
+def _thread_search_conditions(
+	filters: ThreadSearchFilters | None,
+) -> list[vectorstore_service.FieldCondition]:
+	"""vector-layer narrowing conditions derived from thread search filters."""
+	conditions: list[vectorstore_service.FieldCondition] = []
+	if filters is None:
+		return conditions
+	if filters.owner_id is not None:
+		conditions.append(
+			vectorstore_service.FieldMatch(key="owner_id", value=str(filters.owner_id))
+		)
+	if filters.is_archived is not None:
+		conditions.append(
+			vectorstore_service.FieldMatch(key="is_archived", value=filters.is_archived)
+		)
+	return conditions
+
+
+def _apply_thread_search_filters(
+	stmt: Select,
+	filters: ThreadSearchFilters | None,
+) -> Select:
+	"""SQL-layer narrowing mirroring _thread_search_conditions."""
+	if filters is None:
+		return stmt.where(Thread.is_temporary.is_(False))
+	if not filters.include_hidden:
+		stmt = stmt.where(Thread.is_temporary.is_(False))
+	if filters.include_deleted:
+		stmt = stmt.execution_options(include_deleted=True)
+	if filters.owner_id is not None:
+		stmt = stmt.where(Thread.owner_id == filters.owner_id)
+	if filters.is_archived is not None:
+		stmt = stmt.where(Thread.is_archived.is_(filters.is_archived))
+	return stmt
 
 
 async def _autocomplete_threads(
@@ -176,38 +237,33 @@ async def _autocomplete_threads(
 	db: AsyncSession,
 	principal: Principal,
 	limit: int = 5,
-) -> list[SearchResultItem]:
-	"""pg_trgm autocomplete for threads on title."""
+	offset: int = 0,
+	filters: ThreadSearchFilters | None = None,
+) -> list[ScoredResult[Thread]]:
+	"""pg_trgm autocomplete tier scored by title similarity."""
 	pattern = contains_pattern(q)
+	sim = func.similarity(Thread.title, q)
 	stmt = (
-		select(Thread)
+		select(Thread, sim.label("sim"))
+		.options(selectinload(Thread.messages), selectinload(Thread.summaries))
 		.where(
-			Thread.is_temporary.is_(False),
-			thread_access_predicate(
+			resource_access_predicate(
 				principal,
+				ResourceType.THREAD,
 				required_level=AccessLevel.READER,
-				include_hidden=False,
 			),
 			or_(
-				func.similarity(Thread.title, q) > 0.1,
+				sim > 0.1,
 				Thread.title.ilike(pattern, escape="\\"),
 			),
 		)
-		.order_by(func.similarity(Thread.title, q).desc())
+		.order_by(sim.desc())
+		.offset(offset)
 		.limit(limit)
 	)
+	stmt = _apply_thread_search_filters(stmt, filters)
 	result = await db.execute(stmt)
-	return [
-		SearchResultItem(
-			type=SearchResultType.THREAD,
-			id=TypeID(t.id),
-			title=t.title or "",
-			preview=None,
-			created_at=t.created_at,
-			updated_at=t.updated_at,
-		)
-		for t in result.scalars().unique().all()
-	]
+	return [ScoredResult(item=t, score=float(s)) for t, s in result.unique().all()]
 
 
 async def _hybrid_search_threads(
@@ -217,8 +273,9 @@ async def _hybrid_search_threads(
 	limit: int = 10,
 	search_params: SearchParams | None = None,
 	query_embedding: list[float] | None = None,
-) -> list[SearchResultItem]:
-	"""qdrant hybrid search for threads (dense + BM25)."""
+	filters: ThreadSearchFilters | None = None,
+) -> list[ScoredResult[Thread]]:
+	"""qdrant hybrid tier (dense + BM25), scored by fused rank."""
 	params = search_params or SearchParams()
 	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
@@ -232,7 +289,10 @@ async def _hybrid_search_threads(
 		)
 	)
 	text_query = query_text if need_sparse else None
-	query_filter = vector_acl_filter([VectorChunkResourceType.THREAD], principal)
+	query_filter = vectorstore_service.with_conditions(
+		vector_acl_filter([VectorChunkResourceType.THREAD], principal),
+		_thread_search_conditions(filters),
+	)
 	results = await vectorstore_service.search(
 		session=db,
 		query=query_emb,
@@ -247,44 +307,26 @@ async def _hybrid_search_threads(
 	resource_ids = [r.metadata["resource_id"] for r in results]
 	stmt = (
 		select(Thread)
-		.options(selectinload(Thread.summaries))
+		.options(selectinload(Thread.messages), selectinload(Thread.summaries))
 		.where(
 			Thread.id.in_(resource_ids),
-			Thread.deleted_at.is_(None),
-			Thread.is_temporary.is_(False),
-			thread_access_predicate(
+			resource_access_predicate(
 				principal,
+				ResourceType.THREAD,
 				required_level=AccessLevel.READER,
-				include_hidden=False,
 			),
 		)
 	)
+	stmt = _apply_thread_search_filters(stmt, filters)
 	db_result = await db.execute(stmt)
 	by_id = {str(t.id): t for t in db_result.scalars().unique().all()}
-	items: list[SearchResultItem] = []
+	scored: list[ScoredResult[Thread]] = []
 	for r in results:
-		rid = str(r.metadata["resource_id"])
-		thread = by_id.get(rid)
-		if not thread:
+		thread = by_id.get(str(r.metadata["resource_id"]))
+		if thread is None:
 			continue
-		summary = latest_active_summary_text(
-			thread,
-			SummaryPurpose.CATALOG,
-		)
-		if summary is None:
-			summary = (thread.metadata_ or {}).get("summary")
-		items.append(
-			SearchResultItem(
-				type=SearchResultType.THREAD,
-				id=TypeID(thread.id),
-				title=thread.title or "",
-				preview=(str(summary)[:100] if summary else None),
-				score=r.score,
-				created_at=thread.created_at,
-				updated_at=thread.updated_at,
-			)
-		)
-	return items
+		scored.append(ScoredResult(item=thread, score=r.score))
+	return scored
 
 
 async def search_threads(
@@ -292,13 +334,39 @@ async def search_threads(
 	db: AsyncSession,
 	principal: Principal,
 	limit: int = 10,
-	cursor: str | None = None,
+	offset: int = 0,
 	search_params: SearchParams | None = None,
 	query_embedding: list[float] | None = None,
-) -> CursorPage[SearchResultItem]:
-	"""parallel pg_trgm + qdrant hybrid search with cursor pagination."""
+	filters: ThreadSearchFilters | None = None,
+	score_threshold: float = 0.0,
+) -> list[ScoredResult[Thread]]:
+	"""relevance-ordered, deduped thread hits with internal scores.
+
+	hybrid tier ranks first; autocomplete-only matches are appended.
+	"""
 	params = search_params or SearchParams()
-	coros: list[Coroutine[None, None, list[SearchResultItem]]] = []
+	if filters and (filters.include_deleted or filters.include_hidden):
+		if not principal.is_admin:
+			raise HTTPException(
+				status_code=status.HTTP_403_FORBIDDEN,
+				detail="forbidden",
+			)
+		if params.mode != SearchMode.AUTOCOMPLETE:
+			raise HTTPException(
+				status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+				detail="include_deleted/include_hidden requires autocomplete mode",
+			)
+	if params.mode == SearchMode.AUTOCOMPLETE:
+		return await _autocomplete_threads(
+			query_text,
+			db,
+			principal=principal,
+			limit=limit,
+			offset=offset,
+			filters=filters,
+		)
+	fetch = offset + limit
+	coros: list[Coroutine[None, None, list[ScoredResult[Thread]]]] = []
 	run_autocomplete = params.mode in (
 		SearchMode.AUTOCOMPLETE,
 		SearchMode.FULL,
@@ -309,30 +377,31 @@ async def search_threads(
 		SearchMode.SPARSE,
 		SearchMode.FULL,
 	)
-	# hybrid first - wins on deduplication (higher quality than autocomplete)
-	if run_hybrid:
-		coros.append(
-			_hybrid_search_threads(
+
+	async def _run_hybrid() -> list[ScoredResult[Thread]]:
+		async with session_scope(None) as s:
+			return await _hybrid_search_threads(
 				query_text,
-				db,
+				s,
 				principal=principal,
-				limit=limit + 1,
+				limit=fetch,
 				search_params=params,
 				query_embedding=query_embedding,
+				filters=filters,
 			)
-		)
+
+	async def _run_autocomplete() -> list[ScoredResult[Thread]]:
+		async with session_scope(None) as s:
+			return await _autocomplete_threads(
+				query_text, s, principal=principal, limit=fetch, filters=filters
+			)
+
+	if run_hybrid:
+		coros.append(_run_hybrid())
 	if run_autocomplete:
-		coros.append(
-			_autocomplete_threads(query_text, db, principal=principal, limit=limit + 1)
-		)
+		coros.append(_run_autocomplete())
 	results = await asyncio.gather(*coros, return_exceptions=True)
-	items = vectorstore_service.merge_deduplicate(
-		results, limit + 1, resource_name="threads"
-	)
-	if cursor:
-		ts, cid = decode_cursor(cursor)
-		_sk = THREAD_SPEC.sort_key
-		items = [i for i in items if (getattr(i, _sk), str(i.id)) < (ts, cid)]
-	_sk = THREAD_SPEC.sort_key
-	items.sort(key=lambda r: (getattr(r, _sk), str(r.id)), reverse=True)
-	return build_cursor_page(items, limit, sort_key=THREAD_SPEC.sort_key)
+	merged = merge_scored(results, resource_name="threads")
+	if score_threshold > 0.0:
+		merged = [s for s in merged if s.score >= score_threshold]
+	return merged[offset : offset + limit]

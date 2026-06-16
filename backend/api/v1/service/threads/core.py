@@ -10,6 +10,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.selectable import Select
 
 from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
@@ -31,7 +32,7 @@ from api.v1.service.authorization import (
 	list_accessible_user_ids,
 	require_permission,
 	require_thread_access,
-	thread_access_predicate,
+	resource_access_predicate,
 )
 from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.resource_payload_cache import (
@@ -45,6 +46,7 @@ from api.v1.service.vectorize import (
 	sync_resource_vector_acl,
 	vectorize_resource,
 )
+from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -103,10 +105,10 @@ async def _load_thread(
 
 	if principal is not None:
 		stmt = stmt.where(
-			thread_access_predicate(
+			resource_access_predicate(
 				principal,
+				ResourceType.THREAD,
 				required_level=required_level,
-				include_hidden=include_hidden,
 			)
 		)
 		if include_hidden:
@@ -209,6 +211,35 @@ async def create_thread(
 	return thread
 
 
+def _apply_thread_filters(
+	stmt: Select, filters: ThreadListFilters, principal: Principal
+) -> Select:
+	"""apply shared list/count filters for threads."""
+	if filters.include_hidden and not principal.is_admin:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
+	if filters.include_deleted and not principal.is_admin:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
+	if filters.owner_id is not None:
+		stmt = stmt.where(Thread.owner_id == filters.owner_id)
+	# always exclude temporary threads from listings
+	if not filters.include_hidden:
+		stmt = stmt.where(Thread.is_temporary.is_(False))
+	if filters.is_archived is not None:
+		stmt = stmt.where(Thread.is_archived == filters.is_archived)
+	if filters.q is not None and filters.q.strip():
+		pattern = contains_pattern(filters.q.strip())
+		stmt = stmt.where(Thread.title.ilike(pattern, escape="\\"))
+	if filters.include_hidden or filters.include_deleted:
+		stmt = stmt.execution_options(include_deleted=True)
+	return stmt
+
+
 async def list_threads(
 	session: AsyncSession,
 	principal: Principal,
@@ -219,7 +250,6 @@ async def list_threads(
 	sort_dir: SortDir = "desc",
 ) -> list[Thread]:
 	thread_filters = filters or ThreadListFilters()
-	_ensure_admin_for_hidden(thread_filters.include_hidden, principal)
 	stmt = (
 		select(Thread)
 		.options(
@@ -227,27 +257,14 @@ async def list_threads(
 			selectinload(Thread.projects),
 		)
 		.where(
-			thread_access_predicate(
+			resource_access_predicate(
 				principal,
+				ResourceType.THREAD,
 				required_level=AccessLevel.READER,
-				include_hidden=thread_filters.include_hidden,
 			)
 		)
 	)
-
-	if thread_filters.owner_id is not None:
-		stmt = stmt.where(Thread.owner_id == thread_filters.owner_id)
-
-	# always exclude temporary threads from listings
-	if not thread_filters.include_hidden:
-		stmt = stmt.where(Thread.is_temporary.is_(False))
-
-	if thread_filters.is_archived is not None:
-		stmt = stmt.where(Thread.is_archived == thread_filters.is_archived)
-
-	if thread_filters.include_hidden:
-		stmt = stmt.execution_options(include_deleted=True)
-
+	stmt = _apply_thread_filters(stmt, thread_filters, principal)
 	stmt = apply_sort(
 		stmt,
 		sort_by=sort_by,
@@ -271,26 +288,18 @@ async def count_threads(
 	filters: ThreadListFilters | None = None,
 ) -> int:
 	thread_filters = filters or ThreadListFilters()
-	_ensure_admin_for_hidden(thread_filters.include_hidden, principal)
 	stmt = (
 		select(func.count())
 		.select_from(Thread)
 		.where(
-			thread_access_predicate(
+			resource_access_predicate(
 				principal,
+				ResourceType.THREAD,
 				required_level=AccessLevel.READER,
-				include_hidden=thread_filters.include_hidden,
 			)
 		)
 	)
-	if thread_filters.owner_id is not None:
-		stmt = stmt.where(Thread.owner_id == thread_filters.owner_id)
-	if not thread_filters.include_hidden:
-		stmt = stmt.where(Thread.is_temporary.is_(False))
-	if thread_filters.is_archived is not None:
-		stmt = stmt.where(Thread.is_archived == thread_filters.is_archived)
-	if thread_filters.include_hidden:
-		stmt = stmt.execution_options(include_deleted=True)
+	stmt = _apply_thread_filters(stmt, thread_filters, principal)
 	return await session.scalar(stmt) or 0
 
 

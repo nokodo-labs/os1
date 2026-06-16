@@ -9,10 +9,12 @@ from typing import TYPE_CHECKING
 from pydantic import Field
 
 from api.models.memory import Memory
+from api.schemas.memory import MemorySearchFilters
 from api.schemas.preferences import AIPreferences
+from api.schemas.search import SearchMode, SearchParams
 from api.settings import settings as app_settings
 from api.v1.service.chat.filters.base import Filter
-from api.v1.service.memories import query_relevant_memories
+from api.v1.service.memories import search_memories
 from api.v1.service.prompts import SENTINEL_USER_MEMORIES
 from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
@@ -84,14 +86,17 @@ class MemoryContextFilter(Filter):
 				return state
 			query_text = "\n".join(_turns)
 
-		memories = await query_relevant_memories(
+		scored = await search_memories(
 			query_text,
 			app_context.session,
 			principal=app_context.principal,
 			limit=mem_cfg.top_k,
-			score_threshold=mem_cfg.similarity_threshold,
+			search_params=SearchParams(mode=SearchMode.HYBRID),
 			query_embedding=retrieval.query_embedding,
+			filters=MemorySearchFilters(owner_id=app_context.principal.user.id),
+			score_threshold=mem_cfg.similarity_threshold,
 		)
+		memories = [s.item for s in scored]
 		content = self._format_memories(memories) if memories else ""
 
 		self._replace_sentinel(thread, SENTINEL_USER_MEMORIES, content)

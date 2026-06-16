@@ -115,6 +115,18 @@ class CursorPage[T](ORMModel):
 	has_more: bool = False
 
 
+class Page[T](ORMModel):
+	"""offset-paginated response wrapper for relevance-ordered search.
+
+	items are returned in descending relevance order. has_more is true when
+	at least one further result exists beyond this page (detected by
+	over-fetching one item).
+	"""
+
+	items: list[T]
+	has_more: bool = False
+
+
 class SearchRequest(ORMModel):
 	"""request body for search (used in non-SSE paginated mode)."""
 

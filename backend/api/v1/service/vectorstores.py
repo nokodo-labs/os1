@@ -18,16 +18,19 @@ from urllib.parse import urlparse
 from qdrant_client import AsyncQdrantClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.schemas.search import SearchResultItem
 from api.settings import settings
 from api.v1.service.embeddings import resolve_embedding_model
 from nokodo_ai.adapters.base.vectorstores import (
 	Chunk,
 	ChunkFilter,
 	ChunkSearchResult,
+	FieldCondition,
 	FieldMatch,
 	FieldMatchAny,
 	Index,
+)
+from nokodo_ai.adapters.base.vectorstores import (
+	FieldRange as FieldRange,  # re-export for vectorstore_service.FieldRange
 )
 from nokodo_ai.adapters.vectorstores import VectorstoreAdapter
 from nokodo_ai.vectorstores import Vectorstore
@@ -58,6 +61,18 @@ DEFAULT_INDEXES: Index = {
 	"allowed_user_ids": "keyword",
 	"allowed_group_ids": "keyword",
 	"allowed_role_ids": "keyword",
+	# per-resource search filter fields
+	"tags": "keyword",  # threads, memories
+	"labels": "keyword",  # notes
+	"status": "keyword",  # reminders, files
+	"source": "keyword",  # files
+	"list_id": "keyword",  # reminders
+	"project_ids": "keyword",  # notes, files, threads
+	"is_archived": "bool",  # threads
+	"due_at": "datetime",  # reminders
+	"remind_at": "datetime",  # reminders
+	"start_at": "datetime",  # calendar events
+	"end_at": "datetime",  # calendar events
 }
 """scalar field indexes for the default collection.
 
@@ -210,14 +225,25 @@ def resource_types_filter(
 	"""
 	if not resource_types:
 		raise ValueError("resource_types cannot be empty")
-	all_of: list[FieldMatch | FieldMatchAny] = [
-		_resource_type_condition(resource_types)
-	]
+	all_of: list[FieldCondition] = [_resource_type_condition(resource_types)]
 	if resource_id is not None:
 		all_of.append(FieldMatch(key="resource_id", value=resource_id))
 	if owner_id is not None:
 		all_of.append(FieldMatch(key="owner_id", value=owner_id))
 	return ChunkFilter(all_of=all_of)
+
+
+def with_conditions(
+	base: ChunkFilter,
+	conditions: Sequence[FieldCondition],
+) -> ChunkFilter:
+	"""return a copy of base with extra all_of (AND) conditions appended.
+
+	used to narrow an ACL prefilter with per-resource structured search filters.
+	"""
+	if not conditions:
+		return base
+	return ChunkFilter(all_of=[*base.all_of, *conditions], any_of=base.any_of)
 
 
 def parent_resource_filter(
@@ -226,7 +252,7 @@ def parent_resource_filter(
 	resource_types: list[VectorChunkResourceType] | None = None,
 ) -> ChunkFilter:
 	"""build a filter for chunks attached to a parent resource."""
-	all_of: list[FieldMatch | FieldMatchAny] = []
+	all_of: list[FieldCondition] = []
 	if resource_types is not None:
 		if not resource_types:
 			raise ValueError("resource_types cannot be empty")
@@ -259,12 +285,10 @@ def acl_filter(
 	- any(group_ids) in allowed_group_ids
 	- any(role_ids) in allowed_role_ids
 	"""
-	all_of: list[FieldMatch | FieldMatchAny] = [
-		_resource_type_condition(chunk_resource_types)
-	]
+	all_of: list[FieldCondition] = [_resource_type_condition(chunk_resource_types)]
 	if is_admin:
 		return ChunkFilter(all_of=all_of)
-	any_of: list[FieldMatch | FieldMatchAny] = [
+	any_of: list[FieldCondition] = [
 		FieldMatch(key="owner_id", value=user_id),
 		FieldMatch(key="allowed_user_ids", value=user_id),
 	]
@@ -441,6 +465,13 @@ async def search(
 	group_by collapses results per distinct value of the given payload field
 	(e.g. "resource_id"), so limit bounds distinct resources rather than raw
 	chunks. group_size sets how many chunks to keep per group (default 1).
+
+	NOTE - offset is intentionally not forwarded here: Qdrant silently ignores
+	offset when group_by is set (query_points_groups has no offset parameter),
+	and all resource searches use group_by="resource_id". SQL autocomplete
+	tiers handle their own offset via .offset() on the SELECT statement.
+	Cross-tier (FULL mode) pagination is done by fetching offset+limit rows
+	from each tier, merging, then slicing merged[offset:offset+limit].
 	"""
 	coll = collection or await get_collection(session)
 	vs = store or get_vectorstore(collection=coll)
@@ -458,34 +489,6 @@ async def search(
 		group_by=group_by,
 		group_size=group_size,
 	)
-
-
-def merge_deduplicate(
-	results: Sequence[list[SearchResultItem] | BaseException],
-	limit: int,
-	resource_name: str = "unknown",
-) -> list[SearchResultItem]:
-	"""merge parallel search results, deduplicating by id.
-
-	priority: first result_set in the sequence wins on duplicates.
-	callers should put higher-priority tiers first (hybrid before autocomplete).
-	"""
-	seen: set[str] = set()
-	merged: list[SearchResultItem] = []
-	for result_set in results:
-		if isinstance(result_set, BaseException):
-			logger.warning(
-				"search tier failed for %s",
-				resource_name,
-				exc_info=result_set,
-			)
-			continue
-		for item in result_set:
-			key = str(item.id)
-			if key not in seen:
-				seen.add(key)
-				merged.append(item)
-	return merged[:limit]
 
 
 # admin operations

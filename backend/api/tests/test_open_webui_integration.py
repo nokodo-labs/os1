@@ -719,9 +719,12 @@ async def test_open_webui_import_reports_progress(
 	assert (10, "fetching data from open webui") in progress_updates
 	assert (20, "found 1 chats") in progress_updates
 	assert (25, "importing 1 chats") in progress_updates
-	assert any(stage == "importing chat 1/1" for _, stage in progress_updates)
+	assert any(stage == "importing chats 1/1" for _, stage in progress_updates)
 	assert (85, "chats imported") in progress_updates
 	assert progress_updates[-1] == (99, "finalizing")
+	# progress must advance monotonically (no backward jumps under fan-out).
+	values = [value for value, _ in progress_updates]
+	assert values == sorted(values)
 
 
 @pytest.mark.asyncio

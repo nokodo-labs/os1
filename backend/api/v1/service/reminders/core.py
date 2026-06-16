@@ -141,6 +141,26 @@ async def _reminder_subtree_depth(
 	return depth
 
 
+async def _next_sibling_position(
+	session: AsyncSession,
+	list_id: TypeID,
+	parent_id: TypeID | None,
+) -> float:
+	"""return the next position value for a new sibling in the given list/parent.
+
+	positions are 0-indexed; returns max_position + 1.0, or 0 if empty.
+	"""
+	stmt = select(func.max(Reminder.position)).where(
+		Reminder.list_id == list_id,
+		Reminder.parent_id == parent_id,
+	)
+	result = await session.execute(stmt)
+	max_pos = result.scalar_one_or_none()
+	if max_pos is None:
+		return 0.0
+	return max_pos + 1.0
+
+
 async def _validate_reminder_parent_assignment(
 	parent_id: TypeID,
 	target_list_id: TypeID,
@@ -214,6 +234,11 @@ async def create_reminder(
 		by_alias=True,
 		exclude={"recurrence", "list_id"},
 	)
+	# auto-compute position when not explicitly provided: append last
+	if "position" not in create_data:
+		create_data["position"] = await _next_sibling_position(
+			session, target_list_id, data.parent_id
+		)
 	create_data["list_id"] = target_list_id
 	create_data["recurrence"] = recurrence_to_storage(data.recurrence)
 	reminder = Reminder(
@@ -263,8 +288,16 @@ async def list_reminders(
 	await get_reminder_list(list_id, session, principal=principal)
 	stmt = stmt.where(Reminder.list_id == list_id)
 
-	if reminder_filters.status_filter is not None:
-		stmt = stmt.where(Reminder.status == reminder_filters.status_filter)
+	if reminder_filters.status is not None:
+		stmt = stmt.where(Reminder.status == reminder_filters.status)
+	if reminder_filters.due_after is not None:
+		stmt = stmt.where(Reminder.due_at >= reminder_filters.due_after)
+	if reminder_filters.due_before is not None:
+		stmt = stmt.where(Reminder.due_at <= reminder_filters.due_before)
+	if reminder_filters.remind_after is not None:
+		stmt = stmt.where(Reminder.remind_at >= reminder_filters.remind_after)
+	if reminder_filters.remind_before is not None:
+		stmt = stmt.where(Reminder.remind_at <= reminder_filters.remind_before)
 
 	stmt = apply_sort(
 		stmt, sort_by=sort_by, sort_dir=sort_dir, columns=_REMINDER_SORT_COLUMNS
@@ -484,8 +517,7 @@ async def get_reminder(
 			status_code=status.HTTP_404_NOT_FOUND,
 			detail="reminder not found",
 		)
-	if reminder.owner_id != principal.user_id and not principal.is_admin:
-		await get_reminder_list(reminder.list_id, session, principal=principal)
+	await get_reminder_list(reminder.list_id, session, principal=principal)
 	return reminder
 
 

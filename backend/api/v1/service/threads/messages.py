@@ -22,7 +22,10 @@ from api.schemas.message import MessageCreate, MessageUpdate
 from api.schemas.sorting import CommonSortBy
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
-from api.v1.service.authorization import require_thread_access, thread_access_predicate
+from api.v1.service.authorization import (
+	require_thread_access,
+	resource_access_predicate,
+)
 from api.v1.service.files.message_links import (
 	fanout_message_file_link_updates,
 	invalidate_message_file_link_caches,
@@ -323,7 +326,9 @@ async def load_thread_with_branch(
 	"""
 	stmt = select(Thread).where(
 		Thread.id == thread_id,
-		thread_access_predicate(principal, required_level=AccessLevel.READER),
+		resource_access_predicate(
+			principal, ResourceType.THREAD, required_level=AccessLevel.READER
+		),
 	)
 	result = await session.execute(stmt)
 	thread = result.scalars().one_or_none()

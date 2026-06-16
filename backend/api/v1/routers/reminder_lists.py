@@ -21,6 +21,7 @@ from api.schemas.reminder import (
 	ReminderListSortBy,
 	ReminderListUpdate,
 	ReminderListWithCounts,
+	ReminderSearchFilters,
 	ReminderSortBy,
 	ReminderUpdate,
 	ReminderWithSubtasks,
@@ -33,7 +34,7 @@ from api.schemas.scheduled_item import (
 	ReminderSeriesEdit,
 	ScheduledItem,
 )
-from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
+from api.schemas.search import Page, SearchMode, SearchParams
 from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import reminders as reminder_service
@@ -102,23 +103,29 @@ async def create_reminder_list(
 	)
 
 
-@router.get("/search", response_model=CursorPage[SearchResultItem])
+@router.get("/search", response_model=Page[ReminderSchema])
 async def search_reminder_lists(
+	filters: Annotated[ReminderSearchFilters, Depends()],
 	q: str = Query(min_length=1, max_length=500),
 	limit: int = Query(default=10, ge=1, le=50),
-	cursor: str | None = Query(default=None),
+	offset: int = Query(default=0, ge=0),
 	mode: SearchMode = Query(default=SearchMode.FULL),
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> CursorPage[SearchResultItem]:
-	"""search reminders with cursor-based pagination."""
-	return await reminder_service.search_reminders(
+) -> Page[ReminderSchema]:
+	"""search reminders, returning relevance-ordered reminders."""
+	scored = await reminder_service.search_reminders(
 		q,
 		db,
 		principal=principal,
-		limit=limit,
-		cursor=cursor,
+		limit=limit + 1,
+		offset=offset,
 		search_params=SearchParams(mode=mode),
+		filters=filters,
+	)
+	return Page(
+		items=[ReminderSchema.model_validate(hit.item) for hit in scored[:limit]],
+		has_more=len(scored) > limit,
 	)
 
 

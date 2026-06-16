@@ -47,7 +47,6 @@ FILE_SPEC: VectorSpec[File] = VectorSpec(
 	bm25_text=file_searchable_text,
 	metadata=file_metadata,
 	should_revectorize=file_should_revectorize,
-	sort_key="updated_at",
 )
 
 

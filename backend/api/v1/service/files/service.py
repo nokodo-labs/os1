@@ -72,6 +72,7 @@ from api.v1.service.resource_payload_cache import (
 	invalidate_resource_payload_cache,
 )
 from nokodo_ai.utils.files import corrected_mime_type
+from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -602,7 +603,14 @@ def _file_category_predicate(category: FileCategoryFilter) -> ColumnElement[bool
 	)
 
 
-def _apply_file_filters(stmt: Select, filters: FileListFilters) -> Select:
+def _apply_file_filters(
+	stmt: Select, filters: FileListFilters, principal: Principal
+) -> Select:
+	if filters.include_deleted and not principal.is_admin:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
 	if filters.owner_id is not None:
 		stmt = stmt.where(File.owner_id == filters.owner_id)
 	if filters.project_id is not None:
@@ -614,15 +622,15 @@ def _apply_file_filters(stmt: Select, filters: FileListFilters) -> Select:
 		stmt = stmt.where(File.source == filters.source)
 	if filters.category is not None:
 		stmt = stmt.where(_file_category_predicate(filters.category))
-	return stmt
-
-
-def _ensure_admin_for_deleted(include_deleted: bool, principal: Principal) -> None:
-	if include_deleted and not principal.is_admin:
-		raise HTTPException(
-			status_code=status.HTTP_403_FORBIDDEN,
-			detail="forbidden",
+	if filters.q is not None and filters.q.strip():
+		pattern = contains_pattern(filters.q.strip())
+		stmt = stmt.where(
+			or_(
+				File.filename.ilike(pattern, escape="\\"),
+				File.description.ilike(pattern, escape="\\"),
+			)
 		)
+	return stmt
 
 
 async def list_files(
@@ -637,19 +645,17 @@ async def list_files(
 ) -> list[File]:
 	"""list files accessible by the principal."""
 	file_filters = filters or FileListFilters()
-	_ensure_admin_for_deleted(file_filters.include_deleted, principal)
 	include_deleted = file_filters.include_deleted
 	stmt = select(File).where(
 		resource_access_predicate(
 			principal,
 			ResourceType.FILE,
 			required_level=AccessLevel.READER,
-			include_deleted=include_deleted,
 		),
 	)
 	if include_deleted:
 		stmt = stmt.execution_options(include_deleted=True)
-	stmt = _apply_file_filters(stmt, file_filters)
+	stmt = _apply_file_filters(stmt, file_filters, principal)
 	stmt = apply_sort(
 		stmt,
 		sort_by=sort_by,
@@ -675,19 +681,17 @@ async def count_files(
 ) -> FileCounts:
 	"""count files accessible by the principal."""
 	file_filters = filters or FileListFilters()
-	_ensure_admin_for_deleted(file_filters.include_deleted, principal)
 	include_deleted = file_filters.include_deleted
 	base_stmt = select(File).where(
 		resource_access_predicate(
 			principal,
 			ResourceType.FILE,
 			required_level=AccessLevel.READER,
-			include_deleted=include_deleted,
 		),
 	)
 	if include_deleted:
 		base_stmt = base_stmt.execution_options(include_deleted=True)
-	base_stmt = _apply_file_filters(base_stmt, file_filters)
+	base_stmt = _apply_file_filters(base_stmt, file_filters, principal)
 
 	total_result = await session.execute(
 		base_stmt.with_only_columns(func.count(File.id)).order_by(None)

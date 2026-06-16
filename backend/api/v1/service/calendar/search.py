@@ -7,13 +7,13 @@ from collections.abc import Coroutine
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
-from api.database import build_cursor_page, decode_cursor
+from api.database.main import session_scope
 from api.models.calendar import Calendar, CalendarEvent
 from api.permissions import ResourceType
-from api.schemas.calendar import CalendarEventUpdate
+from api.schemas.calendar import CalendarEventSearchFilters, CalendarEventUpdate
 from api.schemas.search import (
-	CursorPage,
 	SearchMode,
 	SearchParams,
 	SearchResourceReferenceType,
@@ -25,6 +25,7 @@ from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import resource_access_predicate
 from api.v1.service.embeddings import embed_text
+from api.v1.service.search.primitives import ScoredResult, merge_scored
 from api.v1.service.vectorize import (
 	VectorSpec,
 	vectorize_resources,
@@ -84,6 +85,28 @@ async def _calendar_event_should_revectorize(
 	return bool(_fields & update_data.keys())
 
 
+def calendar_event_to_search_item(
+	calendar_event: CalendarEvent, score: float | None = None
+) -> SearchResultItem:
+	"""projection from a calendar event (and optional score) to a SearchResultItem."""
+	return SearchResultItem(
+		type=SearchResultType.CALENDAR_EVENT,
+		id=TypeID(calendar_event.id),
+		title=calendar_event.title or "",
+		preview=calendar_event.description[:100]
+		if calendar_event.description
+		else None,
+		score=score,
+		parent=SearchResultParent(
+			type=SearchResourceReferenceType.CALENDAR,
+			id=TypeID(calendar_event.calendar_id),
+		),
+		metadata=_calendar_event_metadata(calendar_event),
+		created_at=calendar_event.created_at,
+		updated_at=calendar_event.updated_at,
+	)
+
+
 CALENDAR_EVENT_SPEC: VectorSpec[CalendarEvent] = VectorSpec(
 	resource_type=VectorChunkResourceType.CALENDAR_EVENT,
 	resource_id=lambda calendar_event: str(calendar_event.id),
@@ -91,7 +114,6 @@ CALENDAR_EVENT_SPEC: VectorSpec[CalendarEvent] = VectorSpec(
 	bm25_text=_calendar_event_dense_text,
 	metadata=_calendar_event_metadata,
 	should_revectorize=_calendar_event_should_revectorize,
-	sort_key="updated_at",
 )
 
 
@@ -128,48 +150,52 @@ async def vectorize_all_calendar_events(session: AsyncSession) -> int:
 	)
 
 
+def _apply_calendar_event_search_filters(
+	stmt: Select, filters: CalendarEventSearchFilters | None
+) -> Select:
+	"""narrow a calendar event select by the time window in search filters."""
+	if filters is None:
+		return stmt
+	if filters.start_at is not None:
+		stmt = stmt.where(CalendarEvent.end_at >= filters.start_at)
+	if filters.end_at is not None:
+		stmt = stmt.where(CalendarEvent.start_at <= filters.end_at)
+	return stmt
+
+
 async def _autocomplete_calendar_events(
 	q: str,
 	db: AsyncSession,
 	principal: Principal,
 	limit: int = 5,
-) -> list[SearchResultItem]:
-	"""pg_trgm autocomplete for calendar events."""
+	offset: int = 0,
+	filters: CalendarEventSearchFilters | None = None,
+) -> list[ScoredResult[CalendarEvent]]:
+	"""pg_trgm autocomplete tier scored by title similarity."""
 	pattern = contains_pattern(q)
+	sim = func.similarity(CalendarEvent.title, q)
 	stmt = (
-		select(CalendarEvent)
+		select(CalendarEvent, sim.label("sim"))
 		.join(Calendar, CalendarEvent.calendar_id == Calendar.id)
 		.where(
 			resource_access_predicate(principal, ResourceType.CALENDAR),
 			or_(
-				func.similarity(CalendarEvent.title, q) > 0.1,
+				sim > 0.1,
 				CalendarEvent.title.ilike(pattern, escape="\\"),
 				CalendarEvent.description.ilike(pattern, escape="\\"),
 				CalendarEvent.location.ilike(pattern, escape="\\"),
 				CalendarEvent.virtual_url.ilike(pattern, escape="\\"),
 			),
 		)
-		.order_by(func.similarity(CalendarEvent.title, q).desc())
+		.order_by(sim.desc())
+		.offset(offset)
 		.limit(limit)
 	)
+	stmt = _apply_calendar_event_search_filters(stmt, filters)
 	result = await db.execute(stmt)
 	return [
-		SearchResultItem(
-			type=SearchResultType.CALENDAR_EVENT,
-			id=TypeID(calendar_event.id),
-			title=calendar_event.title or "",
-			preview=calendar_event.description[:100]
-			if calendar_event.description
-			else None,
-			parent=SearchResultParent(
-				type=SearchResourceReferenceType.CALENDAR,
-				id=TypeID(calendar_event.calendar_id),
-			),
-			metadata=_calendar_event_metadata(calendar_event),
-			created_at=calendar_event.created_at,
-			updated_at=calendar_event.updated_at,
-		)
-		for calendar_event in result.scalars().all()
+		ScoredResult(item=calendar_event, score=float(score))
+		for calendar_event, score in result.all()
 	]
 
 
@@ -180,8 +206,9 @@ async def _hybrid_search_calendar_events(
 	limit: int = 10,
 	search_params: SearchParams | None = None,
 	query_embedding: list[float] | None = None,
-) -> list[SearchResultItem]:
-	"""qdrant hybrid search for calendar events."""
+	filters: CalendarEventSearchFilters | None = None,
+) -> list[ScoredResult[CalendarEvent]]:
+	"""qdrant hybrid tier (dense + BM25), scored by fused rank."""
 	params = search_params or SearchParams()
 	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
@@ -217,36 +244,19 @@ async def _hybrid_search_calendar_events(
 			resource_access_predicate(principal, ResourceType.CALENDAR),
 		)
 	)
+	stmt = _apply_calendar_event_search_filters(stmt, filters)
 	db_result = await db.execute(stmt)
 	by_id = {
 		str(calendar_event.id): calendar_event
 		for calendar_event in db_result.scalars().all()
 	}
-	items: list[SearchResultItem] = []
+	scored: list[ScoredResult[CalendarEvent]] = []
 	for result in results:
-		resource_id = str(result.metadata["resource_id"])
-		calendar_event = by_id.get(resource_id)
+		calendar_event = by_id.get(str(result.metadata["resource_id"]))
 		if calendar_event is None:
 			continue
-		items.append(
-			SearchResultItem(
-				type=SearchResultType.CALENDAR_EVENT,
-				id=TypeID(calendar_event.id),
-				title=calendar_event.title or "",
-				preview=calendar_event.description[:100]
-				if calendar_event.description
-				else None,
-				score=result.score,
-				parent=SearchResultParent(
-					type=SearchResourceReferenceType.CALENDAR,
-					id=TypeID(calendar_event.calendar_id),
-				),
-				metadata=_calendar_event_metadata(calendar_event),
-				created_at=calendar_event.created_at,
-				updated_at=calendar_event.updated_at,
-			)
-		)
-	return items
+		scored.append(ScoredResult(item=calendar_event, score=result.score))
+	return scored
 
 
 async def search_calendar_events(
@@ -254,50 +264,62 @@ async def search_calendar_events(
 	db: AsyncSession,
 	principal: Principal,
 	limit: int = 10,
-	cursor: str | None = None,
+	offset: int = 0,
 	search_params: SearchParams | None = None,
 	query_embedding: list[float] | None = None,
-) -> CursorPage[SearchResultItem]:
-	"""parallel pg_trgm + qdrant search for calendar events."""
+	score_threshold: float = 0.0,
+	filters: CalendarEventSearchFilters | None = None,
+) -> list[ScoredResult[CalendarEvent]]:
+	"""relevance-ordered, deduped calendar event hits with internal scores.
+
+	hybrid tier ranks first; autocomplete-only matches are appended.
+	"""
 	params = search_params or SearchParams()
-	coros: list[Coroutine[None, None, list[SearchResultItem]]] = []
+	if params.mode == SearchMode.AUTOCOMPLETE:
+		return await _autocomplete_calendar_events(
+			query_text,
+			db,
+			principal=principal,
+			limit=limit,
+			offset=offset,
+			filters=filters,
+		)
+	fetch = offset + limit
+	coros: list[Coroutine[None, None, list[ScoredResult[CalendarEvent]]]] = []
+
+	async def _run_hybrid() -> list[ScoredResult[CalendarEvent]]:
+		async with session_scope(None) as s:
+			return await _hybrid_search_calendar_events(
+				query_text,
+				s,
+				principal=principal,
+				limit=fetch,
+				search_params=params,
+				query_embedding=query_embedding,
+				filters=filters,
+			)
+
+	async def _run_autocomplete() -> list[ScoredResult[CalendarEvent]]:
+		async with session_scope(None) as s:
+			return await _autocomplete_calendar_events(
+				query_text,
+				s,
+				principal=principal,
+				limit=fetch,
+				filters=filters,
+			)
+
 	if params.mode in (
 		SearchMode.HYBRID,
 		SearchMode.DENSE,
 		SearchMode.SPARSE,
 		SearchMode.FULL,
 	):
-		coros.append(
-			_hybrid_search_calendar_events(
-				query_text,
-				db,
-				principal=principal,
-				limit=limit + 1,
-				search_params=params,
-				query_embedding=query_embedding,
-			)
-		)
+		coros.append(_run_hybrid())
 	if params.mode in (SearchMode.AUTOCOMPLETE, SearchMode.FULL):
-		coros.append(
-			_autocomplete_calendar_events(
-				query_text,
-				db,
-				principal=principal,
-				limit=limit + 1,
-			)
-		)
+		coros.append(_run_autocomplete())
 	results = await asyncio.gather(*coros, return_exceptions=True)
-	items = vectorstore_service.merge_deduplicate(
-		results,
-		limit + 1,
-		resource_name="calendar events",
-	)
-	if cursor:
-		timestamp, cursor_id = decode_cursor(cursor)
-		items = [
-			item
-			for item in items
-			if (item.updated_at, str(item.id)) < (timestamp, cursor_id)
-		]
-	items.sort(key=lambda item: (item.updated_at, str(item.id)), reverse=True)
-	return build_cursor_page(items, limit, sort_key=CALENDAR_EVENT_SPEC.sort_key)
+	merged = merge_scored(results, resource_name="calendar events")
+	if score_threshold > 0.0:
+		merged = [s for s in merged if s.score >= score_threshold]
+	return merged[offset : offset + limit]

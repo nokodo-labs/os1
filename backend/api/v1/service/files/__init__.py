@@ -8,12 +8,14 @@ from api.v1.service.files.content_vectorization import (
 )
 from api.v1.service.files.description import update_file_description
 from api.v1.service.files.processing import (
-	list_files_due_for_description,
+	list_files_due_for_processing,
 	process_file,
-	process_file_content_vectorization,
 	process_file_description,
 )
-from api.v1.service.files.search import search_files
+from api.v1.service.files.search import (
+	file_to_search_item,
+	search_files,
+)
 from api.v1.service.files.service import (
 	count_files,
 	delete_content,
@@ -54,10 +56,9 @@ __all__ = [
 	"get_file_url",
 	"ingest_file",
 	"list_files",
-	"list_files_due_for_description",
+	"list_files_due_for_processing",
 	"load_file_content_chunks",
 	"process_file",
-	"process_file_content_vectorization",
 	"process_file_description",
 	"read_content",
 	"read_file_base64",
@@ -66,6 +67,7 @@ __all__ = [
 	"replace_all_file_vectors",
 	"replace_file_description_vectors",
 	"restore_file",
+	"file_to_search_item",
 	"search_files",
 	"store_file",
 	"update_file",

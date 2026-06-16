@@ -27,6 +27,15 @@ class NoteListFilters(BaseModel):
 	owner_id: TypeID | None = None
 	labels: list[str] | None = None
 	include_deleted: bool = False
+	q: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+class NoteSearchFilters(BaseModel):
+	"""structured filters applied to note search (vector + autocomplete)."""
+
+	owner_id: TypeID | None = None
+	labels: list[str] | None = None
+	include_deleted: bool = False
 
 
 class NoteBase(MetadataModel):

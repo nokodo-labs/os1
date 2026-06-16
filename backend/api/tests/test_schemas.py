@@ -10,14 +10,16 @@ import pytest
 from api.models.message import MessageType
 from api.models.project import Project as ProjectModel
 from api.models.thread import Thread as ThreadModel
+from api.schemas.common import sanitize_metadata
 from api.schemas.event import Event as EventSchema
 from api.schemas.message import Message as MessageSchema
-from api.schemas.message import MessageCreate, TextContent, public_message_metadata
+from api.schemas.message import MessageCreate, TextContent
 from api.schemas.project import Project as ProjectSchema
 from api.schemas.prompt import PromptCreate, PromptUpdate
 from api.schemas.runs import RunInput, RunRequest, ThreadCreateAndRunRequest
 from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadSummary
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import new_typeid
 
 
@@ -121,8 +123,8 @@ def test_message_create_normalizes_content_variants() -> None:
 	assert from_empty.content == []
 
 
-def test_public_message_metadata_strips_private_underscore_keys() -> None:
-	metadata = {
+def test_sanitize_metadata_strips_private_underscore_keys() -> None:
+	metadata: JSONObject = {
 		"run_id": "run_123",
 		"steering_state": "queued",
 		"custom_public": "visible",
@@ -135,7 +137,7 @@ def test_public_message_metadata_strips_private_underscore_keys() -> None:
 		"_web_search": {"engine": "perplexity"},
 	}
 
-	assert public_message_metadata(metadata) == {
+	assert sanitize_metadata(metadata) == {
 		"run_id": "run_123",
 		"steering_state": "queued",
 		"custom_public": "visible",

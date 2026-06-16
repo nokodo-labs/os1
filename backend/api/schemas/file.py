@@ -32,6 +32,16 @@ class FileListFilters(BaseModel):
 	source: FileSource | None = None
 	category: FileCategoryFilter | None = None
 	include_deleted: bool = False
+	q: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+class FileSearchFilters(BaseModel):
+	"""structured filters applied to file search (vector + autocomplete)."""
+
+	owner_id: TypeID | None = None
+	project_id: TypeID | None = None
+	source: FileSource | None = None
+	include_deleted: bool = False
 
 
 class FileCounts(BaseModel):

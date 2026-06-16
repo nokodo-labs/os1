@@ -8,8 +8,9 @@ import logging
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.models.note import Note
 from api.schemas.note import NoteCreate, NoteUpdate
-from api.schemas.search import SearchMode, SearchParams
+from api.schemas.search import Page, SearchMode, SearchParams
 from api.v1.service import notes as note_service
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.message_metadata import CITABLE_SOURCES_KEY
@@ -22,7 +23,15 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
-_HYBRID_SEARCH = SearchParams(mode=SearchMode.HYBRID)
+
+
+def _note_search_result(note: Note) -> dict[str, object]:
+	"""summarize a note for agent search results."""
+	return {
+		"id": str(note.id),
+		"title": note.title or "",
+		**({"preview": note.content[:50]} if note.content else {}),
+	}
 
 
 class NoteGetInput(BaseModel):
@@ -51,6 +60,11 @@ class NoteGetInput(BaseModel):
 		description="max notes to return when searching (ignored for direct fetch)",
 		ge=1,
 		le=20,
+	)
+	offset: int = Field(
+		default=0,
+		description="number of search results to skip before this page.",
+		ge=0,
 	)
 
 
@@ -149,16 +163,21 @@ class NoteGetTool(Tool[AppContext]):
 
 		# search by query
 		try:
-			page = await note_service.search_notes(
+			scored = await note_service.search_notes(
 				inp.query,
 				__app_context__.session,
 				principal=__app_context__.principal,
-				limit=inp.limit,
-				search_params=_HYBRID_SEARCH,
+				limit=inp.limit + 1,
+				offset=inp.offset,
+				search_params=SearchParams(mode=SearchMode.HYBRID),
 			)
 		except HTTPException as exc:
 			return self.error(str(exc.detail), __tool_call_context__)
 
+		page = Page(
+			items=[hit.item for hit in scored[: inp.limit]],
+			has_more=len(scored) > inp.limit,
+		)
 		if not page.items:
 			out = {
 				"status": "success",
@@ -168,25 +187,20 @@ class NoteGetTool(Tool[AppContext]):
 			}
 			return self.success(json.dumps(out), __tool_call_context__)
 
-		results = [
-			{
-				"id": item.id,
-				"title": item.title,
-				**({"preview": item.preview[:50]} if item.preview else {}),
-			}
-			for item in page.items
-		]
+		results = [_note_search_result(item) for item in page.items]
 		n = len(results)
 		msg = f"found {n} {'note' if n == 1 else 'notes'}"
 		citable_sources: list[JSONValue] = [
-			{"source_type": "note", "source_id": item.id, "title": item.title}
+			{"source_type": "note", "source_id": str(item.id), "title": item.title}
 			for item in page.items
 		]
+		next_offset = inp.offset + inp.limit if page.has_more else None
 		out = {
 			"status": "success",
 			"message": msg,
 			"count": n,
 			"results": results,
+			"next_offset": next_offset,
 		}
 		return ToolMessage(
 			tool_call_id=__tool_call_context__.tool_call_id,

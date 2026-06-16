@@ -32,7 +32,11 @@ type ReminderListSortBy = Literal["position", "name", "created_at", "updated_at"
 class ReminderListItemFilters(BaseModel):
 	"""filters for listing reminders in a list."""
 
-	status_filter: ReminderStatus | None = None
+	status: ReminderStatus | None = None
+	due_after: datetime | None = None
+	due_before: datetime | None = None
+	remind_after: datetime | None = None
+	remind_before: datetime | None = None
 
 
 class ScheduledReminderListFilters(BaseModel):
@@ -45,6 +49,19 @@ class ReminderListFilters(BaseModel):
 	"""filters for listing reminder lists."""
 
 	owner_id: TypeID | None = None
+	q: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+class ReminderSearchFilters(BaseModel):
+	"""structured filters applied to reminder search (vector + autocomplete)."""
+
+	owner_id: TypeID | None = None
+	list_id: TypeID | None = None
+	status: ReminderStatus | None = None
+	due_after: datetime | None = None
+	due_before: datetime | None = None
+	remind_after: datetime | None = None
+	remind_before: datetime | None = None
 
 
 # ReminderList schemas
@@ -116,6 +133,7 @@ class ReminderCreate(ReminderBase):
 	"""schema for creating a reminder."""
 
 	list_id: TypeID | None = None
+	position: float | MissingType = MISSING
 
 
 class ReminderUpdate(MetadataUpdateModel):

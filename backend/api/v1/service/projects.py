@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
 
-from api.database import build_cursor_page, decode_cursor
 from api.models.access_rule import AccessLevel
 from api.models.calendar import Calendar
 from api.models.event import Event, EventScope
@@ -32,11 +31,10 @@ from api.schemas.project import (
 	ProjectCreate,
 	ProjectListFilters,
 	ProjectResourceCounts,
+	ProjectSearchFilters,
 	ProjectUpdate,
 )
 from api.schemas.search import (
-	CursorPage,
-	SearchParams,
 	SearchResultItem,
 	SearchResultType,
 )
@@ -54,6 +52,7 @@ from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
 	invalidate_resource_payload_cache,
 )
+from api.v1.service.search.primitives import ScoredResult
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
@@ -418,7 +417,42 @@ def _apply_project_filters(stmt: Select, filters: ProjectListFilters) -> Select:
 	"""apply project list/count filters."""
 	if filters.owner_id is not None:
 		stmt = stmt.where(Project.owner_id == filters.owner_id)
+	if filters.q is not None and filters.q.strip():
+		pattern = contains_pattern(filters.q.strip())
+		stmt = stmt.where(
+			or_(
+				Project.name.ilike(pattern, escape="\\"),
+				Project.description.ilike(pattern, escape="\\"),
+			)
+		)
 	return stmt
+
+
+def _apply_project_search_filters(
+	stmt: Select, filters: ProjectSearchFilters | None
+) -> Select:
+	"""narrow a project search select by structured search filters."""
+	if filters is None:
+		return stmt
+	if filters.owner_id is not None:
+		stmt = stmt.where(Project.owner_id == filters.owner_id)
+	return stmt
+
+
+def project_to_search_item(
+	project: Project, score: float | None = None
+) -> SearchResultItem:
+	"""projection from a project (and optional score) to a SearchResultItem."""
+	return SearchResultItem(
+		type=SearchResultType.PROJECT,
+		id=TypeID(project.id),
+		title=project.name,
+		preview=project.description[:100] if project.description else None,
+		score=score,
+		metadata=_project_search_metadata(project),
+		created_at=project.created_at,
+		updated_at=project.updated_at,
+	)
 
 
 async def search_projects(
@@ -426,10 +460,10 @@ async def search_projects(
 	session: AsyncSession,
 	principal: Principal,
 	limit: int = 10,
-	cursor: str | None = None,
-	search_params: SearchParams | None = None,
-) -> CursorPage[SearchResultItem]:
-	"""search accessible projects by name and description with pg_trgm."""
+	offset: int = 0,
+	filters: ProjectSearchFilters | None = None,
+) -> list[ScoredResult[Project]]:
+	"""relevance-ordered project hits by name/description pg_trgm similarity."""
 	pattern = contains_pattern(query_text)
 	description_text = func.coalesce(Project.description, "")
 	search_score = func.greatest(
@@ -452,32 +486,15 @@ async def search_projects(
 			),
 		)
 		.order_by(search_score.desc(), Project.updated_at.desc(), Project.id.desc())
-		.limit(limit + 1)
+		.offset(offset)
+		.limit(limit)
 	)
+	stmt = _apply_project_search_filters(stmt, filters)
 	result = await session.execute(stmt)
-	items: list[SearchResultItem] = []
-	for project, score in result.all():
-		items.append(
-			SearchResultItem(
-				type=SearchResultType.PROJECT,
-				id=TypeID(project.id),
-				title=project.name,
-				preview=project.description[:100] if project.description else None,
-				score=float(score) if score is not None else None,
-				metadata=_project_search_metadata(project),
-				created_at=project.created_at,
-				updated_at=project.updated_at,
-			)
-		)
-	if cursor:
-		timestamp, cursor_id = decode_cursor(cursor)
-		items = [
-			item
-			for item in items
-			if (item.updated_at, str(item.id)) < (timestamp, cursor_id)
-		]
-	items.sort(key=lambda item: (item.updated_at, str(item.id)), reverse=True)
-	return build_cursor_page(items, limit, sort_key="updated_at")
+	return [
+		ScoredResult(item=project, score=float(score) if score is not None else 0.0)
+		for project, score in result.all()
+	]
 
 
 async def get_project(

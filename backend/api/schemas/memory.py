@@ -34,6 +34,14 @@ class MemoryListFilters(BaseModel):
 
 	owner_id: TypeID | None = None
 	search: str | None = Field(default=None, min_length=1, max_length=500)
+	tags: list[str] | None = None
+
+
+class MemorySearchFilters(BaseModel):
+	"""structured filters applied to memory search (vector + autocomplete)."""
+
+	owner_id: TypeID | None = None
+	tags: list[str] | None = None
 
 
 class MemoryBase(MetadataModel):

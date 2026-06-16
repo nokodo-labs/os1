@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
 
-from api.database import build_cursor_page, decode_cursor
 from api.database.main import session_scope
 from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
@@ -20,9 +19,8 @@ from api.models.event_types import EventType
 from api.models.note import Note
 from api.permissions import ResourceType
 from api.schemas.note import Note as NoteOut
-from api.schemas.note import NoteCreate, NoteListFilters, NoteUpdate
+from api.schemas.note import NoteCreate, NoteListFilters, NoteSearchFilters, NoteUpdate
 from api.schemas.search import (
-	CursorPage,
 	SearchMode,
 	SearchParams,
 	SearchResultItem,
@@ -50,6 +48,7 @@ from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
 	invalidate_resource_payload_cache,
 )
+from api.v1.service.search.primitives import ScoredResult, merge_scored
 from api.v1.service.vectorize import (
 	VectorSpec,
 	remove_vectorized_resource,
@@ -158,12 +157,28 @@ async def create_note(
 	return await _get_note(note_id, session, principal)
 
 
-def _ensure_admin_for_deleted(include_deleted: bool, principal: Principal) -> None:
-	if include_deleted and not principal.is_admin:
+def _apply_note_filters(
+	stmt: Select, filters: NoteListFilters, principal: Principal
+) -> Select:
+	"""apply note list/count filters."""
+	if filters.include_deleted and not principal.is_admin:
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="forbidden",
 		)
+	if filters.owner_id is not None:
+		stmt = stmt.where(Note.user_id == filters.owner_id)
+	if filters.labels:
+		stmt = stmt.where(Note.labels.contains(filters.labels))
+	if filters.q is not None and filters.q.strip():
+		pattern = contains_pattern(filters.q.strip())
+		stmt = stmt.where(
+			or_(
+				Note.title.ilike(pattern, escape="\\"),
+				Note.content.ilike(pattern, escape="\\"),
+			)
+		)
+	return stmt
 
 
 async def list_notes(
@@ -176,16 +191,13 @@ async def list_notes(
 	sort_dir: SortDir = "desc",
 ) -> list[Note]:
 	note_filters = filters or NoteListFilters()
-	_ensure_admin_for_deleted(note_filters.include_deleted, principal)
 	include_deleted = note_filters.include_deleted
 	stmt = select(Note).where(
-		resource_access_predicate(
-			principal, ResourceType.NOTE, include_deleted=include_deleted
-		),
+		resource_access_predicate(principal, ResourceType.NOTE),
 	)
 	if include_deleted:
 		stmt = stmt.execution_options(include_deleted=True)
-	stmt = _apply_note_filters(stmt, note_filters)
+	stmt = _apply_note_filters(stmt, note_filters, principal)
 	stmt = apply_sort(
 		stmt,
 		sort_by=sort_by,
@@ -209,30 +221,18 @@ async def count_notes(
 	filters: NoteListFilters | None = None,
 ) -> int:
 	note_filters = filters or NoteListFilters()
-	_ensure_admin_for_deleted(note_filters.include_deleted, principal)
 	include_deleted = note_filters.include_deleted
 	stmt = (
 		select(func.count())
 		.select_from(Note)
 		.where(
-			resource_access_predicate(
-				principal, ResourceType.NOTE, include_deleted=include_deleted
-			),
+			resource_access_predicate(principal, ResourceType.NOTE),
 		)
 	)
 	if include_deleted:
 		stmt = stmt.execution_options(include_deleted=True)
-	stmt = _apply_note_filters(stmt, note_filters)
+	stmt = _apply_note_filters(stmt, note_filters, principal)
 	return await session.scalar(stmt) or 0
-
-
-def _apply_note_filters(stmt: Select, filters: NoteListFilters) -> Select:
-	"""apply note list/count filters."""
-	if filters.owner_id is not None:
-		stmt = stmt.where(Note.user_id == filters.owner_id)
-	if filters.labels:
-		stmt = stmt.where(Note.labels.contains(filters.labels))
-	return stmt
 
 
 async def get_note(
@@ -482,6 +482,19 @@ async def _note_should_revectorize(
 	return bool(_fields & update_data.keys())
 
 
+def note_to_search_item(note: Note, score: float | None = None) -> SearchResultItem:
+	"""projection from a note (and optional score) to a SearchResultItem."""
+	return SearchResultItem(
+		type=SearchResultType.NOTE,
+		id=TypeID(note.id),
+		title=note.title or "",
+		preview=(note.content[:100] if note.content else None),
+		score=score,
+		created_at=note.created_at,
+		updated_at=note.updated_at,
+	)
+
+
 NOTE_SPEC: VectorSpec[Note] = VectorSpec(
 	resource_type=VectorChunkResourceType.NOTE,
 	resource_id=lambda n: str(n.id),
@@ -490,7 +503,6 @@ NOTE_SPEC: VectorSpec[Note] = VectorSpec(
 	metadata=_note_metadata,
 	should_revectorize=_note_should_revectorize,
 	chunker="markdown",
-	sort_key="updated_at",
 )
 
 
@@ -535,40 +547,68 @@ async def vectorize_all_notes(session: AsyncSession) -> int:
 	return await _vectorize_notes(list(result.scalars().all()), session)
 
 
+def _note_search_conditions(
+	filters: NoteSearchFilters | None,
+) -> list[vectorstore_service.FieldCondition]:
+	"""vector-layer narrowing conditions derived from note search filters."""
+	conditions: list[vectorstore_service.FieldCondition] = []
+	if filters is None:
+		return conditions
+	if filters.owner_id is not None:
+		conditions.append(
+			vectorstore_service.FieldMatch(key="owner_id", value=str(filters.owner_id))
+		)
+	if filters.labels:
+		conditions.append(
+			vectorstore_service.FieldMatchAny(key="labels", values=filters.labels)
+		)
+	return conditions
+
+
+def _apply_note_search_filters(
+	stmt: Select,
+	filters: NoteSearchFilters | None,
+) -> Select:
+	"""SQL-layer narrowing mirroring _note_search_conditions."""
+	if filters is None:
+		return stmt
+	if filters.include_deleted:
+		stmt = stmt.execution_options(include_deleted=True)
+	if filters.owner_id is not None:
+		stmt = stmt.where(Note.user_id == filters.owner_id)
+	if filters.labels:
+		stmt = stmt.where(Note.labels.op("&&")(filters.labels))
+	return stmt
+
+
 async def _autocomplete_notes(
 	q: str,
 	db: AsyncSession,
 	principal: Principal,
 	limit: int = 5,
-) -> list[SearchResultItem]:
-	"""pg_trgm autocomplete for notes on title and content."""
+	offset: int = 0,
+	filters: NoteSearchFilters | None = None,
+) -> list[ScoredResult[Note]]:
+	"""pg_trgm autocomplete tier scored by title similarity."""
 	pattern = contains_pattern(q)
+	sim = func.similarity(Note.title, q)
 	stmt = (
-		select(Note)
+		select(Note, sim.label("sim"))
 		.where(
-			Note.deleted_at.is_(None),
 			resource_access_predicate(principal, ResourceType.NOTE),
 			or_(
-				func.similarity(Note.title, q) > 0.1,
+				sim > 0.1,
 				Note.title.ilike(pattern, escape="\\"),
 				Note.content.ilike(pattern, escape="\\"),
 			),
 		)
-		.order_by(func.similarity(Note.title, q).desc())
+		.order_by(sim.desc())
+		.offset(offset)
 		.limit(limit)
 	)
+	stmt = _apply_note_search_filters(stmt, filters)
 	result = await db.execute(stmt)
-	return [
-		SearchResultItem(
-			type=SearchResultType.NOTE,
-			id=TypeID(note.id),
-			title=note.title or "",
-			preview=(note.content[:100] if note.content else None),
-			created_at=note.created_at,
-			updated_at=note.updated_at,
-		)
-		for note in result.scalars().all()
-	]
+	return [ScoredResult(item=note, score=float(score)) for note, score in result.all()]
 
 
 async def _hybrid_search_notes(
@@ -578,8 +618,9 @@ async def _hybrid_search_notes(
 	limit: int = 10,
 	search_params: SearchParams | None = None,
 	query_embedding: list[float] | None = None,
-) -> list[SearchResultItem]:
-	"""qdrant hybrid search for notes (dense + BM25, RRF fusion)."""
+	filters: NoteSearchFilters | None = None,
+) -> list[ScoredResult[Note]]:
+	"""qdrant hybrid tier (dense + BM25, RRF fusion), scored by fused rank."""
 	params = search_params or SearchParams()
 	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
@@ -593,7 +634,10 @@ async def _hybrid_search_notes(
 		)
 	)
 	text_query = query_text if need_sparse else None
-	query_filter = vector_acl_filter([VectorChunkResourceType.NOTE], principal)
+	query_filter = vectorstore_service.with_conditions(
+		vector_acl_filter([VectorChunkResourceType.NOTE], principal),
+		_note_search_conditions(filters),
+	)
 	results = await vectorstore_service.search(
 		session=db,
 		query=query_emb,
@@ -608,29 +652,18 @@ async def _hybrid_search_notes(
 	resource_ids = [r.metadata["resource_id"] for r in results]
 	stmt = select(Note).where(
 		Note.id.in_(resource_ids),
-		Note.deleted_at.is_(None),
 		resource_access_predicate(principal, ResourceType.NOTE),
 	)
+	stmt = _apply_note_search_filters(stmt, filters)
 	db_result = await db.execute(stmt)
 	by_id = {str(n.id): n for n in db_result.scalars().all()}
-	items: list[SearchResultItem] = []
+	scored: list[ScoredResult[Note]] = []
 	for r in results:
-		rid = str(r.metadata["resource_id"])
-		note = by_id.get(rid)
-		if not note:
+		note = by_id.get(str(r.metadata["resource_id"]))
+		if note is None:
 			continue
-		items.append(
-			SearchResultItem(
-				type=SearchResultType.NOTE,
-				id=TypeID(note.id),
-				title=note.title or "",
-				preview=(note.content[:100] if note.content else None),
-				score=r.score,
-				created_at=note.created_at,
-				updated_at=note.updated_at,
-			)
-		)
-	return items
+		scored.append(ScoredResult(item=note, score=r.score))
+	return scored
 
 
 async def search_notes(
@@ -638,13 +671,37 @@ async def search_notes(
 	db: AsyncSession,
 	principal: Principal,
 	limit: int = 10,
-	cursor: str | None = None,
+	offset: int = 0,
 	search_params: SearchParams | None = None,
 	query_embedding: list[float] | None = None,
-) -> CursorPage[SearchResultItem]:
-	"""parallel pg_trgm + qdrant hybrid search with cursor pagination."""
+	filters: NoteSearchFilters | None = None,
+	score_threshold: float = 0.0,
+) -> list[ScoredResult[Note]]:
+	"""relevance-ordered, deduped note hits with internal scores."""
 	params = search_params or SearchParams()
-	coros: list[Coroutine[None, None, list[SearchResultItem]]] = []
+	if filters and filters.include_deleted:
+		if not principal.is_admin:
+			raise HTTPException(
+				status_code=status.HTTP_403_FORBIDDEN,
+				detail="forbidden",
+			)
+		if params.mode != SearchMode.AUTOCOMPLETE:
+			raise HTTPException(
+				status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+				detail="include_deleted requires autocomplete search mode",
+			)
+	if params.mode == SearchMode.AUTOCOMPLETE:
+		async with session_scope(None) as s:
+			return await _autocomplete_notes(
+				query_text,
+				s,
+				principal=principal,
+				limit=limit,
+				offset=offset,
+				filters=filters,
+			)
+	fetch = offset + limit
+	coros: list[Coroutine[None, None, list[ScoredResult[Note]]]] = []
 	run_autocomplete = params.mode in (
 		SearchMode.AUTOCOMPLETE,
 		SearchMode.FULL,
@@ -658,39 +715,34 @@ async def search_notes(
 
 	# each parallel coroutine gets its own session to avoid
 	# "prepared state" errors from concurrent use of a single session
-	async def _run_hybrid() -> list[SearchResultItem]:
+	async def _run_hybrid() -> list[ScoredResult[Note]]:
 		async with session_scope(None) as s:
 			return await _hybrid_search_notes(
 				query_text,
 				s,
 				principal=principal,
-				limit=limit + 1,
+				limit=fetch,
 				search_params=params,
 				query_embedding=query_embedding,
+				filters=filters,
 			)
 
-	async def _run_autocomplete() -> list[SearchResultItem]:
+	async def _run_autocomplete() -> list[ScoredResult[Note]]:
 		async with session_scope(None) as s:
 			return await _autocomplete_notes(
 				query_text,
 				s,
 				principal=principal,
-				limit=limit + 1,
+				limit=fetch,
+				filters=filters,
 			)
 
-	# hybrid first - wins on deduplication (higher quality than autocomplete)
 	if run_hybrid:
 		coros.append(_run_hybrid())
 	if run_autocomplete:
 		coros.append(_run_autocomplete())
 	results = await asyncio.gather(*coros, return_exceptions=True)
-	items = vectorstore_service.merge_deduplicate(
-		results, limit + 1, resource_name="notes"
-	)
-	if cursor:
-		ts, cid = decode_cursor(cursor)
-		_sk = NOTE_SPEC.sort_key
-		items = [i for i in items if (getattr(i, _sk), str(i.id)) < (ts, cid)]
-	_sk = NOTE_SPEC.sort_key
-	items.sort(key=lambda r: (getattr(r, _sk), str(r.id)), reverse=True)
-	return build_cursor_page(items, limit, sort_key=NOTE_SPEC.sort_key)
+	merged = merge_scored(results, resource_name="notes")
+	if score_threshold > 0.0:
+		merged = [s for s in merged if s.score >= score_threshold]
+	return merged[offset : offset + limit]

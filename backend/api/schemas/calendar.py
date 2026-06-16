@@ -38,6 +38,13 @@ class CalendarEventListFilters(BaseModel):
 	q: str | None = Field(default=None, min_length=1, max_length=200)
 
 
+class CalendarEventSearchFilters(BaseModel):
+	"""structured filters applied to calendar event search."""
+
+	start_at: datetime | None = None
+	end_at: datetime | None = None
+
+
 class CalendarBase(MetadataModel):
 	"""shared calendar fields."""
 

@@ -24,8 +24,9 @@ from api.v1.service.files.content_vectorization import (
 from api.v1.service.files.description import _content_excerpt, _truncate_description
 from api.v1.service.files.metadata import FILE_CONTENT_RESOURCE_TYPE, FILE_RESOURCE_TYPE
 from api.v1.service.files.modalities import should_try_model_text
-from api.v1.service.files.search import _group_file_hits, _matched_chunk_payload
+from api.v1.service.files.search import _file_id_for_hit
 from api.v1.service.files.vectorization import FILE_SPEC, _build_file_content_chunk
+from api.v1.service.search.grouping import ResourceHitGroup, group_resource_hits
 from api.v1.service.vectorize import build_chunk
 from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.adapters.base.vectorstores import Chunk as VectorChunk
@@ -99,6 +100,74 @@ class _ExtractionChatAdapter(BaseChatAdapter):
 			return AssistantMessage.from_text(self._response)
 
 		return response()
+
+
+class _StatusError(Exception):
+	def __init__(self, status_code: int) -> None:
+		super().__init__("provider rejected input")
+		self.status_code = status_code
+
+
+class _RaisingChatAdapter(BaseChatAdapter):
+	type: Literal["test.raising_extraction"] = "test.raising_extraction"
+	_exc: Exception = PrivateAttr()
+
+	def __init__(self, exc: Exception) -> None:
+		super().__init__()
+		self._exc = exc
+
+	@property
+	def messages(self) -> list[Message]:
+		return []
+
+	@overload
+	def generate(
+		self,
+		messages: list[Message],
+		model: str,
+		stream: Literal[False] = False,
+		tools: list[ToolDefinition] = [],
+		params: ChatGenerationParams | None = None,
+	) -> Awaitable[AssistantMessage]: ...
+
+	@overload
+	def generate(
+		self,
+		messages: list[Message],
+		model: str,
+		stream: Literal[True],
+		tools: list[ToolDefinition] = [],
+		params: ChatGenerationParams | None = None,
+	) -> AsyncIterator[AssistantMessage]: ...
+
+	def generate(
+		self,
+		messages: list[Message],
+		model: str,
+		stream: bool = False,
+		tools: list[ToolDefinition] = [],
+		params: ChatGenerationParams | None = None,
+	) -> Awaitable[AssistantMessage] | AsyncIterator[AssistantMessage]:
+		exc = self._exc
+		if stream:
+
+			async def raising_stream() -> AsyncIterator[AssistantMessage]:
+				raise exc
+				yield AssistantMessage.from_text("")  # pragma: no cover
+
+			return raising_stream()
+
+		async def raising() -> AssistantMessage:
+			raise exc
+
+		return raising()
+
+
+def _image_chat_model(adapter: BaseChatAdapter) -> TaskChatModel:
+	return TaskChatModel(
+		chat_model=ChatModel.model_construct(model_name="extractor", adapter=adapter),
+		input_modalities=frozenset({"images"}),
+	)
 
 
 class _MemoryStorageBackend(StorageBackend):
@@ -315,8 +384,10 @@ def test_file_search_groups_content_hits_by_parent_file_id() -> None:
 		),
 	]
 
-	groups = _group_file_hits(hits)
-	matched_payload = _matched_chunk_payload(hits[0])
+	groups = group_resource_hits(hits, _file_id_for_hit)
+	matched_payload = ResourceHitGroup(resource_id="x", hits=[hits[0]]).matched_chunks(
+		1, 9999
+	)[0]
 
 	assert list(groups) == [file_id]
 	assert len(groups[file_id].hits) == 2
@@ -360,6 +431,35 @@ async def test_api_auto_loader_rejects_unsupported_chat_model_modality(
 	assert loaded.skipped_reason == "unsupported_input_modality"
 	assert loaded.metadata["input_modality"] == "images"
 	assert loaded.metadata["model_input_modalities"] == ["text"]
+
+
+async def test_api_auto_loader_skips_permanent_provider_failure(monkeypatch) -> None:
+	"""a 4xx input rejection is recorded as skipped, never retried."""
+	monkeypatch.setattr(settings.assets.content_vectorization, "loader", "auto")
+	chat_model = _image_chat_model(_RaisingChatAdapter(_StatusError(400)))
+
+	loaded = await load_sdk_file_text(
+		SDKFile(data=b"image-bytes", filename="scan.png", mime_type="image/png"),
+		chat_model=chat_model,
+	)
+
+	assert loaded.status == "unsupported"
+	assert loaded.skipped_reason == "permanent_provider_error"
+	assert loaded.metadata["provider_status"] == 400
+
+
+async def test_api_auto_loader_reraises_transient_provider_failure(
+	monkeypatch,
+) -> None:
+	"""a 5xx/transient failure propagates so the sweep can retry it."""
+	monkeypatch.setattr(settings.assets.content_vectorization, "loader", "auto")
+	chat_model = _image_chat_model(_RaisingChatAdapter(_StatusError(503)))
+
+	with pytest.raises(_StatusError):
+		await load_sdk_file_text(
+			SDKFile(data=b"image-bytes", filename="scan.png", mime_type="image/png"),
+			chat_model=chat_model,
+		)
 
 
 async def test_api_auto_loader_keeps_text_files_on_local_loader(monkeypatch) -> None:

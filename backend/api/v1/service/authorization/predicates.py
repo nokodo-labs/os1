@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import and_, exists, literal, or_, select, true
+from sqlalchemy import exists, literal, or_, select, true
 from sqlalchemy.sql import ColumnElement
 
 from api.models.access_rule import AccessLevel, AccessRule
@@ -15,19 +15,6 @@ from api.v1.service.authorization.inheritance import inherited_resource_access_p
 def _false() -> ColumnElement[bool]:
 	"""return a SQL literal False."""
 	return literal(False)
-
-
-def _visibility_predicate(
-	resource_type: ResourceType,
-	principal: Principal,
-	include_deleted: bool,
-) -> ColumnElement[bool]:
-	config = RESOURCE_CONFIG[resource_type]
-	if config.deleted_at_col is None:
-		return true()
-	if include_deleted and principal.is_admin:
-		return true()
-	return config.deleted_at_col.is_(None)
 
 
 def _direct_resource_access_predicate(
@@ -101,13 +88,10 @@ def resource_access_predicate(
 	principal: Principal,
 	resource_type: ResourceType,
 	required_level: AccessLevel = AccessLevel.READER,
-	include_deleted: bool = False,
 ) -> ColumnElement[bool]:
 	"""return a SQL predicate limiting resources to those accessible by principal."""
-	visibility = _visibility_predicate(resource_type, principal, include_deleted)
-
 	if principal.is_admin:
-		return visibility
+		return true()
 
 	base_access = _direct_resource_access_predicate(
 		principal,
@@ -123,30 +107,4 @@ def resource_access_predicate(
 	if inherited_access is not None:
 		base_access = or_(base_access, inherited_access)
 
-	return and_(base_access, visibility)
-
-
-def thread_access_predicate(
-	principal: Principal,
-	required_level: AccessLevel = AccessLevel.READER,
-	include_hidden: bool = False,
-) -> ColumnElement[bool]:
-	"""return a SQL predicate limiting threads to those accessible to principal."""
-	return resource_access_predicate(
-		principal,
-		ResourceType.THREAD,
-		required_level=required_level,
-		include_deleted=include_hidden,
-	)
-
-
-def project_access_predicate(
-	principal: Principal,
-	required_level: AccessLevel = AccessLevel.READER,
-) -> ColumnElement[bool]:
-	"""return a SQL predicate limiting projects to those accessible to principal."""
-	return resource_access_predicate(
-		principal,
-		ResourceType.PROJECT,
-		required_level=required_level,
-	)
+	return base_access

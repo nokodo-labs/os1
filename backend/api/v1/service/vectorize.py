@@ -5,7 +5,6 @@ VectorSpec is the contract each resource service implements to declare:
   - what metadata fields accompany the chunk
   - how to extract the resource ID (used for filter-based identity)
   - when an update requires re-vectorizing
-  - which field drives sort order in cursor-based search results
 
 chunk identity is entirely filter-based: (resource_type, resource_id)
 identifies a chunk in the vectorstore without relying on the chunk ID.
@@ -19,9 +18,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,6 +55,8 @@ from nokodo_ai.utils.typeid import TypeID
 
 _VECTOR_ACL_UPDATE_CONCURRENCY = 32
 
+logger = logging.getLogger(__name__)
+
 # acl fields live on chunks but are owned by acl sync, not the resource
 # content; they are excluded from the vectorization fingerprint so an acl
 # change never reads as a stale vector.
@@ -85,7 +87,6 @@ class VectorSpec[T]:
 		defaults to a hash of bm25_text plus comparable (non-acl) metadata
 	- chunker: chunker adapter used when dense_text overflows the embedding
 		model's input limit and must be split into multiple chunks
-	- sort_key: SearchResultItem field name used for cursor sort
 	"""
 
 	resource_type: VectorChunkResourceType
@@ -96,7 +97,6 @@ class VectorSpec[T]:
 	should_revectorize: Callable[[T, Any, AsyncSession], Awaitable[bool]]
 	fingerprint: Callable[[T], str] | None = None
 	chunker: Literal["recursive", "markdown", "semantic"] = "recursive"
-	sort_key: str = field(default="updated_at")
 
 
 def fingerprint_payload(payload: JSONObject) -> str:

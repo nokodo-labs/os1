@@ -9,8 +9,9 @@ from typing import Literal
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.models.file import File
 from api.schemas.file import FileUpdate
-from api.schemas.search import SearchMode, SearchParams
+from api.schemas.search import Page, SearchMode, SearchParams
 from api.v1.service import files as file_service
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.models import fetch_agent_input_modalities
@@ -32,6 +33,17 @@ _HYBRID_SEARCH = SearchParams(mode=SearchMode.HYBRID)
 # max files a single file_get call may fetch natively in one batch. fetching
 # them together lands all needed media on one tool message in one turn.
 MAX_FILE_GET_BATCH = 8
+
+
+def _file_search_result(f: File) -> dict[str, object]:
+	"""summarize a file for agent search results."""
+	return {
+		"id": str(f.id),
+		"filename": f.filename or "(unnamed)",
+		"mime_type": f.mime_type or "",
+		"size_bytes": f.size_bytes,
+		**({"preview": f.description[:100]} if f.description else {}),
+	}
 
 
 class FileGetInput(BaseModel):
@@ -60,9 +72,10 @@ class FileGetInput(BaseModel):
 		min_length=1,
 		max_length=500,
 	)
-	cursor: str | None = Field(
-		default=None,
-		description="cursor returned by a previous file search page.",
+	offset: int = Field(
+		default=0,
+		description="number of file search results to skip before this page.",
+		ge=0,
 	)
 	limit: int = Field(
 		default=10,
@@ -221,24 +234,28 @@ class FileGetTool(Tool[AppContext]):
 
 		if inp.query:
 			try:
-				page = await file_service.search_files(
+				scored = await file_service.search_files(
 					inp.query,
 					__app_context__.session,
 					principal=__app_context__.principal,
-					limit=inp.limit,
-					cursor=inp.cursor,
+					limit=inp.limit + 1,
+					offset=inp.offset,
 					search_params=_HYBRID_SEARCH,
 				)
 			except HTTPException as exc:
 				return self.error(str(exc.detail), __tool_call_context__)
-			results = [item.model_dump(mode="json") for item in page.items]
+			page = Page(
+				items=[hit.item for hit in scored[: inp.limit]],
+				has_more=len(scored) > inp.limit,
+			)
+			results = [_file_search_result(f) for f in page.items]
+			next_offset = inp.offset + inp.limit if page.has_more else None
 			out = {
 				"status": "success",
 				"message": f"found {len(results)} files",
 				"count": len(results),
 				"results": results,
-				"next_cursor": page.next_cursor,
-				"has_more": page.has_more,
+				"next_offset": next_offset,
 			}
 			return self.success(json.dumps(out), __tool_call_context__)
 
