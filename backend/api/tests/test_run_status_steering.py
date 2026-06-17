@@ -14,11 +14,19 @@ from api.models.user import User
 from api.schemas.runs import RunInput
 from api.v1.service.auth import Principal
 from api.v1.service.chat import steering as steering_service
-from api.v1.service.chat.message_metadata import CLIENT_STEERING_ID_KEY
+from api.v1.service.chat.message_metadata import (
+	ATTACHMENTS_KEY,
+	CITATIONS_KEY,
+	CLIENT_STEERING_ID_KEY,
+	FOLDED_METADATA_KEYS,
+	persisted_message_metadata,
+	to_persisted_metadata,
+)
 from api.v1.service.chat.run_status import RunStatusStore, run_status_store
 from nokodo_ai.messages import TextContent
 from nokodo_ai.messages import UserMessage as SDKUserMessage
-from nokodo_ai.utils.typeid import TypeID
+from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 @pytest.mark.asyncio
@@ -87,6 +95,8 @@ async def test_enqueue_run_steering_accepts_before_subscriber_starts(
 		assert origin_session_id is None
 		assert sdk_msg.metadata is not None
 		assert sdk_msg.metadata[CLIENT_STEERING_ID_KEY] == "local-steering-1"
+		# steering_state rides on the SDK message and is carried onto the row
+		assert sdk_msg.metadata["steering_state"] == "queued"
 
 		class _FakePersistedMessage:
 			id = persisted_message_id
@@ -301,3 +311,29 @@ async def test_steering_inbox_is_bounded_at_64_by_default() -> None:
 		await asyncio.wait_for(
 			store.enqueue_steering(TypeID("run_s7"), TypeID(f"m{i}"), {}), timeout=1.0
 		)
+
+
+def test_to_persisted_metadata_unfold_contract() -> None:
+	"""unfold(fold(col)) == col: fold-injected keys dropped, rest carried."""
+	persisted: JSONObject = {
+		"run_id": "run_x",
+		"steering_state": "queued",
+		"client_steering_id": "cs_1",
+		"_model_id": "claude",
+		"_next_citation_index": 3,
+		"_e2b_sandbox_id": "sb_1",
+	}
+	folded: JSONObject = {
+		**persisted,
+		**persisted_message_metadata(
+			new_typeid("msg"), datetime.now(UTC), new_typeid("user")
+		),
+		CITATIONS_KEY: [{"index": 1}],
+		ATTACHMENTS_KEY: [{"file_id": "f"}],
+	}
+
+	recovered = to_persisted_metadata(folded)
+	assert recovered == persisted
+	assert FOLDED_METADATA_KEYS.isdisjoint(recovered)
+	assert to_persisted_metadata(None) == {}
+	assert to_persisted_metadata({}) == {}

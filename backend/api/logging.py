@@ -56,6 +56,7 @@ NOISY_THIRD_PARTY_LOGGERS = (
 	"openai",
 	"grpc",
 	"qdrant_client",
+	"voyageai",
 )
 
 

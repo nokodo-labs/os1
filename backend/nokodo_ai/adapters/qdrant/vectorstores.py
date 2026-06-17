@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Literal, overload
 
 from pydantic import PrivateAttr
 from qdrant_client.models import (
 	Condition,
+	DatetimeRange,
 	Distance,
 	Document,
 	ExtendedPointId,
@@ -38,9 +40,26 @@ from ..base.vectorstores import (
 	ChunkSearchResult,
 	FieldMatch,
 	FieldMatchAny,
+	FieldRange,
 	Index,
 )
 from .base import BaseQdrantAdapter
+
+
+def _to_datetime_bound(value: float | int | str | None) -> datetime | None:
+	"""coerce an ISO-8601 string range bound to a datetime."""
+	if value is None or isinstance(value, datetime):
+		return value
+	if isinstance(value, str):
+		return datetime.fromisoformat(value)
+	raise TypeError(f"datetime range bound must be ISO-8601 str, got {type(value)}")
+
+
+def _to_number_bound(value: float | int | str | None) -> float | int | None:
+	"""coerce a numeric range bound, rejecting strings."""
+	if value is None or isinstance(value, (int, float)):
+		return value
+	raise TypeError(f"numeric range bound must be int or float, got {type(value)}")
 
 
 class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
@@ -463,10 +482,34 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		return payload
 
 	@staticmethod
-	def _build_field_condition(match: FieldMatch | FieldMatchAny) -> FieldCondition:
-		"""convert a FieldMatch or FieldMatchAny to a Qdrant FieldCondition."""
+	def _build_field_condition(
+		match: FieldMatch | FieldMatchAny | FieldRange,
+	) -> FieldCondition:
+		"""convert a library field condition to a Qdrant FieldCondition."""
 		if isinstance(match, FieldMatchAny):
 			return FieldCondition(key=match.key, match=MatchAny(any=match.values))
+		if isinstance(match, FieldRange):
+			# string bounds denote ISO-8601 datetimes (datetime payload index).
+			bounds = (match.gte, match.lte, match.gt, match.lt)
+			if any(isinstance(bound, str) for bound in bounds):
+				return FieldCondition(
+					key=match.key,
+					range=DatetimeRange(
+						gte=_to_datetime_bound(match.gte),
+						lte=_to_datetime_bound(match.lte),
+						gt=_to_datetime_bound(match.gt),
+						lt=_to_datetime_bound(match.lt),
+					),
+				)
+			return FieldCondition(
+				key=match.key,
+				range=Range(
+					gte=_to_number_bound(match.gte),
+					lte=_to_number_bound(match.lte),
+					gt=_to_number_bound(match.gt),
+					lt=_to_number_bound(match.lt),
+				),
+			)
 		# FieldMatch - MatchValue only accepts str | int | bool, not float.
 		# for integral floats, coerce to int. for non-integral floats, use a
 		# Range condition (gte=lte) to do exact numeric matching.

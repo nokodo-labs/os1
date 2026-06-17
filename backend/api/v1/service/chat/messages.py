@@ -41,6 +41,7 @@ from api.v1.service.chat.message_metadata import (
 	SENDER_USER_ID_KEY,
 	STEERING_ENQUEUED_AT_KEY,
 	persisted_message_metadata,
+	to_persisted_metadata,
 )
 from api.v1.service.prompts import render_agent_instructions
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
@@ -215,20 +216,19 @@ def _build_message_create(
 ) -> MessageCreate:
 	"""build a MessageCreate from a streamed sdk message for persistence.
 
-	owns the sdk->orm conversion for runs: lifts attachment refs out of
-	private metadata into the attachments column and resolves assistant
-	citations from the runtime citation list.
+	SDK→ORM boundary: lifts attachment refs into the attachments column and
+	strips the fold-injected keys via to_persisted_metadata; real metadata rides
+	through.
 	"""
 	create_in = MessageCreate.from_sdk_message(
 		sdk_msg,
 		sender_agent_id=sender_agent_id,
 	)
-	# lift attachment refs into the column and drop the metadata copy so it
-	# is not persisted twice (from_sdk_message copies tool metadata verbatim).
+	# lift attachment refs into the column
 	refs = (sdk_msg.metadata or {}).get(ATTACHMENTS_KEY)
 	if isinstance(refs, list):
 		create_in.attachments = [ResourceAttachment.model_validate(r) for r in refs]
-	create_in.metadata.pop(ATTACHMENTS_KEY, None)
+	create_in.metadata = to_persisted_metadata(create_in.metadata)
 	if isinstance(sdk_msg, SDKAssistantMessage):
 		text = ""
 		for part in sdk_msg.content or []:

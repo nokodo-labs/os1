@@ -62,6 +62,7 @@ _DEFAULT_BASE_URLS: dict[str, str] = {
 	"anthropic": "https://api.anthropic.com/v1",
 	"google": "https://generativelanguage.googleapis.com/v1beta",
 	"ollama": "http://localhost:11434/v1",
+	"voyageai": "https://api.voyageai.com/v1",
 }
 
 
@@ -83,7 +84,7 @@ def _default_model_adapter(provider_key: str, model_type: str) -> str | None:
 				return "chat"
 	if model_type == "embedding":
 		match provider_key:
-			case "openai" | "ollama" | "google":
+			case "openai" | "ollama" | "google" | "voyageai":
 				return "embedding"
 	if model_type == "image":
 		match provider_key:
@@ -524,6 +525,10 @@ async def _fetch_models_for_provider(
 			client, base_url=base_url_with_key, headers=headers
 		)
 
+	# voyageai has no public /v1/models endpoint
+	if provider.adapter_type == "voyageai":
+		return None
+
 	# openai-compatible (openai, ollama, custom)
 	base_headers: dict[str, str] = {}
 	api_key = provider.api_key
@@ -600,7 +605,7 @@ def _check_valid_adapter(
 		elif provider_type == "ollama":
 			valid = adapter == "chat"
 	elif model_type == "embedding":
-		if provider_type in ("openai", "ollama", "google"):
+		if provider_type in ("openai", "ollama", "google", "voyageai"):
 			valid = adapter == "embedding"
 	elif model_type == "image":
 		if provider_type == "openai":

@@ -13,6 +13,7 @@ dependencies = [ # library-only dependencies
     "pydantic[email]>=2.13.4",
     "qdrant-client>=1.18.0",
     "tiktoken>=0.8.0",
+    "voyageai>=0.4.0",
 ]
 
 [project.optional-dependencies]

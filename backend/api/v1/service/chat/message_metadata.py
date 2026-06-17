@@ -24,6 +24,23 @@ MODEL_ID_KEY = "_model_id"
 E2B_SANDBOX_ID_KEY = "_e2b_sandbox_id"
 
 
+# keys the ORM→SDK fold injects on top of the persisted metadata column
+# (identity mirrors + citations/attachments column projections); the SDK→ORM
+# unfold strips exactly this set so they never double-write into the column.
+ROUND_TRIP_IDENTITY_KEYS: frozenset[str] = frozenset(
+	{MESSAGE_ID_KEY, CREATED_AT_KEY, SENDER_USER_ID_KEY}
+)
+COLUMN_PROJECTED_KEYS: frozenset[str] = frozenset({CITATIONS_KEY, ATTACHMENTS_KEY})
+FOLDED_METADATA_KEYS: frozenset[str] = ROUND_TRIP_IDENTITY_KEYS | COLUMN_PROJECTED_KEYS
+
+
+def to_persisted_metadata(sdk_metadata: JSONObject | None) -> JSONObject:
+	"""SDK→ORM metadata unfold: drop fold-injected keys, carry the rest."""
+	if not sdk_metadata:
+		return {}
+	return {k: v for k, v in sdk_metadata.items() if k not in FOLDED_METADATA_KEYS}
+
+
 def get_message_id(msg: SDKMessage) -> str | None:
 	"""extract the ORM message ID from SDK message metadata."""
 	mid = (msg.metadata or {}).get(MESSAGE_ID_KEY)

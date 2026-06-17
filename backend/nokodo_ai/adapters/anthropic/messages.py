@@ -188,6 +188,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 			else anthropic.omit,
 			tools=anthropic_tools,
 			tool_choice=anthropic_tool_choice,
+			cache_control=self.cache_control.model_dump(),
 			extra_headers=extra_headers,
 			extra_body=extra_body,
 		)
@@ -285,6 +286,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 			else anthropic.omit,
 			tools=anthropic_tools,
 			tool_choice=anthropic_tool_choice,
+			cache_control=self.cache_control.model_dump(),
 			extra_headers=extra_headers,
 			extra_body=extra_body,
 			stream=True,

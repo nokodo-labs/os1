@@ -19,8 +19,8 @@ from api.models.event import Event
 from api.models.event_types import EventType
 from api.models.model import Model
 from api.permissions import ResourceType
+from api.schemas.common import is_private_metadata_key
 from api.schemas.message import Message as MessageSchema
-from api.schemas.message import is_private_metadata_key
 from api.schemas.runs import ClientContext, RunInput, ToolChoice
 from api.settings import settings as app_settings
 from api.v1.service.auth import Principal
@@ -272,8 +272,8 @@ def _public_delta_payload(value: object) -> object:
 	"""return a stream payload copy with every metadata object public-sanitized.
 
 	this is the centralized redaction gate for streamed SSE ``delta`` events
-	(partial SDK messages). it applies the SAME private-key rule as the
-	``Message`` schema's metadata serializer - ``is_private_metadata_key`` - so
+	(partial SDK messages). it applies the SAME private-key rule as
+	``MetadataModel``'s metadata serializer - ``is_private_metadata_key`` - so
 	streamed deltas and complete messages strip identical ``_``-prefixed keys.
 	"""
 	if isinstance(value, Mapping):

@@ -152,7 +152,10 @@ async def generate_image(
 				origin_session_id=origin_session_id,
 			)
 			# store generation metadata on the file record
-			gen_meta: dict[str, str] = {"prompt": prompt}
+			gen_meta: dict[str, str] = {
+				"prompt": prompt,
+				"_model_id": str(effective_model_id),
+			}
 			if agent_id:
 				gen_meta["agent_id"] = str(agent_id)
 			file.metadata_ = {**file.metadata_, **gen_meta}

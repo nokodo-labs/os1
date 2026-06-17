@@ -9,10 +9,11 @@ from pydantic import Field
 from .base.embeddings import BaseEmbeddingAdapter, EmbeddingInputType
 from .ollama.embeddings import OllamaEmbeddingsAdapter
 from .openai.embeddings import OpenAIEmbeddingsAdapter
+from .voyageai.embeddings import VoyageAIEmbeddingsAdapter
 
 
 EmbeddingsAdapter = Annotated[
-	OpenAIEmbeddingsAdapter | OllamaEmbeddingsAdapter,
+	OpenAIEmbeddingsAdapter | OllamaEmbeddingsAdapter | VoyageAIEmbeddingsAdapter,
 	Field(discriminator="type"),
 ]
 
@@ -23,6 +24,8 @@ def resolve_embeddings_adapter(provider: str, adapter: str | None) -> str | None
 		return "openai.embedding"
 	if provider == "ollama":
 		return "ollama.embedding"
+	if provider == "voyageai":
+		return "voyageai.embedding"
 	return None
 
 

@@ -78,6 +78,11 @@ class AppearancePreferences(_PreferencesSection):
 		alias="bubbleTailStyle",
 		description="chat bubble tail style preference",
 	)
+	bubble_animation: Literal["morph", "flyup", "none"] | MissingType = Field(
+		default=MISSING,
+		alias="bubbleAnimation",
+		description="outgoing user message entrance animation",
+	)
 
 
 # account / profile preferences (stored alongside other prefs)

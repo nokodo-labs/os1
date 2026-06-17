@@ -43,8 +43,27 @@ class FieldMatchAny(Base):
 
 	key: str
 	"""payload field name to match."""
-	values: list[str]
+	values: list[str] | list[int]
 	"""at least one of these values must appear in the field."""
+
+
+class FieldRange(Base):
+	"""match a payload field against a numeric or datetime range.
+
+	bounds are inclusive (gte/lte) or exclusive (gt/lt). string bounds are
+	interpreted as ISO-8601 datetimes by adapters that support them.
+	"""
+
+	key: str
+	"""payload field name to match."""
+	gte: float | int | str | None = None
+	lte: float | int | str | None = None
+	gt: float | int | str | None = None
+	lt: float | int | str | None = None
+
+
+FieldCondition = FieldMatch | FieldMatchAny | FieldRange
+"""any single payload condition usable in a ChunkFilter."""
 
 
 class ChunkFilter(Base):
@@ -55,9 +74,9 @@ class ChunkFilter(Base):
 		any_of are non-empty, both constraints apply simultaneously.
 	"""
 
-	all_of: list[FieldMatch | FieldMatchAny] = Field(default_factory=list)
+	all_of: list[FieldCondition] = Field(default_factory=list)
 	"""conditions that must all match (AND logic)."""
-	any_of: list[FieldMatch | FieldMatchAny] = Field(default_factory=list)
+	any_of: list[FieldCondition] = Field(default_factory=list)
 	"""conditions where at least one must match (OR logic)."""
 
 

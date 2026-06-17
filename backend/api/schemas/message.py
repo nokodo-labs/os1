@@ -279,12 +279,14 @@ class MessageCreate(MetadataModel):
 					type=MessageType.USER,
 					content=_to_storage_parts(sdk_msg.content),
 					sender_user_id=sender_user_id,
+					metadata_=dict(sdk_msg.metadata or {}),
 				)
 			case "system":
 				assert isinstance(sdk_msg, SDKSystemMessage)
 				return cls(
 					type=MessageType.SYSTEM,
 					content=_to_storage_parts(sdk_msg.content),
+					metadata_=dict(sdk_msg.metadata or {}),
 				)
 			case "assistant":
 				assert isinstance(sdk_msg, SDKAssistantMessage)
@@ -294,6 +296,7 @@ class MessageCreate(MetadataModel):
 					tool_calls=[tc.model_dump() for tc in sdk_msg.tool_calls],
 					usage=sdk_msg.usage.model_dump() if sdk_msg.usage else None,
 					sender_agent_id=sender_agent_id,
+					metadata_=dict(sdk_msg.metadata or {}),
 				)
 			case "tool":
 				assert isinstance(sdk_msg, SDKToolMessage)
