@@ -881,8 +881,20 @@
 										{@const segments = groupResponseItems(responseItems)}
 										<div class="relative">
 											{#each segments as segment, idx (idx)}
-												{#if segment.type === 'assistant'}
-													{#if hasAttachmentParts(segment.item.message.content)}
+												{#if segment.type === 'assistant' || segment.type === 'streaming_assistant'}
+													{@const text =
+														segment.type === 'streaming_assistant'
+															? (chat.streamingAssistant?.content ??
+																'')
+															: contentPartsToText(
+																	segment.item.message.content
+																)}
+													{@const citeId =
+														segment.type === 'streaming_assistant'
+															? (chat.streamingAssistant?.messageId ??
+																'')
+															: segment.item.message.id}
+													{#if segment.type === 'assistant' && hasAttachmentParts(segment.item.message.content)}
 														<div class="mb-2">
 															<MediaAttachments
 																mediaParts={extractMediaParts(
@@ -896,7 +908,7 @@
 															/>
 														</div>
 													{/if}
-													{#if extractAttachmentRefs(segment.item.message).length > 0}
+													{#if segment.type === 'assistant' && extractAttachmentRefs(segment.item.message).length > 0}
 														<div class="mb-2">
 															<AttachmentRefs
 																refs={extractAttachmentRefs(
@@ -905,19 +917,45 @@
 															/>
 														</div>
 													{/if}
-													<div
-														class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
-													>
-														<MarkdownRenderer
-															content={contentPartsToText(
-																segment.item.message.content
-															)}
-															isStreaming={false}
-															citations={chat.citationSources.get(
-																segment.item.message.id
-															) ?? []}
-														/>
-													</div>
+													{#if text.trim()}
+														<div
+															class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
+														>
+															<MarkdownRenderer
+																content={text}
+																isStreaming={segment.type ===
+																	'streaming_assistant' &&
+																	!chat.streamingAssistant
+																		?.isError}
+																citations={chat.citationSources.get(
+																	citeId
+																) ?? []}
+															/>
+														</div>
+													{:else if segment.type === 'streaming_assistant' && chat.streamingAssistant && !chat.streamingAssistant.isError && !chat.hasActiveStreamingToolCalls}
+														{@const hasActiveTools = segments.some(
+															(s) =>
+																s.type === 'tool_group' &&
+																s.toolCallIds.some((id) => {
+																	const e =
+																		chat.getToolExecution(id)
+																	return (
+																		e != null &&
+																		(e.status === 'pending' ||
+																			e.status === 'running')
+																	)
+																})
+														)}
+														{#if !hasActiveTools}
+															<div
+																class="assistant-markdown text-foreground/60 text-[0.95rem] leading-relaxed"
+															>
+																<div class="my-3">
+																	<ChatGptLoadingIndicator />
+																</div>
+															</div>
+														{/if}
+													{/if}
 												{:else if segment.type === 'tool_group'}
 													{@const toolExecs = segment.toolCallIds
 														.map((id) => chat.getToolExecution(id))
@@ -930,43 +968,6 @@
 													{/if}
 												{:else if segment.type === 'run_activity'}
 													<RunActivity activity={segment.activity} />
-												{:else if segment.type === 'streaming_assistant' && chat.streamingAssistant}
-													{@const hasActiveTools = segments.some(
-														(s) =>
-															s.type === 'tool_group' &&
-															s.toolCallIds.some((id) => {
-																const e = chat.getToolExecution(id)
-																return (
-																	e != null &&
-																	(e.status === 'pending' ||
-																		e.status === 'running')
-																)
-															})
-													)}
-													{#if chat.streamingAssistant.content.trim()}
-														<div
-															class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
-														>
-															<MarkdownRenderer
-																content={chat.streamingAssistant
-																	.content}
-																isStreaming={!chat
-																	.streamingAssistant.isError}
-																citations={chat.citationSources.get(
-																	chat.streamingAssistant
-																		.messageId
-																) ?? []}
-															/>
-														</div>
-													{:else if !chat.streamingAssistant.isError && !chat.hasActiveStreamingToolCalls && !hasActiveTools}
-														<div
-															class="assistant-markdown text-foreground/60 text-[0.95rem] leading-relaxed"
-														>
-															<div class="my-3">
-																<ChatGptLoadingIndicator />
-															</div>
-														</div>
-													{/if}
 												{/if}
 											{/each}
 										</div>
