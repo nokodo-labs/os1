@@ -5204,7 +5204,7 @@ export interface components {
              * @default auto
              * @enum {string}
              */
-            chunking_algorithm: "auto" | "recursive" | "markdown";
+            chunking_algorithm: "auto" | "recursive" | "markdown" | "semantic";
             /**
              * Max Bytes
              * @description maximum bytes read from an asset; null means unlimited
@@ -5229,6 +5229,24 @@ export interface components {
              * @default 200
              */
             max_chunks: number | null;
+            /**
+             * Semantic Breakpoint Percentile
+             * @description percentile threshold for semantic breakpoint detection
+             * @default 95
+             */
+            semantic_breakpoint_percentile: number;
+            /**
+             * Semantic Min Sentences
+             * @description minimum sentences per semantic chunk before merging
+             * @default 2
+             */
+            semantic_min_sentences: number;
+            /**
+             * Semantic Buffer Size
+             * @description neighbor sentence window size used when embedding for semantic splitting
+             * @default 1
+             */
+            semantic_buffer_size: number;
         };
         /** AssetContentVectorizationSettingsPatch */
         AssetContentVectorizationSettingsPatch: {
@@ -5243,7 +5261,7 @@ export interface components {
              * @description asset content chunking algorithm
              * @enum {string}
              */
-            chunking_algorithm?: "auto" | "recursive" | "markdown";
+            chunking_algorithm?: "auto" | "recursive" | "markdown" | "semantic";
             /**
              * Max Bytes
              * @description maximum bytes read from an asset; null means unlimited
@@ -5264,6 +5282,21 @@ export interface components {
              * @description maximum content chunks per asset; null means unlimited
              */
             max_chunks?: number | null;
+            /**
+             * Semantic Breakpoint Percentile
+             * @description percentile threshold for semantic breakpoint detection
+             */
+            semantic_breakpoint_percentile?: number;
+            /**
+             * Semantic Min Sentences
+             * @description minimum sentences per semantic chunk before merging
+             */
+            semantic_min_sentences?: number;
+            /**
+             * Semantic Buffer Size
+             * @description neighbor sentence window size used when embedding for semantic splitting
+             */
+            semantic_buffer_size?: number;
         };
         /**
          * AssetDescriptionSettings
@@ -6658,35 +6691,44 @@ export interface components {
          * FileMaintenanceSettings
          * @description knobs for the optional retroactive file maintenance sweep.
          *
-         *     by default this is fully disabled. when enabled, a periodic background
-         *     task scans imported files for deferred upkeep and dispatches work in
-         *     bounded batches. the first maintenance job is generating the missing
-         *     description for imported files: bulk imports defer descriptions so a
-         *     large import never fans out hundreds of chat model calls at once and
-         *     trips provider rate limits, leaving files without one. each dispatched
-         *     task spends model tokens, so administrators must opt in explicitly and
-         *     set their own batch bounds. additional file upkeep can be folded into
-         *     this sweep later without renaming it.
+         *     a periodic background task scans files for deferred upkeep and dispatches
+         *     one unified `file.process` task per due file in bounded batches. bulk
+         *     imports defer processing so a large import never fans out hundreds of
+         *     embedding and chat model calls at once and trips provider rate limits. the
+         *     sweep also reaps file tasks that died mid-run so their files stop being
+         *     skipped by the active-task guard.
          */
         FileMaintenanceSettings: {
             /**
              * Enabled
-             * @description enable the periodic file maintenance sweep. when False, the schedule is removed and imported files keep no description.
+             * @description enable the periodic file maintenance sweep. when False, the schedule is removed.
              * @default false
              */
             enabled: boolean;
             /**
              * Cron
-             * @description cron expression for the periodic sweep, evaluated in UTC. defaults to once per day at 04:00 UTC.
-             * @default 0 4 * * *
+             * @description cron expression for the periodic sweep, evaluated in UTC. defaults to every 8 hours.
+             * @default 0 *\/8 * * *
              */
             cron: string;
             /**
              * Batch Size
-             * @description maximum number of files dispatched per sweep run. each file results in one maintenance task and one model spend; keep this modest so the chat model provider is never flooded.
-             * @default 10
+             * @description maximum number of files dispatched per sweep run. each file results in one task and one unit of provider spend; keep this modest so providers are never flooded.
+             * @default 8
              */
             batch_size: number;
+            /**
+             * Runner Timeout Seconds
+             * @description seconds before a file processing task runner times out.
+             * @default 1800
+             */
+            runner_timeout_seconds: number;
+            /**
+             * Stale Task Cleanup After Minutes
+             * @description minutes of inactivity before a file processing task is treated as stale and failed so its file can be redispatched.
+             * @default 45
+             */
+            stale_task_cleanup_after_minutes: number;
         };
         /** FileMaintenanceSettingsPatch */
         FileMaintenanceSettingsPatch: {
@@ -9756,11 +9798,8 @@ export interface components {
             parent_id?: string | null;
             /** Source Thread Id */
             source_thread_id?: string | null;
-            /**
-             * Position
-             * @default 0
-             */
-            position: number;
+            /** Position */
+            position?: number;
             /** List Id */
             list_id?: string | null;
         };
@@ -11170,7 +11209,7 @@ export interface components {
             thread_maintenance?: components["schemas"]["ThreadMaintenanceSettings"];
             /** @description retroactive thread maintenance backfill settings. off by default; controls an optional periodic sweep that runs maintenance on stale threads in batches. */
             maintenance_backfill?: components["schemas"]["ThreadMaintenanceBackfillSettings"];
-            /** @description retroactive file maintenance settings. off by default; controls an optional periodic sweep that fills deferred upkeep (currently descriptions) for imported files in paced batches so bulk imports never flood the chat model. */
+            /** @description retroactive file maintenance settings. off by default; controls an optional periodic sweep that dispatches deferred processing (content vectorization and description) for imported files in paced batches so bulk imports never flood the providers. */
             file_maintenance?: components["schemas"]["FileMaintenanceSettings"];
         };
         /** TasksSettingsPatch */
@@ -24052,12 +24091,18 @@ export interface operations {
                 limit?: number;
                 cursor?: string | null;
                 mode?: components["schemas"]["SearchMode"];
+                full_content?: boolean;
+                owner_id?: string | null;
             };
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": string[] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -24156,7 +24201,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": string[] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -24441,7 +24490,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": string[] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -32645,6 +32698,13 @@ export interface operations {
                 limit?: number;
                 cursor?: string | null;
                 mode?: components["schemas"]["SearchMode"];
+                owner_id?: string | null;
+                list_id?: string | null;
+                status?: components["schemas"]["ReminderStatus"] | null;
+                due_after?: string | null;
+                due_before?: string | null;
+                remind_after?: string | null;
+                remind_before?: string | null;
             };
             header?: never;
             path?: never;
@@ -33127,7 +33187,11 @@ export interface operations {
                 limit?: number;
                 sort_by?: "position" | "due_at" | "created_at" | "updated_at" | "title";
                 sort_dir?: "asc" | "desc";
-                status_filter?: components["schemas"]["ReminderStatus"] | null;
+                status?: components["schemas"]["ReminderStatus"] | null;
+                due_after?: string | null;
+                due_before?: string | null;
+                remind_after?: string | null;
+                remind_before?: string | null;
             };
             header?: never;
             path: {

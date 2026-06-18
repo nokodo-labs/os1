@@ -102,6 +102,14 @@
 			icon: Cpu,
 		},
 		{
+			id: 'voyageai',
+			name: 'Voyage AI',
+			type: 'voyageai',
+			provider_type: 'external',
+			url: 'https://api.voyageai.com/v1',
+			icon: Sparkles,
+		},
+		{
 			id: 'custom',
 			name: 'custom',
 			type: 'openai', // default to openai compatible

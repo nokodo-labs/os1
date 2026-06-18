@@ -130,6 +130,7 @@
 		anthropic: ['chat_model'],
 		google: ['chat_model', 'image'],
 		ollama: ['chat_model', 'embedding'],
+		voyageai: ['embedding'],
 	}
 	const ALL_MODEL_TYPES: Model['model_type'][] = [
 		'chat_model',
@@ -399,7 +400,11 @@
 			}
 		}
 		if (modelType === 'embedding') {
-			if (providerKey === 'openai' || providerKey === 'ollama') {
+			if (
+				providerKey === 'openai' ||
+				providerKey === 'ollama' ||
+				providerKey === 'voyageai'
+			) {
 				return [{ value: 'embedding', label: 'embedding' }]
 			}
 		}
