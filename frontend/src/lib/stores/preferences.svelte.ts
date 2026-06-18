@@ -40,6 +40,7 @@ export type ThemeMode = NonNullable<AppearancePreferences['themeMode']>
 export type AccentColor = NonNullable<AppearancePreferences['accent']>
 export type BackgroundType = NonNullable<AppearancePreferences['background']>
 export type BubbleTailStyle = NonNullable<AppearancePreferences['bubbleTailStyle']>
+export type BubbleAnimation = NonNullable<AppearancePreferences['bubbleAnimation']>
 export type ClientPreferenceScope = 'synced' | 'client'
 export type WallpaperPreferenceScope = ClientPreferenceScope
 
@@ -112,6 +113,12 @@ function hasBubbleTailOverride(preferences: UserClientPreferences | null | undef
 	return hasValue(preferences?.appearance?.bubbleTailStyle)
 }
 
+function hasBubbleAnimationOverride(
+	preferences: UserClientPreferences | null | undefined
+): boolean {
+	return hasValue(preferences?.appearance?.bubbleAnimation)
+}
+
 function hasHapticFeedbackOverride(preferences: UserClientPreferences | null | undefined): boolean {
 	return hasValue(preferences?.accessibility?.hapticFeedback)
 }
@@ -178,6 +185,9 @@ function removeWallpaperOverrides(preferences: UserClientPreferences): UserClien
 	if (hasValue(appearance.bubbleTailStyle)) {
 		nextAppearance.bubbleTailStyle = appearance.bubbleTailStyle
 	}
+	if (hasValue(appearance.bubbleAnimation)) {
+		nextAppearance.bubbleAnimation = appearance.bubbleAnimation
+	}
 
 	return withAppearancePreferences(preferences, nextAppearance)
 }
@@ -199,6 +209,9 @@ function removeThemeModeOverride(preferences: UserClientPreferences): UserClient
 	if (hasValue(appearance.bubbleTailStyle)) {
 		nextAppearance.bubbleTailStyle = appearance.bubbleTailStyle
 	}
+	if (hasValue(appearance.bubbleAnimation)) {
+		nextAppearance.bubbleAnimation = appearance.bubbleAnimation
+	}
 
 	return withAppearancePreferences(preferences, nextAppearance)
 }
@@ -218,6 +231,31 @@ function removeBubbleTailOverride(preferences: UserClientPreferences): UserClien
 	}
 	if (hasValue(appearance.background)) nextAppearance.background = appearance.background
 	if (hasValue(appearance.staticColor)) nextAppearance.staticColor = appearance.staticColor
+	if (hasValue(appearance.bubbleAnimation)) {
+		nextAppearance.bubbleAnimation = appearance.bubbleAnimation
+	}
+
+	return withAppearancePreferences(preferences, nextAppearance)
+}
+
+function removeBubbleAnimationOverride(preferences: UserClientPreferences): UserClientPreferences {
+	const appearance = preferences.appearance
+	if (!appearance) return preferences
+
+	const nextAppearance: AppearancePreferences = {}
+	if (hasValue(appearance.themeMode)) nextAppearance.themeMode = appearance.themeMode
+	if (hasValue(appearance.accent)) nextAppearance.accent = appearance.accent
+	if (hasValue(appearance.autoAccentColors)) {
+		nextAppearance.autoAccentColors = appearance.autoAccentColors
+	}
+	if (hasValue(appearance.autoBackground)) {
+		nextAppearance.autoBackground = appearance.autoBackground
+	}
+	if (hasValue(appearance.background)) nextAppearance.background = appearance.background
+	if (hasValue(appearance.staticColor)) nextAppearance.staticColor = appearance.staticColor
+	if (hasValue(appearance.bubbleTailStyle)) {
+		nextAppearance.bubbleTailStyle = appearance.bubbleTailStyle
+	}
 
 	return withAppearancePreferences(preferences, nextAppearance)
 }
@@ -259,6 +297,7 @@ function createPreferencesStore() {
 			autoBackground: true,
 			staticColor: '#171717',
 			bubbleTailStyle: 'none',
+			bubbleAnimation: 'morph',
 		},
 		account: {
 			bio: null,
@@ -325,6 +364,9 @@ function createPreferencesStore() {
 	)
 	const bubbleTailScope: ClientPreferenceScope = $derived(
 		hasBubbleTailOverride(clientPreferences) ? 'client' : 'synced'
+	)
+	const bubbleAnimationScope: ClientPreferenceScope = $derived(
+		hasBubbleAnimationOverride(clientPreferences) ? 'client' : 'synced'
 	)
 	const hapticFeedbackScope: ClientPreferenceScope = $derived(
 		hasHapticFeedbackOverride(clientPreferences) ? 'client' : 'synced'
@@ -638,6 +680,25 @@ function createPreferencesStore() {
 		return await update('appearance', { bubbleTailStyle })
 	}
 
+	async function setBubbleAnimationScope(scope: ClientPreferenceScope): Promise<boolean> {
+		if (scope === bubbleAnimationScope) return true
+		if (scope === 'client') {
+			return await updateClientAppearance({
+				bubbleAnimation: data.appearance.bubbleAnimation,
+			})
+		}
+
+		const currentPreferences = userClient.current?.preferences ?? {}
+		return await saveClientPreferences(removeBubbleAnimationOverride(currentPreferences))
+	}
+
+	async function updateBubbleAnimation(bubbleAnimation: BubbleAnimation): Promise<boolean> {
+		if (bubbleAnimationScope === 'client') {
+			return await updateClientAppearance({ bubbleAnimation })
+		}
+		return await update('appearance', { bubbleAnimation })
+	}
+
 	async function setHapticFeedbackScope(scope: ClientPreferenceScope): Promise<boolean> {
 		if (scope === hapticFeedbackScope) return true
 		if (scope === 'client') {
@@ -697,6 +758,9 @@ function createPreferencesStore() {
 		get bubbleTailScope() {
 			return bubbleTailScope
 		},
+		get bubbleAnimationScope() {
+			return bubbleAnimationScope
+		},
 		get hapticFeedbackScope() {
 			return hapticFeedbackScope
 		},
@@ -729,6 +793,8 @@ function createPreferencesStore() {
 		updateWallpaper,
 		setBubbleTailScope,
 		updateBubbleTailStyle,
+		setBubbleAnimationScope,
+		updateBubbleAnimation,
 		setHapticFeedbackScope,
 		updateHapticFeedback,
 		setExperimentalUiScope,

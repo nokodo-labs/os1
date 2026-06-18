@@ -82,7 +82,6 @@
 			calendarResultCount > 0 ||
 			name === 'code_interpreter' ||
 			name === 'fetch_url' ||
-			name === 'memory_recall' ||
 			(isDone && summary.resourceId != null)
 	)
 	let isExpanded = $state(false)
@@ -143,7 +142,7 @@
 		{#if hasBody}
 			<button
 				type="button"
-				class="hover:text-foreground flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-left text-sm transition-colors"
+				class="hover:text-foreground flex min-w-0 cursor-pointer flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-left text-sm transition-colors"
 				onclick={toggleExpand}
 			>
 				{#if isActive}

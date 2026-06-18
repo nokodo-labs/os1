@@ -104,12 +104,6 @@ class RemindersCache {
 		return `${this.#listKey(listId)}|${title}`
 	}
 
-	#nextRootPosition(listId: string | null): number {
-		const reminders = this.getReminders(listId).filter((reminder) => !reminder.parent_id)
-		if (reminders.length === 0) return 0
-		return Math.max(...reminders.map((reminder) => reminder.position ?? 0)) + 1
-	}
-
 	#addPendingCreateRequest(key: string): void {
 		this.#pendingCreateRequests.set(key, (this.#pendingCreateRequests.get(key) ?? 0) + 1)
 	}
@@ -728,7 +722,6 @@ class RemindersCache {
 		}
 		const key = this.#listKey(params.listId)
 		const pendingKey = this.#pendingKey(params.listId, params.title)
-		const position = this.#nextRootPosition(params.listId)
 		this.#addPendingCreateRequest(pendingKey)
 
 		try {
@@ -738,7 +731,6 @@ class RemindersCache {
 					title: params.title,
 					description: params.description,
 					status: 'pending',
-					position,
 				},
 			})
 

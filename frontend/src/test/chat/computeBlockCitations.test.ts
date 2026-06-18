@@ -30,6 +30,7 @@ function makeStreaming(messageId: string, content: string): StreamingAssistantSt
 	return {
 		runId: 'run_1',
 		messageId,
+		sessionId: messageId,
 		content,
 		timestamp: new Date(),
 		senderAgentId: 'agent_1',

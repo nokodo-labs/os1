@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { api } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
+	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
 	import Lock from '$lib/components/icons/Lock.svelte'
+	import Users from '$lib/components/icons/Users.svelte'
 	import { DropdownSelect, Switch } from '$lib/components/primitives'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { clearGeolocation, requestGeolocation } from '$lib/stores/device.svelte'
@@ -11,10 +13,10 @@
 	type Visibility = 'everyone' | 'friends' | 'private'
 	type PrivacySettings = components['schemas']['UserPrivacy']
 
-	const visibilityOptions: { value: Visibility; label: string }[] = [
-		{ value: 'everyone', label: 'everyone' },
-		{ value: 'friends', label: 'friends only' },
-		{ value: 'private', label: 'only me' },
+	const visibilityOptions = [
+		{ value: 'everyone', label: 'everyone', icon: GlobeAlt, iconVariant: 'solid' },
+		{ value: 'friends', label: 'friends only', icon: Users, iconVariant: 'solid' },
+		{ value: 'private', label: 'only me', icon: Lock, iconVariant: 'solid' },
 	]
 
 	// current privacy settings from user object

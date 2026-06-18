@@ -205,6 +205,12 @@ export interface ChatContext {
 	setSteeringParentOverride(runId: string, parentId: string): void
 	consumeSteeringParentOverride(runId: string | null): string | null
 
+	// entrance animation marks: a message that arrived live from another
+	// session is marked once by the WS handler, then consumed (once) by the
+	// view to play the fallback entrance. history/branch/paging never mark.
+	markMessageEntrance(id: string): void
+	consumeMessageEntrance(id: string): boolean
+
 	// paging
 	messageSkip: number
 	hasMoreMessages: boolean
@@ -243,7 +249,14 @@ export interface ChatContext {
 	isThreadLoadCurrent(threadId: string, token: number): boolean
 	incrementActiveRun(): number
 	rebuildRunBlocks(): void
+	// streaming text coalescing: buffer a token delta (flushed once per frame),
+	// or flush the buffer synchronously before any read of streamingAssistant.content.
+	appendStreamingText(text: string): void
+	flushStreamingText(): void
 	queueScrollToBottom(behavior?: 'auto' | 'smooth'): Promise<void>
+	// suppress the auto-scroll pin from flipping due to an imminent programmatic
+	// scroll / scrollTop write (e.g. pagination anchor restore).
+	markProgrammaticScroll(behavior?: 'auto' | 'smooth'): void
 }
 
 /**
@@ -271,6 +284,9 @@ export interface ChatState extends ChatContext {
 	// scroll
 	handleScroll(): void
 	scrollToBottom(behavior?: 'auto' | 'smooth'): void
+	// record a genuine user scroll gesture (wheel/touch) so the pin detaches on
+	// scroll-up and re-evaluates from position even during streaming.
+	onUserScrollGesture(direction?: 'up' | 'down' | 'unknown'): void
 
 	// thread lifecycle
 	setThread(t: Thread | null): void

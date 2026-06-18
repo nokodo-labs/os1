@@ -205,6 +205,9 @@ export async function loadOlderMessages(threadId: string, ctx: ChatContext): Pro
 		// guard again: component may have unmounted during awaits
 		if (!ctx.scrollContainer || threadId !== ctx.thread?.id) return
 		const newScrollHeight = ctx.scrollContainer.scrollHeight
+		// this scrollTop write fires a scroll event near the top; suppress it so
+		// it isn't misread as a user scroll that flips the auto-scroll pin.
+		ctx.markProgrammaticScroll('auto')
 		ctx.scrollContainer.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight)
 	} finally {
 		ctx.isLoadingOlderMessages = false

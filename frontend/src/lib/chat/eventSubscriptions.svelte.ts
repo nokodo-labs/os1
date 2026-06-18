@@ -217,6 +217,12 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 				}
 				// if the new message extends the current branch, move leaf
 				if (newMsg.parent_id === ctx.currentLeafId) {
+					// a user message that arrived live from another session and
+					// lands on the visible tail plays the fallback entrance once.
+					// own sends already animated via the optimistic send path.
+					if (!ownEvent && newMsg.type === 'user') {
+						ctx.markMessageEntrance(newMsg.id)
+					}
 					ctx.currentLeafId = newMsg.id
 				}
 				ctx.rebuildRunBlocks()
@@ -529,6 +535,9 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 
 			const parentId = nextInjectedParentId
 			const injected = injectSteeringMessage(mid, runId, parentId, steeringCreatedAt)
+			// advance the chain cursor for EVERY message, even a deferred one: the
+			// next link records this id as its parent and the deferred message is
+			// injected later (via its own message.created) under the right parent.
 			nextInjectedParentId = mid
 			if (injected) {
 				pendingSteeringStates.delete(mid)

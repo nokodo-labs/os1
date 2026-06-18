@@ -451,6 +451,7 @@ describe('buildRunBlocks', () => {
 			streamingAssistant: {
 				runId,
 				messageId: 'streaming_1',
+				sessionId: 'streaming_1',
 				content: 'searching',
 				timestamp: new Date(at(3)),
 				senderAgentId: agentId,
@@ -495,6 +496,7 @@ describe('buildRunBlocks', () => {
 			streamingAssistant: {
 				runId,
 				messageId: 'streaming_1',
+				sessionId: 'streaming_1',
 				content: '',
 				timestamp: new Date(at(3)),
 				senderAgentId: agentId,
@@ -549,6 +551,7 @@ describe('buildRunBlocks', () => {
 			streamingAssistant: {
 				runId,
 				messageId: 'streaming_1',
+				sessionId: 'streaming_1',
 				content: '',
 				timestamp: new Date(at(4)),
 				senderAgentId: agentId,
@@ -568,6 +571,66 @@ describe('buildRunBlocks', () => {
 			'assistant',
 			'streaming_assistant',
 			'streaming_tool',
+		])
+	})
+
+	it('hides the assistant placeholder while the user message is still optimistic', () => {
+		const result = buildRunBlocks({
+			messages: [],
+			userId,
+			streamingAssistant: {
+				runId,
+				messageId: 'pending-1',
+				content: '',
+				timestamp: new Date(at(2)),
+				senderAgentId: agentId,
+				toolCalls: [],
+				isError: false,
+				errorMessage: null,
+			},
+			optimisticUserMessage: {
+				text: 'hello there',
+				attachments: [],
+				timestamp: new Date(at(1)),
+			},
+			viewingStreamingBranch: true,
+		})
+
+		expect(result.blocks).toHaveLength(1)
+		expect(result.blocks[0].items.map((item) => item.kind)).toEqual(['optimistic_user'])
+	})
+
+	it('shows the assistant placeholder once the user message is persisted', () => {
+		const persistedUser = message({
+			id: 'u1',
+			type: 'user',
+			parent_id: null,
+			sender_user_id: userId,
+			content: [{ type: 'text', text: 'hello there' }],
+			created_at: at(1),
+		})
+
+		const result = buildRunBlocks({
+			messages: [persistedUser],
+			userId,
+			streamingAssistant: {
+				runId,
+				messageId: 'pending-1',
+				content: '',
+				timestamp: new Date(at(2)),
+				senderAgentId: agentId,
+				toolCalls: [],
+				isError: false,
+				errorMessage: null,
+			},
+			optimisticUserMessage: null,
+			viewingStreamingBranch: true,
+		})
+
+		expect(result.blocks).toHaveLength(1)
+		expect(result.blocks[0].items.map((item) => item.kind)).toEqual([
+			'user',
+			'streaming_assistant',
 		])
 	})
 })

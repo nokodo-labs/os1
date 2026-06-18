@@ -67,6 +67,7 @@ function makeStreamingState(messageId: string, content = ''): StreamingAssistant
 	return {
 		runId: 'run_1',
 		messageId,
+		sessionId: messageId,
 		content,
 		timestamp: new Date(),
 		senderAgentId: 'agent_1',

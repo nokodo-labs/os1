@@ -67,6 +67,8 @@ export function contentPartsToText(parts: ApiMessage['content']): string {
 export function finalizeStreamingAssistantAsPartial(ctx: ChatContext): void {
 	const streaming = ctx.streamingAssistant
 	if (!streaming) return
+	// apply any buffered streamed tokens before snapshotting the partial content
+	ctx.flushStreamingText()
 
 	const existingMessage = ctx.messageTree.get(streaming.messageId)
 	const content = streaming.content.trim() || contentPartsToText(existingMessage?.content).trim()
@@ -642,9 +644,12 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		const hasUnresolvedStreamingToolCalls = streamingAssistant.toolCalls.some(
 			(toolCall) => !completedToolCallIds.has(toolCall.id)
 		)
+		const userMessagePending = optimisticUserMessage !== null
 		if (
 			hasStreamingText ||
-			(!hasUnresolvedPreviousToolCalls && !hasUnresolvedStreamingToolCalls)
+			(!userMessagePending &&
+				!hasUnresolvedPreviousToolCalls &&
+				!hasUnresolvedStreamingToolCalls)
 		) {
 			targetBlock.items.push({ kind: 'streaming_assistant' })
 		}
@@ -715,7 +720,9 @@ export function getBlockFirstAssistant(block: RunBlock): ApiMessage | null {
 }
 
 export function blockHasStreamingAssistant(block: RunBlock): boolean {
-	return block.items.some((item) => item.kind === 'streaming_assistant')
+	return block.items.some(
+		(item) => item.kind === 'streaming_assistant' || item.kind === 'streaming_tool'
+	)
 }
 
 /** convert pending attachments to media parts for optimistic rendering before the real message arrives */

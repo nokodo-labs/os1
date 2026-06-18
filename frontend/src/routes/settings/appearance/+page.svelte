@@ -12,6 +12,7 @@
 		preferences,
 		type AccentColor,
 		type BackgroundType,
+		type BubbleAnimation,
 		type BubbleTailStyle,
 		type ClientPreferenceScope,
 		type ThemeMode,
@@ -46,6 +47,12 @@
 		{ value: 'imessage', label: 'imessage' },
 	] as const
 
+	const bubbleAnimationOptions = [
+		{ value: 'morph', label: 'morph' },
+		{ value: 'flyup', label: 'fly up' },
+		{ value: 'none', label: 'none' },
+	] as const
+
 	// reactive getters from the typed store
 	const selectedBackground = $derived.by((): BackgroundType => {
 		const bg = preferences.data.appearance.background
@@ -59,9 +66,11 @@
 	const autoBackground = $derived(preferences.data.appearance.autoBackground ?? true)
 	const staticColor = $derived(background.userStaticColor)
 	const selectedBubbleTailStyle = $derived(preferences.data.appearance.bubbleTailStyle ?? 'none')
+	const selectedBubbleAnimation = $derived(preferences.data.appearance.bubbleAnimation ?? 'morph')
 	const themeScope = $derived(preferences.themeScope)
 	const wallpaperScope = $derived(preferences.wallpaperScope)
 	const bubbleTailScope = $derived(preferences.bubbleTailScope)
+	const bubbleAnimationScope = $derived(preferences.bubbleAnimationScope)
 
 	function setThemeMode(next: string): void {
 		void preferences.updateThemeMode(next as ThemeMode)
@@ -91,6 +100,10 @@
 		void preferences.updateBubbleTailStyle(style as BubbleTailStyle)
 	}
 
+	function setBubbleAnimation(mode: string): void {
+		void preferences.updateBubbleAnimation(mode as BubbleAnimation)
+	}
+
 	function setThemeScope(scope: ClientPreferenceScope): void {
 		void preferences.setThemeScope(scope)
 	}
@@ -101,6 +114,10 @@
 
 	function setBubbleTailScope(scope: ClientPreferenceScope): void {
 		void preferences.setBubbleTailScope(scope)
+	}
+
+	function setBubbleAnimationScope(scope: ClientPreferenceScope): void {
+		void preferences.setBubbleAnimationScope(scope)
 	}
 </script>
 
@@ -282,6 +299,27 @@
 				options={bubbleTailOptions}
 				value={selectedBubbleTailStyle}
 				onchange={setBubbleTailStyle}
+				class="mt-4"
+			/>
+		</div>
+
+		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
+			<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+				<div>
+					<div class="text-foreground text-sm font-semibold">bubble animation</div>
+					<div class="text-foreground/50 mt-1 text-sm">
+						how your outgoing message animates into the chat thread
+					</div>
+				</div>
+				<PreferenceScopeToggle
+					scope={bubbleAnimationScope}
+					onchange={setBubbleAnimationScope}
+				/>
+			</div>
+			<RadioGroup
+				options={bubbleAnimationOptions}
+				value={selectedBubbleAnimation}
+				onchange={setBubbleAnimation}
 				class="mt-4"
 			/>
 		</div>

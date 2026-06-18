@@ -44,6 +44,9 @@
 		sending?: boolean
 		onEditSave?: (newContent: string) => Promise<void>
 		onEditSaveAsCopy?: (newContent: string) => Promise<void>
+		/** Svelte action applied to the root on mount, used by the page to play
+		 *  the entrance animation for live (cross-session) messages. */
+		entrance?: (node: HTMLElement) => void
 	}
 
 	let {
@@ -65,6 +68,7 @@
 		sending = false,
 		onEditSave,
 		onEditSaveAsCopy,
+		entrance = () => {},
 	}: Props = $props()
 
 	const apiBase = getApiBaseUrl()
@@ -251,7 +255,8 @@
 
 <div
 	bind:this={messageRef}
-	class="flex animate-[messageSlideIn_0.3s_cubic-bezier(0.34,1.56,0.64,1)] flex-col gap-2"
+	use:entrance
+	class="flex flex-col gap-2"
 	class:ml-auto={align === 'right' && !isEditing}
 	class:items-end={align === 'right' && !isEditing}
 	class:items-start={align === 'left' && !isEditing}
@@ -463,19 +468,6 @@
 </div>
 
 <style>
-	@keyframes messageSlideIn {
-		from {
-			opacity: 0;
-			filter: blur(2px);
-			transform: translateY(34px) scale(0.92);
-		}
-		to {
-			opacity: 1;
-			filter: blur(0);
-			transform: translateY(0) scale(1);
-		}
-	}
-
 	.bubble-wrapper {
 		position: relative;
 		max-width: 100%;

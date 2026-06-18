@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
+	import { EntranceController, type EntranceMode } from '$lib/animations/entrance.svelte'
 	import { getApiBaseUrl } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
 	import {
@@ -24,6 +25,7 @@
 		unarchiveThread,
 		type ApiMessage,
 	} from '$lib/chat'
+	import type { RunModifiers } from '$lib/chat/attachments'
 	import { RunActivity } from '$lib/components/chat/activities'
 	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
 	import AssistantChatMessage from '$lib/components/chat/AssistantChatMessage.svelte'
@@ -47,6 +49,7 @@
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
 	import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte'
 	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
+	import Clock from '$lib/components/icons/Clock.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import GarbageBin from '$lib/components/icons/GarbageBin.svelte'
 	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
@@ -69,6 +72,109 @@
 	// initialize chat state
 	const chat = createChatState()
 	const threadId = $derived(chat.thread?.id ?? null)
+
+	// outgoing-bubble entrance, driven by the bubbleAnimation preference.
+	// mode is 'morph' (FLIP ghost) | 'flyup' (WAAPI slide-in) | 'none'.
+	const reducedMotion =
+		typeof window !== 'undefined' &&
+		typeof window.matchMedia === 'function' &&
+		window.matchMedia('(prefers-reduced-motion: reduce)').matches
+	const entranceMode = $derived.by((): EntranceMode => {
+		if (reducedMotion) return 'none'
+		return (preferences.data.appearance.bubbleAnimation ?? 'morph') as EntranceMode
+	})
+	const entrance = new EntranceController(() => entranceMode)
+	let optimisticMsgEl = $state<HTMLElement | null>(null)
+	let inputBoxEl = $state<HTMLElement | null>(null)
+	// the optimistic bubble hides its own clock while the ghost is carrying it.
+	const optimisticClockHidden = $derived(entrance.inFlight)
+	// id of the steering row a morph ghost is currently flying into; that row is
+	// hidden during the flight so the real bubble and the ghost don't both show.
+	let morphingSteeringId = $state<string | null>(null)
+	const hiddenSteeringId = $derived(entrance.inFlight ? morphingSteeringId : null)
+
+	// resolve the last queued steering bubble element (the LiquidGlass child of
+	// the newest queue row), or null if the queue is empty.
+	function lastSteeringBubble(): HTMLElement | null {
+		const queue = document.querySelector('[aria-label="steering queue"]')
+		if (!queue) return null
+		const lastRow = queue.lastElementChild as HTMLElement | null
+		return lastRow?.querySelector('[style*="steering-message-"]') as HTMLElement | null
+	}
+
+	// a user message that arrived live from another session (cross-device sync)
+	// plays the fallback entrance once, on mount.  the mark is set by the WS
+	// handler only for live tail-appends, so history / branch-switch / paging
+	// never animate.  own sends already animated via the optimistic path.
+	function revealOnSync(node: HTMLElement, id: string): void {
+		if (chat.consumeMessageEntrance(id)) entrance.reveal(node)
+	}
+
+	// detect genuine user scroll gestures (wheel / touch) on the message
+	// container.  attached as passive listeners via an action — this keeps the
+	// pin authoritative on scroll-up even while streaming keeps firing
+	// programmatic scrolls, and avoids the a11y static-interaction warning.
+	function detectUserScroll(node: HTMLElement) {
+		const onWheel = (e: WheelEvent) => chat.onUserScrollGesture(e.deltaY < 0 ? 'up' : 'down')
+		const onTouchMove = () => chat.onUserScrollGesture('unknown')
+		node.addEventListener('wheel', onWheel, { passive: true })
+		node.addEventListener('touchmove', onTouchMove, { passive: true })
+		return {
+			destroy() {
+				node.removeEventListener('wheel', onWheel)
+				node.removeEventListener('touchmove', onTouchMove)
+			},
+		}
+	}
+
+	/** send wrapper.  flies a FLIP ghost from the input to the outgoing bubble;
+	 *  morph/flyup/none are resolved by the entrance controller from the
+	 *  bubbleAnimation preference. */
+	async function handleChatSend(content: string, modifiers?: RunModifiers): Promise<void> {
+		const trimmed = content.trim()
+		const startsFreshRun =
+			!chat.isGenerating &&
+			chat.streamingAssistant === null &&
+			chat.thread !== null &&
+			selectedAgent.id !== ''
+		const canAnimate =
+			entranceMode !== 'none' && trimmed.length > 0 && typeof document !== 'undefined'
+
+		if (!canAnimate) {
+			chat.handleSendMessage(content, modifiers)
+			return
+		}
+
+		const source = inputBoxEl
+		if (startsFreshRun) {
+			// not pinned to bottom: the bubble lands below the fold — fly the ghost
+			// down and out of the viewport instead of into an off-screen target.
+			if (!chat.autoScroll) {
+				void chat.handleSendMessage(content, modifiers)
+				await entrance.flyOutDown(source, trimmed)
+				return
+			}
+			void chat.handleSendMessage(content, modifiers)
+			const target = () =>
+				optimisticMsgEl?.querySelector('.bubble-content') as HTMLElement | null
+			// make room (scroll the bubble into its final slot) before the ghost
+			// measures its target, so it doesn't fly to a spot under the input.
+			await entrance.animateFrom(source, target, trimmed, () => chat.scrollToBottom('auto'))
+		} else {
+			// in-progress run: animate into the freshly-queued steering bubble.
+			const queueLenBefore = chat.queuedSteeringMessages.length
+			void chat.handleSendMessage(content, modifiers)
+			if (chat.queuedSteeringMessages.length <= queueLenBefore) return
+			// hide the just-enqueued row while a morph ghost flies into it (a no-op
+			// in flyup mode, where inFlight stays false and the row animates in place).
+			morphingSteeringId = chat.queuedSteeringMessages.at(-1)?.id ?? null
+			try {
+				await entrance.animateFrom(source, lastSteeringBubble, trimmed)
+			} finally {
+				morphingSteeringId = null
+			}
+		}
+	}
 
 	// local UI state
 	let didLoadAgents = $state(false)
@@ -521,8 +627,8 @@
 				aria-label="scroll to bottom"
 				onpointerdown={(e: PointerEvent) => e.preventDefault()}
 				onclick={() => {
-					chat.queueScrollToBottom('smooth')
 					chat.autoScroll = true
+					chat.queueScrollToBottom('smooth')
 				}}
 			>
 				<ArrowUp class="h-4 w-4 rotate-180" />
@@ -535,6 +641,7 @@
 		style="view-transition-name: thread-body; scrollbar-gutter: stable;"
 		bind:this={chat.scrollContainer}
 		onscroll={chat.handleScroll}
+		use:detectUserScroll
 	>
 		<div
 			bind:this={messageListEl}
@@ -633,6 +740,7 @@
 									<UserChatMessage
 										content={contentPartsToText(item.message.content)}
 										contentParts={item.message.content}
+										entrance={(node) => revealOnSync(node, item.message.id)}
 										attachmentRefs={extractAttachmentRefs(item.message)}
 										{timestamp}
 										align={item.align}
@@ -680,19 +788,26 @@
 									{@const oFiles = pendingAttachmentsToFileParts(
 										item.attachments
 									)}
-									<UserChatMessage
-										content={item.text}
-										optimisticMediaParts={oMedia}
-										optimisticFileParts={oFiles}
-										{timestamp}
-										tailStyle={bubbleTailStyle}
-										{showTail}
-										sending
+									<!-- the optimistic bubble is hidden (opacity) while the entrance ghost
+									     is in flight, then revealed when it lands. -->
+									<div
+										style:opacity={entrance.inFlight ? '0' : '1'}
+										bind:this={optimisticMsgEl}
 									>
-										{#snippet actions()}
-											<CopyButton content={item.text} />
-										{/snippet}
-									</UserChatMessage>
+										<UserChatMessage
+											content={item.text}
+											optimisticMediaParts={oMedia}
+											optimisticFileParts={oFiles}
+											{timestamp}
+											tailStyle={bubbleTailStyle}
+											{showTail}
+											sending={!optimisticClockHidden}
+										>
+											{#snippet actions()}
+												<CopyButton content={item.text} />
+											{/snippet}
+										</UserChatMessage>
+									</div>
 								{/if}
 							{/each}
 
@@ -891,6 +1006,8 @@
 														userMessageId,
 														prompt
 													)
+													// physical keyboard: focus the input for a follow-up
+													if (!device.isMobile) inputFocusToken += 1
 												}}
 											/>
 										{:else if chat.streamingAssistant?.isError && !isReadOnly}
@@ -961,22 +1078,50 @@
 				class="relative mx-auto w-full {device.isMobile ? '' : 'max-w-7xl'}"
 				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 			>
-				<div class="transition-all duration-500 ease-in-out">
+				<div class="relative transition-all duration-500 ease-in-out">
 					<SteeringQueue
 						messages={chat.queuedSteeringMessages}
 						onDrop={(runId, messageId) => chat.dropSteering(runId, messageId)}
+						entrance={entrance.action}
+						hiddenId={hiddenSteeringId}
 					/>
-					<ChatInput
-						bind:value={chat.inputValue}
-						onSubmit={chat.handleSendMessage}
-						onStop={chat.handleStopGeneration}
-						isGenerating={chat.isGenerating}
-						placeholder="send a message"
-						focusToken={inputFocusToken}
-						viewTransitionName="chat-input"
-					/>
+					<!-- morph source is the input box only (not the steering queue above it) -->
+					<div bind:this={inputBoxEl}>
+						<ChatInput
+							bind:value={chat.inputValue}
+							onSubmit={handleChatSend}
+							onStop={chat.handleStopGeneration}
+							isGenerating={chat.isGenerating}
+							placeholder="send a message"
+							focusToken={inputFocusToken}
+							viewTransitionName="chat-input"
+						/>
+					</div>
 				</div>
 			</div>
+		</div>
+	{/if}
+
+	{#if entrance.ghost}
+		<!-- entrance morph ghost: flies the input box to the outgoing bubble rect.
+		     animates left/top/width/height (no scale) so text never distorts.
+		     carries the sending clock, removed reactively once the message persists. -->
+		<div
+			bind:this={entrance.ghostEl}
+			class="text-foreground pointer-events-none fixed z-50 flex items-center gap-2 overflow-hidden rounded-3xl px-3"
+			aria-hidden="true"
+			style="left: {entrance.ghost.left}px; top: {entrance.ghost.top}px; width: {entrance
+				.ghost.width}px; height: {entrance.ghost
+				.height}px; background-color: var(--accent-primary); box-shadow: 0 4px 16px var(--accent-border);"
+		>
+			{#if entrance.inFlight}
+				<span class="flex size-4 shrink-0 items-center justify-center">
+					<span class="ghost-clock-tick flex size-4 items-center justify-center">
+						<Clock class="h-4 w-4" strokeWidth="2" />
+					</span>
+				</span>
+			{/if}
+			<span class="truncate">{entrance.ghost.text}</span>
 		</div>
 	{/if}
 </div>
@@ -988,3 +1133,16 @@
 		sourcesModalCitations = null
 	}}
 />
+
+<style>
+	@keyframes ghostClockTick {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	.ghost-clock-tick {
+		animation: ghostClockTick 1.4s steps(12) infinite;
+		transform-origin: center;
+	}
+</style>

@@ -2,6 +2,7 @@
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import SortIcon from '$lib/components/icons/SortIcon.svelte'
+	import XMark from '$lib/components/icons/XMark.svelte'
 	import LoadingMoreIndicator from '$lib/components/LoadingMoreIndicator.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { DropdownSelect } from '$lib/components/primitives'
@@ -84,11 +85,21 @@
 			/>
 			<input
 				type="text"
-				class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border py-2 pr-3 pl-9 text-sm transition-colors outline-none"
+				class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border py-2 pr-9 pl-9 text-sm transition-colors outline-none"
 				placeholder={searchPlaceholder}
 				value={search}
 				oninput={(e) => onSearchInput(e.currentTarget.value)}
 			/>
+			{#if search}
+				<button
+					type="button"
+					class="rounded-circle text-foreground/40 hover:bg-foreground/10 hover:text-foreground/70 absolute top-1/2 right-2 flex h-6 w-6 -translate-y-1/2 cursor-pointer items-center justify-center transition-colors"
+					onclick={() => onSearchInput('')}
+					aria-label="clear search"
+				>
+					<XMark class="h-3.5 w-3.5" />
+				</button>
+			{/if}
 		</div>
 		<div class="relative shrink-0">
 			<SortIcon

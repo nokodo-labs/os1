@@ -70,6 +70,7 @@ function makeContext(overrides: Partial<ChatContext> = {}): ChatContext {
 		streamingLeafId: null,
 		viewingStreamingBranch: true,
 		optimisticUserMessage: null,
+		pendingStreamSessionId: null,
 		queuedSteeringMessages: staged,
 		lastRunInput: '',
 		inputValue: 'steer me',

@@ -72,6 +72,14 @@ export function createChatState(): ChatState {
 	let lastRunInput = $state('')
 	let runBlocks = $state<RunBlock[]>([])
 
+	// streaming text coalescing: SSE token deltas buffer here and flush to
+	// streamingAssistant.content once per frame, so per-token markdown re-render
+	// and the scroll effect collapse to at most once per frame. flushed
+	// synchronously at every boundary that reads streamingAssistant.content.
+	let pendingStreamText = ''
+	let pendingStreamMessageId: string | null = null
+	let streamTextRaf: number | null = null
+
 	// thread state (activeThread in chatStore is the source of truth)
 	let isThreadLoading = $state(false)
 	let hasLoadedBranch = $state(false)
@@ -94,8 +102,23 @@ export function createChatState(): ChatState {
 	let initialScrollDone = $state(false)
 	let lastThreadId = $state<string | null>(null)
 	let inputOverlayHeight = $state(0)
-	let scrollQueued = false
-	let scrollRequestedWhileQueued = false
+	// intent-based pin: `autoScroll` flips ONLY on genuine user gestures (see
+	// onUserScrollGesture + handleScroll), never from our own scrolls or content
+	// reflow.  these timestamps mark windows during which a scroll event is
+	// attributed to a program/reflow (suppress pin change) or to the user (force
+	// pin re-evaluation even inside a programmatic window).
+	let programmaticScrollUntil = 0
+	let userScrollUntil = 0
+	// monotonic request counter for the scroll coalescer: the chain re-runs only
+	// when a genuinely new request arrived (no sticky boolean -> no busy loop).
+	let scrollReqSeq = 0
+	let scrollChainRunning = false
+
+	// entrance animation: ids of messages that arrived live from another session
+	// (cross-device sync) and should play the fallback entrance once, on mount.
+	// marked by the WS handler for live tail-appends only — never on load,
+	// branch-switch, or pagination — so history doesn't animate.
+	const messageEntranceIds = new SvelteSet<string>()
 
 	// tool tracking
 	const toolTracker = new ToolExecutionTracker()
@@ -161,8 +184,44 @@ export function createChatState(): ChatState {
 		buildAgentLookup(agents.list, (a) => a.profile_image_url ?? null)
 	)
 
+	function flushStreamingText(): void {
+		if (streamTextRaf !== null) {
+			cancelAnimationFrame(streamTextRaf)
+			streamTextRaf = null
+		}
+		if (!pendingStreamText) return
+		// only apply if the buffer still belongs to the live streaming message;
+		// a supersede/abort can swap the message out from under us.
+		if (streamingAssistant && streamingAssistant.messageId === pendingStreamMessageId) {
+			streamingAssistant.content += pendingStreamText
+		}
+		pendingStreamText = ''
+		pendingStreamMessageId = null
+	}
+
+	function appendStreamingText(text: string): void {
+		if (!streamingAssistant || !text) return
+		if (
+			pendingStreamMessageId !== null &&
+			pendingStreamMessageId !== streamingAssistant.messageId
+		) {
+			pendingStreamText = ''
+		}
+		pendingStreamMessageId = streamingAssistant.messageId
+		pendingStreamText += text
+		if (streamTextRaf !== null) return
+		if (typeof requestAnimationFrame !== 'function') {
+			flushStreamingText()
+			return
+		}
+		streamTextRaf = requestAnimationFrame(flushStreamingText)
+	}
+
 	// run block management
 	function rebuildRunBlocks(): void {
+		// every structural rebuild reads streamingAssistant.content; apply any
+		// buffered tokens first so block structure and content stay consistent.
+		flushStreamingText()
 		const result = buildRunBlocks({
 			messages,
 			userId: currentUserId,
@@ -386,12 +445,49 @@ export function createChatState(): ChatState {
 		return parentId
 	}
 
-	// scroll management
-	// position-based auto-scroll: every scroll event checks if we're at the
-	// bottom. if yes → autoScroll stays/becomes true. if no → false.
+	// scroll management — intent-based pin.
+	// the pin (`autoScroll`) reflects whether the USER wants the view to follow
+	// new content.  it flips only on genuine user gestures: a scroll event counts
+	// as user-driven when it lands in a user-gesture window OR outside the
+	// programmatic-scroll window.  this keeps the view pinned through fast
+	// streaming and run-end reflow (whose scroll events are suppressed) while
+	// detaching the instant the user scrolls up.
+	const PROGRAMMATIC_AUTO_MS = 150
+	const PROGRAMMATIC_SMOOTH_MS = 700
+	const USER_GESTURE_MS = 500
+
+	function nextAnimationFrame(): Promise<void> {
+		return new Promise((resolve) => requestAnimationFrame(() => resolve()))
+	}
+
+	// mark an imminent programmatic scroll so the scroll event(s) it triggers do
+	// not flip the pin.  exposed so non-scrollTo programmatic writes (e.g. the
+	// pagination scroll-anchor restore in dataLoader) can suppress intent too.
+	function markProgrammaticScroll(behavior: 'auto' | 'smooth' = 'auto') {
+		programmaticScrollUntil =
+			performance.now() +
+			(behavior === 'smooth' ? PROGRAMMATIC_SMOOTH_MS : PROGRAMMATIC_AUTO_MS)
+	}
+
+	// called by the page on a genuine user scroll gesture (wheel / touch).  an
+	// upward gesture detaches immediately (bypassing the programmatic window,
+	// which is otherwise perpetually open during streaming); other directions
+	// open a window so the resulting scroll events re-evaluate the pin from
+	// position — re-pinning when the user returns to the bottom, even mid-stream.
+	function onUserScrollGesture(direction: 'up' | 'down' | 'unknown' = 'unknown') {
+		userScrollUntil = performance.now() + USER_GESTURE_MS
+		if (direction === 'up') autoScroll = false
+	}
+
 	function handleScroll() {
 		if (!scrollContainer) return
-		autoScroll = computeIsAtBottom(scrollContainer)
+		const now = performance.now()
+		// update the pin from position only for genuine user scrolls — never for
+		// our own scrollTo or content reflow (those fall inside the programmatic
+		// window and would otherwise detach the user during streaming/run-end).
+		if (now <= userScrollUntil || now > programmaticScrollUntil) {
+			autoScroll = computeIsAtBottom(scrollContainer)
+		}
 
 		// avoid runaway paging during initial mount/auto-scroll.
 		// initialScrollDone is set once we have loaded and pinned to bottom.
@@ -407,29 +503,36 @@ export function createChatState(): ChatState {
 
 	function scrollToBottom(behavior: 'auto' | 'smooth' = 'auto') {
 		if (!scrollContainer) return
+		markProgrammaticScroll(behavior)
 		scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior })
 	}
 
+	// coalesced scroll-to-bottom.  single-flight via a monotonic request counter:
+	// while a chain runs, new calls just bump the counter and the chain runs one
+	// more pass for them; it stops as soon as no new request arrived or the pin
+	// was released.  never drops a request, never busy-loops.
 	async function queueScrollToBottom(behavior: 'auto' | 'smooth' = 'auto') {
 		if (!scrollContainer) return
-		scrollRequestedWhileQueued = true
-		if (scrollQueued) return
-		scrollQueued = true
-		await tick()
-		requestAnimationFrame(() => {
-			if (!autoScroll) {
-				scrollQueued = false
-				scrollRequestedWhileQueued = false
-				return
+		scrollReqSeq += 1
+		if (scrollChainRunning) return
+		scrollChainRunning = true
+		try {
+			let handled = -1
+			while (handled !== scrollReqSeq) {
+				handled = scrollReqSeq
+				await tick()
+				if (!autoScroll) return
+				await nextAnimationFrame()
+				if (!autoScroll) return
+				scrollToBottom(behavior)
+				// instant correction pass after layout settles (covers late
+				// reflow).  skipped for smooth so the animation isn't cut short.
+				await nextAnimationFrame()
+				if (autoScroll && behavior === 'auto') scrollToBottom('auto')
 			}
-			scrollRequestedWhileQueued = false
-			scrollToBottom(behavior)
-			requestAnimationFrame(() => {
-				if (autoScroll) scrollToBottom('auto')
-				scrollQueued = false
-				if (scrollRequestedWhileQueued) void queueScrollToBottom('auto')
-			})
-		})
+		} finally {
+			scrollChainRunning = false
+		}
 	}
 
 	// thread lifecycle
@@ -479,8 +582,15 @@ export function createChatState(): ChatState {
 		// clear run state to prevent leaking to other chats
 		optimisticUserMessage = null
 		queuedSteeringById.clear()
+		messageEntranceIds.clear()
 		steeringParentOverrides.clear()
 		pendingSteeringFlushInFlight = false
+		if (streamTextRaf !== null) {
+			cancelAnimationFrame(streamTextRaf)
+			streamTextRaf = null
+		}
+		pendingStreamText = ''
+		pendingStreamMessageId = null
 		streamingAssistant = null
 		streamingAssistantParentId = null
 		viewingStreamingBranch = true
@@ -577,6 +687,14 @@ export function createChatState(): ChatState {
 		injectQueuedSteeringMessage,
 		setSteeringParentOverride,
 		consumeSteeringParentOverride,
+		markMessageEntrance(id: string) {
+			messageEntranceIds.add(id)
+		},
+		consumeMessageEntrance(id: string) {
+			if (!messageEntranceIds.has(id)) return false
+			messageEntranceIds.delete(id)
+			return true
+		},
 		get lastRunInput() {
 			return lastRunInput
 		},
@@ -760,9 +878,13 @@ export function createChatState(): ChatState {
 			return ++activeRun
 		},
 		rebuildRunBlocks,
+		appendStreamingText,
+		flushStreamingText,
 		queueScrollToBottom,
 		handleScroll,
 		scrollToBottom,
+		onUserScrollGesture,
+		markProgrammaticScroll,
 		setThread,
 		clearThread,
 		getToolExecution(toolCallId: string) {

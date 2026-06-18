@@ -222,6 +222,10 @@ export function processDelta(
 					}
 					sctx.setAssistantParentId(messageId)
 					ctx.streamingAssistantParentId = messageId
+
+					// tool result changed the tree and tracker state;
+					// refresh blocks so the text placeholder reappears.
+					ctx.rebuildRunBlocks()
 				}
 			}
 
@@ -294,11 +298,13 @@ export function processDelta(
 						// catchup replay: reconstruct this message from frame 0 into a
 						// shadow buffer and reconcile against what is rendered so the
 						// drop stays invisible (see reconcileStreamedContent).
+						ctx.flushStreamingText()
 						const shadow = (sctx.replayContent.get(messageId) ?? '') + chunkText
 						sctx.replayContent.set(messageId, shadow)
 						streaming.content = reconcileStreamedContent(streaming.content, shadow)
 					} else {
-						streaming.content += chunkText
+						// buffer the token; flushed to content once per frame
+						ctx.appendStreamingText(chunkText)
 					}
 					throttledHapticFeedback()
 				}
@@ -319,6 +325,7 @@ export function processDelta(
 				}
 
 				if (isDone) {
+					ctx.flushStreamingText()
 					const content = streaming.content.trim()
 					const now = new SvelteDate().toISOString()
 					const existingMessage = ctx.messageTree.get(streaming.messageId)
@@ -427,6 +434,7 @@ export async function consumeStream(
 
 	for await (const delta of stream) {
 		if (opts.runId !== ctx.activeRun) {
+			ctx.flushStreamingText()
 			ctx.runAbortController?.abort()
 			return 'superseded'
 		}
@@ -437,6 +445,7 @@ export async function consumeStream(
 	// generator exhausted without a terminal `done`/`error`: the transport
 	// closed mid-run (proxy idle kill, EOF). NOT a success - the caller must
 	// attempt to recover so already-streamed content is not silently dropped.
+	ctx.flushStreamingText()
 	return 'ended'
 }
 

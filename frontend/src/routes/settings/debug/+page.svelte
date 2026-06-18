@@ -11,6 +11,7 @@
 
 	const streamdownAnimationTypes = ['fade', 'blur', 'slideUp', 'slideDown'] as const
 	const streamdownTokenizeModes = ['word', 'char'] as const
+	const sendAnimationModes = ['morph', 'flyup', 'none'] as const
 
 	const isAdmin = $derived(Boolean(session.currentUser?.is_superuser))
 	const isBackgroundDisabled = $derived(preferences.data.appearance.background === 'none')
@@ -272,6 +273,28 @@
 						class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/85 w-28 border px-3 py-2 text-sm outline-none"
 					/>
 				</label>
+			</div>
+
+			<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
+				<div class="text-foreground/85 text-sm font-semibold">chat send animation</div>
+				<div class="text-foreground/55 mt-1 text-sm">
+					how an outgoing message animates from the input into a bubble. morph uses the
+					view transitions api; flyup is a css fallback.
+				</div>
+				<div class="mt-4 flex flex-wrap gap-1">
+					{#each sendAnimationModes as m (m)}
+						<button
+							type="button"
+							onclick={() => debugUi.setSendAnimationMode(m)}
+							class="rounded-pill px-3 py-1.5 text-xs transition-colors {debugUi.sendAnimationMode ===
+							m
+								? 'bg-foreground/15 text-foreground'
+								: 'bg-foreground/5 text-foreground/60 hover:bg-foreground/10 hover:text-foreground/80'}"
+						>
+							{m}
+						</button>
+					{/each}
+				</div>
 			</div>
 		</div>
 	{/if}

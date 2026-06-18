@@ -40,6 +40,7 @@ function makeContext(): ChatContext {
 	const messageTree = new SvelteMap<string, ApiMessage>()
 	const queuedSteeringMessages: QueuedSteeringMessage[] = []
 	const steeringParentOverrides = new Map<string, string>()
+	const messageEntranceIds = new Set<string>()
 	const ctx: ChatContext = {
 		thread: makeThread({ id: 'thread_1' }),
 		messageTree,
@@ -107,6 +108,14 @@ function makeContext(): ChatContext {
 			steeringParentOverrides.delete(runId)
 			return parentId
 		},
+		markMessageEntrance(id) {
+			messageEntranceIds.add(id)
+		},
+		consumeMessageEntrance(id) {
+			if (!messageEntranceIds.has(id)) return false
+			messageEntranceIds.delete(id)
+			return true
+		},
 		messageSkip: 0,
 		hasMoreMessages: false,
 		isLoadingOlderMessages: false,
@@ -136,7 +145,10 @@ function makeContext(): ChatContext {
 			return 1
 		},
 		rebuildRunBlocks: vi.fn(),
+		appendStreamingText() {},
+		flushStreamingText() {},
 		async queueScrollToBottom() {},
+		markProgrammaticScroll() {},
 	}
 	messageTree.set(
 		'assistant_1',

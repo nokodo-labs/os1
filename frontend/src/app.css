@@ -453,11 +453,11 @@ html[data-vt-active='1'] .chat-sidebar {
 	backdrop-filter: none;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
+/*
    mobile layout adjustments
    888px matches DEVICE_MOBILE_BREAKPOINT_PX from device.svelte.ts
    in mobile mode, pages are full-width with minimal insets for space efficiency.
-   ═══════════════════════════════════════════════════════════════════════════ */
+ */
 @media (max-width: 888px) {
 	:root {
 		--spacing-page-x: var(--spacing-mobile-inset);
@@ -465,10 +465,10 @@ html[data-vt-active='1'] .chat-sidebar {
 	}
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
+/*
    PWA standalone mode
    hides browser-only UI when running as an installed app.
-   ═══════════════════════════════════════════════════════════════════════════ */
+ */
 @media (display-mode: standalone) {
 	/* hide elements marked as browser-only in standalone PWA mode */
 	.browser-only {

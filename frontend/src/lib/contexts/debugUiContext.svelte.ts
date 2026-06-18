@@ -8,6 +8,9 @@ export type AppsGridIconShape = 'default' | 'circle'
 export type StreamdownAnimationType = 'fade' | 'blur' | 'slideUp' | 'slideDown'
 export type StreamdownAnimationTokenize = 'word' | 'char'
 
+/** how an outgoing user message animates from the chat input into a bubble. */
+export type SendAnimationMode = 'morph' | 'flyup' | 'none'
+
 export interface StreamdownAnimationOptions {
 	enabled: boolean
 	type: StreamdownAnimationType
@@ -22,6 +25,9 @@ export interface DebugUiContext {
 
 	readonly streamdownAnimation: StreamdownAnimationOptions
 	setStreamdownAnimation(next: Partial<StreamdownAnimationOptions>): void
+
+	readonly sendAnimationMode: SendAnimationMode
+	setSendAnimationMode(mode: SendAnimationMode): void
 }
 
 const STORAGE_KEY = 'debug.appsGridIconShape'
@@ -30,6 +36,8 @@ const STREAMDOWN_ANIMATION_ENABLED_KEY = 'debug.streamdown.animation.enabled'
 const STREAMDOWN_ANIMATION_TYPE_KEY = 'debug.streamdown.animation.type'
 const STREAMDOWN_ANIMATION_TOKENIZE_KEY = 'debug.streamdown.animation.tokenize'
 const STREAMDOWN_ANIMATION_DURATION_KEY = 'debug.streamdown.animation.duration'
+
+const SEND_ANIMATION_MODE_KEY = 'debug.chat.sendAnimationMode'
 
 function readStoredShape(): AppsGridIconShape {
 	if (!browser) return 'default'
@@ -75,9 +83,21 @@ function writeStreamdownAnimation(next: StreamdownAnimationOptions) {
 	window.localStorage.setItem(STREAMDOWN_ANIMATION_DURATION_KEY, String(next.duration))
 }
 
+function readSendAnimationMode(): SendAnimationMode {
+	if (!browser) return 'morph'
+	const value = window.localStorage.getItem(SEND_ANIMATION_MODE_KEY)
+	return value === 'flyup' || value === 'none' ? value : 'morph'
+}
+
+function writeSendAnimationMode(mode: SendAnimationMode) {
+	if (!browser) return
+	window.localStorage.setItem(SEND_ANIMATION_MODE_KEY, mode)
+}
+
 export function createDebugUiContext(): DebugUiContext {
 	let appsGridIconShape = $state<AppsGridIconShape>(readStoredShape())
 	let streamdownAnimation = $state<StreamdownAnimationOptions>(readStreamdownAnimation())
+	let sendAnimationMode = $state<SendAnimationMode>(readSendAnimationMode())
 
 	const context: DebugUiContext = {
 		get appsGridIconShape() {
@@ -101,6 +121,13 @@ export function createDebugUiContext(): DebugUiContext {
 				...next,
 			}
 			writeStreamdownAnimation(streamdownAnimation)
+		},
+		get sendAnimationMode() {
+			return sendAnimationMode
+		},
+		setSendAnimationMode(mode) {
+			sendAnimationMode = mode
+			writeSendAnimationMode(mode)
 		},
 	}
 

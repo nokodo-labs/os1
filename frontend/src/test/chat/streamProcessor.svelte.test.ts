@@ -169,6 +169,8 @@ function makeConsumeCtx(activeRun: number): ChatContext {
 		activeRun,
 		streamingAssistantParentId: null,
 		runAbortController: new AbortController(),
+		appendStreamingText: () => {},
+		flushStreamingText: () => {},
 	} as unknown as ChatContext
 }
 
@@ -260,20 +262,25 @@ function chatDelta(messageId: string, text: string, done = false): ChatStreamDel
 }
 
 function makeStreamingCtx(content: string): ChatContext {
+	const streamingAssistant = {
+		runId: 'run_x',
+		messageId: 'msg_1',
+		content,
+		timestamp: new Date(),
+		senderAgentId: 'agent_1',
+		toolCalls: [],
+		isError: false,
+		errorMessage: null,
+	}
 	return {
 		activeRun: 1,
 		runAbortController: new AbortController(),
 		streamingAssistantParentId: null,
-		streamingAssistant: {
-			runId: 'run_x',
-			messageId: 'msg_1',
-			content,
-			timestamp: new Date(),
-			senderAgentId: 'agent_1',
-			toolCalls: [],
-			isError: false,
-			errorMessage: null,
+		streamingAssistant,
+		appendStreamingText: (text: string) => {
+			streamingAssistant.content += text
 		},
+		flushStreamingText: () => {},
 	} as unknown as ChatContext
 }
 
@@ -316,6 +323,16 @@ async function* throwing404Stream(): AsyncGenerator<ChatStreamDelta, void, unkno
 }
 
 function makeRunCtx(): ChatContext {
+	const streamingAssistant = {
+		runId: 'run_x',
+		messageId: 'msg_1',
+		content: 'Hi',
+		timestamp: new Date(),
+		senderAgentId: 'agent_1',
+		toolCalls: [],
+		isError: false,
+		errorMessage: null,
+	}
 	return {
 		activeRun: 5,
 		runAbortController: undefined,
@@ -328,16 +345,11 @@ function makeRunCtx(): ChatContext {
 		messageTree: new Map(),
 		citationSources: new Map(),
 		rebuildRunBlocks: vi.fn(),
-		streamingAssistant: {
-			runId: 'run_x',
-			messageId: 'msg_1',
-			content: 'Hi',
-			timestamp: new Date(),
-			senderAgentId: 'agent_1',
-			toolCalls: [],
-			isError: false,
-			errorMessage: null,
+		appendStreamingText: (text: string) => {
+			streamingAssistant.content += text
 		},
+		flushStreamingText: () => {},
+		streamingAssistant,
 	} as unknown as ChatContext
 }
 

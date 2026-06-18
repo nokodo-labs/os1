@@ -9,9 +9,14 @@
 	interface SteeringQueueProps {
 		messages: QueuedSteeringMessage[]
 		onDrop?: (runId: string, messageId: string) => Promise<void> | void
+		/** Svelte action applied to each queued row on mount for entrance. */
+		entrance?: (node: HTMLElement) => void
+		/** id of the row to hide while an entrance ghost morphs into it; the
+		 *  real bubble is revealed once the morph lands. */
+		hiddenId?: string | null
 	}
 
-	let { messages, onDrop }: SteeringQueueProps = $props()
+	let { messages, onDrop, entrance = () => {}, hiddenId = null }: SteeringQueueProps = $props()
 	const dropping = new SvelteSet<string>()
 
 	function textFor(message: QueuedSteeringMessage): string {
@@ -40,7 +45,9 @@
 	>
 		{#each messages as message (message.id)}
 			<div
-				class="flex max-w-[80%] animate-[queuedMessageIn_0.32s_cubic-bezier(0.34,1.56,0.64,1)] items-center justify-end gap-2"
+				class="flex max-w-[80%] items-center justify-end gap-2"
+				use:entrance
+				style:opacity={message.id === hiddenId ? '0' : undefined}
 			>
 				<span
 					class="text-foreground/55 flex size-4 shrink-0 items-center justify-center"
@@ -75,19 +82,6 @@
 {/if}
 
 <style>
-	@keyframes queuedMessageIn {
-		from {
-			opacity: 0;
-			filter: blur(2px);
-			transform: translateY(24px) scale(0.94);
-		}
-		to {
-			opacity: 1;
-			filter: blur(0);
-			transform: translateY(0) scale(1);
-		}
-	}
-
 	@keyframes queueClockTick {
 		to {
 			transform: rotate(360deg);
