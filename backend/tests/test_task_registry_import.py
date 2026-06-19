@@ -23,8 +23,6 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
 _REQUIRED_RUNNERS = (
 	"file.process",
-	"file.content_vectorization",
-	"file.description",
 	"integrations.open_webui.import",
 )
 

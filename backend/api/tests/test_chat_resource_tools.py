@@ -392,7 +392,6 @@ async def test_calendar_write_create_omits_calendar_id_for_default_calendar() ->
 
 @pytest.mark.asyncio
 async def test_chat_get_query_uses_hybrid_search_and_chat_output_names() -> None:
-	now = datetime.now(tz=UTC)
 	chat_id = new_typeid("thread")
 	thread = SimpleNamespace(
 		id=chat_id,
@@ -590,7 +589,6 @@ async def test_project_get_query_uses_hybrid_search() -> None:
 @pytest.mark.asyncio
 async def test_file_get_query_uses_hybrid_search() -> None:
 	app_context = _app_context()
-	now = datetime.now(tz=UTC)
 	file_id = new_typeid("file")
 	file_item = SimpleNamespace(
 		id=file_id,
