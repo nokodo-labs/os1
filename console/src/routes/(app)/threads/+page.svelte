@@ -3,7 +3,6 @@
 	import { page } from '$app/state'
 	import { api, unwrap, type Schemas } from '$lib/api'
 
-	type SearchResultItem = Schemas['SearchResultItem']
 	type Thread = Schemas['Thread']
 
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
@@ -79,7 +78,7 @@
 	let total = $state(0)
 
 	let searchQuery = $state('')
-	let searchResults = $state<SearchResultItem[]>([])
+	let searchResults = $state<Thread[]>([])
 	let isSearching = $state(false)
 	let searchError = $state<string | null>(null)
 	let _searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -391,13 +390,10 @@
 								<div class="min-w-0 flex-1 space-y-1">
 									<div class="flex items-center gap-2">
 										<MessageSquare class="h-4 w-4 text-zinc-500" />
-										<span class="truncate font-medium">{r.title}</span>
+										<span class="truncate font-medium"
+											>{r.title ?? '(untitled)'}</span
+										>
 									</div>
-									{#if r.preview}
-										<div class="line-clamp-1 text-sm text-zinc-400">
-											{r.preview}
-										</div>
-									{/if}
 									<div class="flex items-center gap-2 text-xs text-zinc-400">
 										<span
 											class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
@@ -407,11 +403,6 @@
 										</span>
 									</div>
 								</div>
-								{#if r.score != null}
-									<span class="shrink-0 text-xs text-zinc-500"
-										>{(r.score * 100).toFixed(1)}%</span
-									>
-								{/if}
 							</div>
 						</div>
 					{/each}

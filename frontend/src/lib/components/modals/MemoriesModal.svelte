@@ -71,7 +71,6 @@
 	let deletingAll = $state(false)
 	let hasMore = $state(true)
 	let memoryTotal = $state<number | null>(null)
-	let searchCursor = $state<string | null>(null)
 
 	const currentSort = $derived(sortParsed[sortIndex])
 	const isSearching = $derived(search.trim().length > 0)
@@ -115,15 +114,14 @@
 	}
 
 	async function fetchSearchPage(userId: string, query: string, isReset: boolean): Promise<void> {
-		const cursor = isReset ? null : searchCursor
+		const offset = isReset ? 0 : memories.length
 		const { data } = await api.GET('/v1/memories/search', {
 			params: {
 				query: {
 					q: query,
 					limit: SEARCH_PAGE_SIZE,
-					cursor: cursor ?? undefined,
+					offset,
 					mode: 'full',
-					full_content: true,
 					owner_id: userId,
 				},
 			},
@@ -131,7 +129,6 @@
 		if (!data) return
 		const items = data.items.map(toDisplayMemory)
 		memories = isReset ? items : [...memories, ...items]
-		searchCursor = data.next_cursor ?? null
 		hasMore = data.has_more
 	}
 
@@ -161,7 +158,6 @@
 
 	function reload(): void {
 		memoryTotal = null
-		searchCursor = null
 		void fetchMemories({ reset: true })
 		if (!isSearching) void fetchMemoryTotal()
 	}
@@ -190,7 +186,6 @@
 			memories = []
 			hasMore = true
 			memoryTotal = null
-			searchCursor = null
 			search = ''
 			sortIndex = 0
 			editingId = null

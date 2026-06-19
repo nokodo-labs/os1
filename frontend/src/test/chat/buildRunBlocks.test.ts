@@ -451,7 +451,6 @@ describe('buildRunBlocks', () => {
 			streamingAssistant: {
 				runId,
 				messageId: 'streaming_1',
-				sessionId: 'streaming_1',
 				content: 'searching',
 				timestamp: new Date(at(3)),
 				senderAgentId: agentId,
@@ -496,7 +495,6 @@ describe('buildRunBlocks', () => {
 			streamingAssistant: {
 				runId,
 				messageId: 'streaming_1',
-				sessionId: 'streaming_1',
 				content: '',
 				timestamp: new Date(at(3)),
 				senderAgentId: agentId,
@@ -551,7 +549,6 @@ describe('buildRunBlocks', () => {
 			streamingAssistant: {
 				runId,
 				messageId: 'streaming_1',
-				sessionId: 'streaming_1',
 				content: '',
 				timestamp: new Date(at(4)),
 				senderAgentId: agentId,

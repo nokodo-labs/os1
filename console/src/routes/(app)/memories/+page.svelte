@@ -6,7 +6,6 @@
 	import { api, unwrap, type Schemas } from '$lib/api'
 
 	type Memory = Schemas['Memory']
-	type SearchResultItem = Schemas['SearchResultItem']
 
 	import MemoryDetailsModal from '$lib/components/MemoryDetailsModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
@@ -67,7 +66,7 @@
 	let total = $state(0)
 
 	let searchQuery = $state('')
-	let searchResults = $state<SearchResultItem[]>([])
+	let searchResults = $state<Memory[]>([])
 	let isSearching = $state(false)
 	let searchError = $state<string | null>(null)
 	let _searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -375,14 +374,8 @@
 								class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
 							>
 								<div class="min-w-0 flex-1 space-y-1">
-									<span class="truncate font-mono text-sm font-medium"
-										>{r.title}</span
+									<span class="line-clamp-2 text-sm font-medium">{r.content}</span
 									>
-									{#if r.preview}
-										<div class="line-clamp-1 text-sm text-zinc-400">
-											{r.preview}
-										</div>
-									{/if}
 									<span
 										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5 text-xs text-zinc-400"
 									>
@@ -390,11 +383,6 @@
 										{r.id}
 									</span>
 								</div>
-								{#if r.score != null}
-									<span class="shrink-0 text-xs text-zinc-500"
-										>{(r.score * 100).toFixed(1)}%</span
-									>
-								{/if}
 							</div>
 						</div>
 					{/each}

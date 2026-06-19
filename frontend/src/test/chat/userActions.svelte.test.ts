@@ -70,7 +70,6 @@ function makeContext(overrides: Partial<ChatContext> = {}): ChatContext {
 		streamingLeafId: null,
 		viewingStreamingBranch: true,
 		optimisticUserMessage: null,
-		pendingStreamSessionId: null,
 		queuedSteeringMessages: staged,
 		lastRunInput: '',
 		inputValue: 'steer me',
@@ -93,6 +92,13 @@ function makeContext(overrides: Partial<ChatContext> = {}): ChatContext {
 		consumeSteeringParentOverride() {
 			return null
 		},
+		markMessageEntrance() {},
+		consumeMessageEntrance() {
+			return false
+		},
+		appendStreamingText() {},
+		flushStreamingText() {},
+		markProgrammaticScroll() {},
 		messageSkip: 0,
 		hasMoreMessages: false,
 		isLoadingOlderMessages: false,

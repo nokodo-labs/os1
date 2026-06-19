@@ -880,7 +880,7 @@ export interface paths {
         };
         /**
          * Search Threads
-         * @description search threads with cursor-based pagination.
+         * @description search threads returning ranked thread objects.
          */
         get: operations["search_threads_v1_threads_search_get"];
         put?: never;
@@ -1565,7 +1565,7 @@ export interface paths {
         };
         /**
          * Search Calendars
-         * @description search calendar events with cursor-based pagination.
+         * @description search calendar events returning ranked event objects.
          */
         get: operations["search_calendars_v1_calendars_search_get"];
         put?: never;
@@ -1941,7 +1941,7 @@ export interface paths {
         };
         /**
          * Search Memories
-         * @description hybrid search across memories with cursor pagination.
+         * @description hybrid search across memories, returning relevance-ordered memories.
          *
          *     memories are only searchable via this dedicated endpoint and are NOT
          *     included in the global /search results.
@@ -2180,7 +2180,7 @@ export interface paths {
         };
         /**
          * Search Notes
-         * @description search notes with cursor-based pagination.
+         * @description search notes returning ranked note objects.
          */
         get: operations["search_notes_v1_notes_search_get"];
         put?: never;
@@ -2804,7 +2804,7 @@ export interface paths {
         };
         /**
          * Search Files
-         * @description search files by description and filename autocomplete.
+         * @description search files returning ranked file objects.
          */
         get: operations["search_files_v1_files_search_get"];
         put?: never;
@@ -2849,8 +2849,8 @@ export interface paths {
          * @description manually run one batch of the retroactive file maintenance sweep.
          *
          *     admin-only. this intentionally ignores the scheduled maintenance enabled
-         *     flag so admins can spot-check the sweep (currently description backfill for
-         *     imported files) without leaving the periodic schedule on.
+         *     flag so admins can spot-check the sweep (deferred content vectorization and
+         *     description backfill for files) without leaving the periodic schedule on.
          */
         post: operations["run_file_maintenance_backfill_v1_files_maintenance_backfill_run_post"];
         delete?: never;
@@ -3140,7 +3140,7 @@ export interface paths {
         };
         /**
          * Search Reminder Lists
-         * @description search reminders with cursor-based pagination.
+         * @description search reminders, returning relevance-ordered reminders.
          */
         get: operations["search_reminder_lists_v1_reminder_lists_search_get"];
         put?: never;
@@ -5185,6 +5185,12 @@ export interface components {
              * @enum {string}
              */
             bubbleTailStyle?: "none" | "whatsapp" | "imessage";
+            /**
+             * Bubbleanimation
+             * @description outgoing user message entrance animation
+             * @enum {string}
+             */
+            bubbleAnimation?: "morph" | "flyup" | "none";
         };
         /**
          * AssetContentVectorizationSettings
@@ -6296,18 +6302,6 @@ export interface components {
         };
         /** @enum {string} */
         CommonSortBy: "created_at" | "updated_at";
-        /** CursorPage[SearchResultItem] */
-        CursorPage_SearchResultItem_: {
-            /** Items */
-            items: components["schemas"]["SearchResultItem"][];
-            /** Next Cursor */
-            next_cursor?: string | null;
-            /**
-             * Has More
-             * @default false
-             */
-            has_more: boolean;
-        };
         /**
          * DebugPreferences
          * @description user debug preferences (admin-only section).
@@ -8901,6 +8895,76 @@ export interface components {
              * @description api key for opensearch
              */
             api_key?: string | null;
+        };
+        /** Page[CalendarEvent] */
+        Page_CalendarEvent_: {
+            /** Items */
+            items: components["schemas"]["CalendarEvent"][];
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
+        };
+        /** Page[File] */
+        Page_File_: {
+            /** Items */
+            items: components["schemas"]["File"][];
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
+        };
+        /** Page[Memory] */
+        Page_Memory_: {
+            /** Items */
+            items: components["schemas"]["Memory"][];
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
+        };
+        /** Page[Note] */
+        Page_Note_: {
+            /** Items */
+            items: components["schemas"]["Note"][];
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
+        };
+        /** Page[Project] */
+        Page_Project_: {
+            /** Items */
+            items: components["schemas"]["Project"][];
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
+        };
+        /** Page[Reminder] */
+        Page_Reminder_: {
+            /** Items */
+            items: components["schemas"]["Reminder"][];
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
+        };
+        /** Page[Thread] */
+        Page_Thread_: {
+            /** Items */
+            items: components["schemas"]["Thread"][];
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
         };
         /**
          * PasswordChange
@@ -17026,6 +17090,8 @@ export interface operations {
                 owner_id?: string | null;
                 include_hidden?: boolean;
                 is_archived?: boolean | null;
+                include_deleted?: boolean;
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -17318,6 +17384,8 @@ export interface operations {
                 owner_id?: string | null;
                 include_hidden?: boolean;
                 is_archived?: boolean | null;
+                include_deleted?: boolean;
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -17413,8 +17481,12 @@ export interface operations {
             query: {
                 q: string;
                 limit?: number;
-                cursor?: string | null;
+                offset?: number;
                 mode?: components["schemas"]["SearchMode"];
+                owner_id?: string | null;
+                is_archived?: boolean | null;
+                include_hidden?: boolean;
+                include_deleted?: boolean;
             };
             header?: never;
             path?: never;
@@ -17428,7 +17500,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
+                    "application/json": components["schemas"]["Page_Thread_"];
                 };
             };
             /** @description bad request */
@@ -21575,8 +21647,10 @@ export interface operations {
             query: {
                 q: string;
                 limit?: number;
-                cursor?: string | null;
+                offset?: number;
                 mode?: components["schemas"]["SearchMode"];
+                start_at?: string | null;
+                end_at?: string | null;
             };
             header?: never;
             path?: never;
@@ -21590,7 +21664,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
+                    "application/json": components["schemas"]["Page_CalendarEvent_"];
                 };
             };
             /** @description bad request */
@@ -24089,9 +24163,8 @@ export interface operations {
             query: {
                 q: string;
                 limit?: number;
-                cursor?: string | null;
+                offset?: number;
                 mode?: components["schemas"]["SearchMode"];
-                full_content?: boolean;
                 owner_id?: string | null;
             };
             header?: never;
@@ -24110,7 +24183,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
+                    "application/json": components["schemas"]["Page_Memory_"];
                 };
             };
             /** @description bad request */
@@ -25645,6 +25718,7 @@ export interface operations {
                 sort_dir?: "asc" | "desc";
                 owner_id?: string | null;
                 include_deleted?: boolean;
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -25842,6 +25916,7 @@ export interface operations {
             query?: {
                 owner_id?: string | null;
                 include_deleted?: boolean;
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -25941,14 +26016,20 @@ export interface operations {
             query: {
                 q: string;
                 limit?: number;
-                cursor?: string | null;
+                offset?: number;
                 mode?: components["schemas"]["SearchMode"];
+                owner_id?: string | null;
+                include_deleted?: boolean;
             };
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": string[] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -25956,7 +26037,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
+                    "application/json": components["schemas"]["Page_Note_"];
                 };
             };
             /** @description bad request */
@@ -28742,6 +28823,7 @@ export interface operations {
                 sort_by?: components["schemas"]["CommonSortBy"] | "name";
                 sort_dir?: "asc" | "desc";
                 owner_id?: string | null;
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -28934,6 +29016,7 @@ export interface operations {
         parameters: {
             query?: {
                 owner_id?: string | null;
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -29029,8 +29112,9 @@ export interface operations {
             query: {
                 q: string;
                 limit?: number;
-                cursor?: string | null;
+                offset?: number;
                 mode?: components["schemas"]["SearchMode"];
+                owner_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -29044,7 +29128,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
+                    "application/json": components["schemas"]["Page_Project_"];
                 };
             };
             /** @description bad request */
@@ -30191,6 +30275,7 @@ export interface operations {
                 source?: components["schemas"]["FileSource"] | null;
                 category?: components["schemas"]["FileCategoryFilter"] | null;
                 include_deleted?: boolean;
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -30485,6 +30570,7 @@ export interface operations {
                 source?: components["schemas"]["FileSource"] | null;
                 category?: components["schemas"]["FileCategoryFilter"] | null;
                 include_deleted?: boolean;
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -30580,8 +30666,12 @@ export interface operations {
             query: {
                 q: string;
                 limit?: number;
-                cursor?: string | null;
+                offset?: number;
                 mode?: components["schemas"]["SearchMode"];
+                owner_id?: string | null;
+                project_id?: string | null;
+                source?: components["schemas"]["FileSource"] | null;
+                include_deleted?: boolean;
             };
             header?: never;
             path?: never;
@@ -30595,7 +30685,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
+                    "application/json": components["schemas"]["Page_File_"];
                 };
             };
             /** @description bad request */
@@ -32409,6 +32499,7 @@ export interface operations {
                 sort_by?: "position" | "name" | "created_at" | "updated_at";
                 sort_dir?: "asc" | "desc";
                 owner_id?: string | null;
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -32601,6 +32692,7 @@ export interface operations {
         parameters: {
             query?: {
                 owner_id?: string | null;
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -32696,7 +32788,7 @@ export interface operations {
             query: {
                 q: string;
                 limit?: number;
-                cursor?: string | null;
+                offset?: number;
                 mode?: components["schemas"]["SearchMode"];
                 owner_id?: string | null;
                 list_id?: string | null;
@@ -32718,7 +32810,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CursorPage_SearchResultItem_"];
+                    "application/json": components["schemas"]["Page_Reminder_"];
                 };
             };
             /** @description bad request */

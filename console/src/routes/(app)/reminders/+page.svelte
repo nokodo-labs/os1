@@ -4,7 +4,7 @@
 	import { api, unwrap, type Schemas } from '$lib/api'
 
 	type ReminderListWithCounts = Schemas['ReminderListWithCounts']
-	type SearchResultItem = Schemas['SearchResultItem']
+	type Reminder = Schemas['Reminder']
 
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ReminderListDetailsModal from '$lib/components/ReminderListDetailsModal.svelte'
@@ -60,7 +60,7 @@
 	let total = $state(0)
 	let listRequestId = 0
 
-	let searchResults = $state<SearchResultItem[]>([])
+	let searchResults = $state<Reminder[]>([])
 	let isSearching = $state(false)
 	let searchError = $state<string | null>(null)
 	let _searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -359,9 +359,9 @@
 										<Circle class="h-4 w-4 text-zinc-500" />
 										<span class="truncate font-medium">{r.title}</span>
 									</div>
-									{#if r.preview}
+									{#if r.description}
 										<div class="line-clamp-1 text-sm text-zinc-400">
-											{r.preview}
+											{r.description}
 										</div>
 									{/if}
 									<span
@@ -371,11 +371,6 @@
 										{r.id}
 									</span>
 								</div>
-								{#if r.score != null}
-									<span class="shrink-0 text-xs text-zinc-500"
-										>{(r.score * 100).toFixed(1)}%</span
-									>
-								{/if}
 							</div>
 						</div>
 					{/each}
