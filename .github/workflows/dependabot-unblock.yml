@@ -16,6 +16,20 @@ on:
       console_passed:
         type: boolean
         required: true
+  workflow_dispatch:
+    inputs:
+      backend_passed:
+        description: consider backend dependabot PRs
+        type: boolean
+        default: true
+      frontend_passed:
+        description: consider frontend dependabot PRs
+        type: boolean
+        default: true
+      console_passed:
+        description: consider console dependabot PRs
+        type: boolean
+        default: true
 
 permissions:
   actions: read
