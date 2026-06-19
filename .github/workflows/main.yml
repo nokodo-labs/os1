@@ -304,3 +304,17 @@ jobs:
     with:
       release_version: ${{ needs.release.outputs.version }}
       component_tags: ${{ needs.release.outputs.component_tags }}
+
+  dependabot-unblock:
+    name: unblock stuck dependabot PRs
+    needs: [backend-ci, frontend-ci, console-ci]
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'branch' && github.ref_name == 'dev' }}
+    uses: ./.github/workflows/dependabot-unblock.yml
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    with:
+      backend_passed: ${{ needs.backend-ci.result == 'success' }}
+      frontend_passed: ${{ needs.frontend-ci.result == 'success' }}
+      console_passed: ${{ needs.console-ci.result == 'success' }}

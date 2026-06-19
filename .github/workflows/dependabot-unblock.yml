@@ -1,0 +1,110 @@
+name: unblock stuck dependabot PRs
+
+# called by the main pipeline after component CI runs. for each component that
+# just passed on dev, dev's base is green again, so any open dependabot PR for
+# that component still stuck on a failed run is asked to rebase. components map
+# to dependabot labels backend/frontend/console (see .github/dependabot.yml).
+on:
+  workflow_call:
+    inputs:
+      backend_passed:
+        type: boolean
+        required: true
+      frontend_passed:
+        type: boolean
+        required: true
+      console_passed:
+        type: boolean
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
+jobs:
+  unblock:
+    name: rebase stuck dependabot PRs
+    runs-on: ubuntu-latest
+    if: ${{ inputs.backend_passed || inputs.frontend_passed || inputs.console_passed }}
+    steps:
+      - name: rebase stuck dependabot PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BACKEND_PASSED: ${{ inputs.backend_passed }}
+          FRONTEND_PASSED: ${{ inputs.frontend_passed }}
+          CONSOLE_PASSED: ${{ inputs.console_passed }}
+        run: |
+          set -euo pipefail
+
+          branch="dev"
+
+          # component dependabot label => whether its CI just passed
+          declare -A passed=(
+            [backend]="${BACKEND_PASSED}"
+            [frontend]="${FRONTEND_PASSED}"
+            [console]="${CONSOLE_PASSED}"
+          )
+
+          # main pipeline workflow id, to read each PR's latest run conclusion
+          workflow_id=$(gh api "repos/${REPO}/actions/runs/${GITHUB_RUN_ID}" --jq '.workflow_id')
+
+          # open dependabot PRs targeting dev
+          prs=$(gh api "repos/${REPO}/pulls?state=open&base=${branch}&per_page=100" \
+            --jq '.[] | select(.user.login == "dependabot[bot]") | {number, head_sha: .head.sha, body: (.body // ""), labels: [.labels[].name]}' -c || true)
+
+          if [ -z "${prs}" ]; then
+            echo "no open dependabot PRs targeting ${branch}"
+            exit 0
+          fi
+
+          while IFS= read -r pr; do
+            [ -z "${pr}" ] && continue
+            number=$(jq -r '.number' <<<"${pr}")
+            head_sha=$(jq -r '.head_sha' <<<"${pr}")
+
+            # match a single component label whose CI just passed
+            component=""
+            for label in backend frontend console; do
+              if jq -e --arg l "${label}" '.labels | index($l)' <<<"${pr}" >/dev/null && [ "${passed[${label}]}" = "true" ]; then
+                component="${label}"
+                break
+              fi
+            done
+            if [ -z "${component}" ]; then
+              echo "PR #${number}: no passing-component label, skipping"
+              continue
+            fi
+
+            # only act on PRs whose latest pipeline run actually failed
+            conclusion=$(gh api "repos/${REPO}/actions/workflows/${workflow_id}/runs?head_sha=${head_sha}&per_page=1" \
+              --jq '.workflow_runs[0].conclusion // ""' || true)
+            if [ "${conclusion}" != "failure" ]; then
+              echo "PR #${number} (${component}): latest run conclusion='${conclusion}', skipping"
+              continue
+            fi
+
+            # dedup: skip if dependabot is already rebasing. while a rebase is
+            # in flight it injects a "Dependabot is rebasing this PR" header into
+            # the PR body, so a fresh request would be redundant.
+            body=$(jq -r '.body' <<<"${pr}")
+            if printf '%s' "${body}" | grep -qiF "dependabot is rebasing this pr"; then
+              echo "PR #${number} (${component}): rebase already in progress, skipping"
+              continue
+            fi
+
+            # dedup: skip if a rebase was already requested since the head commit
+            head_date=$(gh api "repos/${REPO}/commits/${head_sha}" --jq '.commit.committer.date' || true)
+            comments=$(gh api "repos/${REPO}/issues/${number}/comments?per_page=100" || echo '[]')
+            already=$(jq --arg since "${head_date}" \
+              '[.[] | select((.body // "") | test("@dependabot rebase")) | select(.created_at >= $since)] | length' \
+              <<<"${comments}" 2>/dev/null || echo 0)
+            if [ "${already}" != "0" ]; then
+              echo "PR #${number} (${component}): rebase already requested since last commit, skipping"
+              continue
+            fi
+
+            echo "PR #${number} (${component}): requesting @dependabot rebase"
+            gh pr comment "${number}" --repo "${REPO}" --body "@dependabot rebase"
+          done <<< "${prs}"
