@@ -61,12 +61,9 @@ jobs:
             [console]="${CONSOLE_PASSED}"
           )
 
-          # main pipeline workflow id, to read each PR's latest run conclusion
-          workflow_id=$(gh api "repos/${REPO}/actions/runs/${GITHUB_RUN_ID}" --jq '.workflow_id')
-
-          # open dependabot PRs targeting dev
+          # open dependabot PRs targeting dev (gh --jq emits one compact object per line)
           prs=$(gh api "repos/${REPO}/pulls?state=open&base=${branch}&per_page=100" \
-            --jq '.[] | select(.user.login == "dependabot[bot]") | {number, head_sha: .head.sha, body: (.body // ""), labels: [.labels[].name]}' -c || true)
+            --jq '.[] | select(.user.login == "dependabot[bot]") | {number, head_sha: .head.sha, body: (.body // ""), labels: [.labels[].name]}' || true)
 
           if [ -z "${prs}" ]; then
             echo "no open dependabot PRs targeting ${branch}"
@@ -91,8 +88,10 @@ jobs:
               continue
             fi
 
-            # only act on PRs whose latest pipeline run actually failed
-            conclusion=$(gh api "repos/${REPO}/actions/workflows/${workflow_id}/runs?head_sha=${head_sha}&per_page=1" \
+            # only act on PRs whose latest main pipeline run actually failed.
+            # reference main.yml directly so this holds under both workflow_call
+            # (shares the caller's run) and manual workflow_dispatch.
+            conclusion=$(gh api "repos/${REPO}/actions/workflows/main.yml/runs?head_sha=${head_sha}&per_page=1" \
               --jq '.workflow_runs[0].conclusion // ""' || true)
             if [ "${conclusion}" != "failure" ]; then
               echo "PR #${number} (${component}): latest run conclusion='${conclusion}', skipping"
