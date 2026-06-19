@@ -42,9 +42,19 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ inputs.backend_passed || inputs.frontend_passed || inputs.console_passed }}
     steps:
+      # the default GITHUB_TOKEN (github-actions[bot]) lacks push access, so
+      # dependabot rejects its commands ("only users with push access...").
+      # mint a token for the nokodo ops app, which has it.
+      - name: mint app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.NOKODO_OPS_APP_ID }}
+          private-key: ${{ secrets.NOKODO_OPS_PRIVATE_KEY }}
+
       - name: rebase stuck dependabot PRs
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
           BACKEND_PASSED: ${{ inputs.backend_passed }}
           FRONTEND_PASSED: ${{ inputs.frontend_passed }}
