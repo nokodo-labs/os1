@@ -42,19 +42,12 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ inputs.backend_passed || inputs.frontend_passed || inputs.console_passed }}
     steps:
-      # the default GITHUB_TOKEN (github-actions[bot]) lacks push access, so
-      # dependabot rejects its commands ("only users with push access...").
-      # mint a token for the nokodo ops app, which has it.
-      - name: mint app token
-        id: app-token
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.NOKODO_OPS_APP_ID }}
-          private-key: ${{ secrets.NOKODO_OPS_PRIVATE_KEY }}
-
+      # dependabot only honors commands from a real user with push access:
+      # both GITHUB_TOKEN and GitHub App tokens are rejected ("only users with
+      # push access..."). see dependabot-core#9147. so use a user PAT.
       - name: rebase stuck dependabot PRs
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.OS1_OPS_PAT }}
           REPO: ${{ github.repository }}
           BACKEND_PASSED: ${{ inputs.backend_passed }}
           FRONTEND_PASSED: ${{ inputs.frontend_passed }}
@@ -118,13 +111,25 @@ jobs:
             fi
 
             # dedup: skip if a rebase was already requested since the head commit
+            # AND dependabot has not since rejected it. a request that drew a
+            # "only users with push access" rejection never took effect, so it
+            # must not block a fresh, now-authorized attempt.
             head_date=$(gh api "repos/${REPO}/commits/${head_sha}" --jq '.commit.committer.date' || true)
             comments=$(gh api "repos/${REPO}/issues/${number}/comments?per_page=100" || echo '[]')
-            already=$(jq --arg since "${head_date}" \
-              '[.[] | select((.body // "") | test("@dependabot rebase")) | select(.created_at >= $since)] | length' \
-              <<<"${comments}" 2>/dev/null || echo 0)
-            if [ "${already}" != "0" ]; then
-              echo "PR #${number} (${component}): rebase already requested since last commit, skipping"
+            pending=$(jq --arg since "${head_date}" '
+              ([.[] | select((.body // "") | test("@dependabot rebase")) | select(.created_at >= $since) | .created_at] | sort) as $reqs
+              | if ($reqs | length) == 0 then 0
+                else
+                  ($reqs | last) as $last
+                  | ([.[]
+                      | select((.user.login // "") == "dependabot[bot]")
+                      | select((.body // "") | test("only users with push access"; "i"))
+                      | select(.created_at >= $last)] | length) as $rejected
+                  | if $rejected > 0 then 0 else 1 end
+                end
+            ' <<<"${comments}" 2>/dev/null || echo 0)
+            if [ "${pending}" != "0" ]; then
+              echo "PR #${number} (${component}): rebase already requested (not rejected) since last commit, skipping"
               continue
             fi
 
