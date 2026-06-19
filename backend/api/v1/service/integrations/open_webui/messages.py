@@ -50,6 +50,7 @@ def _file_content_part(
 	filename: str | None,
 	media_type: str | None,
 	owui_file_id: str | None,
+	checksum_sha256: str | None = None,
 ) -> dict[str, Any] | None:
 	if file_id is None and not url:
 		return None
@@ -59,6 +60,8 @@ def _file_content_part(
 	}
 	if file_id is not None:
 		metadata["file_id"] = str(file_id)
+	if checksum_sha256 is not None:
+		metadata["checksum_sha256"] = checksum_sha256
 	if owui_file_id is not None:
 		metadata[OWUI_METADATA_KEY] = {"file_id": owui_file_id}
 	part: dict[str, Any] = {

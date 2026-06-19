@@ -42,9 +42,6 @@ class ImportSummary:
 	notes_imported: int = 0
 	notes_skipped: int = 0
 	errors: list[str] | None = None
-	# files created during this run that still need async processing; the
-	# import enqueues them only after its transaction has committed.
-	processing_file_ids: list[TypeID] = field(default_factory=list)
 	# resources created during this run that still need vectorization; the
 	# import vectorizes them only after its transaction has committed.
 	memory_ids: list[TypeID] = field(default_factory=list)

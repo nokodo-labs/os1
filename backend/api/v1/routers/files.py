@@ -168,8 +168,8 @@ async def run_file_maintenance_backfill(
 	"""manually run one batch of the retroactive file maintenance sweep.
 
 	admin-only. this intentionally ignores the scheduled maintenance enabled
-	flag so admins can spot-check the sweep (currently description backfill for
-	imported files) without leaving the periodic schedule on.
+	flag so admins can spot-check the sweep (deferred content vectorization and
+	description backfill for files) without leaving the periodic schedule on.
 	"""
 	require_admin(principal)
 	return await run_file_maintenance_backfill_sweep(

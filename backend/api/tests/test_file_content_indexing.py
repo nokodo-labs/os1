@@ -15,7 +15,9 @@ from api.settings import settings
 from api.storage.base import FileInfo, MimeType, StorageBackend
 from api.v1.service.chat.models import TaskChatModel
 from api.v1.service.files import content_vectorization as content_vectorization_service
+from api.v1.service.files import processing as processing_service
 from api.v1.service.files.content_vectorization import (
+	FileContentChunkBatch,
 	chunk_loaded_text,
 	load_file_content_chunks,
 	load_sdk_file_text,
@@ -43,7 +45,7 @@ from nokodo_ai.messages import (
 	UserMessage,
 )
 from nokodo_ai.tool import ToolDefinition
-from nokodo_ai.utils.typeid import new_typeid
+from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 class _ExtractionChatAdapter(BaseChatAdapter):
@@ -388,6 +390,7 @@ def test_file_search_groups_content_hits_by_parent_file_id() -> None:
 	matched_payload = ResourceHitGroup(resource_id="x", hits=[hits[0]]).matched_chunks(
 		1, 9999
 	)[0]
+	assert isinstance(matched_payload, dict)
 
 	assert list(groups) == [file_id]
 	assert len(groups[file_id].hits) == 2
@@ -997,3 +1000,129 @@ async def test_filter_unvectorized_files_keeps_incomplete_chunk_set(
 			[file], session
 		)
 	assert [str(f.id) for f in pending] == [str(file.id)]
+
+
+# process_file orchestration
+
+
+def _patch_process_file_collaborators(
+	monkeypatch,
+	file: File,
+	*,
+	vectorize_calls: list[bool],
+	load_calls: list[str],
+	described: list[str],
+) -> None:
+	async def _load_file(file_id: object, session: object) -> File:
+		_ = (file_id, session)
+		return file
+
+	async def _vectorize(
+		f: File,
+		session: object,
+		content_chunks: object = None,
+		force: bool = False,
+	) -> FileContentChunkBatch:
+		_ = (f, session, content_chunks)
+		vectorize_calls.append(force)
+		return FileContentChunkBatch(
+			chunks=[],
+			text_loadable=False,
+			loader="plain",
+			chunker="recursive",
+			skipped_reason="already_current",
+		)
+
+	async def _load_chunks(f: File, session: object = None) -> FileContentChunkBatch:
+		_ = session
+		load_calls.append(str(f.id))
+		return FileContentChunkBatch(
+			chunks=[ContentChunk(index=0, total=1, text="body text")],
+			text_loadable=True,
+			loader="plain",
+			chunker="recursive",
+			content="body text",
+		)
+
+	async def _update_description(
+		f: File,
+		session: object,
+		content_chunks: object = None,
+		full_content: str | None = None,
+		**kwargs: object,
+	) -> str:
+		_ = (session, content_chunks, kwargs)
+		described.append(full_content or "")
+		f.description = "generated"
+		return "generated"
+
+	async def _noop(*args: object, **kwargs: object) -> None:
+		_ = (args, kwargs)
+		return None
+
+	monkeypatch.setattr(processing_service, "_load_file", _load_file)
+	monkeypatch.setattr(processing_service, "vectorize_file_content", _vectorize)
+	monkeypatch.setattr(processing_service, "load_file_content_chunks", _load_chunks)
+	monkeypatch.setattr(
+		processing_service, "update_file_description", _update_description
+	)
+	monkeypatch.setattr(processing_service, "replace_file_description_vectors", _noop)
+	monkeypatch.setattr(processing_service, "emit_file_event", _noop)
+	monkeypatch.setattr(processing_service, "invalidate_resource_payload_cache", _noop)
+
+
+async def test_process_file_reloads_chunks_when_description_owed(
+	db_session: AsyncSession,
+	monkeypatch,
+) -> None:
+	"""when content vectors are already current and only the description is
+	owed, process_file reloads chunks to build it rather than force-rebuilding
+	(re-embedding + re-upserting) vectors that already match."""
+	file = _file_record("doc.txt", "text/plain", b"body")
+	file.description = None
+	vectorize_calls: list[bool] = []
+	load_calls: list[str] = []
+	described: list[str] = []
+	_patch_process_file_collaborators(
+		monkeypatch,
+		file,
+		vectorize_calls=vectorize_calls,
+		load_calls=load_calls,
+		described=described,
+	)
+
+	result = await processing_service.process_file(TypeID(file.id), db_session)
+
+	# vectorization ran once without force; the description path reloaded chunks.
+	assert vectorize_calls == [False]
+	assert load_calls == [str(file.id)]
+	assert described == ["body text"]
+	assert result["content_chunks"] == 1
+	assert result["skipped_reason"] is None
+
+
+async def test_process_file_skips_description_work_when_present(
+	db_session: AsyncSession,
+	monkeypatch,
+) -> None:
+	"""a file that already has a description neither reloads chunks nor invokes
+	description generation."""
+	file = _file_record("doc.txt", "text/plain", b"body")
+	file.description = "existing"
+	vectorize_calls: list[bool] = []
+	load_calls: list[str] = []
+	described: list[str] = []
+	_patch_process_file_collaborators(
+		monkeypatch,
+		file,
+		vectorize_calls=vectorize_calls,
+		load_calls=load_calls,
+		described=described,
+	)
+
+	result = await processing_service.process_file(TypeID(file.id), db_session)
+
+	assert vectorize_calls == [False]
+	assert load_calls == []
+	assert described == []
+	assert result["skipped_reason"] == "already_current"

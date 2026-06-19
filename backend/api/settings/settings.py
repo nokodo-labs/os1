@@ -2094,38 +2094,48 @@ class ThreadMaintenanceSettings(BaseModel):
 class FileMaintenanceSettings(BaseModel):
 	"""knobs for the optional retroactive file maintenance sweep.
 
-	by default this is fully disabled. when enabled, a periodic background
-	task scans imported files for deferred upkeep and dispatches work in
-	bounded batches. the first maintenance job is generating the missing
-	description for imported files: bulk imports defer descriptions so a
-	large import never fans out hundreds of chat model calls at once and
-	trips provider rate limits, leaving files without one. each dispatched
-	task spends model tokens, so administrators must opt in explicitly and
-	set their own batch bounds. additional file upkeep can be folded into
-	this sweep later without renaming it.
+	a periodic background task scans files for deferred upkeep and dispatches
+	one unified `file.process` task per due file in bounded batches. bulk
+	imports defer processing so a large import never fans out hundreds of
+	embedding and chat model calls at once and trips provider rate limits. the
+	sweep also reaps file tasks that died mid-run so their files stop being
+	skipped by the active-task guard.
 	"""
 
 	enabled: bool = settings_field(
 		default=False,
 		description=(
 			"enable the periodic file maintenance sweep. when False, the "
-			"schedule is removed and imported files keep no description."
+			"schedule is removed."
 		),
 	)
 	cron: str = settings_field(
-		default="0 4 * * *",
+		default="0 */8 * * *",
 		description=(
 			"cron expression for the periodic sweep, evaluated in UTC. "
-			"defaults to once per day at 04:00 UTC."
+			"defaults to every 8 hours."
 		),
 	)
 	batch_size: int = settings_field(
-		default=10,
+		default=8,
 		ge=1,
 		description=(
 			"maximum number of files dispatched per sweep run. each file "
-			"results in one maintenance task and one model spend; keep this "
-			"modest so the chat model provider is never flooded."
+			"results in one task and one unit of provider spend; keep this "
+			"modest so providers are never flooded."
+		),
+	)
+	runner_timeout_seconds: int = settings_field(
+		default=30 * 60,
+		ge=1,
+		description="seconds before a file processing task runner times out.",
+	)
+	stale_task_cleanup_after_minutes: int = settings_field(
+		default=45,
+		ge=1,
+		description=(
+			"minutes of inactivity before a file processing task is treated as "
+			"stale and failed so its file can be redispatched."
 		),
 	)
 
@@ -2154,9 +2164,9 @@ class TasksSettings(BaseModel):
 		default_factory=FileMaintenanceSettings,
 		description=(
 			"retroactive file maintenance settings. off by default; controls "
-			"an optional periodic sweep that fills deferred upkeep (currently "
-			"descriptions) for imported files in paced batches so bulk imports "
-			"never flood the chat model."
+			"an optional periodic sweep that dispatches deferred processing "
+			"(content vectorization and description) for imported files in "
+			"paced batches so bulk imports never flood the providers."
 		),
 	)
 

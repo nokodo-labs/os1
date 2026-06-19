@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.database.main import async_session_local, safe_rollback
-from api.models.file import File
 from api.models.memory import Memory
 from api.models.note import Note
 from api.models.project import Project
@@ -23,8 +22,6 @@ from api.permissions import ActionPermission
 from api.settings import OpenWebUIDeployment, settings
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
-from api.v1.service.files.content_vectorization import filter_unvectorized_files
-from api.v1.service.files.processing import start_file_content_vectorization_task
 from api.v1.service.integrations.open_webui.chats import (
 	ModelAgentResolver,
 	_chat_folder_id,
@@ -84,7 +81,6 @@ def _merge_import_summary(target: ImportSummary, source: ImportSummary) -> None:
 	target.memories_skipped += source.memories_skipped
 	target.notes_imported += source.notes_imported
 	target.notes_skipped += source.notes_skipped
-	target.processing_file_ids.extend(source.processing_file_ids)
 	target.memory_ids.extend(source.memory_ids)
 	target.note_ids.extend(source.note_ids)
 	target.thread_ids.extend(source.thread_ids)
@@ -93,17 +89,44 @@ def _merge_import_summary(target: ImportSummary, source: ImportSummary) -> None:
 
 
 class _ProgressReporter:
-	"""serialize progress callbacks so concurrent workers never overlap."""
+	"""drive monotonic, throttled chat-import progress under fan-out.
 
-	def __init__(self, callback: ImportProgressCallback | None) -> None:
+	workers finish out of order, so progress is driven by a completion counter
+	(never the assigned chat index), clamped non-decreasing, and only emitted
+	when the integer percentage advances so a large import cannot spam the
+	callback.
+	"""
+
+	def __init__(
+		self,
+		callback: ImportProgressCallback | None,
+		total: int,
+		base: int,
+		span: int,
+	) -> None:
 		self._callback = callback
 		self._lock = asyncio.Lock()
+		self._total = max(total, 1)
+		self._base = base
+		self._span = span
+		self._completed = 0
+		self._last_progress = -1
 
-	async def report(self, progress: int, stage: str) -> None:
+	async def advance(self) -> None:
+		"""mark one chat done and emit throttled, monotonic progress."""
 		if self._callback is None:
 			return
 		async with self._lock:
-			await self._callback(progress, stage)
+			self._completed += 1
+			progress = self._base + int(self._completed / self._total * self._span)
+			progress = min(progress, self._base + self._span)
+			if progress <= self._last_progress and self._completed < self._total:
+				return
+			self._last_progress = progress
+			await self._callback(
+				progress,
+				f"importing chats {self._completed}/{self._total}",
+			)
 
 
 class _FileLockRegistry:
@@ -178,57 +201,6 @@ def _require_import_permissions(
 		require_permission(principal, ActionPermission.MEMORIES_CREATE.value)
 	if include_notes:
 		require_permission(principal, ActionPermission.NOTES_CREATE.value)
-
-
-async def _enqueue_imported_file_processing(
-	session: AsyncSession,
-	principal: Principal,
-	summary: ImportSummary,
-) -> None:
-	"""enqueue content vectorization for files created during this import.
-
-	runs after the import transaction has committed so each task sees a
-	durably stored file. files whose nested transaction rolled back are
-	skipped. failures are logged, never raised - a missed processing
-	enqueue must not fail an otherwise successful import.
-
-	only content vectorization is enqueued here. LLM description generation
-	is deliberately NOT triggered inline: a large import creates hundreds of
-	files at once, and fanning out a description task per file stampedes the
-	chat model provider into rate limits. descriptions are instead filled in
-	gradually by the throttled file description backfill sweep.
-	"""
-	file_ids = summary.processing_file_ids
-	if not file_ids:
-		return
-	files = list(
-		(
-			await session.scalars(
-				select(File).where(
-					File.id.in_([str(file_id) for file_id in file_ids]),
-					File.deleted_at.is_(None),
-				)
-			)
-		).all()
-	)
-	if not files:
-		return
-	# skip files whose content vectors already match the current pipeline
-	# inputs so a re-import only fills gaps left by a prior run.
-	try:
-		pending = await filter_unvectorized_files(files, session)
-	except Exception:
-		logger.exception("failed to check imported file vectorization state")
-		pending = files
-	for file in pending:
-		try:
-			await start_file_content_vectorization_task(
-				session, principal, TypeID(file.id)
-			)
-		except Exception:
-			logger.exception(
-				"failed to enqueue processing for imported file %s", file.id
-			)
 
 
 async def _vectorize_imported_resources(
@@ -309,8 +281,6 @@ async def _pending_note_ids(
 async def _import_one_chat_worker(
 	chat: dict[str, Any],
 	chat_id: str,
-	index: int,
-	total: int,
 	owner_id: TypeID,
 	deployment: OpenWebUIDeployment,
 	deployment_origin: str,
@@ -327,10 +297,6 @@ async def _import_one_chat_worker(
 	this chat's commit, so cross-chat file dedup stays correct under fan-out.
 	"""
 	local = ImportSummary(deployment_origin=deployment_origin)
-	await progress.report(
-		40 + int((index - 1) / total * 35),
-		f"importing chat {index}/{total}",
-	)
 	file_ids = _chat_owui_file_ids(chat)
 	# resolve the pinned project before opening this worker session so a worker
 	# never holds two pool connections at once (its own session plus the cache's
@@ -375,12 +341,12 @@ async def _import_one_chat_worker(
 			logger.exception("failed to import Open WebUI chat")
 			local.chats_skipped += 1
 			local.add_error(f"chat {chat_id} failed: {type(exc).__name__}")
+	await progress.advance()
 	return local
 
 
 async def _import_chat_items(
-	chat_items: list[tuple[int, dict[str, Any], str]],
-	total_chats: int,
+	chat_items: list[tuple[dict[str, Any], str]],
 	owner_id: TypeID,
 	deployment: OpenWebUIDeployment,
 	deployment_origin: str,
@@ -401,8 +367,6 @@ async def _import_chat_items(
 			_import_one_chat_worker(
 				chat,
 				chat_id,
-				index,
-				total_chats,
 				owner_id=owner_id,
 				deployment=deployment,
 				deployment_origin=deployment_origin,
@@ -413,7 +377,7 @@ async def _import_chat_items(
 				file_locks=file_locks,
 				progress=progress,
 			)
-			for index, chat, chat_id in chat_items
+			for chat, chat_id in chat_items
 		),
 		limit=limit,
 	)
@@ -423,7 +387,6 @@ async def _import_chat_items(
 
 async def _import_chats_streaming(
 	chat_list: list[Any],
-	total_chats: int,
 	owner_id: TypeID,
 	deployment: OpenWebUIDeployment,
 	deployment_origin: str,
@@ -447,20 +410,20 @@ async def _import_chats_streaming(
 	write pool (sized by ``write_concurrency``) drains it, so both stages stay
 	saturated for the whole import.
 	"""
-	refs: list[tuple[int, dict[str, Any], str]] = []
-	for offset, chat_ref in enumerate(chat_list):
+	refs: list[tuple[dict[str, Any], str]] = []
+	for chat_ref in chat_list:
 		chat_id = _first_str(chat_ref, "id", "chat_id")
 		if chat_id is None:
 			summary.chats_skipped += 1
 			summary.add_error("chat skipped: missing Open WebUI id")
 			continue
-		refs.append((offset + 1, chat_ref, chat_id))
+		refs.append((chat_ref, chat_id))
 	if not refs:
 		return
 
 	# a bounded queue applies backpressure so the fetch pool never races far
 	# ahead of the slower write pool and buffers the whole export in memory.
-	queue: asyncio.Queue[tuple[int, dict[str, Any], str] | None] = asyncio.Queue(
+	queue: asyncio.Queue[tuple[dict[str, Any], str] | None] = asyncio.Queue(
 		maxsize=max(fetch_concurrency, write_concurrency) * 2
 	)
 	merge_lock = asyncio.Lock()
@@ -475,7 +438,7 @@ async def _import_chats_streaming(
 		local.add_error(detail)
 		await _merge(local)
 
-	async def _fetch_one(index: int, chat_ref: dict[str, Any], chat_id: str) -> None:
+	async def _fetch_one(chat_ref: dict[str, Any], chat_id: str) -> None:
 		try:
 			chat_body = await client.get_chat(chat_id)
 		except OpenWebUIAuthError as exc:
@@ -491,12 +454,12 @@ async def _import_chats_streaming(
 		chat = {**chat_ref, **chat_body}
 		if chat_ref.get("archived") is True:
 			chat["archived"] = True
-		await queue.put((index, chat, chat_id))
+		await queue.put((chat, chat_id))
 
 	async def _produce() -> None:
 		try:
 			await gather_bounded(
-				(_fetch_one(index, ref, cid) for index, ref, cid in refs),
+				(_fetch_one(ref, cid) for ref, cid in refs),
 				limit=fetch_concurrency,
 			)
 		finally:
@@ -510,12 +473,10 @@ async def _import_chats_streaming(
 			item = await queue.get()
 			if item is None:
 				return
-			index, chat, chat_id = item
+			chat, chat_id = item
 			local = await _import_one_chat_worker(
 				chat,
 				chat_id,
-				index,
-				total_chats,
 				owner_id=owner_id,
 				deployment=deployment,
 				deployment_origin=deployment_origin,
@@ -683,7 +644,7 @@ async def import_from_open_webui(
 
 			pinned_cache = _PinnedProjectCache(owner_id=owner_id, deployment=deployment)
 			file_locks = _FileLockRegistry()
-			chat_progress = _ProgressReporter(progress_callback)
+			chat_progress = _ProgressReporter(progress_callback, len(chat_list), 40, 35)
 			folder_project_ids = {
 				folder_id: TypeID(project.id)
 				for folder_id, project in projects_by_folder_id.items()
@@ -693,14 +654,14 @@ async def import_from_open_webui(
 			await session.commit()
 
 			if chat_import_mode == "bulk":
-				bulk_items: list[tuple[int, dict[str, Any], str]] = []
-				for index, chat in enumerate(chat_list, start=1):
+				bulk_items: list[tuple[dict[str, Any], str]] = []
+				for chat in chat_list:
 					chat_id = _chat_id(chat)
 					if chat_id is None:
 						summary.chats_skipped += 1
 						summary.add_error("chat skipped: missing Open WebUI id")
 						continue
-					bulk_items.append((index, chat, chat_id))
+					bulk_items.append((chat, chat_id))
 				total_bulk = len(bulk_items)
 				await _report_progress(
 					progress_callback, 25, f"importing {total_bulk} chats"
@@ -709,7 +670,6 @@ async def import_from_open_webui(
 					await model_resolver.prewarm()
 				await _import_chat_items(
 					bulk_items,
-					total_chats=total_bulk,
 					owner_id=owner_id,
 					deployment=deployment,
 					deployment_origin=origin,
@@ -732,7 +692,6 @@ async def import_from_open_webui(
 				fetch_concurrency = settings.integrations.open_webui.fetch_concurrency
 				await _import_chats_streaming(
 					chat_list,
-					total_chats=total_chats,
 					owner_id=owner_id,
 					deployment=deployment,
 					deployment_origin=origin,
@@ -787,7 +746,6 @@ async def import_from_open_webui(
 			await _report_progress(progress_callback, 88, "all resources imported")
 
 	await session.commit()
-	await _enqueue_imported_file_processing(session, principal, summary)
 	await _report_progress(progress_callback, 90, "vectorizing resources")
 	await _vectorize_imported_resources(session, summary)
 	await _report_progress(progress_callback, 99, "finalizing")

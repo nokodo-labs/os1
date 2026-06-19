@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,11 +41,35 @@ from nokodo_ai.chunkers import ContentChunk
 from nokodo_ai.loaders import File as SDKFile
 from nokodo_ai.loaders import Text
 from nokodo_ai.types.json import JSONObject, JSONValue
+from nokodo_ai.utils.error_mapping import error_text, status_code_from_attrs
 from nokodo_ai.utils.files import file_metadata
+
+
+logger = logging.getLogger(__name__)
 
 
 FileContentChunk = ContentChunk
 _AUTO_LOCAL_LOADERS = ("plain", "markitdown")
+
+# provider responses that mean the input itself is unusable. retrying never
+# helps, so the file is marked permanently skipped instead of flooding the
+# worker with tracebacks and endless re-dispatches.
+_PERMANENT_PROVIDER_STATUS = frozenset({400, 413, 415, 422})
+_PERMANENT_EXTRACTION_TEXT_MARKERS = (
+	"truncated",
+	"invalid image",
+	"corrupt",
+	"unsupported image",
+)
+
+
+def _is_permanent_extraction_error(exc: Exception) -> bool:
+	"""classify a model extraction failure as permanent (vs retryable)."""
+	if status_code_from_attrs(exc) in _PERMANENT_PROVIDER_STATUS:
+		return True
+	text = error_text(exc).lower()
+	return any(marker in text for marker in _PERMANENT_EXTRACTION_TEXT_MARKERS)
+
 
 # stored on file.metadata_ so a file that extracted to zero chunks (media
 # without a model loader) still records that it was vectorized for its inputs.
@@ -73,6 +98,9 @@ class FileContentChunkBatch:
 	loader: str
 	chunker: str
 	skipped_reason: str | None = None
+	# verbatim extracted text before chunking. media files use this as their
+	# description directly; text-extractable files summarize it.
+	content: str = ""
 
 
 async def file_content_fingerprint(file: File, session: AsyncSession) -> str:
@@ -180,6 +208,7 @@ async def load_file_content_chunks(
 		loader=loaded.source,
 		chunker=chunker,
 		skipped_reason=loaded.skipped_reason,
+		content=loaded.content,
 	)
 
 
@@ -187,9 +216,28 @@ async def vectorize_file_content(
 	file: File,
 	session: AsyncSession,
 	content_chunks: list[FileContentChunk] | None = None,
+	force: bool = False,
 ) -> FileContentChunkBatch:
-	"""load, chunk, embed, and vectorize file body contents."""
+	"""load, chunk, embed, and vectorize file body contents.
+
+	with force=False a file whose recorded fingerprint already matches its
+	current inputs is left untouched, so a re-dispatch or re-import never reruns
+	extraction (a vision model call for media). pass force=True to rebuild
+	vectors regardless, or pass content_chunks to vectorize a known chunk set.
+	"""
+	fingerprint = await file_content_fingerprint(file, session)
 	if content_chunks is None:
+		if not force:
+			stored = (file.metadata_ or {}).get(CONTENT_VECTOR_FINGERPRINT_KEY)
+			if stored == fingerprint:
+				cfg = settings.assets.content_vectorization
+				return FileContentChunkBatch(
+					chunks=[],
+					text_loadable=False,
+					loader=cfg.loader,
+					chunker=cfg.chunking_algorithm,
+					skipped_reason="already_current",
+				)
 		batch = await load_file_content_chunks(file, session)
 		chunks = batch.chunks
 	else:
@@ -199,6 +247,7 @@ async def vectorize_file_content(
 			text_loadable=bool(content_chunks),
 			loader=settings.assets.content_vectorization.loader,
 			chunker=chunker,
+			content="\n\n".join(chunk.text for chunk in content_chunks),
 		)
 		chunks = content_chunks
 	await remove_file_vectors(
@@ -206,7 +255,6 @@ async def vectorize_file_content(
 		session,
 		include_file_vector=False,
 	)
-	fingerprint = await file_content_fingerprint(file, session)
 	if not chunks:
 		_record_content_fingerprint(file, fingerprint)
 		return batch
@@ -316,10 +364,28 @@ async def _load_chatmodel_file_text(
 			"unsupported_input_modality",
 			extra_metadata,
 		)
-	loaded = await Loader.create(
-		adapter="chatmodel",
-		chat_model=chat_model.chat_model,
-	).load(file)
+	try:
+		loaded = await Loader.create(
+			adapter="chatmodel",
+			chat_model=chat_model.chat_model,
+		).load(file)
+	except Exception as exc:
+		if not _is_permanent_extraction_error(exc):
+			raise
+		status = status_code_from_attrs(exc)
+		logger.warning(
+			"chatmodel file extraction permanently skipped "
+			"file=%s modality=%s status=%s",
+			file.metadata.get("resource_id"),
+			modality.value,
+			status,
+		)
+		return _unsupported_text(
+			file,
+			"chatmodel_loader",
+			"permanent_provider_error",
+			{"provider_status": status},
+		)
 	loaded.metadata = {
 		**loaded.metadata,
 		"input_modality": modality.value,

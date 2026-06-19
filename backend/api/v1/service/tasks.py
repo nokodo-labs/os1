@@ -121,6 +121,7 @@ def register_task_runner(
 
 
 def _resolve_task_runner_timeout(runner_name: str) -> float | None:
+	"""resolve a runner's configured timeout in seconds, or None when unbounded."""
 	timeout_config = _task_runner_timeouts.get(runner_name)
 	if timeout_config is None:
 		return None
@@ -135,6 +136,7 @@ def _resolve_task_runner_timeout(runner_name: str) -> float | None:
 
 
 def _is_terminal(status_value: TaskStatus) -> bool:
+	"""report whether a task status is a terminal (ended) state."""
 	return status_value in _TERMINAL_STATUSES
 
 
@@ -143,6 +145,7 @@ def _task_event_payload(
 	event_type: EventType,
 	data: JSONObject | None = None,
 ) -> dict[str, object]:
+	"""build the serialized payload for a task lifecycle event."""
 	return {
 		"type": event_type.value,
 		"task_id": str(task.id),
@@ -156,6 +159,7 @@ def _task_frame(
 	event_type: EventType,
 	data: JSONObject | None = None,
 ) -> bytes:
+	"""encode a task lifecycle event as an SSE frame."""
 	return sse_encode(
 		event=event_type.value,
 		data=_task_event_payload(task, event_type, data),
@@ -168,6 +172,7 @@ async def _publish_task_event(
 	event_type: EventType,
 	data: JSONObject | None = None,
 ) -> None:
+	"""persist a task lifecycle event and mirror it to the task SSE bus."""
 	await session.flush()
 	await session.refresh(task)
 	payload = _task_event_payload(task, event_type, data)
@@ -184,6 +189,7 @@ async def _publish_task_event(
 
 
 def _event_type_for_status(status_value: TaskStatus) -> EventType:
+	"""map a task status to its corresponding lifecycle event type."""
 	match status_value:
 		case TaskStatus.RUNNING:
 			return EventType.TASK_UPDATED
@@ -198,6 +204,7 @@ def _event_type_for_status(status_value: TaskStatus) -> EventType:
 
 
 def _runner_name(task: Task) -> str | None:
+	"""return the registered runner name recorded on a task, if any."""
 	metadata = task.metadata_ or {}
 	value = metadata.get(TASK_NAME_METADATA_KEY)
 	if isinstance(value, str) and value:
@@ -206,6 +213,7 @@ def _runner_name(task: Task) -> str | None:
 
 
 def _merge_metadata(task: Task, metadata_update: JSONObject | None) -> None:
+	"""merge an update into a task's metadata without dropping existing keys."""
 	if metadata_update is None:
 		return
 	merged = dict(task.metadata_ or {})
@@ -214,6 +222,7 @@ def _merge_metadata(task: Task, metadata_update: JSONObject | None) -> None:
 
 
 def _apply_public_update(task: Task, task_in: TaskUpdate) -> None:
+	"""apply user-supplied fields from a TaskUpdate onto a task row."""
 	update_data = task_in.model_dump(exclude_unset=True, by_alias=True)
 	for key, value in update_data.items():
 		setattr(task, key, value)
@@ -227,6 +236,7 @@ def _apply_execution_update(
 	result: JSONObject | None = None,
 	metadata_update: JSONObject | None = None,
 ) -> None:
+	"""apply a runner-side status, progress, and result update to a task in place."""
 	if task.status == TaskStatus.CANCELLED and status_value != TaskStatus.CANCELLED:
 		raise TaskCancelledError
 
@@ -252,6 +262,7 @@ def _apply_execution_update(
 
 
 async def get_task(task_id: str, session: AsyncSession, principal: Principal) -> Task:
+	"""fetch a task by id, scoped to the principal unless they are admin."""
 	stmt = select(Task).where(Task.id == task_id)
 	if not principal.is_admin:
 		stmt = stmt.where(Task.user_id == principal.user.id)
@@ -269,6 +280,7 @@ async def create_task(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Task:
+	"""create a task row from an explicit TaskCreate request."""
 	require_permission(principal, "tasks:create")
 	user_id = task_in.user_id if principal.is_admin else principal.user.id
 	now = datetime.now(tz=UTC)
@@ -380,6 +392,7 @@ async def list_tasks(
 	sort_by: str = "updated_at",
 	sort_dir: SortDir = "desc",
 ) -> list[Task]:
+	"""list tasks matching the filters, sorted and paginated."""
 	task_filters = filters or TaskListFilters()
 	stmt = select(Task)
 	stmt = _apply_task_filters(stmt, task_filters, principal)
@@ -451,6 +464,7 @@ async def update_task(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Task:
+	"""apply a public update to a task and publish the change."""
 	task = await get_task(task_id, session, principal)
 	if task_in.model_fields_set:
 		_apply_public_update(task, task_in)
@@ -540,6 +554,8 @@ async def fail_stale_active_tasks(
 				task,
 				event_type=EventType.TASK_FAILED,
 			)
+		await session.commit()
+		for task in stale_tasks:
 			await task_bus.mark_task_end(TypeID(task.id))
 		return len(stale_tasks)
 

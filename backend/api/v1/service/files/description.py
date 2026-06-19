@@ -8,18 +8,26 @@ from sqlalchemy import update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.file import File
+from api.models.model import InputModality
 from api.settings import settings
 from api.v1.service.chat.models import resolve_task_chat_model
 from api.v1.service.files.content_vectorization import (
 	FileContentChunk,
 	load_file_content_chunks,
 )
+from api.v1.service.files.modalities import file_input_modality
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.threads import Thread as SDKThread
 
 
 logger = logging.getLogger(__name__)
+
+# media whose extracted text (a transcription or visual description) is the
+# description itself, stored verbatim rather than summarized again.
+_MEDIA_MODALITIES = frozenset(
+	{InputModality.IMAGES, InputModality.AUDIO, InputModality.VIDEO}
+)
 
 _SYSTEM_PROMPT = """write concise file metadata for nokodo AI.
 
@@ -33,6 +41,7 @@ async def update_file_description(
 	session: AsyncSession,
 	content_chunks: list[FileContentChunk] | None = None,
 	preserve_timestamps: bool = False,
+	full_content: str | None = None,
 ) -> str | None:
 	"""generate and persist the file description field.
 
@@ -43,10 +52,12 @@ async def update_file_description(
 	updated_at as usual.
 	"""
 	chunks = content_chunks
+	content = full_content
 	if chunks is None:
 		batch = await load_file_content_chunks(file, session)
 		chunks = batch.chunks
-	description = await build_file_description(file, chunks, session)
+		content = batch.content
+	description = await build_file_description(file, chunks, session, content)
 	if description is None:
 		return file.description
 	if preserve_timestamps:
@@ -67,8 +78,19 @@ async def build_file_description(
 	file: File,
 	content_chunks: list[FileContentChunk],
 	session: AsyncSession | None = None,
+	full_content: str | None = None,
 ) -> str | None:
-	"""build a summary/description using a task model when configured."""
+	"""build the description for a file.
+
+	media (image/audio/video) keeps its model-extracted text verbatim: the
+	extraction is already a concise transcription or visual description, so it
+	becomes the description with no second model pass and no length cap.
+	text-extractable files instead get a summary of their extracted text,
+	bounded by the configured description length.
+	"""
+	if file_input_modality(file.filename, file.mime_type) in _MEDIA_MODALITIES:
+		verbatim = (full_content or _content_excerpt(content_chunks)).strip()
+		return verbatim or _fallback_description(file, content_chunks)
 	fallback = _fallback_description(file, content_chunks)
 	try:
 		chat_model = await resolve_task_chat_model(session, "asset_description")

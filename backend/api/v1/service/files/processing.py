@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy import update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -18,6 +18,7 @@ from api.v1.service import tasks as task_service
 from api.v1.service.auth import Principal
 from api.v1.service.embeddings import embed_texts
 from api.v1.service.files.content_vectorization import (
+	CONTENT_VECTOR_FINGERPRINT_KEY,
 	load_file_content_chunks,
 	vectorize_file_content,
 )
@@ -38,8 +39,6 @@ logger = logging.getLogger(__name__)
 # durable task names shared between the enqueue helpers below and the runners
 # that execute them in api.v1.tasks.files.
 FILE_PROCESSING_TASK = "file.process"
-FILE_CONTENT_VECTORIZATION_TASK = "file.content_vectorization"
-FILE_DESCRIPTION_TASK = "file.description"
 
 
 async def start_file_processing_task(
@@ -70,42 +69,6 @@ async def start_file_processing_task(
 	)
 
 
-async def start_file_content_vectorization_task(
-	session: AsyncSession,
-	principal: Principal,
-	file_id: TypeID,
-) -> Task:
-	"""enqueue repeatable file content vectorization only."""
-	metadata: JSONObject = {"file_id": str(file_id)}
-	return await task_service.start_task(
-		session,
-		principal,
-		task_type=TaskType.CUSTOM,
-		task_name=FILE_CONTENT_VECTORIZATION_TASK,
-		metadata=metadata,
-		stage="queued content vectorization",
-		progress=0,
-	)
-
-
-async def start_file_description_task(
-	session: AsyncSession,
-	principal: Principal,
-	file_id: TypeID,
-) -> Task:
-	"""enqueue repeatable file description generation only."""
-	metadata: JSONObject = {"file_id": str(file_id)}
-	return await task_service.start_task(
-		session,
-		principal,
-		task_type=TaskType.CUSTOM,
-		task_name=FILE_DESCRIPTION_TASK,
-		metadata=metadata,
-		stage="queued file description",
-		progress=0,
-	)
-
-
 async def process_file(
 	file_id: TypeID,
 	session: AsyncSession,
@@ -126,9 +89,19 @@ async def process_file(
 	)
 	try:
 		content_batch = await vectorize_file_content(file, session)
-		await update_file_description(
-			file, session, content_chunks=content_batch.chunks
-		)
+		if file.description is None:
+			# vectors may already be current (cheap re-dispatch). re-load the
+			# extracted text only to build the owed description; reusing the
+			# current vectors avoids a redundant embed + upsert of content we
+			# already stored.
+			if content_batch.skipped_reason == "already_current":
+				content_batch = await load_file_content_chunks(file, session)
+			await update_file_description(
+				file,
+				session,
+				content_chunks=content_batch.chunks,
+				full_content=content_batch.content,
+			)
 		await replace_file_description_vectors(file, session)
 		file.status = FileStatus.AVAILABLE
 		await session.flush()
@@ -180,7 +153,9 @@ async def process_file_description(
 		# phase 2: external I/O - no Postgres connection held
 		# build_file_description and embed_texts both use process-level caches
 		# and open their own short-lived sessions if the cache is cold.
-		description = await build_file_description(file, batch.chunks)
+		description = await build_file_description(
+			file, batch.chunks, full_content=batch.content
+		)
 		# vector text must include the new description so search finds the file
 		desc_for_vector = description if description is not None else file.description
 		vector_parts = [p for p in [file.filename or "", desc_for_vector or ""] if p]
@@ -216,33 +191,19 @@ async def process_file_description(
 	return {"file_id": str(file_id), "description_updated": description_updated}
 
 
-async def process_file_content_vectorization(
-	file_id: TypeID,
-	session: AsyncSession,
-) -> JSONObject:
-	"""repeat only the file content vectorization pipeline."""
-	file = await _load_file(file_id, session)
-	batch = await vectorize_file_content(file, session)
-	return {
-		"file_id": str(file.id),
-		"content_chunks": len(batch.chunks),
-		"text_loadable": batch.text_loadable,
-		"skipped_reason": batch.skipped_reason,
-	}
-
-
-async def list_files_due_for_description(
+async def list_files_due_for_processing(
 	session: AsyncSession,
 	limit: int,
 ) -> list[File]:
-	"""return settled files that still need an LLM description.
+	"""return files that still owe deferred processing.
 
-	any AVAILABLE, non-deleted file whose description never got generated is
-	eligible, regardless of how it was created. imports are the usual source
-	of this backlog because they defer description generation to keep a bulk
-	import from stampeding the chat model provider, but an upload whose
-	description generation failed belongs here too. this query feeds the
-	throttled backfill sweep that fills those descriptions in gradually.
+	a file is due when it never recorded a content-vectorization fingerprint
+	or never got an LLM description, covering both halves of the unified
+	pipeline in one query. imports are the usual source of this backlog
+	because they persist files AVAILABLE but defer processing so a bulk import
+	never stampedes the embedding and chat model providers. stranded PENDING
+	files (their processing task died) are included too; the sweep's active-task
+	guard keeps freshly uploaded files with a live task from being redispatched.
 	results are ordered oldest-first and SQL-limited so each sweep drains at
 	most one batch.
 	"""
@@ -250,8 +211,11 @@ async def list_files_due_for_description(
 		select(File)
 		.where(
 			File.deleted_at.is_(None),
-			File.status == FileStatus.AVAILABLE,
-			File.description.is_(None),
+			File.status.in_((FileStatus.PENDING, FileStatus.AVAILABLE)),
+			or_(
+				File.metadata_[CONTENT_VECTOR_FINGERPRINT_KEY].as_string().is_(None),
+				File.description.is_(None),
+			),
 		)
 		.order_by(File.created_at.asc())
 		.limit(limit)
@@ -260,6 +224,7 @@ async def list_files_due_for_description(
 
 
 async def _load_file(file_id: TypeID, session: AsyncSession) -> File:
+	"""load a non-deleted file by id with its projects, raising if it is missing."""
 	result = await session.execute(
 		select(File)
 		.where(File.id == file_id, File.deleted_at.is_(None))

@@ -1,4 +1,4 @@
-"""vectorstore operations for the api.
+"""vectorstore operations for the API.
 
 provides the process-wide vectorstore adapter, collection resolution,
 provisioning, CRUD operations (upsert, search, delete), and cursor-based

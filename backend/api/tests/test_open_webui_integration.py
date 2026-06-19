@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.models.agent import Agent
-from api.models.file import File, FileSource
+from api.models.file import File, FileSource, FileStatus
 from api.models.memory import Memory
 from api.models.message import Message, MessageType
 from api.models.note import Note
@@ -31,9 +31,13 @@ from api.v1.service.auth import Principal
 from api.v1.service.integrations import open_webui
 from api.v1.service.integrations.open_webui import files as owui_files
 from api.v1.service.integrations.open_webui import imports as owui_imports
+from api.v1.service.integrations.open_webui.common import _owui_metadata
+from api.v1.service.integrations.open_webui.deployments import get_deployment
+from api.v1.service.integrations.open_webui.messages import _file_content_part
 from api.v1.service.vectorstores import VectorChunkResourceType
 from api.v1.tasks import open_webui as owui_tasks
 from nokodo_ai.adapters.base.vectorstores import Chunk
+from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 def _owui_meta(metadata: Mapping[str, object]) -> dict[str, object]:
@@ -1475,6 +1479,112 @@ async def test_open_webui_reimport_repairs_broken_file_filename_and_message_link
 	repaired = files[0]
 	assert repaired.filename == "notes.txt"
 	assert repaired.message_id == messages[0].id
+
+
+@pytest.mark.asyncio
+async def test_open_webui_reimport_collapses_duplicate_rows_and_heals_part(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""a re-import collapses duplicate rows minted for one Open WebUI file by an
+	older buggy import and rewrites the message to reference the surviving
+	canonical row exactly once."""
+	_allow_test_deployment(monkeypatch)
+	_install_fake_open_webui_client(
+		monkeypatch,
+		files={
+			"file_1": (
+				{
+					"id": "file_1",
+					"filename": "notes.txt",
+					"meta": {"content_type": "text/plain"},
+				},
+				b"hello from owui",
+				"text/plain",
+			)
+		},
+		chats=[
+			_chat_with_messages(
+				chat_id="chat_1",
+				current_id="m1",
+				messages={
+					"m1": {
+						"id": "m1",
+						"role": "user",
+						"content": "see attached",
+						"files": [{"id": "file_1", "name": "notes.txt"}],
+					}
+				},
+			)
+		],
+	)
+	principal = await _persisted_principal(db_session, *_all_import_permissions())
+
+	await open_webui.import_from_open_webui(
+		deployment_origin="https://open-webui.example.com",
+		credential="token",
+		include_chats=True,
+		include_memories=False,
+		session=db_session,
+		principal=principal,
+	)
+
+	canonical = (await db_session.scalars(select(File))).one()
+	message = (await db_session.scalars(select(Message))).one()
+
+	# simulate a duplicate row plus a stale extra content part left by an older
+	# buggy import: a second File row for the same Open WebUI id, and a message
+	# part referencing it. commit so the per-chat worker session observes them.
+	deployment = get_deployment("https://open-webui.example.com")
+	duplicate = File(
+		id=TypeID(new_typeid("file")),
+		owner_id=canonical.owner_id,
+		source=FileSource.IMPORT,
+		storage_backend=canonical.storage_backend,
+		storage_key=f"tests/{new_typeid('file')}",
+		filename="notes.txt",
+		mime_type="text/plain",
+		size_bytes=canonical.size_bytes,
+		checksum_sha256=canonical.checksum_sha256,
+		status=FileStatus.AVAILABLE,
+		message_id=message.id,
+		metadata_=_owui_metadata(deployment, "file", "file_1", file_id="file_1"),
+	)
+	db_session.add(duplicate)
+	await db_session.flush()
+	stale_part = _file_content_part(
+		file_id=TypeID(duplicate.id),
+		url=None,
+		filename="notes.txt",
+		media_type="text/plain",
+		owui_file_id="file_1",
+	)
+	assert stale_part is not None
+	message.content = [*(message.content or []), stale_part]
+	await db_session.commit()
+
+	await open_webui.import_from_open_webui(
+		deployment_origin="https://open-webui.example.com",
+		credential="token",
+		include_chats=True,
+		include_memories=False,
+		session=db_session,
+		principal=principal,
+	)
+
+	db_session.expire_all()
+	# the duplicate is soft-deleted, leaving only the canonical row active.
+	active_files = (await db_session.scalars(select(File))).all()
+	assert [str(f.id) for f in active_files] == [str(canonical.id)]
+	healed = (await db_session.scalars(select(Message))).one()
+	file_parts = [
+		part for part in healed.content if part.get("type") in ("file", "image")
+	]
+	# the stale duplicate part is collapsed; the single survivor points at the
+	# canonical row, not the soft-deleted duplicate.
+	assert len(file_parts) == 1
+	assert file_parts[0]["metadata"]["file_id"] == str(canonical.id)
+	assert _owui_meta(file_parts[0]["metadata"])["file_id"] == "file_1"
 
 
 @pytest.mark.asyncio

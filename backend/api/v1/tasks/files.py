@@ -12,19 +12,14 @@ from api.redis import on_invalidation
 from api.settings import settings
 from api.taskiq import broker, redis_schedule_source
 from api.v1.service import tasks as task_service
-from api.v1.service.auth import load_principal_for_user
+from api.v1.service.auth import Principal, load_principal_for_user
 from api.v1.service.files.processing import (
-	FILE_CONTENT_VECTORIZATION_TASK,
-	FILE_DESCRIPTION_TASK,
 	FILE_PROCESSING_TASK,
-	list_files_due_for_description,
+	list_files_due_for_processing,
 	process_file,
-	process_file_content_vectorization,
-	process_file_description,
-	start_file_description_task,
 	start_file_processing_task,
 )
-from nokodo_ai.types.json import JSONObject, JSONValue
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -35,7 +30,33 @@ FILE_PROCESSING_DISPATCH_TASK = "file.processing.dispatch"
 FILE_MAINTENANCE_BACKFILL_TASK = "file.maintenance.backfill_sweep"
 FILE_MAINTENANCE_BACKFILL_SCHEDULE_ID = "file:maintenance-backfill"
 FILE_MAINTENANCE_BACKFILL_INVALIDATION_SIGNAL = "file_maintenance_backfill"
-_FILE_RUNNER_TIMEOUT_SECONDS = 30 * 60
+
+_STALE_FILE_TASKS = (FILE_PROCESSING_TASK,)
+
+
+def _file_task_runner_timeout_seconds() -> float:
+	return float(settings.tasks.file_maintenance.runner_timeout_seconds)
+
+
+def _file_stale_task_cleanup_after() -> timedelta:
+	return timedelta(
+		minutes=settings.tasks.file_maintenance.stale_task_cleanup_after_minutes
+	)
+
+
+async def fail_stale_file_tasks() -> int:
+	"""fail file processing tasks that stopped reporting before they block work.
+
+	a worker that dies mid-run (or during a connection-pool exhaustion event)
+	can leave a file task stuck RUNNING. its file stays PENDING and the sweep's
+	active-task guard then skips that file forever. failing the stale task frees
+	the file to be redispatched on the next sweep.
+	"""
+	return await task_service.fail_stale_active_tasks(
+		_STALE_FILE_TASKS,
+		_file_stale_task_cleanup_after(),
+		"file processing task stopped reporting progress",
+	)
 
 
 def _file_processing_schedule_id(file_id: TypeID) -> str:
@@ -72,7 +93,7 @@ async def schedule_file_processing_task(
 
 @task_service.register_task_runner(
 	FILE_PROCESSING_TASK,
-	timeout_seconds=_FILE_RUNNER_TIMEOUT_SECONDS,
+	timeout_seconds=_file_task_runner_timeout_seconds,
 )
 async def run_file_processing_task(context: task_service.TaskContext) -> JSONObject:
 	"""run both file processing pipelines for a file."""
@@ -89,38 +110,6 @@ async def run_file_processing_task(context: task_service.TaskContext) -> JSONObj
 			origin_session_id=origin_session_id,
 		)
 		await session.commit()
-	await context.update(progress=90, stage="finalizing")
-	return result
-
-
-@task_service.register_task_runner(
-	FILE_CONTENT_VECTORIZATION_TASK,
-	timeout_seconds=_FILE_RUNNER_TIMEOUT_SECONDS,
-)
-async def run_file_content_vectorization_task(
-	context: task_service.TaskContext,
-) -> JSONObject:
-	"""run only file content vectorization for a file."""
-	file_id = _file_id_from_context(context)
-	await context.update(progress=10, stage="vectorizing content")
-	async with async_session_local() as session:
-		result = await process_file_content_vectorization(file_id, session)
-		await session.commit()
-	await context.update(progress=90, stage="finalizing")
-	return result
-
-
-@task_service.register_task_runner(
-	FILE_DESCRIPTION_TASK,
-	timeout_seconds=_FILE_RUNNER_TIMEOUT_SECONDS,
-)
-async def run_file_description_task(context: task_service.TaskContext) -> JSONObject:
-	"""run only file description generation for a file."""
-	file_id = _file_id_from_context(context)
-	await context.update(progress=10, stage="describing file")
-	# process_file_description manages its own sessions and releases the DB
-	# connection between the load, LLM/embedding, and write phases.
-	result = await process_file_description(file_id, preserve_timestamps=True)
 	await context.update(progress=90, stage="finalizing")
 	return result
 
@@ -150,39 +139,39 @@ def _file_id_from_context(context: task_service.TaskContext) -> TypeID:
 	return TypeID(file_id_value)
 
 
-# retroactive file maintenance backfill ----------------------------------------
+# retroactive file maintenance backfill
 #
-# some files end up AVAILABLE without a description. imports are the usual
-# cause: they defer description generation to keep a bulk import from stampeding
-# the chat model provider into rate limits (see the Open WebUI import service).
+# some files end up persisted without their deferred processing done. imports
+# are the usual cause: they persist files but defer content vectorization and
+# description generation so a bulk import does not stampede the embedding and
+# chat model providers into rate limits (see the Open WebUI import service).
 # the sweep below drains that backlog in bounded batches, dispatching one
-# description task per file regardless of source, so model spend stays paced.
-# description generation is its first job; more file upkeep can be folded in
-# later. all knobs come from `settings.tasks.file_maintenance`.
+# unified `file.process` task per due file so provider spend stays paced. all
+# knobs come from `settings.tasks.file_maintenance`.
 
 
 async def run_file_maintenance_backfill_sweep(
 	batch_size: int | None = None,
 	respect_enabled: bool = True,
 ) -> JSONObject:
-	"""dispatch deferred maintenance for files missing a description.
+	"""dispatch deferred processing for files with unfinished upkeep.
 
 	this is the shared core for both the scheduled task and any manual
 	trigger. callers control whether the master enabled flag is honored via
 	`respect_enabled`; set False to spot-check the feature without leaving the
 	schedule on.
 
-	the current maintenance job generates the missing description for any
-	settled file that lacks one; more upkeep can be folded in here later
-	without renaming the task.
+	one backlog is drained per run, capped at the batch size: files that never
+	recorded a content fingerprint or never got a description. files with an
+	active processing task are skipped so a slow run is not piled onto.
 
 	args:
 		batch_size: override the configured batch size for this run.
 		respect_enabled: when True, returns immediately if the master toggle
 			is off.
 
-	returns a JSON-friendly result describing how many files were dispatched
-	and how many were skipped for already having an active maintenance task.
+	returns a JSON-friendly result describing how many tasks were dispatched
+	and how many files were skipped for an already-active task.
 	"""
 	if respect_enabled:
 		settings.reload()
@@ -205,27 +194,37 @@ async def run_file_maintenance_backfill_sweep(
 		)
 		return {"skipped": True, "reason": "invalid_bounds", "dispatched": 0}
 
+	# reap tasks that died mid-run first so their files stop being skipped by
+	# the active-task guard below.
+	await fail_stale_file_tasks()
+
 	dispatched = 0
 	skipped_existing = 0
-	dispatched_file_ids: list[JSONValue] = []
+	principals: dict[str, Principal] = {}
 	async with async_session_local() as session:
-		files = await list_files_due_for_description(session, limit=effective_batch)
-		for file in files:
+
+		async def _principal_for(owner_id: TypeID) -> Principal:
+			cached = principals.get(str(owner_id))
+			if cached is None:
+				cached = await load_principal_for_user(owner_id, session)
+				principals[str(owner_id)] = cached
+			return cached
+
+		due_files = await list_files_due_for_processing(session, limit=effective_batch)
+		for file in due_files:
 			file_id = TypeID(file.id)
 			existing = await task_service.find_active_task(
-				session, FILE_DESCRIPTION_TASK, {"file_id": str(file_id)}
+				session, FILE_PROCESSING_TASK, {"file_id": str(file_id)}
 			)
 			if existing is not None:
 				skipped_existing += 1
 				continue
-			principal = await load_principal_for_user(TypeID(file.owner_id), session)
-			await start_file_description_task(session, principal, file_id)
+			principal = await _principal_for(TypeID(file.owner_id))
+			await start_file_processing_task(session, principal, file_id)
 			dispatched += 1
-			dispatched_file_ids.append(str(file_id))
 
 	logger.info(
-		"file maintenance backfill swept files=%d dispatched=%d skipped_existing=%d",
-		len(dispatched_file_ids) + skipped_existing,
+		"file maintenance backfill swept dispatched=%d skipped_existing=%d",
 		dispatched,
 		skipped_existing,
 	)
@@ -233,7 +232,6 @@ async def run_file_maintenance_backfill_sweep(
 		"dispatched": dispatched,
 		"skipped_existing": skipped_existing,
 		"batch_size": effective_batch,
-		"dispatched_file_ids": dispatched_file_ids,
 	}
 
 

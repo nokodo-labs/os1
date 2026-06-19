@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from taskiq.schedule_sources import LabelScheduleSource
 
@@ -14,6 +15,7 @@ from api.models.file import File, FileSource, FileStatus
 from api.models.task import Task, TaskStatus, TaskType
 from api.models.user import User
 from api.schemas.user import UserCreate
+from api.settings import settings
 from api.taskiq import broker
 from api.v1.service import tasks as task_service
 from api.v1.service import users as user_service
@@ -265,6 +267,82 @@ async def test_file_maintenance_sweep_respects_batch_size(
 
 	assert result["dispatched"] == 2
 	assert len(enqueued) == 2
+
+
+# stale task reaping
+
+
+@pytest.mark.asyncio
+async def test_fail_stale_file_tasks_persists_failure(
+	db_session: AsyncSession,
+) -> None:
+	"""a stale file processing task is committed as FAILED so its file is no
+	longer skipped by the active-task guard forever."""
+	user = await _create_user(db_session, "files_stale_reap")
+	stale_after = timedelta(
+		minutes=settings.tasks.file_maintenance.stale_task_cleanup_after_minutes
+	)
+	old = datetime.now(tz=UTC) - stale_after - timedelta(minutes=5)
+	task = Task(
+		user_id=str(user.id),
+		task_type=TaskType.CUSTOM,
+		status=TaskStatus.RUNNING,
+		progress=0,
+		stage="processing file",
+		started_at=old,
+		last_event_at=old,
+		metadata_={
+			task_service.TASK_NAME_METADATA_KEY: FILE_PROCESSING_TASK,
+			"file_id": str(TypeID(new_typeid("file"))),
+		},
+	)
+	db_session.add(task)
+	await db_session.commit()
+	task_id = task.id
+
+	failed = await file_tasks.fail_stale_file_tasks()
+
+	assert failed == 1
+	db_session.expire_all()
+	refreshed = (await db_session.scalars(select(Task).where(Task.id == task_id))).one()
+	assert refreshed.status == TaskStatus.FAILED
+
+
+@pytest.mark.asyncio
+async def test_removed_runner_fails_task_without_crash_loop(
+	db_session: AsyncSession,
+) -> None:
+	"""a durable task whose runner was removed (e.g. a legacy file task carried
+	over an upgrade) is marked FAILED instead of crash-looping, so its file can
+	self-heal through the unified sweep."""
+	user = await _create_user(db_session, "legacy_runner")
+	now = datetime.now(tz=UTC)
+	task = Task(
+		user_id=str(user.id),
+		task_type=TaskType.CUSTOM,
+		status=TaskStatus.RUNNING,
+		progress=0,
+		stage="queued",
+		started_at=now,
+		last_event_at=now,
+		metadata_={
+			task_service.TASK_NAME_METADATA_KEY: "file.description",
+			"file_id": str(TypeID(new_typeid("file"))),
+		},
+	)
+	db_session.add(task)
+	await db_session.commit()
+	task_id = task.id
+
+	with pytest.raises(RuntimeError, match="unknown task runner"):
+		await task_service.execute_started_task(TypeID(task_id))
+
+	db_session.expire_all()
+	refreshed = (await db_session.scalars(select(Task).where(Task.id == task_id))).one()
+	assert refreshed.status == TaskStatus.FAILED
+
+	# a retry is a no-op because the task is already terminal: no crash loop.
+	await task_service.execute_started_task(TypeID(task_id))
 
 
 # schedule lifecycle
