@@ -12,7 +12,7 @@
  */
 
 import { SvelteDate, SvelteMap } from 'svelte/reactivity'
-import type { ToolCall, ToolEvent, ToolExecution, ToolResult, ToolStatus } from './index'
+import type { ToolCall, ToolEvent, ToolExecution, ToolResult, ToolStatus } from './types'
 
 // ── internal reactive execution state ────────────────────────────────────
 
@@ -51,7 +51,7 @@ class ReactiveToolExecution {
 		this.startedAt = new SvelteDate()
 	}
 
-	/** ToolExecution-compatible toolCall accessor (reads reactive $state fields). */
+	/** ToolExecution-shaped toolCall accessor that reads reactive $state fields. */
 	get toolCall(): { id: string; name: string; arguments: Record<string, unknown> } {
 		return { id: this.id, name: this.name, arguments: this.arguments }
 	}
@@ -171,6 +171,10 @@ export class ToolExecutionTracker {
 			exec.arguments = { ...event.data.toolCallArgs, ...exec.arguments }
 		}
 
+		if (exec.result || exec.status === 'completed' || exec.status === 'error') {
+			return
+		}
+
 		// update status
 		switch (event.type) {
 			case 'tool.progress':
@@ -259,12 +263,12 @@ export class ToolExecutionTracker {
 		return false
 	}
 
-	/** mark all pending/running tool calls as error (e.g. when a run ends). */
+	/** close pending/running tool calls without inventing a failure state. */
 	closeAllActive(): void {
 		for (const exec of this.executions.values()) {
 			if (exec.status === 'pending' || exec.status === 'running') {
-				exec.status = 'error'
-				exec.error = 'tool execution was interrupted'
+				exec.status = 'completed'
+				exec.error = undefined
 				exec.completedAt = new SvelteDate()
 			}
 		}

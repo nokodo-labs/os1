@@ -26,11 +26,13 @@ from ...messages import (
 from ...tool import ToolDefinition
 from ...utils.json_schema import process_schema
 from ...utils.provider_meta import (
+	RunIdTracker,
 	get_provider_tool_call_id,
 	provider_tool_call_metadata,
 )
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseAnthropicAdapter
+from .exceptions import map_anthropic_generation_exceptions
 from .types import (
 	AnthropicBase64ImageSourceParam,
 	AnthropicContentBlockParam,
@@ -40,6 +42,8 @@ from .types import (
 	AnthropicRawContentBlockDeltaEvent,
 	AnthropicRawContentBlockStartEvent,
 	AnthropicRawContentBlockStopEvent,
+	AnthropicRawMessageDeltaEvent,
+	AnthropicRawMessageStartEvent,
 	AnthropicTextBlock,
 	AnthropicTextBlockParam,
 	AnthropicTextDelta,
@@ -121,6 +125,18 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 			)
 		return self._generate_once(messages, model=model, tools=tools, params=params)
 
+	async def cancel_generation(self, latest_message: AssistantMessage) -> bool:
+		"""anthropic has no server-side cancel endpoint.
+
+		closing the HTTP stream (which happens automatically when the
+		asyncio task is cancelled) is the only way to stop generation.
+
+		:param latest_message: unused - anthropic has no cancel API.
+		:returns: always False.
+		"""
+		return False
+
+	@map_anthropic_generation_exceptions
 	async def _generate_once(
 		self,
 		messages: list[Message],
@@ -172,6 +188,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 			else anthropic.omit,
 			tools=anthropic_tools,
 			tool_choice=anthropic_tool_choice,
+			cache_control=self.cache_control.model_dump(),
 			extra_headers=extra_headers,
 			extra_body=extra_body,
 		)
@@ -217,6 +234,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 
 		return AssistantMessage(content=content, tool_calls=tool_calls, usage=usage)
 
+	@map_anthropic_generation_exceptions
 	async def _generate_streaming(
 		self,
 		messages: list[Message],
@@ -268,6 +286,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 			else anthropic.omit,
 			tools=anthropic_tools,
 			tool_choice=anthropic_tool_choice,
+			cache_control=self.cache_control.model_dump(),
 			extra_headers=extra_headers,
 			extra_body=extra_body,
 			stream=True,
@@ -281,8 +300,47 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 		tc_names: dict[str, str] = {}
 		tc_created_at: dict[str, float] = {}
 
+		run_tracker = RunIdTracker("anthropic.messages")
+
+		# prompt-side usage is reported once on message_start; output usage
+		# accumulates and is finalized on message_delta. we carry the input
+		# counts forward so the final usage delta is complete.
+		input_tokens = 0
+		cache_creation_input_tokens: int | None = None
+		cache_read_input_tokens: int | None = None
+
 		async for event in stream:
 			now = time()
+
+			# --- message_start: surface the provider message id for
+			# consistent metadata across all adapters.
+			if isinstance(event, AnthropicRawMessageStartEvent):
+				start_usage = event.message.usage
+				input_tokens = start_usage.input_tokens
+				cache_creation_input_tokens = start_usage.cache_creation_input_tokens
+				cache_read_input_tokens = start_usage.cache_read_input_tokens
+				meta_chunk = run_tracker.observe(event.message.id)
+				if meta_chunk is not None:
+					yield meta_chunk
+				continue
+
+			# --- message_delta: carries final output token usage and stop
+			# reason. emit a usage-only delta so the merged assistant message
+			# (and its persistence) records real provider token counts.
+			if isinstance(event, AnthropicRawMessageDeltaEvent):
+				output_tokens = event.usage.output_tokens or 0
+				yield AssistantMessage(
+					usage=Usage(
+						input_tokens=input_tokens,
+						output_tokens=output_tokens,
+						total_tokens=input_tokens + output_tokens,
+						cache_creation_input_tokens=cache_creation_input_tokens,
+						cache_read_input_tokens=cache_read_input_tokens,
+					),
+					created_at=now,
+					updated_at=now,
+				)
+				continue
 
 			if isinstance(event, AnthropicRawContentBlockStartEvent):
 				block = event.content_block
@@ -500,7 +558,6 @@ def _tool_message_to_result_block(
 
 def _append_anthropic_assistant_message(
 	result: list[AnthropicMessageParam],
-	*,
 	assistant_text: str,
 	tool_blocks: list[AnthropicToolUseBlockParam],
 ) -> None:

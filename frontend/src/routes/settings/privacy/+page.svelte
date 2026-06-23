@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { api } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
+	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
 	import Lock from '$lib/components/icons/Lock.svelte'
-	import { Switch } from '$lib/components/primitives'
+	import Users from '$lib/components/icons/Users.svelte'
+	import { DropdownSelect, Switch } from '$lib/components/primitives'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { clearGeolocation, requestGeolocation } from '$lib/stores/device.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
@@ -11,10 +13,10 @@
 	type Visibility = 'everyone' | 'friends' | 'private'
 	type PrivacySettings = components['schemas']['UserPrivacy']
 
-	const visibilityOptions: { value: Visibility; label: string }[] = [
-		{ value: 'everyone', label: 'everyone' },
-		{ value: 'friends', label: 'friends only' },
-		{ value: 'private', label: 'only me' },
+	const visibilityOptions = [
+		{ value: 'everyone', label: 'everyone', icon: GlobeAlt, iconVariant: 'solid' },
+		{ value: 'friends', label: 'friends only', icon: Users, iconVariant: 'solid' },
+		{ value: 'private', label: 'only me', icon: Lock, iconVariant: 'solid' },
 	]
 
 	// current privacy settings from user object
@@ -29,7 +31,15 @@
 		const val = privacy?.[field]
 		if (val === 'everyone' || val === 'friends' || val === 'private') return val
 		// defaults
-		if (field === 'gender' || field === 'birth_date') return 'friends'
+		if (
+			field === 'online_status' ||
+			field === 'real_name' ||
+			field === 'gender' ||
+			field === 'birth_date' ||
+			field === 'allow_dms'
+		)
+			return 'friends'
+		if (field === 'email') return 'private'
 		return 'everyone'
 	}
 
@@ -40,6 +50,18 @@
 		const { data } = await api.PATCH('/v1/users/{user_id}', {
 			params: { path: { user_id: uid } },
 			body: { privacy: updated },
+		})
+		if (data) session.currentUser = { ...data }
+	}
+
+	const findByEmail = $derived(session.currentUser?.find_by_email ?? false)
+
+	async function setFindByEmail(enabled: boolean): Promise<void> {
+		const uid = session.currentUser?.id
+		if (!uid) return
+		const { data } = await api.PATCH('/v1/users/{user_id}', {
+			params: { path: { user_id: uid } },
+			body: { find_by_email: enabled },
 		})
 		if (data) session.currentUser = { ...data }
 	}
@@ -64,6 +86,11 @@
 			key: 'bio',
 			label: 'bio',
 			description: 'who can see your bio',
+		},
+		{
+			key: 'email',
+			label: 'email address',
+			description: 'who can see your email address',
 		},
 		{
 			key: 'gender',
@@ -123,23 +150,29 @@
 				choose who can see each part of your profile.
 			</div>
 			<div class="mt-4 space-y-4">
+				<div class="flex items-center justify-between gap-3">
+					<div class="min-w-0 flex-1">
+						<div class="text-foreground/70 text-sm">email search</div>
+						<div class="text-foreground/50 text-xs">
+							allow people to find you by your email address
+						</div>
+					</div>
+					<Switch size="sm" checked={findByEmail} onchange={setFindByEmail} />
+				</div>
 				{#each privacyFields as field (field.key)}
 					<div class="flex items-center justify-between gap-3">
 						<div class="min-w-0 flex-1">
 							<div class="text-foreground/70 text-sm">{field.label}</div>
 							<div class="text-foreground/50 text-xs">{field.description}</div>
 						</div>
-						<select
-							class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/80 focus:border-foreground/20 w-32 shrink-0 cursor-pointer appearance-none border px-3 py-1.5 text-xs scheme-dark transition-colors outline-none"
+						<DropdownSelect
+							options={visibilityOptions}
 							value={getVisibility(field.key)}
-							onchange={(e) =>
-								void setVisibility(field.key, e.currentTarget.value as Visibility)}
-						>
-							{#each visibilityOptions as opt (opt.value)}
-								<option value={opt.value} class="bg-neutral-900">{opt.label}</option
-								>
-							{/each}
-						</select>
+							onchange={(value) => void setVisibility(field.key, value as Visibility)}
+							ariaLabel={`${field.label} visibility`}
+							class="w-36 shrink-0"
+							buttonClass="px-3 py-1.5 text-xs"
+						/>
 					</div>
 				{/each}
 			</div>

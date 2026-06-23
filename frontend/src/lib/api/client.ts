@@ -21,13 +21,18 @@ export class BackendUnreachableError extends Error {
 }
 
 let refreshInFlight: Promise<string | null> | null = null
+let authGeneration = 0
+let logoutInProgress = false
 
 export async function refreshAccessToken(): Promise<string | null> {
+	if (logoutInProgress) return null
 	if (refreshInFlight) return refreshInFlight
 
+	const generation = authGeneration
 	refreshInFlight = (async () => {
 		try {
 			const { data, response } = await rawApi.POST('/v1/auth/refresh', {})
+			if (logoutInProgress || generation !== authGeneration) return null
 			if (!response || !response.ok || !data?.access_token) {
 				clearAccessToken()
 				return null
@@ -95,49 +100,40 @@ const authInterceptor = {
 }
 
 /**
- * bypasses Chrome's ALPN protocol crash by unwrapping Request objects back into primitive
- * strings and Blobs. This prevents Chrome from identifying the payload as a ReadableStream.
+ * unwraps Request objects back into URL + Blob fetches so normal POST bodies are not
+ * mistaken for ReadableStream uploads by browser fetch implementations.
  *
- * WHY IS THIS REQUIRED?
- * 1. openapi-fetch internally wraps all payloads into a `new Request(input)` object.
- * 2. According to the Fetch API, accessing `Request.body` exposes it as a `ReadableStream`.
- * 3. Chromium strictly mandates HTTP/2 for stream uploads natively (throwing ERR_ALPN_NEGOTIATION_FAILED if H2 is missing).
- * 4. Chromium REFUSES to negotiate HTTP/2 over cleartext (H2C).
+ * why this is required:
+ * 1. openapi-fetch internally wraps payloads into a `new Request(input)` object.
+ * 2. According to the Fetch API, reading `Request.body` exposes it as a `ReadableStream`.
+ * 3. Chromium rejects HTTP request streams without HTTP/2.
+ * 4. Safari does not support fetch request streams even on HTTPS.
  *
- * Thus, any cross-origin POST with a body from Vite to a local development backend crashes instantly
- * in Chrome over HTTP. Unpacking the Request into a `fetch(url, blob)` circumvents Chromium's
- * stream detection perfectly natively.
- *
- * This hack automatically bypasses itself if the request URL is HTTPS, meaning in production behind a
- * reverse proxy, it uses 100% native fetch.
+ * We do not intentionally stream request bodies from the frontend, so materializing the
+ * body as a Blob preserves behavior while avoiding browser-specific stream upload paths.
  */
 async function safeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
 	const urlStr =
 		typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
 
-	// If the origin is HTTPS, the browser will seamlessly negotiate HTTP/2 via TLS ALPN.
-	// We can safely use the native fetch directly without unwrapping.
-	if (urlStr.startsWith('https://')) {
+	if (!(input instanceof Request)) {
 		return fetch(input, init)
 	}
 
-	let options: RequestInit = { ...init }
-
-	if (input instanceof Request) {
-		options = {
-			method: input.method,
-			headers: input.headers,
-			signal: input.signal,
-			credentials: input.credentials,
-			referrer: input.referrer,
-			mode: input.mode,
-			cache: input.cache,
-			redirect: input.redirect,
-			integrity: input.integrity,
-		}
-		if (input.body) {
-			options.body = await input.clone().blob()
-		}
+	const options: RequestInit = {
+		...init,
+		method: input.method,
+		headers: input.headers,
+		signal: input.signal,
+		credentials: input.credentials,
+		referrer: input.referrer,
+		mode: input.mode,
+		cache: input.cache,
+		redirect: input.redirect,
+		integrity: input.integrity,
+	}
+	if (input.body) {
+		options.body = await input.clone().blob()
 	}
 
 	return fetch(urlStr, options)
@@ -183,5 +179,12 @@ export async function getAuthHeaders(): Promise<HeadersInit> {
 }
 
 export async function logout(): Promise<void> {
-	await rawApi.POST('/v1/auth/logout', {}).catch(() => {})
+	logoutInProgress = true
+	authGeneration += 1
+	try {
+		await rawApi.POST('/v1/auth/logout', {}).catch(() => {})
+	} finally {
+		clearAccessToken()
+		logoutInProgress = false
+	}
 }

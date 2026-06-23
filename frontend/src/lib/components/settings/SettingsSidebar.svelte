@@ -5,12 +5,15 @@
 	import Cog6 from '$lib/components/icons/Cog6.svelte'
 	import CommandLine from '$lib/components/icons/CommandLine.svelte'
 	import Eye from '$lib/components/icons/Eye.svelte'
+	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import Lock from '$lib/components/icons/Lock.svelte'
 	import ShieldCheck from '$lib/components/icons/ShieldCheck.svelte'
 	import SoundHigh from '$lib/components/icons/SoundHigh.svelte'
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import Wrench from '$lib/components/icons/Wrench.svelte'
+	import PageTitle from '$lib/components/PageTitle.svelte'
+	import ScrollTopShadow from '$lib/components/ScrollTopShadow.svelte'
 	import SidebarListItem from '$lib/components/SidebarListItem.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import type { Component } from 'svelte'
@@ -22,6 +25,12 @@
 	}
 
 	let { selectedSection, isMobile = false, rowIconBackground = false }: Props = $props()
+	const sidebarListEdgeStyle = $derived(
+		isMobile
+			? 'width: 100%;'
+			: 'margin-left: calc(0px - var(--spacing-page-x)); margin-right: calc(0px - var(--spacing-page-x)); width: calc(100% + var(--spacing-page-x) + var(--spacing-page-x));'
+	)
+	let scrollEl = $state<HTMLElement | null>(null)
 
 	interface SettingsSection {
 		id: SettingsSectionId
@@ -37,32 +46,10 @@
 		| 'accessibility'
 		| 'ai'
 		| 'security'
+		| 'integrations'
 		| 'advanced'
 		| 'about'
 		| 'debug'
-
-	type SettingsRouteId =
-		| '/settings/appearance'
-		| '/settings/notifications'
-		| '/settings/privacy'
-		| '/settings/accessibility'
-		| '/settings/ai'
-		| '/settings/security'
-		| '/settings/advanced'
-		| '/settings/about'
-		| '/settings/debug'
-
-	const settingsRouteBySection = {
-		appearance: '/settings/appearance',
-		notifications: '/settings/notifications',
-		privacy: '/settings/privacy',
-		accessibility: '/settings/accessibility',
-		ai: '/settings/ai',
-		security: '/settings/security',
-		advanced: '/settings/advanced',
-		about: '/settings/about',
-		debug: '/settings/debug',
-	} as const satisfies Record<SettingsSectionId, SettingsRouteId>
 
 	const sections: SettingsSection[] = [
 		{
@@ -102,10 +89,16 @@
 			description: 'passwords, email, and authentication',
 		},
 		{
+			id: 'integrations',
+			label: 'integrations',
+			icon: GlobeAlt,
+			description: 'imports and connected apps',
+		},
+		{
 			id: 'advanced',
 			label: 'advanced',
 			icon: Wrench,
-			description: 'data management and imports',
+			description: 'data management and experiments',
 		},
 		{
 			id: 'about',
@@ -131,7 +124,38 @@
 	})
 
 	function selectSection(sectionId: SettingsSectionId) {
-		void goto(resolve(settingsRouteBySection[sectionId]), { keepFocus: true, noScroll: true })
+		switch (sectionId) {
+			case 'appearance':
+				void goto(resolve('/settings/appearance'), { keepFocus: true, noScroll: true })
+				break
+			case 'notifications':
+				void goto(resolve('/settings/notifications'), { keepFocus: true, noScroll: true })
+				break
+			case 'privacy':
+				void goto(resolve('/settings/privacy'), { keepFocus: true, noScroll: true })
+				break
+			case 'accessibility':
+				void goto(resolve('/settings/accessibility'), { keepFocus: true, noScroll: true })
+				break
+			case 'ai':
+				void goto(resolve('/settings/ai'), { keepFocus: true, noScroll: true })
+				break
+			case 'security':
+				void goto(resolve('/settings/security'), { keepFocus: true, noScroll: true })
+				break
+			case 'integrations':
+				void goto(resolve('/settings/integrations'), { keepFocus: true, noScroll: true })
+				break
+			case 'advanced':
+				void goto(resolve('/settings/advanced'), { keepFocus: true, noScroll: true })
+				break
+			case 'about':
+				void goto(resolve('/settings/about'), { keepFocus: true, noScroll: true })
+				break
+			case 'debug':
+				void goto(resolve('/settings/debug'), { keepFocus: true, noScroll: true })
+				break
+		}
 	}
 
 	function prefetchSection(sectionId: string): void {
@@ -140,43 +164,44 @@
 	}
 </script>
 
-<div class="flex h-full min-h-0 flex-col" style="gap: var(--spacing-header-content);">
+<div class="flex h-full min-h-0 flex-col">
 	<header
 		class="{isMobile
-			? 'mt-0'
-			: 'mt-7'} flex max-h-22 items-center justify-between gap-3 px-2 py-5 pb-6"
+			? 'pt-5 pb-4'
+			: 'mt-(--master-detail-header-top) mb-(--spacing-island-content) h-(--master-detail-header-height) py-0'} relative z-10 flex shrink-0 items-center justify-between gap-3 px-2"
 	>
-		<div class="flex min-w-0 items-center gap-2">
-			<Cog6 variant="solid" class="text-foreground/60 h-5 w-5" />
-			<h2 class="text-foreground/85 min-w-0 truncate text-lg font-semibold tracking-wide">
-				settings
-			</h2>
-		</div>
+		<PageTitle icon={Cog6} label="settings" iconColor="text-foreground/70" tag="h2" />
 	</header>
 
-	<nav class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-		<div class="space-y-1">
-			{#each effectiveSections as section (section.id)}
-				<SidebarListItem
-					selected={selectedSection === section.id}
-					onSelect={() => selectSection(section.id)}
-					onPrefetch={() => prefetchSection(section.id)}
-					showChevron={true}
-				>
-					{#snippet leading()}
-						<span
-							class="rounded-pill text-foreground/80 flex h-8 w-8 items-center justify-center {rowIconBackground
-								? 'bg-foreground/8'
-								: ''}"
+	<div class="relative min-h-0 flex-1 overflow-hidden" style={sidebarListEdgeStyle}>
+		<nav bind:this={scrollEl} class="h-full min-h-0 w-full overflow-y-auto pt-2 pb-6">
+			<div class="space-y-1">
+				{#each effectiveSections as section (section.id)}
+					<div class="px-3">
+						<SidebarListItem
+							selected={selectedSection === section.id}
+							onSelect={() => selectSection(section.id)}
+							onPrefetch={() => prefetchSection(section.id)}
+							showChevron={true}
 						>
-							<section.icon variant="solid" class="h-5 w-5" />
-						</span>
-					{/snippet}
-					<span class="text-foreground/90 min-w-0 truncate text-[0.95rem] font-medium"
-						>{section.label}</span
-					>
-				</SidebarListItem>
-			{/each}
-		</div>
-	</nav>
+							{#snippet leading()}
+								<span
+									class="rounded-pill text-foreground/80 flex h-8 w-8 items-center justify-center {rowIconBackground
+										? 'bg-foreground/8'
+										: ''}"
+								>
+									<section.icon variant="solid" class="h-5 w-5" />
+								</span>
+							{/snippet}
+							<span
+								class="text-foreground/90 min-w-0 truncate text-[0.95rem] font-medium"
+								>{section.label}</span
+							>
+						</SidebarListItem>
+					</div>
+				{/each}
+			</div>
+		</nav>
+		<ScrollTopShadow target={scrollEl} />
+	</div>
 </div>

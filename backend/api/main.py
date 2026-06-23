@@ -1,5 +1,6 @@
 """main fastapi application entry point."""
 
+import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -9,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.boot_settings import boot_settings
 from api.constants import API_V1_MOUNT_PATH
-from api.database import init_db
+from api.database import init_db, session_scope
 from api.exceptions import (
 	http_exception_handler,
 	unhandled_exception_handler,
@@ -18,22 +19,38 @@ from api.exceptions import (
 from api.logging import configure_logging, get_logger
 from api.middleware import (
 	APIVersionHeaderMiddleware,
+	RateLimitMiddleware,
 	RequestIDMiddleware,
 	RequestLoggingMiddleware,
 	SecurityHeadersMiddleware,
 )
 from api.openapi import DEFAULT_RESPONSES
+from api.redis import redis_client, start_invalidation_subscriber
 from api.routers import system as system_router
-from api.runtime import configure_psycopg_asyncio_event_loop_policy
 from api.settings import settings
 from api.storage import close_all as close_storage
-from api.storage import register as register_storage
-from api.storage.local import LocalStorageBackend
-from api.storage.s3 import S3StorageBackend
+from api.storage import configure_storage_backends
+from api.taskiq import shutdown_taskiq, startup_taskiq
 from api.v1.router import api_router
+from api.v1.service.events import start_remote_fanout_relay
+from api.v1.service.integrations.mcp import (
+	initialize_global_mcp_servers,
+	start_mcp_list_change_listeners,
+	stop_mcp_list_change_listeners,
+)
+from api.v1.tasks.calendar import reconcile_calendar_event_notification_schedules
+from api.v1.tasks.files import (
+	clear_disabled_file_maintenance_backfill_schedule,
+	fail_stale_file_tasks,
+	reconcile_file_maintenance_backfill_schedule,
+)
+from api.v1.tasks.reminders import reconcile_reminder_notification_schedules
+from api.v1.tasks.threads import (
+	clear_disabled_thread_maintenance_backfill_schedule,
+	fail_stale_thread_related_tasks,
+	reconcile_thread_maintenance_backfill_schedule,
+)
 
-
-configure_psycopg_asyncio_event_loop_policy()
 
 # configure logging early, before anything else logs
 configure_logging()
@@ -50,39 +67,50 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 		boot_settings.ENV,
 	)
 
-	# startup: skip db init during tests
+	settings.validate_runtime_security()
+
 	if not boot_settings.TESTING:
 		await init_db()
+		async with session_scope() as session:
+			await initialize_global_mcp_servers(session)
+		await redis_client.connect()
+		await clear_disabled_thread_maintenance_backfill_schedule()
+		await clear_disabled_file_maintenance_backfill_schedule()
+		await startup_taskiq()
+		await fail_stale_thread_related_tasks()
+		await fail_stale_file_tasks()
+		await reconcile_calendar_event_notification_schedules()
+		await reconcile_reminder_notification_schedules()
+		await reconcile_thread_maintenance_backfill_schedule()
+		await reconcile_file_maintenance_backfill_schedule()
 
-	# register the configured storage backend
-	storage_cfg = settings.assets.storage
-	if storage_cfg.backend == "s3":
-		s3 = S3StorageBackend(
-			bucket=storage_cfg.s3.bucket,
-			region=storage_cfg.s3.region,
-			endpoint_url=storage_cfg.s3.endpoint_url,
-			access_key_id=storage_cfg.s3.access_key_id,
-			secret_access_key=storage_cfg.s3.secret_access_key,
-			prefix=storage_cfg.s3.prefix,
-			presigned_url_ttl=storage_cfg.s3.presigned_url_ttl,
-			multipart_threshold=storage_cfg.s3.multipart_threshold,
-			multipart_chunk_size=storage_cfg.s3.multipart_chunk_size,
-			max_retries=storage_cfg.s3.max_retries,
-			retry_mode=storage_cfg.s3.retry_mode,
-		)
-		await s3.ensure_bucket()
-		register_storage("s3", s3)
-	else:
-		register_storage(
-			"local", LocalStorageBackend(root_path=storage_cfg.local.root_path)
-		)
+	# start the cross-worker cache invalidation subscriber. handlers are
+	# self-registered at import time by the modules that own resettable
+	# state (imported transitively through the router tree).
+	invalidation_task: asyncio.Task[None] | None = None
+	event_task: asyncio.Task[None] | None = None
+	mcp_list_change_tasks: list[asyncio.Task[None]] = []
+	if not boot_settings.TESTING:
+		mcp_list_change_tasks = await start_mcp_list_change_listeners()
+		invalidation_task = await start_invalidation_subscriber()
+		event_task = await start_remote_fanout_relay()
+
+	await configure_storage_backends()
 
 	logger.info("startup complete")
 	yield
 
 	# shutdown
 	logger.info("shutting down")
+	if invalidation_task is not None:
+		invalidation_task.cancel()
+	if event_task is not None:
+		event_task.cancel()
+	await stop_mcp_list_change_listeners(mcp_list_change_tasks)
 	await close_storage()
+	if not boot_settings.TESTING:
+		await shutdown_taskiq()
+		await redis_client.aclose()
 
 
 app = FastAPI(
@@ -107,7 +135,7 @@ app.add_middleware(RequestLoggingMiddleware)
 # 2. api version header
 app.add_middleware(APIVersionHeaderMiddleware, version="v1")
 
-# 1. cors (closest to app)
+# 1. cors
 app.add_middleware(
 	CORSMiddleware,
 	allow_origins=settings.security.cors_origins,
@@ -118,6 +146,9 @@ app.add_middleware(
 	allow_methods=["*"],
 	allow_headers=["*"],
 )
+
+# 0. rate limiting (closest to app - after cors handles preflight)
+app.add_middleware(RateLimitMiddleware)
 
 # exception handlers
 app.add_exception_handler(RequestValidationError, validation_exception_handler)

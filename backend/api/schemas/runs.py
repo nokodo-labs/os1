@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from api.schemas.message import Message
+from api.schemas.message import Message, ResourceAttachment
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -166,28 +166,21 @@ class ClientContext(BaseModel):
 class RunInput(BaseModel):
 	"""structured input for an agent run.
 
-	supports plain text, file attachments via IDs, or both.
+	supports plain text, resource attachments, or both.
 	"""
 
 	text: str | None = Field(
 		default=None,
 		description="user message text content",
 	)
-	attachment_ids: list[TypeID] = Field(
+	attachments: list[ResourceAttachment] = Field(
 		default_factory=list,
-		description="file IDs to include as content parts in the message. "
-		"each ID is resolved server-side to an image or file content part.",
-	)
-	attachment_actions: dict[str, Literal["reveal", "reference"]] | None = Field(
-		default=None,
-		description="one-off user attachment actions. keys are file_ids, values are "
-		"'reveal' (make active) or 'reference' (force decay). "
-		"persisted as events and applied by the decay filter.",
+		description="resource references to attach to the message.",
 	)
 
 
 # allowed tool_choice values - only specific tools can be forced by the client
-ToolChoice = Literal["web_search", "think", "generate_image"]
+ToolChoice = Literal["agentic_web_search", "think", "generate_image"]
 
 
 # base run fields shared across request types
@@ -206,6 +199,10 @@ class _RunBase(BaseModel):
 		default=None,
 		description="optional tool choice override for this run. "
 		"only specific tools can be forced.",
+	)
+	extra_plugins: list[str] = Field(
+		default_factory=list,
+		description="extra tool plugin ids to include for this run only.",
 	)
 	stream: bool = Field(
 		default=True,
@@ -281,10 +278,41 @@ class ThreadRunResponse(BaseModel):
 class ActiveRunOut(BaseModel):
 	"""lightweight snapshot of an in-memory active run."""
 
-	run_id: str
-	thread_id: str
-	agent_id: str
-	user_id: str
-	state: str
+	run_id: TypeID
+	thread_id: TypeID | None = None
+	agent_id: TypeID
+	user_id: TypeID
+	state: Literal["running", "completed", "error"]
 	started_at: datetime
 	updated_at: datetime
+
+
+class SteerRunRequest(BaseModel):
+	"""inject a user message into a running agent loop.
+
+	the message is persisted immediately and queued for delivery at the
+	next iteration boundary of the SDK loop.
+	"""
+
+	input: RunInput
+	parent_id: TypeID | None = Field(
+		default=None,
+		description="parent message id for the persisted user message. "
+		"defaults to the current branch tip if omitted.",
+	)
+	client_steering_id: str | None = Field(
+		default=None,
+		min_length=1,
+		max_length=128,
+		description="client-generated id used to reconcile optimistic queued messages.",
+	)
+
+
+class SteerRunResponse(BaseModel):
+	"""response from a successful steering enqueue."""
+
+	message_id: TypeID
+	state: Literal["queued", "dropped"] = Field(
+		description="'queued' if the run accepted the message, 'dropped' if "
+		"the run terminated before the message could be enqueued.",
+	)

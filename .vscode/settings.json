@@ -17,7 +17,6 @@
 	"files.exclude": {
 		"**/__pycache__": true,
 		"**/.pytest_cache": true,
-		"**/.mypy_cache": true,
 		"**/.ruff_cache": true,
 		"**/node_modules": true,
 		"**/.svelte-kit": true
@@ -37,6 +36,7 @@
 	"githubIssues.issueBranchTitle": "issues/${issueNumber}-${user}",
 
 	// Python
+	"python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv",
 	"[python]": {
 		"editor.defaultFormatter": "charliermarsh.ruff",
 		"editor.formatOnSave": true,
@@ -45,17 +45,20 @@
 			"source.organizeImports.ruff": "explicit"
 		}
 	},
-	"python.analysis.typeCheckingMode": "basic",
-	"python.analysis.autoImportCompletions": true,
-	"python.analysis.extraPaths": ["${workspaceFolder}/backend"],
-	"python.analysis.stubPath": "${workspaceFolder}/backend/stubs",
+	"python.languageServer": "None",
+	"ty.disableLanguageServices": false,
+	"ty.diagnosticMode": "workspace",
+	"ty.completions.autoImport": true,
+	"ty.importStrategy": "useBundled",
 	"python.testing.pytestEnabled": true,
 	"python.testing.unittestEnabled": false,
 	"python.testing.cwd": "${workspaceFolder}/backend",
 	"python.testing.pytestArgs": [],
 	"ruff.enable": true,
+	"ruff.nativeServer": "on",
 	"ruff.organizeImports": true,
 	"ruff.fixAll": true,
+	"ruff.importStrategy": "useBundled",
 
 	// JavaScript/TypeScript
 	"[javascript]": {
@@ -138,10 +141,14 @@
 		"git log": true,
 		"git show": true,
 		"git diff": true,
-		"git grep": true,
-		"git branch": true,
-		"git merge-base": true,
+		"/^git (status|log|show|diff|grep|blame|ls-files|rev-parse|describe|shortlog|merge-base)\\b/": true,
+		"/^git -C .+ (status|log|show|diff|grep|blame|ls-files|rev-parse|describe|shortlog|merge-base)\\b/": true,
+		"/^git branch\\b(?!.*-(d|D|m|M|-delete|-force)\\b)/": true,
 		"/^git branch\\b.*-(d|D|m|M|-delete|-force)\\b/": false,
+		"/^git tag\\b(\\s*(-l|--list|--sort|--format|--column|--merged|--no-merged|--contains|--no-contains|--points-at)[^;|&]*)?$/": true,
+		"/^git stash list\\b/": true,
+		"/^git stash\\b(?!\\s+list\\b)/": false,
+		"/^git worktree list\\b/": true,
 		"Write-Host": true,
 		"Write-Output": true,
 		"Split-Path": true,
@@ -196,16 +203,32 @@
 		"eval": false,
 		"Invoke-Expression": false,
 		"iex": false,
-		"uv run mypy": true,
+		"uv run ty": true,
 		"uv run ruff": true,
 		"uv run pytest": true,
+		"uv tree": true,
+		"uv pip list": true,
+		"docker ps": true,
+		"docker images": true,
+		"docker logs": true,
+		"docker inspect": true,
+		"docker stats": true,
+		"docker compose ls": true,
+		"docker compose ps": true,
+		"docker compose logs": true,
+		"/^docker\\b.*(run|exec|build|push|pull|rm|rmi|stop|start|restart|kill|prune|cp|commit|tag|save|load|export|import|create|rename|pause|unpause|update|network create|network rm|volume create|volume rm)\\b/": false,
+		"/^docker compose\\b.*(up|down|build|pull|push|rm|kill|stop|start|restart|run|exec|create|scale)\\b/": false,
 		"pnpm exec svelte-check": true,
 		"pnpm exec eslint": true,
 		"/^pnpm (vitest|run test|exec vitest)\\b/": true,
 		"/^uv run alembic -c api/migrations/alembic\\.ini check 2>&1$/": {
 			"approve": true,
 			"matchCommandLine": true
-		}
+		},
+		"Push-Location": true,
+		"Pop-Location": true,
+		"uv run alembic current": true,
+		"uv run python ../tools/autogen-migration": true
 	},
 	"postman.settings.dotenv-detection-notification-visibility": false
 }

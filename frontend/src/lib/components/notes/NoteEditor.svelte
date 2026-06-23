@@ -2,6 +2,7 @@
 	import type { DocParticipant } from '$lib/collaboration'
 	import SharedEditor from '$lib/components/editor/SharedEditor.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
+	import EmptyState from '$lib/components/EmptyState.svelte'
 	import ArrowUturnLeft from '$lib/components/icons/ArrowUturnLeft.svelte'
 	import ArrowUturnRight from '$lib/components/icons/ArrowUturnRight.svelte'
 	import Bars3BottomLeft from '$lib/components/icons/Bars3BottomLeft.svelte'
@@ -28,13 +29,18 @@
 	import { PopupMenu, Switch } from '$lib/components/primitives'
 	import MenuItem from '$lib/components/primitives/MenuItem.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
+	import type { ResourceProjectOption } from '$lib/components/widgets/ResourceProjectsMenu.svelte'
+	import ResourceProjectsMenu from '$lib/components/widgets/ResourceProjectsMenu.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
+	import { markdownToEditorHtml } from '$lib/editor/markdownSerialization'
 	import { device } from '$lib/stores/device.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { notes } from '$lib/stores/notes.svelte'
+	import { projects } from '$lib/stores/projects.svelte'
+	import { canEditAccessLevel, resourceAccess } from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { getUserInitials } from '$lib/utils'
-	import { marked } from 'marked'
+	import { userDisplayName } from '$lib/utils/resourceAuthors'
 	import { onDestroy } from 'svelte'
 	// storage format: markdown (in notes store)
 	// normal mode: shared collaborative tiptap editor (Yjs CRDT)
@@ -54,6 +60,39 @@
 	})
 
 	const note = $derived(notes.get(noteId))
+	const noteAccessLevel = $derived(
+		note ? resourceAccess.level('note', note.id, note.userId) : null
+	)
+	const canEditNote = $derived(canEditAccessLevel(noteAccessLevel))
+	const hasNoteActions = $derived(Boolean(note || canEditNote))
+	const manageableProjectOptions = $derived.by((): ResourceProjectOption[] =>
+		projects.list
+			.filter((project) =>
+				canEditAccessLevel(resourceAccess.level('project', project.id, project.owner_id))
+			)
+			.map((project) => ({
+				id: project.id,
+				name: project.name,
+				owner_id: project.owner_id,
+			}))
+	)
+
+	$effect(() => {
+		const accessKey = note ? `${note.id}:${resourceAccess.version}` : ''
+		if (note && accessKey) void resourceAccess.ensure('note', note.id, note.userId)
+	})
+
+	$effect(() => {
+		void projects.load()
+	})
+
+	$effect(() => {
+		const projectsAccessKey = `${resourceAccess.version}:${projects.list.map((project) => project.id).join('|')}`
+		if (!projectsAccessKey) return
+		for (const project of projects.list) {
+			void resourceAccess.ensure('project', project.id, project.owner_id)
+		}
+	})
 
 	let title = $state('')
 	let content = $state('') // markdown string
@@ -67,6 +106,10 @@
 	let collabParticipants = $state<DocParticipant[]>([])
 	let rawDirty = $state(false) // track unsaved raw edits
 
+	$effect(() => {
+		if (!canEditNote && isRawMode) isRawMode = false
+	})
+
 	const documentId = $derived(`note:${noteId}`)
 	// all participants except self (per-session: same user can appear multiple times)
 	const peers = $derived(collabParticipants.filter((p) => p.sessionId !== currentSessionId))
@@ -78,7 +121,7 @@
 		if (!u) return undefined
 		return {
 			id: String(u.id),
-			name: u.display_name ?? u.email?.split('@')[0] ?? 'user',
+			name: userDisplayName(u) ?? 'user',
 			avatarUrl: u.avatar_url ?? null,
 		}
 	})
@@ -92,8 +135,8 @@
 	const charCount = $derived(content.length)
 
 	// undo/redo always enabled in rich mode (tiptap handles internally)
-	const canUndo = $derived(!isRawMode)
-	const canRedo = $derived(!isRawMode)
+	const canUndo = $derived(canEditNote && !isRawMode)
+	const canRedo = $derived(canEditNote && !isRawMode)
 
 	let lastNoteId: string | null = $state(null)
 	let isSyncingFromStore = false
@@ -147,6 +190,7 @@
 	})
 
 	function scheduleSave(): void {
+		if (!canEditNote) return
 		if (saveTimeout !== null) window.clearTimeout(saveTimeout)
 		saveTimeout = window.setTimeout(() => {
 			saveTimeout = null
@@ -158,11 +202,12 @@
 
 	/** manual save for raw mode (Ctrl+S) */
 	function saveRaw(): void {
+		if (!canEditNote) return
 		if (!rawDirty) return
 		// push raw markdown into the SharedEditor's Yjs doc so it syncs to peers
 		const editor = sharedEditor?.getEditor()
 		if (editor) {
-			const html = String(marked.parse(content, { gfm: true, breaks: true }))
+			const html = markdownToEditorHtml(content)
 			editor.commands.setContent(html)
 		}
 		rawDirty = false
@@ -177,32 +222,36 @@
 	})
 
 	function handleContentChange(markdown: string): void {
+		if (!canEditNote) return
 		if (isSyncingFromStore) return
 		content = markdown
 		scheduleSave()
 	}
 
 	function handleTitleInput(): void {
+		if (!canEditNote) return
 		if (isSyncingFromStore) return
 		scheduleSave()
 	}
 
 	function handleRawInput(): void {
+		if (!canEditNote) return
 		if (isSyncingFromStore) return
 		rawDirty = true
 	}
 
 	function undo(): void {
-		if (isRawMode) return
+		if (!canEditNote || isRawMode) return
 		sharedEditor?.undo()
 	}
 
 	function redo(): void {
-		if (isRawMode) return
+		if (!canEditNote || isRawMode) return
 		sharedEditor?.redo()
 	}
 
 	function handleShare(): void {
+		if (!note) return
 		menuOpen = false
 		modals.open('resource-access', {
 			resourceType: 'note',
@@ -212,6 +261,7 @@
 	}
 
 	function setRawMode(next: boolean): void {
+		if (!canEditNote) return
 		if (next === isRawMode) return
 		if (next) {
 			// switching TO raw: grab latest markdown from SharedEditor
@@ -231,13 +281,24 @@
 	}
 
 	function handleProperties(): void {
+		if (!canEditNote) return
 		menuOpen = false
-		console.log('show properties for:', noteId)
+		modals.open('note-properties', { noteId })
+	}
+
+	async function handleNoteProjectToggle(projectId: string, selected: boolean): Promise<void> {
+		if (!note || !canEditNote) return
+		const currentIds = note.projectIds
+		const nextIds = selected
+			? [...new Set([...currentIds, projectId])]
+			: currentIds.filter((id) => id !== projectId)
+		await notes.update(note.id, { projectIds: nextIds })
+		projects.invalidateResourceCounts([...new Set([...currentIds, ...nextIds])])
 	}
 
 	async function handleEnhance(): Promise<void> {
 		menuOpen = false
-		if (isEnhancing) return
+		if (!canEditNote || isEnhancing) return
 		isEnhancing = true
 		try {
 			await notes.enhance(noteId)
@@ -288,70 +349,87 @@
 		</button>
 	{/if}
 
-	<!-- undo/redo buttons -->
-	<button
-		type="button"
-		class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
-		onclick={undo}
-		disabled={isRawMode || !canUndo}
-		aria-label="undo"
-	>
-		<ArrowUturnLeft />
-	</button>
-	<button
-		type="button"
-		class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
-		onclick={redo}
-		disabled={isRawMode || !canRedo}
-		aria-label="redo"
-	>
-		<ArrowUturnRight />
-	</button>
-
-	<!-- 3-dot menu -->
-	<button
-		type="button"
-		bind:this={menuButtonEl}
-		class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
-		onclick={() => (menuOpen = !menuOpen)}
-		aria-label="note options"
-		aria-haspopup="menu"
-		aria-expanded={menuOpen}
-	>
-		<EllipsisHorizontal />
-	</button>
-	<PopupMenu open={menuOpen} anchorEl={menuButtonEl} onClose={() => (menuOpen = false)}>
-		<MenuItem onclick={() => void handleEnhance()} disabled={isEnhancing}>
-			{#snippet icon()}<Sparkles class="h-4 w-4" />{/snippet}
-			{#if isEnhancing}<ShimmerText className="inline-block">enhancing</ShimmerText
-				>{:else}enhance{/if}
-		</MenuItem>
-		<div class="bg-foreground/10 my-1 h-px w-full"></div>
+	{#if canEditNote}
 		<button
 			type="button"
-			role="menuitemcheckbox"
-			aria-checked={isRawMode}
-			class="rounded-pill text-foreground/85 hover:bg-foreground/10 hover:text-foreground flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2 text-left text-sm transition-all duration-150"
-			onclick={() => setRawMode(!isRawMode)}
+			class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
+			onclick={undo}
+			disabled={!canUndo}
+			aria-label="undo"
 		>
-			<span class="flex h-5 w-5 shrink-0 items-center justify-center *:h-full *:w-full">
-				<Code class="h-4 w-4" />
-			</span>
-			<span class="flex-1 truncate">markdown mode</span>
-			<Switch size="sm" checked={isRawMode} />
+			<ArrowUturnLeft />
 		</button>
-		{#if device.isMobile}
-			<div class="bg-foreground/10 my-1 h-px w-full"></div>
-			<MenuItem onclick={handleShare}>
-				{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
-				share
-			</MenuItem>
-			<MenuItem onclick={handleProperties}>
-				{#snippet icon()}<InfoCircle class="h-4 w-4" />{/snippet}
-				properties
-			</MenuItem>
-		{/if}
-	</PopupMenu>
+		<button
+			type="button"
+			class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
+			onclick={redo}
+			disabled={!canRedo}
+			aria-label="redo"
+		>
+			<ArrowUturnRight />
+		</button>
+	{/if}
+
+	{#if hasNoteActions}
+		<button
+			type="button"
+			bind:this={menuButtonEl}
+			class="rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+			onclick={() => (menuOpen = !menuOpen)}
+			aria-label="note options"
+			aria-haspopup="menu"
+			aria-expanded={menuOpen}
+		>
+			<EllipsisHorizontal />
+		</button>
+		<PopupMenu open={menuOpen} anchorEl={menuButtonEl} onClose={() => (menuOpen = false)}>
+			{#if canEditNote}
+				<MenuItem onclick={() => void handleEnhance()} disabled={isEnhancing}>
+					{#snippet icon()}<Sparkles class="h-4 w-4" />{/snippet}
+					{#if isEnhancing}<ShimmerText className="inline-block">enhancing</ShimmerText
+						>{:else}enhance{/if}
+				</MenuItem>
+				<div class="bg-foreground/10 my-1 h-px w-full"></div>
+				<button
+					type="button"
+					role="menuitemcheckbox"
+					aria-checked={isRawMode}
+					class="rounded-pill text-foreground/85 hover:bg-foreground/10 hover:text-foreground flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2 text-left text-sm transition-all duration-150"
+					onclick={() => setRawMode(!isRawMode)}
+				>
+					<span
+						class="flex h-5 w-5 shrink-0 items-center justify-center *:h-full *:w-full"
+					>
+						<Code class="h-4 w-4" />
+					</span>
+					<span class="flex-1 truncate">markdown mode</span>
+					<Switch size="sm" checked={isRawMode} />
+				</button>
+				{#if note}
+					<ResourceProjectsMenu
+						projectOptions={manageableProjectOptions}
+						selectedProjectIds={note.projectIds}
+						onProjectToggle={handleNoteProjectToggle}
+					/>
+				{/if}
+			{/if}
+			{#if device.isMobile}
+				<div class="bg-foreground/10 my-1 h-px w-full"></div>
+				{#if note}
+					<MenuItem onclick={handleShare}>
+						{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
+						share
+					</MenuItem>
+				{/if}
+				{#if canEditNote}
+					<MenuItem onclick={handleProperties}>
+						{#snippet icon()}<InfoCircle variant="solid" class="h-4 w-4" />{/snippet}
+						properties
+					</MenuItem>
+				{/if}
+			{/if}
+		</PopupMenu>
+	{/if}
 {/snippet}
 
 {#if !note}
@@ -360,13 +438,7 @@
 			<NokodoLoader className="opacity-70" expanded={false} />
 		</div>
 	{:else}
-		<div class="mx-auto mt-10 max-w-3xl">
-			<div
-				class="rounded-container liquid-glass liquid-glass--frosted border-foreground/10 text-foreground/70 border p-5 text-sm"
-			>
-				note not found
-			</div>
-		</div>
+		<EmptyState label="note not found" class="flex-1" />
 	{/if}
 {:else}
 	<div class="flex w-full flex-1 flex-col" id="note-editor">
@@ -379,11 +451,12 @@
 					placeholder="title"
 					bind:value={title}
 					oninput={handleTitleInput}
+					readonly={!canEditNote}
 				/>
 			</div>
 
 			<!-- meta row -->
-			<div class="scrollbar-none flex w-full overflow-x-auto" use:wheelToHScroll>
+			<div class="flex w-full scrollbar-none overflow-x-auto" use:wheelToHScroll>
 				<div class="text-foreground/55 flex w-fit items-center gap-1 text-xs font-medium">
 					<div class="flex w-fit min-w-fit items-center gap-1 px-0.5 py-1">
 						<Calendar class="h-3.5 w-3.5" strokeWidth="2" />
@@ -416,7 +489,7 @@
 			<!-- viewers row (sessions editing this document) -->
 			{#if peers.length > 0}
 				<div
-					class="scrollbar-none mt-3 flex items-center gap-3 overflow-x-auto pt-2"
+					class="mt-3 flex scrollbar-none items-center gap-3 overflow-x-auto pt-2"
 					use:wheelToHScroll
 				>
 					{#each peers as peer, idx (peer.sessionId + ':' + idx)}
@@ -449,12 +522,13 @@
 
 			<!-- formatting toolbar row - hidden in raw mode -->
 			<div
-				class="formatting-toolbar overflow-hidden transition-all duration-200 ease-out {isRawMode
+				class="formatting-toolbar overflow-hidden transition-all duration-200 ease-out {isRawMode ||
+				!canEditNote
 					? 'max-h-0 opacity-0'
 					: 'max-h-20 opacity-100'}"
 			>
 				<div
-					class="scrollbar-none border-foreground/10 mt-3 flex items-center justify-between overflow-x-auto border-t pt-3"
+					class="border-foreground/10 mt-3 flex scrollbar-none items-center justify-between overflow-x-auto border-t pt-3"
 					use:wheelToHScroll
 				>
 					<div class="flex min-w-fit items-center gap-0.5">
@@ -574,6 +648,7 @@
 					bind:value={content}
 					oninput={handleRawInput}
 					onkeydown={handleRawKeyDown}
+					readonly={!canEditNote}
 				></textarea>
 			{/if}
 
@@ -584,6 +659,7 @@
 					{documentId}
 					initialContent={content}
 					user={userInfo}
+					editable={canEditNote}
 					placeholder="write something..."
 					onchange={handleContentChange}
 					onparticipantschange={(p) => (collabParticipants = p)}

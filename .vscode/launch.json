@@ -6,7 +6,7 @@
 			"type": "debugpy",
 			"request": "launch",
 			"module": "uvicorn",
-			"preLaunchTask": "Docker: ensure dev deps",
+			"preLaunchTask": "backend: ensure dev deps",
 			"args": [
 				"api.main:app",
 				"--host",
@@ -24,6 +24,44 @@
 			},
 			"console": "integratedTerminal",
 			"purpose": ["debug-in-terminal"]
+		},
+		{
+			"name": "TaskIQ: worker",
+			"type": "debugpy",
+			"request": "launch",
+			"module": "api.taskiq",
+			"preLaunchTask": "Docker: ensure dev deps",
+			"args": [
+				"worker",
+				"api.taskiq:broker",
+				"api.tasks.registry",
+				"--workers",
+				"auto",
+				"--max-async-tasks",
+				"25"
+			],
+			"justMyCode": true,
+			"subProcess": true,
+			"cwd": "${workspaceFolder}/backend",
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/backend"
+			},
+			"console": "integratedTerminal"
+		},
+		{
+			"name": "TaskIQ: scheduler",
+			"type": "debugpy",
+			"request": "launch",
+			"module": "api.taskiq",
+			"preLaunchTask": "Docker: ensure dev deps",
+			"args": ["scheduler", "api.taskiq:scheduler", "api.tasks.registry"],
+			"justMyCode": true,
+			"subProcess": true,
+			"cwd": "${workspaceFolder}/backend",
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/backend"
+			},
+			"console": "integratedTerminal"
 		},
 		{
 			"name": "Python: current file",
@@ -97,13 +135,48 @@
 			}
 		},
 		{
-			"name": "Docker: attach to backend",
+			"name": "Docker: attach backend API",
 			"type": "debugpy",
 			"request": "attach",
 			"connect": {
 				"host": "localhost",
 				"port": 5678
 			},
+			"justMyCode": true,
+			"pathMappings": [
+				{
+					"localRoot": "${workspaceFolder}/backend",
+					"remoteRoot": "/app"
+				}
+			]
+		},
+		{
+			"name": "Docker: attach TaskIQ worker",
+			"type": "debugpy",
+			"request": "attach",
+			"connect": {
+				"host": "localhost",
+				"port": 5679
+			},
+			"justMyCode": true,
+			"subProcess": true,
+			"pathMappings": [
+				{
+					"localRoot": "${workspaceFolder}/backend",
+					"remoteRoot": "/app"
+				}
+			]
+		},
+		{
+			"name": "Docker: attach TaskIQ scheduler",
+			"type": "debugpy",
+			"request": "attach",
+			"connect": {
+				"host": "localhost",
+				"port": 5680
+			},
+			"justMyCode": true,
+			"subProcess": true,
 			"pathMappings": [
 				{
 					"localRoot": "${workspaceFolder}/backend",
@@ -114,13 +187,37 @@
 	],
 	"compounds": [
 		{
+			"name": "Docker: API + TaskIQ debug stack",
+			"configurations": [
+				"Docker: attach backend API",
+				"Docker: attach TaskIQ worker",
+				"Docker: attach TaskIQ scheduler"
+			],
+			"preLaunchTask": "Docker: debug API + TaskIQ",
+			"postDebugTask": "Docker: stop debug API + TaskIQ",
+			"stopAll": true,
+			"presentation": {
+				"hidden": false,
+				"group": "docker",
+				"order": 1
+			}
+		},
+		{
+			"name": "backend: API + TaskIQ",
+			"configurations": ["backend: FastAPI Uvicorn server"],
+			"stopAll": true,
+			"presentation": {
+				"hidden": false,
+				"group": "backend",
+				"order": 1
+			}
+		},
+		{
 			"name": "full stack",
 			"configurations": [
 				"backend: FastAPI Uvicorn server",
 				"frontend: Vite dev server",
-				"frontend: Chrome",
-				"console: Vite dev server",
-				"console: Chrome"
+				"console: Vite dev server"
 			],
 			"stopAll": true,
 			"presentation": {
@@ -133,8 +230,7 @@
 			"name": "API + frontend",
 			"configurations": [
 				"backend: FastAPI Uvicorn server",
-				"frontend: Vite dev server",
-				"frontend: Chrome"
+				"frontend: Vite dev server"
 			],
 			"stopAll": true,
 			"presentation": {
@@ -147,8 +243,7 @@
 			"name": "API + console",
 			"configurations": [
 				"backend: FastAPI Uvicorn server",
-				"console: Vite dev server",
-				"console: Chrome"
+				"console: Vite dev server"
 			],
 			"stopAll": true,
 			"presentation": {

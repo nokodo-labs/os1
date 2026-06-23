@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.v1.service.prompt_runtime import render_inline_with_prompts
+from api.v1.service.prompts import (
+	invalidate_prompt_template_cache,
+	render_inline_with_prompts,
+)
 
 
 @pytest.mark.asyncio
@@ -53,6 +58,22 @@ async def test_list_prompts_sorting(
 	assert resp.status_code == 200
 	items = resp.json()
 	assert items[0]["command"] == "b"
+
+	page = await client.get(
+		"/v1/prompts",
+		headers=headers,
+		params={
+			"source": "custom",
+			"sort_by": "command",
+			"sort_dir": "asc",
+			"skip": 1,
+			"limit": 1,
+		},
+	)
+	assert page.status_code == 200
+	page_items = page.json()
+	assert len(page_items) == 1
+	assert page_items[0]["command"] == "b"
 
 
 @pytest.mark.asyncio
@@ -194,3 +215,85 @@ async def test_prompt_render_legacy_prompts_syntax(
 		text="{{PROMPTS.outer}}",
 	)
 	assert rendered == "[Inner]"
+
+
+@pytest.mark.asyncio
+async def test_prompt_render_uses_cached_templates(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	db_session: AsyncSession,
+) -> None:
+	"""prompt rendering avoids DB reads after template cache warmup."""
+	await invalidate_prompt_template_cache(db_session)
+	headers = admin_auth["headers"]
+	assert isinstance(headers, dict)
+
+	created = await client.post(
+		"/v1/prompts",
+		headers=headers,
+		json={"command": "cached", "content": "Cached {{ name }}"},
+	)
+	assert created.status_code == 201
+
+	rendered = await render_inline_with_prompts(
+		db_session,
+		text="{% include 'cached' %}",
+		variables={"name": "template"},
+	)
+	assert rendered == "Cached template"
+
+	with patch.object(
+		db_session,
+		"execute",
+		new=AsyncMock(side_effect=AssertionError("unexpected DB read")),
+	):
+		cached = await render_inline_with_prompts(
+			db_session,
+			text="{% include 'cached' %}",
+			variables={"name": "again"},
+		)
+
+	assert cached == "Cached again"
+
+
+@pytest.mark.asyncio
+async def test_prompt_update_invalidates_template_cache(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	db_session: AsyncSession,
+) -> None:
+	"""prompt updates invalidate cached template content."""
+	await invalidate_prompt_template_cache(db_session)
+	headers = admin_auth["headers"]
+	assert isinstance(headers, dict)
+
+	created = await client.post(
+		"/v1/prompts",
+		headers=headers,
+		json={"command": "mutable", "content": "before"},
+	)
+	assert created.status_code == 201
+	prompt_id = created.json()["id"]
+
+	assert (
+		await render_inline_with_prompts(
+			db_session,
+			text="{% include 'mutable' %}",
+		)
+		== "before"
+	)
+
+	updated = await client.patch(
+		f"/v1/prompts/{prompt_id}",
+		headers=headers,
+		json={"content": "after"},
+	)
+	assert updated.status_code == 200
+
+	assert (
+		await render_inline_with_prompts(
+			db_session,
+			text="{% include 'mutable' %}",
+		)
+		== "after"
+	)

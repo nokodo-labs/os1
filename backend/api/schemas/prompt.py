@@ -3,10 +3,30 @@
 from __future__ import annotations
 
 import re
+from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
-from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+from api.schemas.common import (
+	MISSING,
+	MetadataModel,
+	MetadataUpdateModel,
+	MissingType,
+	TimestampedModel,
+)
+from api.schemas.sorting import CommonSortBy
+
+
+type PromptSortBy = CommonSortBy | Literal["command"]
+PromptSourceStr = Literal["native", "external", "custom"]
+type PromptSourceFilter = PromptSourceStr | None
+
+
+class PromptListFilters(BaseModel):
+	"""filters for listing prompts."""
+
+	q: str | None = Field(default=None, min_length=1, max_length=500)
+	source: PromptSourceFilter = None
 
 
 _COMMAND_PATTERN = r"^[a-zA-Z0-9][a-zA-Z0-9-_]*$"
@@ -51,14 +71,12 @@ class PromptCreate(PromptBase):
 class PromptUpdate(MetadataUpdateModel):
 	"""payload for prompt update."""
 
-	command: str | None = None
-	content: str | None = None
+	command: str | MissingType = MISSING
+	content: str | MissingType = MISSING
 
 	@field_validator("command")
 	@classmethod
-	def _validate_command(cls, value: str | None) -> str | None:
-		if value is None:
-			return None
+	def _validate_command(cls, value: str) -> str:
 		# reuse the base validator logic
 		return PromptBase._validate_command(value)
 
@@ -67,3 +85,4 @@ class Prompt(PromptBase, TimestampedModel):
 	"""response schema."""
 
 	id: str
+	source: PromptSourceStr = "custom"

@@ -35,10 +35,21 @@ class EventType(StrEnum):
 	# agent run lifecycle
 	RUN_STARTED = "run.started"
 	RUN_COMPLETED = "run.completed"
+	RUN_ERROR = "run.error"
+	RUN_ACTIVITY_STARTED = "run.activity.started"
+	RUN_ACTIVITY_PROGRESS = "run.activity.progress"
+	RUN_ACTIVITY_ENDED = "run.activity.ended"
+
+	# in-flight steering: a user injects an extra message into a run
+	RUN_STEERING_QUEUED = "run.steering.queued"
+	RUN_STEERING_INJECTED = "run.steering.injected"
+	RUN_STEERING_DROPPED = "run.steering.dropped"
 
 	# notification events
 	NOTIFICATION_CUSTOM = "notification.custom"
 	NOTIFICATION_AGENT = "notification.agent"
+	NOTIFICATION_REMINDER_ALERT = "notification.reminder_alert"
+	NOTIFICATION_CALENDAR_EVENT_ALERT = "notification.calendar_event_alert"
 
 	# reminder events
 	REMINDER_CREATED = "reminder.created"
@@ -49,11 +60,20 @@ class EventType(StrEnum):
 	REMINDER_LIST_UPDATED = "reminder_list.updated"
 	REMINDER_LIST_DELETED = "reminder_list.deleted"
 
+	# calendar events
+	CALENDAR_CREATED = "calendar.created"
+	CALENDAR_UPDATED = "calendar.updated"
+	CALENDAR_DELETED = "calendar.deleted"
+	CALENDAR_EVENT_CREATED = "calendar.event.created"
+	CALENDAR_EVENT_UPDATED = "calendar.event.updated"
+	CALENDAR_EVENT_DELETED = "calendar.event.deleted"
+
 	# task events
 	TASK_CREATED = "task.created"
 	TASK_UPDATED = "task.updated"
 	TASK_COMPLETED = "task.completed"
 	TASK_FAILED = "task.failed"
+	TASK_CANCELLED = "task.cancelled"
 
 	# project events
 	PROJECT_CREATED = "project.created"
@@ -93,6 +113,7 @@ class EventType(StrEnum):
 	FRIEND_REQUEST_SENT = "friend.request_sent"
 	FRIEND_REQUEST_ACCEPTED = "friend.request_accepted"
 	FRIEND_REQUEST_DECLINED = "friend.request_declined"
+	FRIEND_REQUEST_CANCELLED = "friend.request_cancelled"
 	FRIEND_REMOVED = "friend.removed"
 
 	# settings events
@@ -100,14 +121,11 @@ class EventType(StrEnum):
 
 	# user events
 	USER_PREFERENCES_UPDATED = "user.preferences_updated"
+	USER_CLIENT_PREFERENCES_UPDATED = "user_client.preferences_updated"
 
 	# role events
 	ROLE_UPDATED = "role.updated"
 	ROLE_DELETED = "role.deleted"
-
-	# attachment lifecycle events
-	ATTACHMENT_DECAYED = "attachment.decayed"
-	ATTACHMENT_REVEALED = "attachment.revealed"
 
 	# citation events
 	CITATION_SOURCES = "citation.sources"
@@ -140,6 +158,13 @@ TYPING_EVENTS = {
 RUN_EVENTS = {
 	EventType.RUN_STARTED,
 	EventType.RUN_COMPLETED,
+	EventType.RUN_ERROR,
+	EventType.RUN_ACTIVITY_STARTED,
+	EventType.RUN_ACTIVITY_PROGRESS,
+	EventType.RUN_ACTIVITY_ENDED,
+	EventType.RUN_STEERING_QUEUED,
+	EventType.RUN_STEERING_INJECTED,
+	EventType.RUN_STEERING_DROPPED,
 }
 
 SETTINGS_EVENTS = {
@@ -148,11 +173,14 @@ SETTINGS_EVENTS = {
 
 USER_EVENTS = {
 	EventType.USER_PREFERENCES_UPDATED,
+	EventType.USER_CLIENT_PREFERENCES_UPDATED,
 }
 
 NOTIFICATION_EVENTS = {
 	EventType.NOTIFICATION_CUSTOM,
 	EventType.NOTIFICATION_AGENT,
+	EventType.NOTIFICATION_REMINDER_ALERT,
+	EventType.NOTIFICATION_CALENDAR_EVENT_ALERT,
 }
 
 TOOL_EVENTS = {
@@ -205,6 +233,7 @@ FRIEND_EVENTS = {
 	EventType.FRIEND_REQUEST_SENT,
 	EventType.FRIEND_REQUEST_ACCEPTED,
 	EventType.FRIEND_REQUEST_DECLINED,
+	EventType.FRIEND_REQUEST_CANCELLED,
 	EventType.FRIEND_REMOVED,
 }
 
@@ -218,16 +247,21 @@ REMINDER_EVENTS = {
 	EventType.REMINDER_LIST_DELETED,
 }
 
+CALENDAR_EVENTS = {
+	EventType.CALENDAR_CREATED,
+	EventType.CALENDAR_UPDATED,
+	EventType.CALENDAR_DELETED,
+	EventType.CALENDAR_EVENT_CREATED,
+	EventType.CALENDAR_EVENT_UPDATED,
+	EventType.CALENDAR_EVENT_DELETED,
+}
+
 TASK_EVENTS = {
 	EventType.TASK_CREATED,
 	EventType.TASK_UPDATED,
 	EventType.TASK_COMPLETED,
 	EventType.TASK_FAILED,
-}
-
-ATTACHMENT_EVENTS = {
-	EventType.ATTACHMENT_DECAYED,
-	EventType.ATTACHMENT_REVEALED,
+	EventType.TASK_CANCELLED,
 }
 
 CITATION_EVENTS = {

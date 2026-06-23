@@ -17,8 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.event import Event, EventScope
 from api.models.message import Message, MessageType
+from api.models.note import Note
 from api.models.notification import Notification
 from api.models.thread import Thread
+from api.models.user import User
 from api.schemas.message import MessageCreate
 from api.schemas.thread import ThreadCreate
 from api.schemas.user import UserCreate
@@ -63,7 +65,7 @@ async def test_soft_delete_thread_does_not_delete_messages(
 	assert int(count_before or 0) == 1
 
 	with patch(
-		"api.v1.service.threads.remove_vectorized_resource",
+		"api.v1.service.threads.core.remove_vectorized_resource",
 		new=AsyncMock(),
 	):
 		await thread_service.delete_thread(
@@ -169,7 +171,11 @@ async def test_delete_notification_also_deletes_attached_event(
 	db_session.add(event)
 	await db_session.flush()
 
-	notification = Notification(user_id=str(user.id), event_id=str(event.id))
+	notification = Notification(
+		user_id=str(user.id),
+		event_id=str(event.id),
+		title="cascade notification",
+	)
 	db_session.add(notification)
 	await db_session.commit()
 	await db_session.refresh(notification)
@@ -426,3 +432,39 @@ async def test_delete_user_message_preserves_siblings(
 	# thread leaf should point to the deepest remaining leaf
 	await db_session.refresh(thread)
 	assert thread.current_message_id == assistant_2.id
+
+
+@pytest.mark.asyncio
+async def test_delete_user_cascades_owned_rows(db_session: AsyncSession) -> None:
+	admin = await user_service.create_user(
+		UserCreate(
+			email="delete-owner-admin@example.com",
+			password="password123",
+			username="delete_owner_admin",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	principal = Principal(user=admin, group_ids=(), permissions=frozenset())
+	target = await user_service.create_user(
+		UserCreate(
+			email="delete-owner-target@example.com",
+			password="password123",
+			username="delete_owner_target",
+		),
+		db_session,
+		principal=principal,
+	)
+	note = Note(
+		user_id=target.id,
+		title="delete me",
+		content="owned by deleted user",
+	)
+	db_session.add(note)
+	await db_session.commit()
+	await db_session.refresh(note)
+
+	await user_service.delete_user(TypeID(target.id), db_session, principal=principal)
+
+	assert await db_session.get(User, target.id) is None
+	assert await db_session.get(Note, note.id) is None

@@ -3,11 +3,39 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
-from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+from api.schemas.common import (
+	MISSING,
+	MetadataModel,
+	MetadataUpdateModel,
+	MissingType,
+	TimestampedModel,
+)
+from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
+
+
+type NoteSortBy = CommonSortBy | Literal["title"]
+
+
+class NoteListFilters(BaseModel):
+	"""filters for listing notes."""
+
+	owner_id: TypeID | None = None
+	labels: list[str] | None = None
+	include_deleted: bool = False
+	q: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+class NoteSearchFilters(BaseModel):
+	"""structured filters applied to note search (vector + autocomplete)."""
+
+	owner_id: TypeID | None = None
+	labels: list[str] | None = None
+	include_deleted: bool = False
 
 
 class NoteBase(MetadataModel):
@@ -28,10 +56,10 @@ class NoteCreate(NoteBase):
 class NoteUpdate(MetadataUpdateModel):
 	"""payload to update a note."""
 
-	title: str | None = None
-	content: str | None = None
-	labels: list[str] | None = None
-	project_ids: list[TypeID] | None = None
+	title: str | MissingType = MISSING
+	content: str | MissingType = MISSING
+	labels: list[str] | MissingType = MISSING
+	project_ids: list[TypeID] | MissingType = MISSING
 
 
 class Note(NoteBase, TimestampedModel):

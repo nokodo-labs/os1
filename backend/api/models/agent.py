@@ -14,6 +14,10 @@ from api.models.mixins import (
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+from api.schemas.agent import AgentConfig
+
+
+AGENT_TYPEID_PREFIX = "agent"
 
 
 if TYPE_CHECKING:
@@ -28,7 +32,7 @@ class Agent(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""User-facing AI persona with configuration."""
 
 	__tablename__ = "agents"
-	__typeid_prefix__ = "agent"
+	__typeid_prefix__ = AGENT_TYPEID_PREFIX
 
 	name: Mapped[str] = mapped_column(String(100), unique=True)
 	description: Mapped[str | None] = mapped_column(Text())
@@ -67,3 +71,12 @@ class Agent(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		back_populates="agent",
 		cascade="all, delete-orphan",
 	)
+
+	@property
+	def parsed_config(self) -> AgentConfig:
+		"""typed view of ``self.config``.
+
+		single canonical parse point so callers never need to re-validate
+		the raw JSONB. unknown keys round-trip via ``AgentConfig`` extras.
+		"""
+		return AgentConfig.model_validate(self.config or {})

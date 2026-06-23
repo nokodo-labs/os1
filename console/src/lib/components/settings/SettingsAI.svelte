@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Schemas } from '$lib/api'
+	import SettingsPublicBadge from '$lib/components/settings/SettingsPublicBadge.svelte'
 
 	type Agent = Schemas['Agent']
 	type Model = Schemas['Model']
@@ -45,7 +46,7 @@
 		memoryEnable?: boolean
 		memorySimilarityThreshold?: string
 		memoryTopK?: string
-		memoryMessagesToConsider?: string
+		memoryPostProcessingTurns?: string
 		// chat context
 		chatContextEnabled?: boolean
 		chatContextMode?: ChatContextMode
@@ -57,9 +58,14 @@
 		// tasks
 		taskDefaultModelId?: string
 		taskThreadMetadataModelId?: string
+		taskThreadMaintenanceModelId?: string
 		taskInputAutocompleteModelId?: string
 		taskSummarizationModelId?: string
 		taskMemoryPostProcessingModelId?: string
+		taskWebSearchModelId?: string
+		taskAssetDescriptionModelId?: string
+		taskAssetTextExtractionModelId?: string
+		taskMaintenanceMaxCharsPerMessage?: string
 		// media - images
 		mediaImagesEnabled?: boolean
 		mediaImagesModel?: string
@@ -72,21 +78,24 @@
 		// media - audio
 		mediaAudioEnabled?: boolean
 		// attachments
-		attachmentImageDecayTurns?: string
-		attachmentAudioDecayTurns?: string
-		attachmentVideoDecayTurns?: string
-		attachmentRevealDecayTurns?: string
-		// windowing
-		windowingEnabled?: boolean
-		windowingMaxMessages?: string
-		windowingTriggerRatio?: string
-		windowingHardRatio?: string
-		windowingSummaryBatchSize?: string
-		windowingMaxSummariesBeforeCondense?: string
-		windowingToolResultMaxShare?: string
-		windowingToolResultHardCap?: string
-		windowingToolResultsCombinedMaxShare?: string
-		windowingResponseHeadroom?: string
+		attachmentImageDecayIterations?: string
+		attachmentAudioDecayIterations?: string
+		attachmentVideoDecayIterations?: string
+		// context compaction
+		contextCompactionEnabled?: boolean
+		contextCompactionTriggerRatio?: string
+		contextCompactionRecoveryTargetRatio?: string
+		contextCompactionTargetUsageCapTokens?: string
+		contextCompactionSummaryBatchMinTokens?: string
+		contextCompactionSummaryBatchMaxTokens?: string
+		contextCompactionPromptOverheadTokens?: string
+		contextCompactionBlockingSummarizationEnabled?: boolean
+		contextCompactionBlockingSummarizationTimeoutSeconds?: string
+		contextCompactionToolResultMaxShare?: string
+		contextCompactionToolResultHardCap?: string
+		contextCompactionToolResultsCombinedMaxShare?: string
+		contextCompactionResponseHeadroom?: string
+		contextCompactionSummarizationMaxCharsPerMessage?: string
 		// auxiliary (read-only)
 		agents?: Agent[]
 		models?: Model[]
@@ -102,7 +111,7 @@
 		memoryEnable = $bindable(false),
 		memorySimilarityThreshold = $bindable(''),
 		memoryTopK = $bindable(''),
-		memoryMessagesToConsider = $bindable(''),
+		memoryPostProcessingTurns = $bindable(''),
 		chatContextEnabled = $bindable(true),
 		chatContextMode = $bindable('recent'),
 		chatContextTopK = $bindable(''),
@@ -111,9 +120,14 @@
 		retrievalPreBuild = $bindable(true),
 		taskDefaultModelId = $bindable(''),
 		taskThreadMetadataModelId = $bindable(''),
+		taskThreadMaintenanceModelId = $bindable(''),
 		taskInputAutocompleteModelId = $bindable(''),
 		taskSummarizationModelId = $bindable(''),
 		taskMemoryPostProcessingModelId = $bindable(''),
+		taskWebSearchModelId = $bindable(''),
+		taskAssetDescriptionModelId = $bindable(''),
+		taskAssetTextExtractionModelId = $bindable(''),
+		taskMaintenanceMaxCharsPerMessage = $bindable(''),
 		mediaImagesEnabled = $bindable(true),
 		mediaImagesModel = $bindable(''),
 		mediaImagesDefaultSize = $bindable(''),
@@ -122,20 +136,23 @@
 		mediaImagesMaxN = $bindable(''),
 		mediaVideosEnabled = $bindable(false),
 		mediaAudioEnabled = $bindable(false),
-		attachmentImageDecayTurns = $bindable(''),
-		attachmentAudioDecayTurns = $bindable(''),
-		attachmentVideoDecayTurns = $bindable(''),
-		attachmentRevealDecayTurns = $bindable(''),
-		windowingEnabled = $bindable(true),
-		windowingMaxMessages = $bindable(''),
-		windowingTriggerRatio = $bindable(''),
-		windowingHardRatio = $bindable(''),
-		windowingSummaryBatchSize = $bindable(''),
-		windowingMaxSummariesBeforeCondense = $bindable(''),
-		windowingToolResultMaxShare = $bindable(''),
-		windowingToolResultHardCap = $bindable(''),
-		windowingToolResultsCombinedMaxShare = $bindable(''),
-		windowingResponseHeadroom = $bindable(''),
+		attachmentImageDecayIterations = $bindable(''),
+		attachmentAudioDecayIterations = $bindable(''),
+		attachmentVideoDecayIterations = $bindable(''),
+		contextCompactionEnabled = $bindable(true),
+		contextCompactionTriggerRatio = $bindable(''),
+		contextCompactionRecoveryTargetRatio = $bindable(''),
+		contextCompactionTargetUsageCapTokens = $bindable(''),
+		contextCompactionSummaryBatchMinTokens = $bindable(''),
+		contextCompactionSummaryBatchMaxTokens = $bindable(''),
+		contextCompactionPromptOverheadTokens = $bindable(''),
+		contextCompactionBlockingSummarizationEnabled = $bindable(true),
+		contextCompactionBlockingSummarizationTimeoutSeconds = $bindable(''),
+		contextCompactionToolResultMaxShare = $bindable(''),
+		contextCompactionToolResultHardCap = $bindable(''),
+		contextCompactionToolResultsCombinedMaxShare = $bindable(''),
+		contextCompactionResponseHeadroom = $bindable(''),
+		contextCompactionSummarizationMaxCharsPerMessage = $bindable(''),
 		agents = [],
 		models = [],
 		providers = [],
@@ -167,7 +184,10 @@
 		<div class="space-y-2">
 			<div class="flex items-center justify-between gap-2">
 				<div>
-					<Label for="default_agents">default agents</Label>
+					<div class="flex items-center gap-2">
+						<Label for="default_agents">default agents</Label>
+						<SettingsPublicBadge />
+					</div>
 					<p class="text-xs text-zinc-500">
 						tried in order; first available agent is used.
 					</p>
@@ -277,6 +297,7 @@
 							step="0.01"
 							min="0"
 							max="1"
+							placeholder="0.65"
 							bind:value={memorySimilarityThreshold}
 							class="rounded-xl"
 						/>
@@ -290,20 +311,22 @@
 							id="ai_top_k"
 							type="number"
 							min="1"
+							placeholder="15"
 							bind:value={memoryTopK}
 							class="rounded-xl"
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="ai_messages">messages to consider</Label>
+						<Label for="ai_post_processing_turns">post processing turns</Label>
 						<p class="text-xs text-zinc-500">
-							recent messages scanned when retrieving or consolidating memories.
+							recent turns fed to the memory maintenance agent after each turn.
 						</p>
 						<Input
-							id="ai_messages"
+							id="ai_post_processing_turns"
 							type="number"
 							min="1"
-							bind:value={memoryMessagesToConsider}
+							placeholder="6"
+							bind:value={memoryPostProcessingTurns}
 							class="rounded-xl"
 						/>
 					</div>
@@ -349,6 +372,7 @@
 						id="ai_chat_top_k"
 						type="number"
 						min="1"
+						placeholder="3"
 						bind:value={chatContextTopK}
 						class="rounded-xl"
 					/>
@@ -364,6 +388,7 @@
 						min="0"
 						max="1"
 						step="0.05"
+						placeholder="0.65"
 						bind:value={chatContextSimilarityThreshold}
 						class="rounded-xl"
 					/>
@@ -460,6 +485,28 @@
 					</Select>
 				</div>
 				<div class="space-y-2">
+					<Label for="task_thread_maintenance_model">thread maintenance model</Label>
+					<p class="text-xs text-zinc-500">
+						model used for inactive-thread summaries and metadata maintenance.
+					</p>
+					<Select
+						value={taskThreadMaintenanceModelId}
+						onValueChange={(v: string) => (taskThreadMaintenanceModelId = v)}
+					>
+						<SelectTrigger id="task_thread_maintenance_model" class="rounded-xl">
+							<span class="truncate text-left"
+								>{getModelLabel(taskThreadMaintenanceModelId)}</span
+							>
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="">none</SelectItem>
+							{#each chatModels as model (model.id)}
+								<SelectItem value={model.id}>{modelLabel(model)}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
+				</div>
+				<div class="space-y-2">
 					<Label for="task_input_autocomplete_model">input autocomplete model</Label>
 					<p class="text-xs text-zinc-500">
 						model used to suggest completions as the user types.
@@ -525,6 +572,86 @@
 						</SelectContent>
 					</Select>
 				</div>
+				<div class="space-y-2">
+					<Label for="task_web_search_model">web search model</Label>
+					<p class="text-xs text-zinc-500">model used for native agentic web search.</p>
+					<Select
+						value={taskWebSearchModelId}
+						onValueChange={(v: string) => (taskWebSearchModelId = v)}
+					>
+						<SelectTrigger id="task_web_search_model" class="rounded-xl">
+							<span class="truncate text-left"
+								>{getModelLabel(taskWebSearchModelId)}</span
+							>
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="">none</SelectItem>
+							{#each chatModels as model (model.id)}
+								<SelectItem value={model.id}>{modelLabel(model)}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
+				</div>
+				<div class="space-y-2">
+					<Label for="task_asset_description_model">asset description model</Label>
+					<p class="text-xs text-zinc-500">
+						model for generating asset summaries and descriptions.
+					</p>
+					<Select
+						value={taskAssetDescriptionModelId}
+						onValueChange={(v: string) => (taskAssetDescriptionModelId = v)}
+					>
+						<SelectTrigger id="task_asset_description_model" class="rounded-xl">
+							<span class="truncate text-left"
+								>{getModelLabel(taskAssetDescriptionModelId)}</span
+							>
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="">none</SelectItem>
+							{#each chatModels as model (model.id)}
+								<SelectItem value={model.id}>{modelLabel(model)}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
+				</div>
+				<div class="space-y-2">
+					<Label for="task_asset_text_extraction_model">asset text extraction model</Label
+					>
+					<p class="text-xs text-zinc-500">
+						model for file, document, and media text extraction.
+					</p>
+					<Select
+						value={taskAssetTextExtractionModelId}
+						onValueChange={(v: string) => (taskAssetTextExtractionModelId = v)}
+					>
+						<SelectTrigger id="task_asset_text_extraction_model" class="rounded-xl">
+							<span class="truncate text-left"
+								>{getModelLabel(taskAssetTextExtractionModelId)}</span
+							>
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="">none</SelectItem>
+							{#each chatModels as model (model.id)}
+								<SelectItem value={model.id}>{modelLabel(model)}</SelectItem>
+							{/each}
+						</SelectContent>
+					</Select>
+				</div>
+				<div class="space-y-2">
+					<Label for="task_maintenance_max_chars">maintenance transcript max chars</Label>
+					<p class="text-xs text-zinc-500">
+						max characters per message in maintenance transcripts. leave empty for
+						unlimited.
+					</p>
+					<Input
+						id="task_maintenance_max_chars"
+						type="number"
+						min="1"
+						placeholder="unlimited"
+						bind:value={taskMaintenanceMaxCharsPerMessage}
+						class="rounded-xl"
+					/>
+				</div>
 			</div>
 			{#if modelsError}
 				<p class="mt-3 text-xs text-red-300">{modelsError}</p>
@@ -535,194 +662,295 @@
 		<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
 			<p class="mb-1 text-sm font-medium">attachment decay</p>
 			<p class="mb-4 text-xs text-zinc-500">
-				turns after the last interaction before an active attachment auto-decays to
-				reference state.
+				iterations the model keeps native attachment bytes before they decay to a reference.
+				an iteration is one agent-loop step (one per assistant message) within the same
+				agent turn.
 			</p>
 			<div class="grid gap-4 md:grid-cols-2">
 				<div class="space-y-2">
-					<Label for="attach_image_decay">image decay turns</Label>
+					<Label for="attach_image_decay">image decay iterations</Label>
 					<Input
 						id="attach_image_decay"
 						type="number"
 						min="1"
-						bind:value={attachmentImageDecayTurns}
+						placeholder="3"
+						bind:value={attachmentImageDecayIterations}
 						class="rounded-xl"
 					/>
 				</div>
 				<div class="space-y-2">
-					<Label for="attach_audio_decay">audio decay turns</Label>
+					<Label for="attach_audio_decay">audio decay iterations</Label>
 					<Input
 						id="attach_audio_decay"
 						type="number"
 						min="1"
-						bind:value={attachmentAudioDecayTurns}
+						placeholder="3"
+						bind:value={attachmentAudioDecayIterations}
 						class="rounded-xl"
 					/>
 				</div>
 				<div class="space-y-2">
-					<Label for="attach_video_decay">video decay turns</Label>
+					<Label for="attach_video_decay">video decay iterations</Label>
 					<Input
 						id="attach_video_decay"
 						type="number"
 						min="1"
-						bind:value={attachmentVideoDecayTurns}
-						class="rounded-xl"
-					/>
-				</div>
-				<div class="space-y-2">
-					<Label for="attach_reveal_decay">reveal decay turns</Label>
-					<p class="text-xs text-zinc-500">
-						turns before a manually revealed attachment decays again.
-					</p>
-					<Input
-						id="attach_reveal_decay"
-						type="number"
-						min="1"
-						bind:value={attachmentRevealDecayTurns}
+						placeholder="1"
+						bind:value={attachmentVideoDecayIterations}
 						class="rounded-xl"
 					/>
 				</div>
 			</div>
 		</div>
 
-		<!-- windowing -->
+		<!-- context compaction -->
 		<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
 			<div class="mb-4 flex items-center justify-between">
 				<div>
-					<p class="text-sm font-medium">context windowing</p>
+					<p class="text-sm font-medium">context compaction</p>
 					<p class="text-xs text-zinc-500">
-						token-aware summarization and truncation to keep threads within model
+						token-aware summarization and compaction to keep threads within model
 						limits.
 					</p>
 				</div>
 				<Switch
-					id="windowing_enabled"
-					checked={windowingEnabled}
-					onCheckedChange={(v: boolean) => (windowingEnabled = v)}
+					id="context_compaction_enabled"
+					checked={contextCompactionEnabled}
+					onCheckedChange={(v: boolean) => (contextCompactionEnabled = v)}
 				/>
 			</div>
-			{#if windowingEnabled}
+			{#if contextCompactionEnabled}
 				<div class="grid gap-4 md:grid-cols-2">
 					<div class="space-y-2">
-						<Label for="win_max_messages">max messages</Label>
+						<Label for="context_compaction_trigger_ratio">soft threshold</Label>
 						<p class="text-xs text-zinc-500">
-							cap unsummarized messages regardless of token budget.
+							prompt pressure that starts background summarization while the raw
+							conversation still fits. lower values summarize earlier; higher values
+							wait until the thread is closer to budget.
 						</p>
 						<Input
-							id="win_max_messages"
-							type="number"
-							min="1"
-							bind:value={windowingMaxMessages}
-							class="rounded-xl"
-						/>
-					</div>
-					<div class="space-y-2">
-						<Label for="win_trigger_ratio">trigger ratio</Label>
-						<p class="text-xs text-zinc-500">
-							fraction of token budget that triggers background summarization
-							(0.1–0.95).
-						</p>
-						<Input
-							id="win_trigger_ratio"
+							id="context_compaction_trigger_ratio"
 							type="number"
 							step="0.01"
 							min="0.1"
 							max="0.95"
-							bind:value={windowingTriggerRatio}
+							placeholder="0.7"
+							bind:value={contextCompactionTriggerRatio}
 							class="rounded-xl"
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="win_hard_ratio">hard truncation ratio</Label>
+						<Label for="context_compaction_recovery_target_ratio">recovery target</Label
+						>
 						<p class="text-xs text-zinc-500">
-							fraction that triggers hard truncation as a last resort (0.5–1.0).
+							target pressure after a recovery summary. must stay below the soft
+							threshold so compaction has hysteresis and does not immediately
+							re-trigger.
 						</p>
 						<Input
-							id="win_hard_ratio"
+							id="context_compaction_recovery_target_ratio"
 							type="number"
 							step="0.01"
-							min="0.5"
-							max="1.0"
-							bind:value={windowingHardRatio}
+							min="0.05"
+							max="0.90"
+							placeholder="0.55"
+							bind:value={contextCompactionRecoveryTargetRatio}
 							class="rounded-xl"
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="win_summary_batch">summary batch size</Label>
-						<p class="text-xs text-zinc-500">oldest messages summarized per batch.</p>
+						<Label for="context_compaction_target_usage_cap_tokens"
+							>target usage cap (tokens)</Label
+						>
+						<p class="text-xs text-zinc-500">
+							optional budget cap before response reserve and prompt overhead are
+							subtracted. use it to leave extra safety margin below a model's window.
+						</p>
 						<Input
-							id="win_summary_batch"
+							id="context_compaction_target_usage_cap_tokens"
 							type="number"
 							min="1"
-							bind:value={windowingSummaryBatchSize}
+							placeholder="model context"
+							bind:value={contextCompactionTargetUsageCapTokens}
 							class="rounded-xl"
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="win_max_summaries">max summaries before condense</Label>
+						<Label for="context_compaction_summary_batch_min_tokens"
+							>summary batch min tokens</Label
+						>
 						<p class="text-xs text-zinc-500">
-							condense accumulated summaries when this count is reached.
+							minimum raw span for one summary job. prevents tiny summaries whose
+							marker and metadata cost more than the messages they replace.
 						</p>
 						<Input
-							id="win_max_summaries"
+							id="context_compaction_summary_batch_min_tokens"
 							type="number"
-							min="2"
-							bind:value={windowingMaxSummariesBeforeCondense}
+							min="1"
+							placeholder="512"
+							bind:value={contextCompactionSummaryBatchMinTokens}
 							class="rounded-xl"
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="win_response_headroom">response headroom (tokens)</Label>
-						<p class="text-xs text-zinc-500">tokens reserved for the model's reply.</p>
+						<Label for="context_compaction_summary_batch_max_tokens"
+							>summary batch max tokens</Label
+						>
+						<p class="text-xs text-zinc-500">
+							maximum raw span for one summary job. keeps long threads in bounded
+							batches instead of sending one oversized summary request.
+						</p>
 						<Input
-							id="win_response_headroom"
+							id="context_compaction_summary_batch_max_tokens"
+							type="number"
+							min="1"
+							placeholder="16000"
+							bind:value={contextCompactionSummaryBatchMaxTokens}
+							class="rounded-xl"
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="context_compaction_response_headroom"
+							>response headroom (tokens)</Label
+						>
+						<p class="text-xs text-zinc-500">
+							reserved answer space after prompt compaction. larger values reduce
+							prompt capacity but lower the chance that generation runs out of room.
+						</p>
+						<Input
+							id="context_compaction_response_headroom"
 							type="number"
 							min="256"
-							bind:value={windowingResponseHeadroom}
+							placeholder="4096"
+							bind:value={contextCompactionResponseHeadroom}
 							class="rounded-xl"
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="win_tool_max_share">tool result max share</Label>
+						<Label for="context_compaction_prompt_overhead_tokens"
+							>prompt overhead (tokens)</Label
+						>
 						<p class="text-xs text-zinc-500">
-							max fraction of budget a single tool result may use (0.05–0.75).
+							reserved for provider framing, system wrappers, schema/tool
+							instructions, and other prompt bytes not represented by stored messages.
 						</p>
 						<Input
-							id="win_tool_max_share"
+							id="context_compaction_prompt_overhead_tokens"
+							type="number"
+							min="0"
+							placeholder="300"
+							bind:value={contextCompactionPromptOverheadTokens}
+							class="rounded-xl"
+						/>
+					</div>
+					<div class="space-y-2">
+						<div
+							class="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2"
+						>
+							<div>
+								<p class="text-sm">blocking summarization</p>
+								<p class="text-xs text-zinc-500">
+									allow a last-resort inline summary during the request before
+									older messages are pruned. disabling this lowers latency but
+									prunes sooner.
+								</p>
+							</div>
+							<Switch
+								id="context_compaction_blocking_summarization_enabled"
+								checked={contextCompactionBlockingSummarizationEnabled}
+								onCheckedChange={(v: boolean) =>
+									(contextCompactionBlockingSummarizationEnabled = v)}
+							/>
+						</div>
+					</div>
+					<div class="space-y-2">
+						<Label for="context_compaction_blocking_timeout_seconds"
+							>blocking timeout (seconds)</Label
+						>
+						<p class="text-xs text-zinc-500">
+							maximum wait for inline summarization before falling back to the next
+							compaction tier. bounds user-visible latency when a provider is slow.
+						</p>
+						<Input
+							id="context_compaction_blocking_timeout_seconds"
+							type="number"
+							step="0.5"
+							min="1"
+							max="120"
+							placeholder="20"
+							bind:value={contextCompactionBlockingSummarizationTimeoutSeconds}
+							class="rounded-xl"
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="context_compaction_tool_max_share">tool result max share</Label>
+						<p class="text-xs text-zinc-500">
+							maximum budget share for one tool result before compaction. lower values
+							keep large search, file, or code outputs from crowding out chat context.
+						</p>
+						<Input
+							id="context_compaction_tool_max_share"
 							type="number"
 							step="0.01"
 							min="0.05"
 							max="0.75"
-							bind:value={windowingToolResultMaxShare}
+							placeholder="0.25"
+							bind:value={contextCompactionToolResultMaxShare}
 							class="rounded-xl"
 						/>
 					</div>
 					<div class="space-y-2">
-						<Label for="win_tool_hard_cap">tool result hard cap (chars)</Label>
-						<p class="text-xs text-zinc-500">
-							absolute character ceiling per tool result.
-						</p>
-						<Input
-							id="win_tool_hard_cap"
-							type="number"
-							min="1000"
-							bind:value={windowingToolResultHardCap}
-							class="rounded-xl"
-						/>
-					</div>
-					<div class="space-y-2">
-						<Label for="win_tools_combined_share">tool results combined max share</Label
+						<Label for="context_compaction_tool_hard_cap"
+							>tool result hard cap (chars)</Label
 						>
 						<p class="text-xs text-zinc-500">
-							max fraction of budget for all tool results combined (0.10–0.95).
+							absolute character ceiling for one tool result before token estimation.
+							protects the pipeline from extremely large raw tool outputs.
 						</p>
 						<Input
-							id="win_tools_combined_share"
+							id="context_compaction_tool_hard_cap"
+							type="number"
+							min="1000"
+							placeholder="100000"
+							bind:value={contextCompactionToolResultHardCap}
+							class="rounded-xl"
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="context_compaction_tools_combined_share"
+							>tool results combined max share</Label
+						>
+						<p class="text-xs text-zinc-500">
+							maximum combined budget share for all tool results. when exceeded, older
+							tool results are compacted first so tool-heavy runs leave room for
+							conversation.
+						</p>
+						<Input
+							id="context_compaction_tools_combined_share"
 							type="number"
 							step="0.01"
 							min="0.10"
 							max="0.95"
-							bind:value={windowingToolResultsCombinedMaxShare}
+							placeholder="0.5"
+							bind:value={contextCompactionToolResultsCombinedMaxShare}
+							class="rounded-xl"
+						/>
+					</div>
+					<div class="space-y-2">
+						<Label for="context_compaction_summarization_max_chars"
+							>summarization transcript max chars</Label
+						>
+						<p class="text-xs text-zinc-500">
+							maximum characters copied from each raw message into summary
+							transcripts. limits single-message outliers; leave empty to keep full
+							message text.
+						</p>
+						<Input
+							id="context_compaction_summarization_max_chars"
+							type="number"
+							min="1"
+							placeholder="unlimited"
+							bind:value={contextCompactionSummarizationMaxCharsPerMessage}
 							class="rounded-xl"
 						/>
 					</div>
@@ -789,6 +1017,7 @@
 								id="ai_img_steps"
 								type="number"
 								min="1"
+								placeholder="provider default"
 								bind:value={mediaImagesDefaultSteps}
 								class="rounded-xl"
 							/>
@@ -801,6 +1030,7 @@
 								type="number"
 								min="1"
 								max="10"
+								placeholder="1"
 								bind:value={mediaImagesDefaultN}
 								class="rounded-xl"
 							/>
@@ -813,6 +1043,7 @@
 								type="number"
 								min="1"
 								max="10"
+								placeholder="4"
 								bind:value={mediaImagesMaxN}
 								class="rounded-xl"
 							/>

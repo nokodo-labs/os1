@@ -1,4 +1,5 @@
 <script lang="ts">
+	import EmptyState from '$lib/components/EmptyState.svelte'
 	import Check from '$lib/components/icons/Check.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
@@ -65,7 +66,7 @@
 		if (isOpen) {
 			searchQuery = ''
 			if (!device.isMobile) {
-				requestAnimationFrame(() => searchInputEl?.focus())
+				searchInputEl?.focus()
 			}
 		}
 	})
@@ -85,10 +86,10 @@
 	}
 </script>
 
-<div class="agent-selector relative flex items-center pl-1">
+<div class="agent-selector relative flex min-w-0 flex-1 items-center pl-1">
 	<button
 		bind:this={anchorEl}
-		class="flex cursor-pointer items-center gap-1 border-none bg-transparent transition-transform duration-300 hover:scale-[1.05] active:scale-[0.97]"
+		class="flex min-w-0 cursor-pointer items-center gap-1 border-none bg-transparent transition-transform duration-300 hover:scale-[1.05] active:scale-[0.97]"
 		onclick={toggle}
 		aria-expanded={isOpen}
 		aria-haspopup="listbox"
@@ -104,7 +105,7 @@
 		>
 			{agents.error ? 'error' : (currentAgent?.name ?? 'select agent')}
 		</span>
-		<span style="color: var(--accent-primary);">
+		<span class="shrink-0" style="color: var(--accent-primary);">
 			<ChevronDown
 				class="h-4 w-4 transition-transform duration-200 {isOpen ? 'rotate-180' : ''}"
 				strokeWidth="2"
@@ -133,7 +134,7 @@
 
 		<ul class="m-0 list-none p-0" role="listbox">
 			{#if filteredAgents.length === 0}
-				<li class="text-foreground/50 px-3 py-3 text-center text-sm">no agents found</li>
+				<li><EmptyState label="no agents found" compact /></li>
 			{:else}
 				{#each filteredAgents as agent (agent.id)}
 					{@const isSelected = agent.id === selectedAgent}

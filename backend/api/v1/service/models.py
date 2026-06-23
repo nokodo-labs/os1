@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -14,15 +15,13 @@ from sqlalchemy.orm import selectinload
 
 from api.models.model import InputModality, Model, ModelType
 from api.models.provider import Provider, ProviderStatus
-from api.schemas.model import ModelCreate, ModelUpdate
+from api.redis import publish_invalidation
+from api.schemas.model import ModelCreate, ModelListFilters, ModelUpdate
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
 
 
 logger = logging.getLogger(__name__)
-
-
-# -- fetched model data -------------------------------------------------------
 
 
 @dataclass
@@ -38,7 +37,7 @@ class FetchedModel:
 	output_cost: float | None = None
 
 
-# -- defaults ------------------------------------------------------------------
+# defaults
 
 
 def _default_input_modalities(model_type: str) -> list[str]:
@@ -63,6 +62,7 @@ _DEFAULT_BASE_URLS: dict[str, str] = {
 	"anthropic": "https://api.anthropic.com/v1",
 	"google": "https://generativelanguage.googleapis.com/v1beta",
 	"ollama": "http://localhost:11434/v1",
+	"voyageai": "https://api.voyageai.com/v1",
 }
 
 
@@ -84,7 +84,7 @@ def _default_model_adapter(provider_key: str, model_type: str) -> str | None:
 				return "chat"
 	if model_type == "embedding":
 		match provider_key:
-			case "openai" | "ollama" | "google":
+			case "openai" | "ollama" | "google" | "voyageai":
 				return "embedding"
 	if model_type == "image":
 		match provider_key:
@@ -105,9 +105,8 @@ def _normalize_base_url(provider: Provider) -> str | None:
 
 
 def _merge_headers(
-	*,
 	base: dict[str, str],
-	additional: dict | None,
+	additional: Mapping[object, object] | None,
 ) -> dict[str, str]:
 	headers = dict(base)
 	if additional is None:
@@ -118,7 +117,7 @@ def _merge_headers(
 	return headers
 
 
-# -- openai model type inference -----------------------------------------------
+# openai model type inference
 
 
 def _infer_openai_model_type(model_id: str) -> ModelType:
@@ -148,22 +147,26 @@ def _infer_openai_modalities(model_id: str, model_type: ModelType) -> list[str]:
 	return _default_input_modalities(model_type.value)
 
 
-# -- openai parser -------------------------------------------------------------
+# openai parser
 
 
 def _parse_openai_models_payload(payload: object) -> list[FetchedModel]:
 	"""parse the openai-compatible /v1/models response into FetchedModel list."""
-	if not isinstance(payload, dict):
+	if not isinstance(payload, Mapping):
 		raise ValueError("invalid models payload")
-	data = payload.get("data")
+	payload_map: dict[object, object] = {key: item for key, item in payload.items()}
+	data = payload_map.get("data")
 	if not isinstance(data, list):
 		raise ValueError("invalid models payload")
 
 	results: list[FetchedModel] = []
 	for item in data:
-		if not isinstance(item, dict):
+		if not isinstance(item, Mapping):
 			continue
-		model_id = item.get("id")
+		item_map: dict[object, object] = {
+			key: item_value for key, item_value in item.items()
+		}
+		model_id = item_map.get("id")
 		if not isinstance(model_id, str) or model_id.strip() == "":
 			continue
 		model_type = _infer_openai_model_type(model_id)
@@ -178,26 +181,30 @@ def _parse_openai_models_payload(payload: object) -> list[FetchedModel]:
 	return results
 
 
-# -- anthropic parser ----------------------------------------------------------
+# anthropic parser
 
 
 def _parse_anthropic_models_payload(
 	payload: object,
 ) -> tuple[list[FetchedModel], str | None, bool]:
-	if not isinstance(payload, dict):
+	if not isinstance(payload, Mapping):
 		raise ValueError("invalid models payload")
-	data = payload.get("data")
+	payload_map: dict[object, object] = {key: item for key, item in payload.items()}
+	data = payload_map.get("data")
 	if not isinstance(data, list):
 		raise ValueError("invalid models payload")
 
 	items: list[FetchedModel] = []
 	for item in data:
-		if not isinstance(item, dict):
+		if not isinstance(item, Mapping):
 			continue
-		model_id = item.get("id")
+		item_map: dict[object, object] = {
+			key: item_value for key, item_value in item.items()
+		}
+		model_id = item_map.get("id")
 		if not isinstance(model_id, str) or model_id.strip() == "":
 			continue
-		display_name = item.get("display_name")
+		display_name = item_map.get("display_name")
 		# all anthropic models are multimodal chat models
 		items.append(
 			FetchedModel(
@@ -208,8 +215,8 @@ def _parse_anthropic_models_payload(
 			)
 		)
 
-	last_id = payload.get("last_id")
-	has_more = payload.get("has_more")
+	last_id = payload_map.get("last_id")
+	has_more = payload_map.get("has_more")
 	return (
 		items,
 		last_id if isinstance(last_id, str) and last_id.strip() != "" else None,
@@ -217,7 +224,7 @@ def _parse_anthropic_models_payload(
 	)
 
 
-# -- google parser -------------------------------------------------------------
+# google parser
 
 
 def _infer_google_model_type(
@@ -240,9 +247,10 @@ def _infer_google_modalities(model_type: ModelType) -> list[str]:
 		return [InputModality.TEXT]
 	if model_type == ModelType.IMAGE:
 		return [InputModality.TEXT, InputModality.IMAGES]
-	# gemini chat models accept text, images, audio, video
+	# gemini chat models accept text, documents, images, audio, and video
 	return [
 		InputModality.TEXT,
+		InputModality.DOCUMENTS,
 		InputModality.IMAGES,
 		InputModality.AUDIO,
 		InputModality.VIDEO,
@@ -253,29 +261,35 @@ def _parse_google_models_payload(
 	payload: object,
 ) -> tuple[list[FetchedModel], str | None]:
 	"""parse the google generative language models response."""
-	if not isinstance(payload, dict):
+	if not isinstance(payload, Mapping):
 		raise ValueError("invalid models payload")
-	models_list = payload.get("models")
+	payload_map: dict[object, object] = {key: item for key, item in payload.items()}
+	models_list = payload_map.get("models")
 	if not isinstance(models_list, list):
 		raise ValueError("invalid models payload")
 
 	results: list[FetchedModel] = []
 	for item in models_list:
-		if not isinstance(item, dict):
+		if not isinstance(item, Mapping):
 			continue
-		full_name = item.get("name")
+		item_map: dict[object, object] = {
+			key: item_value for key, item_value in item.items()
+		}
+		full_name = item_map.get("name")
 		if not isinstance(full_name, str) or full_name.strip() == "":
 			continue
 		# strip the "models/" prefix from google model names
 		model_id = full_name.removeprefix("models/")
 
-		display_name = item.get("displayName")
-		methods = item.get("supportedGenerationMethods", [])
-		if not isinstance(methods, list):
+		display_name = item_map.get("displayName")
+		raw_methods = item_map.get("supportedGenerationMethods", [])
+		if isinstance(raw_methods, list):
+			methods = [method for method in raw_methods if isinstance(method, str)]
+		else:
 			methods = []
 
 		model_type = _infer_google_model_type(methods, model_id)
-		input_token_limit = item.get("inputTokenLimit")
+		input_token_limit = item_map.get("inputTokenLimit")
 		context_window = (
 			int(input_token_limit)
 			if isinstance(input_token_limit, (int, float))
@@ -292,7 +306,7 @@ def _parse_google_models_payload(
 			)
 		)
 
-	next_page_token = payload.get("nextPageToken")
+	next_page_token = payload_map.get("nextPageToken")
 	return (
 		results,
 		next_page_token
@@ -301,12 +315,11 @@ def _parse_google_models_payload(
 	)
 
 
-# -- fetch functions -----------------------------------------------------------
+# fetch functions
 
 
 async def _fetch_openai_compatible_models(
 	client: httpx.AsyncClient,
-	*,
 	base_url: str,
 	headers: dict[str, str],
 ) -> list[FetchedModel]:
@@ -318,7 +331,6 @@ async def _fetch_openai_compatible_models(
 
 async def _fetch_anthropic_models(
 	client: httpx.AsyncClient,
-	*,
 	base_url: str,
 	headers: dict[str, str],
 ) -> list[FetchedModel]:
@@ -341,7 +353,6 @@ async def _fetch_anthropic_models(
 
 async def _fetch_google_models(
 	client: httpx.AsyncClient,
-	*,
 	base_url: str,
 	headers: dict[str, str],
 ) -> list[FetchedModel]:
@@ -362,7 +373,7 @@ async def _fetch_google_models(
 		params["pageToken"] = next_token
 
 
-# -- autofetch sync ------------------------------------------------------------
+# autofetch sync
 
 
 def _is_valid_autofetch_provider(provider: Provider) -> bool:
@@ -375,7 +386,6 @@ def _is_valid_autofetch_provider(provider: Provider) -> bool:
 
 async def _sync_autofetched_models(
 	session: AsyncSession,
-	*,
 	provider_id: str | None,
 ) -> None:
 	stmt = select(Provider).where(
@@ -515,6 +525,10 @@ async def _fetch_models_for_provider(
 			client, base_url=base_url_with_key, headers=headers
 		)
 
+	# voyageai has no public /v1/models endpoint
+	if provider.adapter_type == "voyageai":
+		return None
+
 	# openai-compatible (openai, ollama, custom)
 	base_headers: dict[str, str] = {}
 	api_key = provider.api_key
@@ -533,7 +547,7 @@ async def _fetch_models_for_provider(
 	)
 
 
-# -- CRUD helpers --------------------------------------------------------------
+# CRUD helpers
 
 
 async def _ensure_provider(
@@ -591,7 +605,7 @@ def _check_valid_adapter(
 		elif provider_type == "ollama":
 			valid = adapter == "chat"
 	elif model_type == "embedding":
-		if provider_type in ("openai", "ollama", "google"):
+		if provider_type in ("openai", "ollama", "google", "voyageai"):
 			valid = adapter == "embedding"
 	elif model_type == "image":
 		if provider_type == "openai":
@@ -618,7 +632,6 @@ def _check_valid_adapter(
 async def create_model(
 	model_in: ModelCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Model:
 	require_permission(principal, "models:manage")
@@ -649,20 +662,20 @@ async def create_model(
 
 async def list_models(
 	session: AsyncSession,
-	*,
 	principal: Principal,
-	provider_id: str | None = None,
+	filters: ModelListFilters | None = None,
 ) -> list[Model]:
 	require_permission(principal, "models:manage")
-	await _sync_autofetched_models(session, provider_id=provider_id)
+	model_filters = filters or ModelListFilters()
+	await _sync_autofetched_models(session, provider_id=model_filters.provider_id)
 	stmt = (
 		select(Model)
 		.options(selectinload(Model.provider))
 		.order_by(Model.created_at.desc())
 	)
 
-	if provider_id:
-		stmt = stmt.where(Model.provider_id == provider_id)
+	if model_filters.provider_id:
+		stmt = stmt.where(Model.provider_id == model_filters.provider_id)
 
 	result = await session.execute(stmt)
 	return list(result.scalars().all())
@@ -671,7 +684,6 @@ async def list_models(
 async def get_model(
 	model_id: str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Model:
 	return await _get_model(model_id, session, principal)
@@ -681,7 +693,6 @@ async def update_model(
 	model_id: str,
 	model_in: ModelUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Model:
 	model = await _get_model(model_id, session, principal)
@@ -693,19 +704,32 @@ async def update_model(
 		model_type = str(update_data.get("model_type", model.model_type))
 		_check_valid_adapter(model.provider.adapter_type, model_type, adapter)
 
+	affects_embedding = model.model_type == ModelType.EMBEDDING
+	affects_chat = model.model_type == ModelType.CHAT_MODEL
 	for key, value in update_data.items():
 		setattr(model, key, value)
+	affects_embedding = affects_embedding or model.model_type == ModelType.EMBEDDING
+	affects_chat = affects_chat or model.model_type == ModelType.CHAT_MODEL
 
 	await session.commit()
+	if affects_embedding:
+		await publish_invalidation("embedding_model")
+	if affects_chat:
+		await publish_invalidation("task_models")
 	return await _get_model(model_id, session, principal)
 
 
 async def delete_model(
 	model_id: str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> None:
 	model = await _get_model(model_id, session, principal)
+	affects_embedding = model.model_type == ModelType.EMBEDDING
+	affects_chat = model.model_type == ModelType.CHAT_MODEL
 	await session.delete(model)
 	await session.commit()
+	if affects_embedding:
+		await publish_invalidation("embedding_model")
+	if affects_chat:
+		await publish_invalidation("task_models")

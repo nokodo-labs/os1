@@ -4,19 +4,27 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.database import async_session_local
 from api.models.agent import Agent
 from api.models.model import Model, ModelType
 from api.models.provider import Provider
+from api.redis import on_invalidation
 from api.settings import settings
 from nokodo_ai.adapters.audio import resolve_audio_adapter
 from nokodo_ai.adapters.base.chat import ChatGenerationParams
-from nokodo_ai.adapters.chat import resolve_chat_adapter
+from nokodo_ai.adapters.chat import (
+	GenerationBadRequestError,
+	GenerationError,
+	resolve_chat_adapter,
+)
 from nokodo_ai.adapters.embeddings import resolve_embeddings_adapter
 from nokodo_ai.adapters.images import resolve_image_adapter
 from nokodo_ai.adapters.videos import resolve_video_adapter
@@ -32,9 +40,56 @@ from nokodo_ai.video_models import VideoModel
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True, slots=True)
+class TaskChatModel:
+	"""API task chat model plus API-side capability metadata."""
+
+	chat_model: ChatModel
+	input_modalities: frozenset[str]
+
+
+# process-local cache for task chat models.
+# key: task name, value: (task chat model, expiry_timestamp)
+_task_model_cache: dict[str, tuple[TaskChatModel, float]] = {}
+_TASK_MODEL_TTL_S = 60.0 * 60.0 * 24.0
+_CONTEXT_PRESSURE_STATUS_CODES = {400, 413}
+_CONTEXT_PRESSURE_MARKERS = (
+	"context_length_exceeded",
+	"maximum context length",
+	"context length",
+	"context window",
+	"prompt is too long",
+	"input is too long",
+	"input token count",
+	"number of tokens exceeds",
+	"tokens exceed",
+	"exceeds the maximum number of tokens",
+	"request too large",
+)
+
+
+def reset_task_model_cache() -> None:
+	"""clear the task model cache (call when model/provider settings change)."""
+	_task_model_cache.clear()
+
+
+# self-register for cross-worker invalidation. main.py only starts the
+# subscriber; modules own their own reset hook registration.
+on_invalidation("task_models", reset_task_model_cache)
+
+
+def is_context_pressure_generation_error(exc: GenerationError) -> bool:
+	"""return whether a provider bad request probably means context pressure."""
+	if not isinstance(exc, GenerationBadRequestError):
+		return False
+	if exc.status_code not in _CONTEXT_PRESSURE_STATUS_CODES:
+		return False
+	haystack = f"{exc.code or ''} {exc}".lower()
+	return any(marker in haystack for marker in _CONTEXT_PRESSURE_MARKERS)
+
+
 def build_sdk_adapter_config(
 	provider: Provider,
-	*,
 	adapter_type: str,
 ) -> dict[str, object]:
 	"""build a fully explicit sdk adapter config dict from an orm Provider."""
@@ -50,7 +105,6 @@ def build_sdk_adapter_config(
 
 def build_chat_model(
 	model: Model,
-	*,
 	params: ChatGenerationParams | dict[str, object] | None = None,
 ) -> ChatModel:
 	"""create an sdk ChatModel with fully explicit adapter configuration.
@@ -89,27 +143,48 @@ def build_chat_model(
 
 async def run_chat_model_json_schema(
 	chat_model: ChatModel,
-	*,
 	thread: SDKThread,
 	json_schema: dict[str, object],
+	purpose: str = "structured_output",
 ) -> dict[str, object]:
 	"""run a chat model with a structured json schema response.
 
 	this is the shared primitive for structured outputs across the api.
 	"""
-	assistant = await chat_model.generate(
-		thread,
-		stream=False,
-		params={"response_model": json_schema},
+	started = time.perf_counter()
+	extra: dict[str, object] = {
+		"purpose": purpose,
+		"model": chat_model.model_name,
+		"message_count": len(thread.messages),
+		"structured": True,
+	}
+	logger.info("chat model call started", extra=extra)
+	try:
+		assistant = await chat_model.generate(
+			thread,
+			stream=False,
+			params={"response_model": json_schema},
+		)
+		data = assistant.json_content
+		if data is None:
+			raw = assistant.text.strip()
+			if not raw:
+				raise ValueError("model returned empty structured output")
+			data = json.loads(raw)
+		if not isinstance(data, dict):
+			raise ValueError("structured output must be an object")
+	except Exception:
+		logger.exception("chat model call failed", extra=extra)
+		raise
+	duration_ms = round((time.perf_counter() - started) * 1000, 2)
+	logger.info(
+		"chat model call completed",
+		extra={
+			**extra,
+			"duration_ms": duration_ms,
+			"output_keys": sorted(str(key) for key in data),
+		},
 	)
-	data = assistant.json_content
-	if data is None:
-		raw = assistant.text.strip()
-		if not raw:
-			raise ValueError("model returned empty structured output")
-		data = json.loads(raw)
-	if not isinstance(data, dict):
-		raise ValueError("structured output must be an object")
 	return dict[str, object](data)
 
 
@@ -143,7 +218,6 @@ def build_embedding_model(model: Model) -> EmbeddingModel:
 
 async def resolve_model_for_run(
 	session: AsyncSession,
-	*,
 	agent_id: TypeID | None = None,
 	model_id: TypeID | None = None,
 	model: str | None = None,
@@ -208,7 +282,6 @@ async def resolve_model_for_run(
 
 async def resolve_chat_model(
 	session: AsyncSession,
-	*,
 	agent_id: TypeID | None = None,
 	model_id: TypeID | None = None,
 	model: str | None = None,
@@ -247,25 +320,54 @@ async def resolve_embedding_model(
 
 
 async def resolve_task_chat_model(
-	session: AsyncSession,
+	session: AsyncSession | None,
 	task: str,
 ) -> ChatModel:
+	"""resolve the ChatModel for a background task from settings."""
+	return (await resolve_task_chat_model_config(session, task)).chat_model
+
+
+async def resolve_task_chat_model_config(
+	session: AsyncSession | None,
+	task: str,
+) -> TaskChatModel:
 	"""resolve the chat model for a background task from settings.
 
-	resolution: per-task model_id → default_model_id → error.
+	resolution: per-task model_id -> default_model_id -> error.
+	uses a process-local cache to avoid repeated DB lookups (task models
+	rarely change). when session is None and the cache is cold, opens its
+	own short-lived session for the DB lookup.
 	"""
+	now = time.monotonic()
+	cached = _task_model_cache.get(task)
+	if cached is not None:
+		chat_model_config, expiry = cached
+		if now < expiry:
+			return chat_model_config
+
+	if session is None:
+		async with async_session_local() as owned:
+			return await resolve_task_chat_model_config(owned, task)
 
 	task_settings = settings.ai.tasks
 
 	model_id_str: str | None = None
 	if task == "thread_metadata":
 		model_id_str = task_settings.thread_metadata_model_id
+	elif task == "thread_maintenance":
+		model_id_str = task_settings.thread_maintenance_model_id
 	elif task == "input_autocomplete":
 		model_id_str = task_settings.input_autocomplete_model_id
 	elif task == "summarization":
 		model_id_str = task_settings.summarization_model_id
 	elif task == "memory_post_processing":
 		model_id_str = task_settings.memory_post_processing_model_id
+	elif task == "web_search":
+		model_id_str = task_settings.web_search_model_id
+	elif task == "asset_description":
+		model_id_str = task_settings.asset_description_model_id
+	elif task == "asset_text_extraction":
+		model_id_str = task_settings.asset_text_extraction_model_id
 
 	if model_id_str is None:
 		model_id_str = task_settings.default_model_id
@@ -287,7 +389,38 @@ async def resolve_task_chat_model(
 	if model is None:
 		raise ValueError(f"task model not found: {model_id_str}")
 
-	return build_chat_model(model)
+	chat_model_config = TaskChatModel(
+		chat_model=build_chat_model(model),
+		input_modalities=frozenset(model.input_modalities or []),
+	)
+	_task_model_cache[task] = (chat_model_config, now + _TASK_MODEL_TTL_S)
+	return chat_model_config
+
+
+async def fetch_agent_input_modalities(
+	agent_id: TypeID | None,
+	session: AsyncSession,
+) -> set[str] | None:
+	"""fetch the agent's chat model input_modalities.
+
+	returns a set of modality strings (e.g. {"text", "images"}), or none when
+	the agent/model can't be resolved (callers should fail open).
+	"""
+	if agent_id is None:
+		return None
+	try:
+		agent = await session.get(Agent, str(agent_id))
+		if agent is None or agent.model_id is None:
+			return None
+		model = await session.get(Model, agent.model_id)
+		if model is None:
+			return None
+		return set(model.input_modalities or [])
+	except Exception:
+		logger.debug(
+			"could not fetch input modalities for agent %s", agent_id, exc_info=True
+		)
+		return None
 
 
 def build_image_model(model: Model) -> ImageModel:

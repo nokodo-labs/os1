@@ -44,6 +44,7 @@ const NETWORK_ONLY_PATTERNS = [
 	/\/health$/,
 	/\/v1\/openapi\.json$/,
 	/\/runs\/[^/]+\/stream$/, // SSE streaming endpoints must never be cached
+	/\/system\/manifest\.json$/, // manifest must always be fresh for PWA installability
 ]
 
 // static asset extensions eligible for cache-first
@@ -109,7 +110,169 @@ self.addEventListener('fetch', (event) => {
 	}
 })
 
+type PushNotificationAction = {
+	action: string
+	title: string
+	icon_url?: string | null
+}
+
+type PushNotificationPayload = {
+	title: string
+	body?: string | null
+	icon_url?: string | null
+	image_url?: string | null
+	badge_url?: string | null
+	action_url?: string | null
+	tag?: string | null
+	data?: Record<string, unknown> | null
+	actions?: PushNotificationAction[]
+	require_interaction?: boolean | null
+	silent?: boolean | null
+	renotify?: boolean | null
+}
+
+type WebPushNotificationOptions = NotificationOptions & {
+	image?: string
+	actions?: Array<{ action: string; title: string; icon?: string }>
+	renotify?: boolean
+}
+
+self.addEventListener('push', (event: PushEvent) => {
+	event.waitUntil(showPushNotification(event))
+})
+
+self.addEventListener('notificationclick', (event: NotificationEvent) => {
+	event.notification.close()
+	event.waitUntil(openNotificationTarget(event.notification))
+})
+
 // caching strategy implementations
+
+async function showPushNotification(event: PushEvent): Promise<void> {
+	const payload = parsePushPayload(event)
+	if (!payload) return
+	if (await hasVisibleWindowClient()) return
+
+	const data = payload.data ?? {}
+	if (payload.action_url) data.action_url = payload.action_url
+	const options: WebPushNotificationOptions = {
+		body: payload.body ?? undefined,
+		icon: payload.icon_url ?? undefined,
+		image: payload.image_url ?? undefined,
+		badge: payload.badge_url ?? undefined,
+		tag: payload.tag ?? undefined,
+		data,
+		actions: (payload.actions ?? []).map((action) => ({
+			action: action.action,
+			title: action.title,
+			icon: action.icon_url ?? undefined,
+		})),
+		requireInteraction: payload.require_interaction ?? undefined,
+		silent: payload.silent ?? undefined,
+		renotify: payload.renotify ?? undefined,
+	}
+
+	await self.registration.showNotification(payload.title, options)
+}
+
+function parsePushPayload(event: PushEvent): PushNotificationPayload | null {
+	if (!event.data) return null
+	try {
+		const value = event.data.json()
+		if (!isRecord(value)) return null
+		const title = readString(value, 'title')
+		if (!title) return null
+		return {
+			title,
+			body: readNullableString(value, 'body'),
+			icon_url: readNullableString(value, 'icon_url'),
+			image_url: readNullableString(value, 'image_url'),
+			badge_url: readNullableString(value, 'badge_url'),
+			action_url: readNullableString(value, 'action_url'),
+			tag: readNullableString(value, 'tag'),
+			data: readRecord(value, 'data'),
+			actions: readActions(value, 'actions'),
+			require_interaction: readNullableBoolean(value, 'require_interaction'),
+			silent: readNullableBoolean(value, 'silent'),
+			renotify: readNullableBoolean(value, 'renotify'),
+		}
+	} catch {
+		return null
+	}
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function readString(record: Record<string, unknown>, key: string): string | undefined {
+	const value = record[key]
+	return typeof value === 'string' ? value : undefined
+}
+
+function readNullableString(record: Record<string, unknown>, key: string): string | null {
+	const value = record[key]
+	return typeof value === 'string' ? value : null
+}
+
+function readNullableBoolean(record: Record<string, unknown>, key: string): boolean | null {
+	const value = record[key]
+	return typeof value === 'boolean' ? value : null
+}
+
+function readRecord(record: Record<string, unknown>, key: string): Record<string, unknown> | null {
+	const value = record[key]
+	return isRecord(value) ? value : null
+}
+
+function readActions(record: Record<string, unknown>, key: string): PushNotificationAction[] {
+	const value = record[key]
+	if (!Array.isArray(value)) return []
+	return value.flatMap((item) => {
+		if (!isRecord(item)) return []
+		const action = readString(item, 'action')
+		const title = readString(item, 'title')
+		if (!action || !title) return []
+		return [
+			{
+				action,
+				title,
+				icon_url: readNullableString(item, 'icon_url'),
+			},
+		]
+	})
+}
+
+async function hasVisibleWindowClient(): Promise<boolean> {
+	const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+	return clients.some((client) => isWindowClient(client) && client.visibilityState === 'visible')
+}
+
+async function openNotificationTarget(notification: Notification): Promise<void> {
+	const actionUrl = notificationActionUrl(notification)
+	const targetUrl = new URL(actionUrl || '/', self.location.origin).href
+	const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+
+	for (const client of clients) {
+		if (!isWindowClient(client)) continue
+		if (new URL(client.url).origin !== self.location.origin) continue
+		if (client.url !== targetUrl) await client.navigate(targetUrl)
+		await client.focus()
+		return
+	}
+
+	await self.clients.openWindow(targetUrl)
+}
+
+function isWindowClient(client: Client): client is WindowClient {
+	return 'focus' in client && 'visibilityState' in client && 'navigate' in client
+}
+
+function notificationActionUrl(notification: Notification): string | null {
+	const data = notification.data
+	if (!isRecord(data)) return null
+	return readNullableString(data, 'action_url')
+}
 
 /** cache-first: return cached response, falling back to network (and caching). */
 async function cacheFirst(request: Request, cacheName: string): Promise<Response> {

@@ -2,6 +2,7 @@
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
+	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte'
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
 	import { device } from '$lib/stores/device.svelte'
@@ -55,8 +56,11 @@
 	let isHovered = $state(false)
 	let avatarError = $state(false)
 
-	// derived visibility - keeps the template readable
-	let actionsVisible = $derived(!isStreaming && !isRunActive && (isLastMessage || showActions))
+	// derived visibility - keeps the template readable.
+	// hover (showActions) reveals actions on any settled message, even while a
+	// run is generating below it. the auto-show on the last message is still
+	// suppressed during an active run so the in-flight bubble stays clean.
+	let actionsVisible = $derived(!isStreaming && (showActions || (isLastMessage && !isRunActive)))
 	// tree/branch switcher is always visible when multiple siblings exist
 	let branchNavVisible = $derived(siblingCount > 1)
 
@@ -234,12 +238,22 @@
 		{/if}
 
 		{#if tone === 'error'}
-			<div class="border-destructive/30 bg-destructive/10 rounded-container border px-4 py-3">
-				<MarkdownRenderer
-					{content}
-					{isStreaming}
-					class="assistant-markdown text-destructive **:text-destructive! text-[0.95rem] leading-relaxed wrap-break-word"
-				/>
+			<div
+				class="border-destructive/30 bg-destructive/10 rounded-container flex items-start gap-3 border px-4 py-3"
+			>
+				<div
+					class="bg-destructive/15 text-destructive mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+				>
+					<ExclamationTriangle class="h-4 w-4" strokeWidth="2" />
+				</div>
+				<div class="min-w-0 flex-1 space-y-0.5">
+					<div class="text-destructive text-sm font-semibold">something went wrong</div>
+					<MarkdownRenderer
+						{content}
+						{isStreaming}
+						class="assistant-markdown text-destructive/90 **:text-destructive/90! text-[0.9rem] leading-relaxed wrap-break-word"
+					/>
+				</div>
 			</div>
 		{:else if isStreaming && !hasContent && showStreamingPlaceholder}
 			<div class="assistant-markdown text-foreground/60 text-[0.95rem] leading-relaxed">
@@ -291,11 +305,7 @@
 			{/if}
 
 			{#if persistentActions}
-				<div
-					class="flex items-center gap-2"
-					role="none"
-					use:captureClick
-				>
+				<div class="flex items-center gap-2" role="none" use:captureClick>
 					{@render persistentActions()}
 				</div>
 			{/if}

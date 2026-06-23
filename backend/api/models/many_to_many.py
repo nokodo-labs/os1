@@ -73,6 +73,23 @@ reminder_list_project_association = Table(
 	),
 )
 
+calendar_project_association = Table(
+	"calendar_projects",
+	Base.metadata,
+	Column(
+		"calendar_id",
+		String(TYPEID_LENGTH),
+		ForeignKey("calendars.id", ondelete="CASCADE"),
+		primary_key=True,
+	),
+	Column(
+		"project_id",
+		String(TYPEID_LENGTH),
+		ForeignKey("projects.id", ondelete="CASCADE"),
+		primary_key=True,
+	),
+)
+
 user_role_association = Table(
 	"user_roles",
 	Base.metadata,

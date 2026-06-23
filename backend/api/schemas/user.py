@@ -2,14 +2,32 @@
 
 import re
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from api.schemas.common import TimestampedModel
+from api.schemas.common import MISSING, MissingType, ORMModel, TimestampedModel
 from api.schemas.preferences import UserPreferences
 from api.schemas.privacy import UserPrivacy
+from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
+
+
+type UserSortBy = (
+	CommonSortBy
+	| Literal[
+		"email",
+		"display_name",
+		"is_active",
+		"is_superuser",
+	]
+)
+
+
+class UserListFilters(BaseModel):
+	"""filters for listing users."""
+
+	q: str | None = Field(default=None, min_length=1, max_length=500)
 
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._]{1,28}[a-zA-Z0-9]$")
@@ -46,7 +64,7 @@ class UserBase(BaseModel):
 	avatar_url: str | None = None
 	is_active: bool = True
 	is_superuser: bool = False
-	find_by_email: bool = True
+	find_by_email: bool = False
 	privacy: UserPrivacy = Field(default_factory=UserPrivacy)
 	preferences: UserPreferences = Field(default_factory=UserPreferences)
 	integration_tokens: dict[str, Any] = Field(default_factory=dict)
@@ -79,26 +97,40 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
 	"""schema for updating a user."""
 
-	email: EmailStr | None = None
-	password: str | None = None
-	username: Username | None = None
-	is_active: bool | None = None
-	display_name: str | None = None
-	bio: str | None = Field(default=None, max_length=500)
-	avatar_url: str | None = None
-	find_by_email: bool | None = None
-	privacy: UserPrivacy | None = None
-	preferences: UserPreferences | None = None
-	integration_tokens: dict[str, Any] | None = None
-	usage_quotas: dict[str, Any] | None = None
-	role_ids: list[TypeID] | None = None
+	email: EmailStr | MissingType = MISSING
+	password: str | MissingType = MISSING
+	username: Username | MissingType = MISSING
+	is_active: bool | MissingType = MISSING
+	is_superuser: bool | MissingType = MISSING
+	display_name: str | None | MissingType = MISSING
+	bio: str | None | MissingType = Field(default=MISSING, max_length=500)
+	avatar_url: str | None | MissingType = MISSING
+	find_by_email: bool | MissingType = MISSING
+	privacy: UserPrivacy | MissingType = MISSING
+	preferences: UserPreferences | MissingType = MISSING
+	integration_tokens: dict[str, Any] | MissingType = MISSING
+	usage_quotas: dict[str, Any] | MissingType = MISSING
+	role_ids: list[TypeID] | MissingType = MISSING
 
 	@field_validator("username", mode="before")
 	@classmethod
-	def check_username(cls, v: str | None) -> str | None:
-		if v is None:
-			return None
+	def check_username(cls, v: str) -> str:
 		return _validate_username(v)
+
+
+class UserBulkLookupRequest(BaseModel):
+	"""request visible user summaries by ID."""
+
+	user_ids: list[TypeID] = Field(default_factory=list, max_length=100)
+
+
+class UserSummary(ORMModel):
+	"""minimal user identity for allowed lookup results."""
+
+	id: TypeID
+	username: str | None = None
+	display_name: str | None = None
+	avatar_url: str | None = None
 
 
 class User(UserBase, TimestampedModel):

@@ -6,6 +6,8 @@ import pytest
 from pydantic import PrivateAttr, ValidationError
 
 from nokodo_ai import (
+	AgentContext,
+	AgentIterationSnapshot,
 	AssistantMessage,
 	ChatModel,
 	EmbeddingModel,
@@ -14,17 +16,9 @@ from nokodo_ai import (
 	UserMessage,
 	tool,
 )
-from nokodo_ai.adapters.anthropic import AnthropicMessagesAdapter
 from nokodo_ai.adapters.chat import BaseChatAdapter, ChatGenerationParams
-from nokodo_ai.adapters.embeddings import BaseEmbeddingAdapter
-from nokodo_ai.adapters.google import GoogleGenerateContentAdapter
-from nokodo_ai.adapters.ollama import OllamaChatAdapter, OllamaEmbeddingsAdapter
-from nokodo_ai.adapters.openai import (
-	OpenAIChatCompletionsAdapter,
-	OpenAIEmbeddingsAdapter,
-	OpenAIResponsesAdapter,
-)
-from nokodo_ai.context import AgentContext
+from nokodo_ai.adapters.embeddings import BaseEmbeddingAdapter, EmbeddingInputType
+from nokodo_ai.context import ToolCallContext
 from nokodo_ai.tool import ToolDefinition
 
 
@@ -40,6 +34,7 @@ def test_chat_model_resolves_openai_model() -> None:
 			"adapter": {"type": "openai.chat_completions", "api_key": "test"},
 		}
 	)
+	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
 	assert isinstance(chat_model.adapter, OpenAIChatCompletionsAdapter)
 
@@ -50,6 +45,7 @@ def test_chat_model_adapter_shorthand_resolves_to_full_type() -> None:
 		"gpt-4o",
 		adapter={"type": "openai", "api_key": "test"},
 	)
+	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
 	assert isinstance(chat_model.adapter, OpenAIChatCompletionsAdapter)
 	assert chat_model.adapter.type.startswith("openai.")
@@ -62,6 +58,7 @@ def test_chat_model_resolves_openai_explicit() -> None:
 			"adapter": {"type": "openai.chat_completions", "api_key": "test"},
 		}
 	)
+	from nokodo_ai.adapters.openai import OpenAIChatCompletionsAdapter
 
 	assert isinstance(chat_model.adapter, OpenAIChatCompletionsAdapter)
 
@@ -73,6 +70,7 @@ def test_chat_model_resolves_openai_responses_api() -> None:
 			"adapter": {"type": "openai.responses", "api_key": "test"},
 		}
 	)
+	from nokodo_ai.adapters.openai import OpenAIResponsesAdapter
 
 	assert isinstance(chat_model.adapter, OpenAIResponsesAdapter)
 
@@ -84,6 +82,7 @@ def test_chat_model_resolves_anthropic() -> None:
 			"adapter": {"type": "anthropic.messages", "api_key": "test"},
 		}
 	)
+	from nokodo_ai.adapters.anthropic import AnthropicMessagesAdapter
 
 	assert isinstance(chat_model.adapter, AnthropicMessagesAdapter)
 
@@ -92,6 +91,7 @@ def test_chat_model_resolves_ollama() -> None:
 	chat_model = ChatModel.model_validate(
 		{"model_name": "llama3.2", "adapter": {"type": "ollama.chat"}}
 	)
+	from nokodo_ai.adapters.ollama import OllamaChatAdapter
 
 	assert isinstance(chat_model.adapter, OllamaChatAdapter)
 
@@ -103,6 +103,7 @@ def test_chat_model_resolves_google() -> None:
 			"adapter": {"type": "google.generate_content", "api_key": "test"},
 		}
 	)
+	from nokodo_ai.adapters.google import GoogleGenerateContentAdapter
 
 	assert isinstance(chat_model.adapter, GoogleGenerateContentAdapter)
 
@@ -129,6 +130,7 @@ def test_embedding_resolves_openai() -> None:
 			"adapter": {"type": "openai.embedding", "api_key": "test"},
 		}
 	)
+	from nokodo_ai.adapters.openai import OpenAIEmbeddingsAdapter
 
 	assert isinstance(embedder.adapter, OpenAIEmbeddingsAdapter)
 
@@ -137,6 +139,7 @@ def test_embedding_resolves_ollama() -> None:
 	embedder = EmbeddingModel.model_validate(
 		{"model_name": "nomic-embed-text", "adapter": {"type": "ollama.embedding"}}
 	)
+	from nokodo_ai.adapters.ollama import OllamaEmbeddingsAdapter
 
 	assert isinstance(embedder.adapter, OllamaEmbeddingsAdapter)
 
@@ -159,7 +162,6 @@ class _StubChatAdapter(BaseChatAdapter):
 	def __init__(
 		self,
 		response: AssistantMessage,
-		*,
 		stream_chunks: list[AssistantMessage] | None = None,
 	) -> None:
 		super().__init__()
@@ -173,7 +175,6 @@ class _StubChatAdapter(BaseChatAdapter):
 	def generate(  # type: ignore[override]
 		self,
 		messages: list[UserMessage],
-		*,
 		model: str,
 		stream: bool = False,
 		tools: list[ToolDefinition] | None = None,
@@ -207,9 +208,15 @@ class _StubEmbeddingAdapter(BaseEmbeddingAdapter):
 		self.seen: list[list[str]] = []
 		self.seen_models: list[str] = []
 
-	async def embed(self, texts: list[str], *, model: str) -> list[list[float]]:
+	async def embed(
+		self,
+		texts: list[str],
+		model: str,
+		input_type: EmbeddingInputType | None = None,
+	) -> list[list[float]]:
 		self.seen.append(texts)
 		self.seen_models.append(model)
+		_ = input_type
 		return [[float(len(t))] for t in texts]
 
 
@@ -251,11 +258,15 @@ async def test_chat_model_streaming_with_tools() -> None:
 
 	@tool(description="noop")
 	def noop(
+		__state__: AgentIterationSnapshot[None],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: None,
 	) -> ToolMessage:
+		_ = (__state__, __agent_context__, __app_context__)
+		tool_call_id = __tool_call_context__.tool_call_id
 		return ToolMessage(
-			tool_call_id=__agent_context__.tool_call_id,
+			tool_call_id=tool_call_id,
 			tool_output="ok",
 		)
 

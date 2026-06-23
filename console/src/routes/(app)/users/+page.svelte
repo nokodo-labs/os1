@@ -15,18 +15,18 @@
 	import {
 		ArrowDown,
 		ArrowUp,
+		ChevronLeft,
+		ChevronRight,
 		Circle,
+		CircleX,
 		Clock,
 		Hash,
 		Mail,
 		Plus,
+		RefreshCw,
 		Search,
 		Shield,
 		User as UserIcon,
-		RefreshCw,
-		ChevronLeft,
-		ChevronRight,
-		XCircle,
 	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
@@ -67,24 +67,12 @@
 
 	let users = $state<User[]>([])
 	let searchQuery = $state('')
+	let serverSearchQuery = $state('')
+	let searchTimer: ReturnType<typeof setTimeout> | null = null
 	let isLoading = $state(false)
 	let hasNext = $state(false)
+	let total = $state(0)
 	let error = $state<string | null>(null)
-
-	const filteredUsers = $derived(
-		users.filter((u) => {
-			const q = searchQuery.toLowerCase()
-			return (
-				u.email.toLowerCase().includes(q) ||
-				(u.display_name && u.display_name.toLowerCase().includes(q)) ||
-				((u as Record<string, unknown>).username &&
-					String((u as Record<string, unknown>).username)
-						.toLowerCase()
-						.includes(q)) ||
-				u.id.toLowerCase().includes(q)
-			)
-		})
-	)
 
 	let isCreateUserOpen = $state(false)
 	let isUserDetailsOpen = $state(false)
@@ -94,9 +82,26 @@
 		refreshToken += 1
 	}
 
+	function scheduleSearch() {
+		pageIndex = 0
+		if (searchTimer) clearTimeout(searchTimer)
+		searchTimer = setTimeout(() => {
+			serverSearchQuery = searchQuery.trim()
+		}, 250)
+	}
+
 	function openUser(userId: string) {
 		selectedUserId = userId
 		isUserDetailsOpen = true
+	}
+
+	function handleUserUpdated(updated: User) {
+		users = users.map((user) => (user.id === updated.id ? updated : user))
+	}
+
+	function handleUserDeleted(userId: string) {
+		users = users.filter((user) => user.id !== userId)
+		if (selectedUserId === userId) selectedUserId = null
 	}
 
 	function replaceUrl(target: string) {
@@ -150,18 +155,24 @@
 	$effect(() => {
 		if (!browser) return
 
+		const q = serverSearchQuery || undefined
 		const skip = pageIndex * limit + refreshToken * 0
 
 		isLoading = true
 		error = null
 
-		api.GET('/v1/users', {
-			params: { query: { skip, limit, sort_by: sortKey, sort_dir: sortDir } },
-		})
-			.then((r) => unwrap(r))
-			.then((result) => {
+		Promise.all([
+			api
+				.GET('/v1/users', {
+					params: { query: { skip, limit, sort_by: sortKey, sort_dir: sortDir, q } },
+				})
+				.then((r) => unwrap(r)),
+			api.GET('/v1/users/count', { params: { query: { q } } }).then((r) => unwrap(r)),
+		])
+			.then(([result, count]) => {
 				users = result
-				hasNext = result.length === limit
+				total = count
+				hasNext = (pageIndex + 1) * limit < count
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load users'
@@ -189,6 +200,7 @@
 					type="search"
 					placeholder="search users..."
 					bind:value={searchQuery}
+					oninput={scheduleSearch}
 					class="w-full pl-8 sm:w-50 lg:w-75"
 				/>
 			</div>
@@ -221,7 +233,10 @@
 				</Button>
 			</div>
 			<div class="flex w-full items-center gap-2 sm:w-auto">
-				<Button onclick={() => (isCreateUserOpen = true)} class="flex-1 gap-2 rounded-xl sm:flex-none">
+				<Button
+					onclick={() => (isCreateUserOpen = true)}
+					class="flex-1 gap-2 rounded-xl sm:flex-none"
+				>
 					<Plus class="h-4 w-4" />
 					add user
 				</Button>
@@ -261,7 +276,9 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{users.length > 0 ? ` \u00b7 ${users.length} items` : ''}
+					{total > 0
+						? `items ${pageIndex * limit + 1}–${pageIndex * limit + users.length} of ${total}`
+						: ''}
 				</span>
 				<Button
 					variant="outline"
@@ -285,7 +302,7 @@
 				</div>
 			{/if}
 
-			{#if filteredUsers.length === 0 && !isLoading}
+			{#if users.length === 0 && !isLoading}
 				<div
 					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
 				>
@@ -293,7 +310,7 @@
 				</div>
 			{/if}
 
-			{#each filteredUsers as u (u.id)}
+			{#each users as u (u.id)}
 				<div
 					role="button"
 					tabindex="0"
@@ -307,31 +324,45 @@
 					}}
 				>
 					<div class="flex min-w-0 flex-1 items-center gap-4">
-						<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
-							<UserIcon class="h-5 w-5" />
+						<div
+							class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-orange-500/15 text-orange-400"
+						>
+							{#if u.avatar_url}
+								<img src={u.avatar_url} alt="" class="h-full w-full object-cover" />
+							{:else}
+								<UserIcon class="h-5 w-5" />
+							{/if}
 						</div>
 						<div class="min-w-0 flex-1 space-y-1">
 							<div class="flex flex-wrap items-center gap-2">
 								<span class="truncate text-base font-medium text-zinc-100">
 									{u.display_name || u.email}
 								</span>
-								{#if (u as Record<string, unknown>).is_online}
+								{#if u.is_online}
 									<span class="relative flex h-2.5 w-2.5 shrink-0" title="online">
-										<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-										<span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
+										<span
+											class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"
+										></span>
+										<span
+											class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+										></span>
 									</span>
 								{:else}
 									<div class="h-2 w-2 rounded-full bg-zinc-700/50"></div>
 								{/if}
 								{#if u.is_superuser}
-									<span class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-amber-400 uppercase">
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-amber-400 uppercase"
+									>
 										<Shield class="h-3 w-3" />
 										superuser
 									</span>
 								{/if}
 								{#if u.is_active === false}
-									<span class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-red-400 uppercase">
-										<XCircle class="h-3 w-3" />
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-red-400 uppercase"
+									>
+										<CircleX class="h-3 w-3" />
 										inactive
 									</span>
 								{/if}
@@ -341,29 +372,29 @@
 									<Mail class="h-3.5 w-3.5" />
 									{u.email}
 								</span>
-								{#if (u as Record<string, unknown>).username}
+								{#if u.username}
 									<span class="inline-flex items-center gap-1">
-										@{(u as Record<string, unknown>).username}
+										@{u.username}
 									</span>
 								{/if}
-								<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+								<span
+									class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50"
+								>
 									<Hash class="h-3 w-3" />
 									{u.id}
 								</span>
 							</div>
 						</div>
 						<div class="shrink-0 text-xs text-zinc-500">
-							{#if (u as Record<string, unknown>).is_online}
+							{#if u.is_online}
 								<div class="flex items-center gap-1 text-emerald-400">
 									<Circle class="h-3 w-3 fill-emerald-400" />
 									online now
 								</div>
-							{:else if (u as Record<string, unknown>).last_active_at}
+							{:else if u.last_active_at}
 								<div class="flex items-center gap-1">
 									<Clock class="h-3.5 w-3.5" />
-									last active {new Date(
-										(u as Record<string, unknown>).last_active_at as string
-									).toLocaleString()}
+									last active {new Date(u.last_active_at).toLocaleString()}
 								</div>
 							{/if}
 							<div class="mt-1 flex items-center gap-1">
@@ -391,4 +422,9 @@
 	}}
 />
 
-<UserDetailsModal bind:open={isUserDetailsOpen} userId={selectedUserId} />
+<UserDetailsModal
+	bind:open={isUserDetailsOpen}
+	userId={selectedUserId}
+	onUpdated={handleUserUpdated}
+	onDeleted={handleUserDeleted}
+/>

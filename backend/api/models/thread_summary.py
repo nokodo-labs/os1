@@ -22,11 +22,11 @@ if TYPE_CHECKING:
 	from api.models.thread import Thread
 
 
-class SummaryType(StrEnum):
-	"""type of thread summary."""
+class SummaryPurpose(StrEnum):
+	"""consumer-facing purpose of a thread summary."""
 
-	WINDOW = "window"
-	CONDENSED = "condensed"
+	AGENT_CONTEXT = "agent_context"
+	CATALOG = "catalog"
 
 
 class ThreadSummary(
@@ -53,9 +53,10 @@ class ThreadSummary(
 		ForeignKey("threads.id", ondelete="CASCADE"),
 		index=True,
 	)
-	type: Mapped[SummaryType] = mapped_column(
-		StringEnum(SummaryType, length=20),
-		default=SummaryType.WINDOW,
+	purpose: Mapped[SummaryPurpose] = mapped_column(
+		StringEnum(SummaryPurpose, length=30),
+		default=SummaryPurpose.AGENT_CONTEXT,
+		index=True,
 	)
 	start_message_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),

@@ -10,18 +10,20 @@ import pytest
 from api.models.message import MessageType
 from api.models.project import Project as ProjectModel
 from api.models.thread import Thread as ThreadModel
-from api.schemas.content import TextContent
+from api.schemas.common import sanitize_metadata
 from api.schemas.event import Event as EventSchema
-from api.schemas.message import MessageCreate
+from api.schemas.message import Message as MessageSchema
+from api.schemas.message import MessageCreate, TextContent
 from api.schemas.project import Project as ProjectSchema
 from api.schemas.prompt import PromptCreate, PromptUpdate
 from api.schemas.runs import RunInput, RunRequest, ThreadCreateAndRunRequest
 from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadSummary
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import new_typeid
 
 
-def _stamp_project(project: ProjectModel, *, project_id: str) -> ProjectModel:
+def _stamp_project(project: ProjectModel, project_id: str) -> ProjectModel:
 	project.id = project_id
 	project.metadata_ = {}
 	project.created_at = datetime.now(tz=UTC)
@@ -29,7 +31,7 @@ def _stamp_project(project: ProjectModel, *, project_id: str) -> ProjectModel:
 	return project
 
 
-def _stamp_thread(thread: ThreadModel, *, thread_id: str) -> ThreadModel:
+def _stamp_thread(thread: ThreadModel, thread_id: str) -> ThreadModel:
 	thread.id = thread_id
 	thread.metadata_ = {}
 	thread.tags = []
@@ -52,7 +54,7 @@ def test_project_schema_populates_thread_ids() -> None:
 	project.threads = [thread]
 
 	serialized = ProjectSchema.model_validate(project)
-	assert serialized.thread_ids == [thread_id]  # type: ignore[attr-defined]
+	assert serialized.thread_ids == [thread_id]
 
 
 def test_project_schema_handles_empty_threads() -> None:
@@ -64,21 +66,18 @@ def test_project_schema_handles_empty_threads() -> None:
 	project.threads = []
 
 	serialized = ProjectSchema.model_validate(project)
-	assert serialized.thread_ids == []  # type: ignore[attr-defined]
+	assert serialized.thread_ids == []
 
 
-def test_project_schema_respects_existing_thread_ids() -> None:
+def test_project_schema_handles_unloaded_threads() -> None:
 	owner_id = new_typeid("user")
-	preloaded_thread_id = new_typeid("thread")
 	project = _stamp_project(
 		ProjectModel(name="Schema", description="Test", owner_id=owner_id),
 		project_id=new_typeid("proj"),
 	)
-	project.thread_ids = [preloaded_thread_id]  # type: ignore[attr-defined]
-	project.threads = []
 
 	serialized = ProjectSchema.model_validate(project)
-	assert serialized.thread_ids == [preloaded_thread_id]  # type: ignore[attr-defined]
+	assert serialized.thread_ids == []
 
 
 def test_thread_schema_populates_project_ids() -> None:
@@ -124,6 +123,52 @@ def test_message_create_normalizes_content_variants() -> None:
 	assert from_empty.content == []
 
 
+def test_sanitize_metadata_strips_private_underscore_keys() -> None:
+	metadata: JSONObject = {
+		"run_id": "run_123",
+		"steering_state": "queued",
+		"custom_public": "visible",
+		"model_id": "public_if_present",
+		"message_id": "public_if_present",
+		"_provider_data": {"provider": {"tool_call_id": "call_secret"}},
+		"_citations_assigned": True,
+		"_citable_sources": [{"source_type": "url", "source_id": "secret"}],
+		"_web_fetch": {"domain": "example.com"},
+		"_web_search": {"engine": "perplexity"},
+	}
+
+	assert sanitize_metadata(metadata) == {
+		"run_id": "run_123",
+		"steering_state": "queued",
+		"custom_public": "visible",
+		"model_id": "public_if_present",
+		"message_id": "public_if_present",
+	}
+
+
+def test_message_schema_serializes_public_tool_metadata() -> None:
+	now = datetime.now(tz=UTC)
+	message = MessageSchema(
+		id=new_typeid("msg"),
+		thread_id=new_typeid("thread"),
+		type=MessageType.TOOL,
+		content=[],
+		tool_call_id="call_123",
+		is_error=False,
+		metadata_={
+			"run_id": "run_123",
+			"_provider_data": {"provider": {"tool_call_id": "call_secret"}},
+			"_web_search": {"engine": "perplexity"},
+		},
+		created_at=now,
+		updated_at=now,
+	)
+
+	payload = message.model_dump(mode="json", by_alias=True)
+
+	assert payload["metadata_"] == {"run_id": "run_123"}
+
+
 def test_prompt_schema_validates_and_normalizes() -> None:
 	valid = PromptCreate(command="my-prompt", content="body")
 	assert valid.command == "my-prompt"
@@ -135,9 +180,12 @@ def test_prompt_schema_validates_and_normalizes() -> None:
 		PromptCreate(command="not ok!", content="bad")
 
 
-def test_prompt_schema_none_and_blank_commands() -> None:
-	update = PromptUpdate(command=None, content=None)
-	assert update.command is None
+def test_prompt_schema_omits_and_rejects_null_commands() -> None:
+	update = PromptUpdate()
+	assert update.model_dump(exclude_unset=True) == {}
+
+	with pytest.raises(ValueError):
+		PromptUpdate(command=None, content=None)
 
 	with pytest.raises(ValueError):
 		PromptCreate(command="   ", content="x")

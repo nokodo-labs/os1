@@ -2,11 +2,9 @@
 
 AI platform with agentic coding support, beautiful UI, and comprehensive tooling.
 
-**PROJECT STATUS**: greenfield / early prototype. no commits have reached the dev branch yet. working branch is `prototype`.
-
 ## tech stack
 
-- **Backend**: FastAPI (Python 3.13+), SQLAlchemy 2.0+, PostgreSQL 17
+- **Backend**: FastAPI (Python 3.14+), SQLAlchemy 2.0+, PostgreSQL 17
 - **Frontend**: Svelte 5, TypeScript, Vite, Vercel AI SDK, shadcn-svelte, TailwindCSS
 - **Console**: Svelte 5, TypeScript, Vite, shadcn-svelte, TailwindCSS
 - **Infra**: Docker Compose, Nginx + static builds, GitHub Actions CI/CD, custom release tooling
@@ -17,6 +15,9 @@ AI platform with agentic coding support, beautiful UI, and comprehensive tooling
 
 when interacting with the user and working, always **keep comms efficient** and concise.
 
+never end a working session unless the user explicitly says to end, stop, or finalize the session.
+before stopping, ALWAYS use the questions tool and continue unless the user explicitly says to end.
+
 as an AI, your context is limited, thus overly verbose responses will directly affect how your performance degrades over time.
 **less is more** - focus on addressing the user's needs never create extra files or documentation to report changes unless explicitly asked.
 
@@ -26,7 +27,7 @@ to test changes, use dedicated check commands or run proper tests instead.
 ### ascii-only formatting
 
 - use only ASCII in comments/docstrings unless the file already uses non-ASCII and the user asks for it.
-- no em/en dashes or box-drawing separators; avoid decorative separators. use short plain comment headers and `-`.
+- no em/en dashes, box-drawing, or decorative separators. use short plain comment headers and `-`.
 
 ### instruction files
 
@@ -61,6 +62,8 @@ to validate your work, use the following methods, in order of importance:
 1. **problems tool**: ALWAYS check for code errors regularly using your file problems tool, as this will quickly highlight issues.
 2. **dedicated check Tasks**: use these after you have completed a task or set of changes.
 3. **unit tests**: run unit tests after an entire, complete change has passed all previous checks.
+
+multiple agents or users could be working on this worktree simultaneously, so **always ignore changes you are NOT responsible for**, including any errors or failures they may cause in your checks.
 
 ## contribution guidelines
 

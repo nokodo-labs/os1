@@ -10,14 +10,21 @@
 
 import { browser } from '$app/environment'
 import { api } from '$lib/api/client'
-import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
+import type { StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 import { showError } from '$lib/stores/notifications.svelte'
+import {
+	STORE_EVENT_TYPES,
+	storeEventData,
+	storeEventString,
+	subscribeToStoreEvents,
+} from '$lib/stores/storeEvents'
 import { SvelteMap } from 'svelte/reactivity'
 
 // types from API
 type ApiNote = components['schemas']['Note']
+type NoteUpdate = components['schemas']['NoteUpdate']
 
 export interface Note {
 	id: string
@@ -43,6 +50,7 @@ let fetchedAt = $state<number | null>(null)
 let isLoading = $state(true)
 let inFlight: Promise<Note[]> | null = null
 let currentSortMode = $state<NotesSortMode>('updated_at:desc')
+let hasLoadedNotes = $state(false)
 
 function parseSortMode(mode: NotesSortMode): { sort_by: NotesSortBy; sort_dir: SortDir } {
 	const [sort_by, sort_dir] = mode.split(':') as [NotesSortBy, SortDir]
@@ -66,9 +74,25 @@ function toNote(apiNote: ApiNote): Note {
 	}
 }
 
+async function fetchNote(noteId: string): Promise<Note | null> {
+	const { data, error } = await api.GET('/v1/notes/{note_id}', {
+		params: { path: { note_id: noteId } },
+	})
+	if (error || !data) return null
+	return toNote(data)
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+	if (left.length !== right.length) return false
+	return left.every((value, index) => value === right[index])
+}
+
 export const notes = {
 	get hydrated() {
 		return fetchedAt !== null
+	},
+	get hasLoaded() {
+		return hasLoadedNotes
 	},
 	get loading() {
 		return isLoading
@@ -112,6 +136,7 @@ export const notes = {
 				notesMap.set(note.id, note)
 			}
 			fetchedAt = Date.now()
+			hasLoadedNotes = true
 			return this.all
 		})()
 
@@ -180,38 +205,58 @@ export const notes = {
 
 	async update(
 		noteId: string,
-		updates: { title?: string; content?: string },
+		updates: { title?: string; content?: string; labels?: string[]; projectIds?: string[] },
 		options?: { rollback?: boolean }
-	): Promise<void> {
+	): Promise<boolean> {
 		const doRollback = options?.rollback ?? true
 		const existing = notesMap.get(noteId)
-		if (!existing) return
+		if (!existing) return false
 
 		const nextTitle = updates.title ?? existing.title
 		const nextContent = updates.content ?? existing.content
-		if (nextTitle === existing.title && nextContent === existing.content) return
+		const nextLabels = updates.labels ?? existing.labels
+		const nextProjectIds = updates.projectIds ?? existing.projectIds
+		if (
+			nextTitle === existing.title &&
+			nextContent === existing.content &&
+			arraysEqual(nextLabels, existing.labels) &&
+			arraysEqual(nextProjectIds, existing.projectIds)
+		) {
+			return true
+		}
 
 		// optimistic update
 		notesMap.set(noteId, {
 			...existing,
 			title: nextTitle,
 			content: nextContent,
+			labels: nextLabels,
+			projectIds: nextProjectIds,
 			updatedAt: Date.now(),
 		})
 
 		try {
+			const body: NoteUpdate = {}
+			if (nextTitle !== existing.title) body.title = nextTitle
+			if (nextContent !== existing.content) body.content = nextContent
+			if (!arraysEqual(nextLabels, existing.labels)) body.labels = nextLabels
+			if (!arraysEqual(nextProjectIds, existing.projectIds)) body.project_ids = nextProjectIds
+
 			const { error } = await api.PUT('/v1/notes/{note_id}', {
 				params: { path: { note_id: noteId } },
-				body: { title: nextTitle, content: nextContent },
+				body,
 			})
 
 			if (error) {
 				if (doRollback) notesMap.set(noteId, existing)
 				showError('could not save note')
+				return false
 			}
+			return true
 		} catch {
 			if (doRollback) notesMap.set(noteId, existing)
 			showError('could not save note')
+			return false
 		}
 	},
 
@@ -268,15 +313,41 @@ export const notes = {
 	invalidate(): void {
 		fetchedAt = null
 	},
+
+	async refresh(): Promise<void> {
+		await this.load({ force: true })
+	},
+
+	clear(): void {
+		notesMap.clear()
+		fetchedAt = null
+		isLoading = false
+		inFlight = null
+		hasLoadedNotes = false
+	},
 }
 
 // event stream integration
 
 let notesUnsub: (() => void) | null = null
+const NOTE_STREAM_EVENTS = [
+	...STORE_EVENT_TYPES.notes,
+	...STORE_EVENT_TYPES.resourceAccessResource,
+] as const
 
 function handleNoteEvent(message: StreamMessage): void {
-	const data = message.data as Record<string, unknown> | undefined
+	const data = storeEventData(message)
 	if (!data) return
+
+	if (message.type === 'access.updated' || message.type === 'resource.access.updated') {
+		if (data.resource_type !== 'note' || typeof data.resource_id !== 'string') return
+		const resourceId = data.resource_id
+		void fetchNote(resourceId).then((note) => {
+			if (note) notesMap.set(note.id, note)
+			else notesMap.delete(resourceId)
+		})
+		return
+	}
 
 	if (message.type === 'note.created') {
 		const apiNote = data as unknown as ApiNote
@@ -295,19 +366,26 @@ function handleNoteEvent(message: StreamMessage): void {
 		}
 		if (fetchedAt === null) fetchedAt = Date.now()
 	} else if (message.type === 'note.updated') {
-		const id = data.id as string
+		const id = storeEventString(message, ['id'])
 		if (!id) return
 		const existing = notesMap.get(id)
-		if (!existing) return
+		if (!existing) {
+			void fetchNote(id).then((note) => {
+				if (note) notesMap.set(note.id, note)
+				else notesMap.delete(id)
+			})
+			return
+		}
 		// merge partial update into existing cache entry
 		const merged = { ...existing }
 		if ('title' in data) merged.title = data.title as string
 		if ('content' in data) merged.content = data.content as string
 		if ('labels' in data) merged.labels = (data.labels as string[]) ?? []
+		if ('project_ids' in data) merged.projectIds = (data.project_ids as string[]) ?? []
 		if ('updated_at' in data) merged.updatedAt = new Date(data.updated_at as string).getTime()
 		notesMap.set(id, merged)
 	} else if (message.type === 'note.deleted') {
-		const noteId = data.id as string
+		const noteId = storeEventString(message, ['id'])
 		if (noteId) notesMap.delete(noteId)
 	}
 }
@@ -316,19 +394,20 @@ if (browser) {
 	onAccessTokenChanged((token) => {
 		if (token) {
 			if (!notesUnsub) {
-				notesUnsub = eventStreamClient.subscribe(handleNoteEvent)
+				notesUnsub = subscribeToStoreEvents(NOTE_STREAM_EVENTS, handleNoteEvent)
 			}
 		} else {
 			notesUnsub?.()
 			notesUnsub = null
 			notesMap.clear()
 			fetchedAt = null
+			hasLoadedNotes = false
 		}
 	})
 
 	// subscribe immediately if already authenticated
 	// (module may be imported after auth when navigating to /notes)
 	if (getAccessToken() && !notesUnsub) {
-		notesUnsub = eventStreamClient.subscribe(handleNoteEvent)
+		notesUnsub = subscribeToStoreEvents(NOTE_STREAM_EVENTS, handleNoteEvent)
 	}
 }

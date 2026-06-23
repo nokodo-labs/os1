@@ -2,12 +2,36 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field
 
-from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
+from api.schemas.common import (
+	MISSING,
+	MetadataModel,
+	MetadataUpdateModel,
+	MissingType,
+	ORMModel,
+	TimestampedModel,
+)
+from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
+
+
+type ProjectSortBy = CommonSortBy | Literal["name"]
+
+
+class ProjectListFilters(BaseModel):
+	"""filters for listing projects."""
+
+	owner_id: TypeID | None = None
+	q: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+class ProjectSearchFilters(BaseModel):
+	"""structured filters applied to project search."""
+
+	owner_id: TypeID | None = None
 
 
 class ProjectBase(MetadataModel):
@@ -23,11 +47,11 @@ class ProjectCreate(ProjectBase):
 	pass
 
 
-class ProjectUpdate(ORMModel):
+class ProjectUpdate(MetadataUpdateModel):
 	"""Schema for updating a project."""
 
-	name: str | None = None
-	description: str | None = None
+	name: str | MissingType = MISSING
+	description: str | None | MissingType = MISSING
 
 
 class Project(ProjectBase, TimestampedModel, ORMModel):
@@ -37,19 +61,13 @@ class Project(ProjectBase, TimestampedModel, ORMModel):
 	owner_id: TypeID
 	thread_ids: list[TypeID] = Field(default_factory=list)
 
-	@model_validator(mode="before")
-	@classmethod
-	def _ensure_thread_ids(cls, data: Any) -> Any:
-		try:
-			from api.models.project import Project as ProjectModel  # type: ignore
-		except Exception:  # pragma: no cover
-			return data
 
-		if isinstance(data, ProjectModel) and not getattr(data, "thread_ids", None):
-			threads = getattr(data, "__dict__", {}).get("threads")
-			if threads:
-				thread_ids = [
-					thread.id for thread in threads if getattr(thread, "id", None)
-				]
-				setattr(data, "thread_ids", thread_ids)
-		return data
+class ProjectResourceCounts(ORMModel):
+	"""resource counts for one project."""
+
+	thread_count: int = 0
+	note_count: int = 0
+	file_count: int = 0
+	reminder_list_count: int = 0
+	calendar_count: int = 0
+	resource_count: int = 0

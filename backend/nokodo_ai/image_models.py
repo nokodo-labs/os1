@@ -41,7 +41,6 @@ class ImageModel(AdapterEnabledBase[ImageAdapter]):
 	def create(
 		cls,
 		model_name: str,
-		*,
 		adapter: ImageAdapter | dict[str, Any],
 		**fields: Any,
 	) -> ImageModel:
@@ -52,7 +51,6 @@ class ImageModel(AdapterEnabledBase[ImageAdapter]):
 	def generate(
 		self,
 		prompt: str,
-		*,
 		stream: Literal[False] = False,
 		image: bytes | None = None,
 		mask: bytes | None = None,
@@ -63,7 +61,6 @@ class ImageModel(AdapterEnabledBase[ImageAdapter]):
 	def generate(
 		self,
 		prompt: str,
-		*,
 		stream: Literal[True],
 		image: bytes | None = None,
 		mask: bytes | None = None,
@@ -73,7 +70,6 @@ class ImageModel(AdapterEnabledBase[ImageAdapter]):
 	def generate(
 		self,
 		prompt: str,
-		*,
 		stream: bool = False,
 		image: bytes | None = None,
 		mask: bytes | None = None,

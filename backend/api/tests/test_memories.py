@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.schemas.memory import MemoryCreate
+from api.schemas.memory import MemoryCreate, MemoryListFilters
 from api.schemas.user import UserCreate
 from api.settings import settings
 from api.v1.service import memories as memory_service
@@ -36,7 +36,7 @@ async def test_create_memory(db_session: AsyncSession, memory_user: Any) -> None
 	memory_in = MemoryCreate(
 		user_id=memory_user.id,
 		content="Test memory content",
-		category="test",
+		tags=["test"],
 	)
 	memory = await memory_service.create_memory(
 		memory_in,
@@ -61,8 +61,8 @@ async def test_list_memories(db_session: AsyncSession, memory_user: Any) -> None
 
 	memories = await memory_service.list_memories(
 		db_session,
-		user_id=memory_user.id,
 		principal=principal,
+		filters=MemoryListFilters(owner_id=memory_user.id),
 	)
 	assert len(memories) >= 3
 
@@ -150,13 +150,13 @@ async def test_list_memories_sorting(
 	resp_b = await client.post(
 		"/v1/memories",
 		headers=headers,
-		json={"user_id": user_id, "content": "b", "category": "b"},
+		json={"user_id": user_id, "content": "b", "tags": ["b"]},
 	)
 	assert resp_b.status_code == 201
 	resp_a = await client.post(
 		"/v1/memories",
 		headers=headers,
-		json={"user_id": user_id, "content": "a", "category": "a"},
+		json={"user_id": user_id, "content": "a", "tags": ["a"]},
 	)
 	assert resp_a.status_code == 201
 
@@ -164,15 +164,15 @@ async def test_list_memories_sorting(
 		"/v1/memories",
 		headers=headers,
 		params={
-			"user_id": user_id,
-			"sort_by": "category",
+			"owner_id": user_id,
+			"sort_by": "tags",
 			"sort_dir": "asc",
 			"limit": 50,
 		},
 	)
 	assert list_resp.status_code == 200
 	items = list_resp.json()
-	assert [m["category"] for m in items[:2]] == ["a", "b"]
+	assert [m["tags"] for m in items[:2]] == [["a"], ["b"]]
 
 
 @pytest.mark.asyncio
@@ -205,14 +205,16 @@ async def test_admin_list_memories_for_other_user(db_session: AsyncSession) -> N
 	listed = await memory_service.list_memories(
 		db_session,
 		principal=principal,
-		user_id=TypeID(other.id),
+		filters=MemoryListFilters(owner_id=TypeID(other.id)),
 	)
 	assert listed and listed[0].id == memory.id
 
 
 @pytest.mark.asyncio
-async def test_non_admin_list_memories_forces_self(db_session: AsyncSession) -> None:
-	"""Non-admin list_memories should ignore requested user_id."""
+async def test_non_admin_list_memories_scopes_to_own_owner(
+	db_session: AsyncSession,
+) -> None:
+	"""Non-admin list_memories filtered by another owner_id returns nothing."""
 	admin = await user_service.create_user(
 		UserCreate(
 			email="mem_guard_admin@example.com",
@@ -248,16 +250,29 @@ async def test_non_admin_list_memories_forces_self(db_session: AsyncSession) -> 
 			settings.default_permissions.action_permissions
 		),
 	)
+	admin_principal = Principal(
+		user=admin,
+		group_ids=(),
+		permissions=frozenset(),
+		global_action_permissions=frozenset(
+			settings.default_permissions.action_permissions
+		),
+	)
 
 	await memory_service.create_memory(
 		MemoryCreate(user_id=owner.id, content="owner-memory"),
 		db_session,
 		principal=principal,
 	)
+	await memory_service.create_memory(
+		MemoryCreate(user_id=other.id, content="other-memory"),
+		db_session,
+		principal=admin_principal,
+	)
 
 	memories = await memory_service.list_memories(
 		db_session,
 		principal=principal,
-		user_id=TypeID(other.id),
+		filters=MemoryListFilters(owner_id=TypeID(other.id)),
 	)
-	assert memories and all(mem.user_id == owner.id for mem in memories)
+	assert memories == []

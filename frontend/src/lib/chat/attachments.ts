@@ -49,6 +49,7 @@ export async function uploadFile(file: File): Promise<PendingAttachment> {
 
 	return {
 		fileId,
+		resourceType: 'file',
 		filename,
 		mediaType,
 		category,
@@ -67,7 +68,7 @@ export function revokePreviewUrls(attachments: PendingAttachment[]): void {
 
 /** derive tool_choice from run modifiers (null = default/auto) */
 export function deriveToolChoice(modifiers: RunModifiers): ToolChoiceValue | null {
-	if (modifiers.webSearch) return 'web_search'
+	if (modifiers.webSearch) return 'agentic_web_search'
 	if (modifiers.thinkLonger) return 'think'
 	if (modifiers.generateImage) return 'generate_image'
 	return null

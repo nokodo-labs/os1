@@ -8,8 +8,10 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.plugin import Plugin, PluginType
-from api.schemas.plugin import PluginCreate
+from api.schemas.agent import DEFAULT_AGENT_PLUGIN_IDS
+from api.schemas.plugin import PluginCreate, PluginInfo, PluginListFilters
 from api.v1.service import plugins as plugin_service
+from api.v1.service.chat.tools import external as external_tools
 
 
 class _FakePrincipal:
@@ -28,6 +30,11 @@ class _FakePrincipal:
 
 
 _admin = _FakePrincipal()
+
+
+def test_default_agent_filters_are_native_toggleable_plugins() -> None:
+	native_filter_ids = {plugin.id for plugin in plugin_service._list_native("filter")}
+	assert set(DEFAULT_AGENT_PLUGIN_IDS) <= native_filter_ids
 
 
 def test_list_native_description_fallbacks(
@@ -246,11 +253,11 @@ async def test_list_plugins_with_native_filters_db_by_type(
 		db_session,
 		principal=_admin,  # type: ignore[arg-type]
 		include_native=True,
-		plugin_type="tool",
+		filters=PluginListFilters(plugin_type="tool"),
 	)
-	assert any(p.is_native for p in filtered)
-	assert [p for p in filtered if not p.is_native and p.name == "db-tool"]
-	assert not [p for p in filtered if not p.is_native and p.name == "db-filter"]
+	assert any(p.source == "native" for p in filtered)
+	assert [p for p in filtered if p.source == "custom" and p.name == "db-tool"]
+	assert not [p for p in filtered if p.source == "custom" and p.name == "db-filter"]
 
 
 @pytest.mark.asyncio
@@ -288,13 +295,74 @@ async def test_list_plugins_with_native_merges_db_plugins(
 		principal=_admin,  # type: ignore[arg-type]
 		include_native=True,
 	)
-	assert any(p.is_native is False and p.name == "db-tool" for p in all_plugins)
+	assert any(p.source == "custom" and p.name == "db-tool" for p in all_plugins)
 
 	only_tools = await plugin_service.list_plugins(  # type: ignore[call-overload]
 		db_session,
 		principal=_admin,  # type: ignore[arg-type]
 		include_native=True,
-		plugin_type="tool",
+		filters=PluginListFilters(plugin_type="tool"),
 	)
 	assert {p.type for p in only_tools} == {"tool"}
 	assert all(p.name == "db-tool" for p in only_tools)
+
+
+@pytest.mark.asyncio
+async def test_external_plugin_source_registry_feeds_public_lookup(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	monkeypatch.setattr(external_tools, "_SOURCES_BY_NAME", {})
+	monkeypatch.setattr(plugin_service, "TOOL_REGISTRY", {})
+	monkeypatch.setattr(plugin_service, "FILTER_REGISTRY", {})
+	monkeypatch.setattr(plugin_service, "HOOK_REGISTRY", {})
+	plugin = PluginInfo(
+		id="ext:tool:one",
+		name="external tool",
+		description="from source",
+		type="tool",
+		source="external",
+	)
+
+	async def list_plugins(
+		_session: AsyncSession,
+		plugin_type: plugin_service.PluginTypeFilter = None,
+		_principal: object = None,
+	) -> list[PluginInfo]:
+		return [plugin] if plugin_type in (None, "tool") else []
+
+	async def get_plugin(
+		plugin_id: str,
+		_session: AsyncSession,
+		_principal: object,
+	) -> PluginInfo | None:
+		return plugin if plugin_id == plugin.id else None
+
+	async def resolve_tools(_tool_ids: list[str], _context: object) -> list[object]:
+		return []
+
+	external_tools.register_external_tool_source(
+		external_tools.ExternalToolSource(
+			name="coverage-plugins",
+			prefix="ext:",
+			resolve_tools=resolve_tools,
+			list_plugins=list_plugins,
+			get_plugin=get_plugin,
+		)
+	)
+
+	listed = await plugin_service.list_plugins(  # type: ignore[call-overload]
+		db_session,
+		principal=_admin,  # type: ignore[arg-type]
+		include_native=True,
+		filters=PluginListFilters(plugin_type="tool"),
+	)
+	fetched = await plugin_service.get_plugin(
+		plugin.id,
+		db_session,
+		principal=_admin,  # type: ignore[arg-type]
+		include_native=True,
+	)
+
+	assert listed == [plugin]
+	assert fetched == plugin

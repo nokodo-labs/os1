@@ -33,7 +33,6 @@ async def _get_provider(
 async def create_provider(
 	provider_in: ProviderCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Provider:
 	require_permission(principal, "providers:manage")
@@ -63,7 +62,6 @@ async def create_provider(
 
 async def list_providers(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> list[Provider]:
 	require_permission(principal, "providers:manage")
@@ -74,7 +72,6 @@ async def list_providers(
 async def get_provider(
 	provider_id: str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Provider:
 	return await _get_provider(provider_id, session, principal)
@@ -84,7 +81,6 @@ async def update_provider(
 	provider_id: str,
 	provider_in: ProviderUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Provider:
 	provider = await _get_provider(provider_id, session, principal)
@@ -92,11 +88,17 @@ async def update_provider(
 		exclude_unset=True, by_alias=True, exclude={"api_key"}
 	)
 
-	if provider_in.api_key:
-		updates["encrypted_api_key"] = encrypt_string(
-			provider_in.api_key,
-			settings.security.secret_key,
-		)
+	if "api_key" in provider_in.model_fields_set:
+		api_key = provider_in.api_key
+		if api_key is None:
+			updates["encrypted_api_key"] = None
+		elif isinstance(api_key, str):
+			updates["encrypted_api_key"] = encrypt_string(
+				api_key,
+				settings.security.secret_key,
+			)
+		else:
+			raise ValueError("invalid api key")
 	elif provider.encrypted_api_key:
 		# transparent re-encryption on write if stored under a previous key
 		plaintext, needs_reencrypt = decrypt_string_with_fallback(

@@ -51,5 +51,23 @@
 		>
 			toast playground
 		</a>
+		<a
+			href={resolve('/debug/open-webui-import')}
+			class="border-foreground/10 bg-foreground/5 text-foreground/80 hover:border-foreground/20 hover:bg-foreground/8 rounded-xl border px-4 py-3 text-sm transition"
+		>
+			Open WebUI import debug
+		</a>
+		<a
+			href={resolve('/debug/mermaid')}
+			class="border-foreground/10 bg-foreground/5 text-foreground/80 hover:border-foreground/20 hover:bg-foreground/8 rounded-xl border px-4 py-3 text-sm transition"
+		>
+			mermaid wheel-zoom lab
+		</a>
+		<a
+			href={resolve('/debug/chat-send')}
+			class="border-foreground/10 bg-foreground/5 text-foreground/80 hover:border-foreground/20 hover:bg-foreground/8 rounded-xl border px-4 py-3 text-sm transition"
+		>
+			chat send harness
+		</a>
 	</div>
 </div>

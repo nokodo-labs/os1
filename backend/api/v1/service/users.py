@@ -2,44 +2,119 @@
 
 from __future__ import annotations
 
+import asyncio
+from typing import NoReturn
+
 from fastapi import HTTPException, status
-from sqlalchemy import delete, func, insert, select
+from sqlalchemy import delete, func, insert, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
+from api.models.block import Block
+from api.models.calendar import Calendar
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.file import File
+from api.models.friendship import Friendship, FriendshipStatus
 from api.models.group import Group
 from api.models.many_to_many import user_role_association
 from api.models.memory import Memory
 from api.models.note import Note
+from api.models.notification import Notification
+from api.models.project import Project
 from api.models.reminder import Reminder, ReminderList
+from api.models.task import Task
 from api.models.thread import Thread
-from api.models.user import User
-from api.permissions import ActionPermission
-from api.schemas.user import UserCreate, UserUpdate
+from api.models.user import USER_TYPEID_PREFIX, User
+from api.models.user_client import UserClient
+from api.permissions import (
+	DEFAULT_ACCESS_RESOURCE_TYPES,
+	ActionPermission,
+	ResourceType,
+)
+from api.schemas.user import UserCreate, UserSummary, UserUpdate
 from api.settings import settings
 from api.v1.service import events as event_service
 from api.v1.service.auth import Principal
-from api.v1.service.sorting import SortDir, apply_sort
+from api.v1.service.authorization import (
+	invalidate_accessible_users_for_resource_types,
+	invalidate_accessible_users_for_role_defaults,
+	invalidate_accessible_users_for_subject,
+)
+from api.v1.service.listing import SortDir, apply_sort, exact_typeid_filter
+from api.v1.service.social import privacy as privacy_service
+from api.v1.service.social.visibility import user_visibility_predicate
+from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.security import hash_password
 from nokodo_ai.utils.typeid import TypeID
 
 
+def _apply_admin_user_filters(stmt: Select, q: str | None) -> Select:
+	"""apply admin-only user list filters."""
+	if not q or not q.strip():
+		return stmt
+	pattern = contains_pattern(q.strip())
+	return stmt.where(
+		or_(
+			User.email.ilike(pattern, escape="\\"),
+			User.username.ilike(pattern, escape="\\"),
+			User.display_name.ilike(pattern, escape="\\"),
+			exact_typeid_filter(User.id, q, USER_TYPEID_PREFIX),
+		)
+	)
+
+
+def _raise_user_integrity_error(exc: IntegrityError) -> NoReturn:
+	"""
+	inspect IntegrityError for common user creation/update issues
+	and raise appropriate HTTP errors.
+	"""
+	msg = str(exc.orig).lower()
+	if "email" in msg and "unique" in msg:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="email already registered",
+		) from None
+	if "username" in msg and "unique" in msg:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="username already taken",
+		) from None
+	if "foreign key" in msg and "user_roles" in msg:
+		raise HTTPException(
+			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+			detail="invalid role reference in auto_signup_role_ids",
+		) from None
+	raise exc
+
+
+def _build_user_summary(
+	redacted: privacy_service.RedactedUser,
+) -> UserSummary:
+	"""build a user summary without leaking hidden profile fields."""
+	return UserSummary(
+		id=redacted.id,
+		username=redacted.username,
+		display_name=redacted.display_name,
+		avatar_url=redacted.avatar_url,
+	)
+
+
 async def list_users(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	skip: int = 0,
 	limit: int = 100,
 	sort_by: str = "updated_at",
 	sort_dir: SortDir = "desc",
+	q: str | None = None,
 ) -> list[User]:
 	if not principal.is_admin:
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+	stmt = _apply_admin_user_filters(select(User), q)
 	stmt = apply_sort(
-		select(User),
+		stmt,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
 		columns={
@@ -56,10 +131,20 @@ async def list_users(
 	return list(result.scalars().all())
 
 
+async def count_users(
+	session: AsyncSession,
+	principal: Principal,
+	q: str | None = None,
+) -> int:
+	if not principal.is_admin:
+		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+	stmt = _apply_admin_user_filters(select(func.count()).select_from(User), q)
+	return await session.scalar(stmt) or 0
+
+
 async def get_user(
 	user_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> User:
 	if not principal.is_admin and user_id != principal.user.id:
@@ -80,10 +165,47 @@ async def get_user(
 	return user
 
 
+async def get_accessible_user_summaries(
+	user_ids: list[TypeID],
+	session: AsyncSession,
+	principal: Principal,
+) -> list[UserSummary]:
+	"""return requested users the principal is allowed to identify."""
+	requested: list[TypeID] = []
+	seen: set[str] = set()
+	for user_id in user_ids:
+		key = str(user_id)
+		if key in seen:
+			continue
+		seen.add(key)
+		requested.append(user_id)
+
+	if not requested:
+		return []
+
+	result = await session.execute(
+		select(User).where(
+			User.id.in_(requested),
+			user_visibility_predicate(
+				principal,
+				include_inactive=principal.is_admin,
+			),
+		)
+	)
+	users = list(result.scalars().all())
+	users_by_id = {str(user.id): user for user in users}
+	redacted = await privacy_service.redact_users(users, session, principal)
+	summaries: list[UserSummary] = []
+	for user_id in requested:
+		user = users_by_id.get(str(user_id))
+		if user is not None:
+			summaries.append(_build_user_summary(redacted[user.id]))
+	return summaries
+
+
 async def get_user_counts(
 	user_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> dict[str, int]:
 	# ensure actor has permission
@@ -102,6 +224,12 @@ async def get_user_counts(
 		"groups": select(func.count())
 		.select_from(Group)
 		.where(Group.owner_id == user_id),
+		"projects": select(func.count())
+		.select_from(Project)
+		.where(Project.owner_id == user_id),
+		"calendars": select(func.count())
+		.select_from(Calendar)
+		.where(Calendar.owner_id == user_id),
 		"reminders": (
 			select(func.count())
 			.select_from(Reminder)
@@ -112,6 +240,37 @@ async def get_user_counts(
 			.select_from(ReminderList)
 			.where(ReminderList.owner_id == user_id)
 		),
+		"tasks": select(func.count()).select_from(Task).where(Task.user_id == user_id),
+		"notifications": select(func.count())
+		.select_from(Notification)
+		.where(Notification.user_id == user_id),
+		"clients": select(func.count())
+		.select_from(UserClient)
+		.where(UserClient.user_id == user_id),
+		"friends": select(func.count())
+		.select_from(Friendship)
+		.where(
+			Friendship.status == FriendshipStatus.ACCEPTED,
+			or_(
+				Friendship.requester_id == user_id,
+				Friendship.addressee_id == user_id,
+			),
+		),
+		"friend_requests_incoming": select(func.count())
+		.select_from(Friendship)
+		.where(
+			Friendship.status == FriendshipStatus.PENDING,
+			Friendship.addressee_id == user_id,
+		),
+		"friend_requests_outgoing": select(func.count())
+		.select_from(Friendship)
+		.where(
+			Friendship.status == FriendshipStatus.PENDING,
+			Friendship.requester_id == user_id,
+		),
+		"blocks": select(func.count())
+		.select_from(Block)
+		.where(Block.blocker_id == user_id),
 	}
 	counts: dict[str, int] = {}
 	for key, stmt in queries.items():
@@ -123,7 +282,6 @@ async def get_user_counts(
 async def create_user(
 	user_in: UserCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal | None = None,
 ) -> User:
 	user_count = await session.scalar(select(func.count()).select_from(User))
@@ -199,6 +357,14 @@ async def create_user(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail="email already registered",
 		)
+	result = await session.execute(
+		select(User).where(User.username == user_in.username)
+	)
+	if result.scalar_one_or_none():
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="username already taken",
+		)
 
 	user = User(
 		email=user_in.email,
@@ -209,39 +375,40 @@ async def create_user(
 		is_superuser=is_superuser,
 	)
 	session.add(user)
-	await session.flush()
-
-	if actor is None:
-		role_ids = settings.security.auto_signup_role_ids
-		if role_ids:
-			await session.execute(
-				insert(user_role_association),
-				[{"user_id": str(user.id), "role_id": str(rid)} for rid in role_ids],
-			)
-
+	role_ids: list[str] = []
 	try:
+		await session.flush()
+
+		if actor is None:
+			role_ids = settings.security.auto_signup_role_ids or []
+			if role_ids:
+				await session.execute(
+					insert(user_role_association),
+					[
+						{"user_id": str(user.id), "role_id": str(rid)}
+						for rid in role_ids
+					],
+				)
+
 		await session.commit()
 	except IntegrityError as exc:
 		await session.rollback()
-		msg = str(exc.orig).lower()
-		if "email" in msg and "unique" in msg:
-			raise HTTPException(
-				status_code=status.HTTP_400_BAD_REQUEST,
-				detail="email already registered",
-			) from None
-		elif "username" in msg and "unique" in msg:
-			raise HTTPException(
-				status_code=status.HTTP_400_BAD_REQUEST,
-				detail="username already taken",
-			) from None
-		elif "foreign key" in msg and "user_roles" in msg:
-			raise HTTPException(
-				status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-				detail="invalid role reference in auto_signup_role_ids",
-			) from None
-		else:
-			raise exc
+		_raise_user_integrity_error(exc)
 	await session.refresh(user)
+	# auto-signup roles may grant access to existing resources via
+	# AccessRule.subject_role_id; bust those caches so the new user
+	# becomes visible to recipients without waiting for the TTL.
+	# fan out concurrently - each subject invalidation is independent.
+	if role_ids:
+		await asyncio.gather(
+			*(
+				invalidate_accessible_users_for_subject("role", TypeID(rid), session)
+				for rid in role_ids
+			)
+		)
+		await invalidate_accessible_users_for_role_defaults(
+			[TypeID(rid) for rid in role_ids], session
+		)
 	return user
 
 
@@ -249,36 +416,38 @@ async def update_user(
 	user_id: TypeID,
 	user_in: UserUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> User:
+	changed = user_in.model_fields_set
 	if not principal.is_admin and user_id != principal.user.id:
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 
 	if not principal.is_admin:
-		if (
-			user_in.email is not None
-			or user_in.password is not None
-			or user_in.is_active is not None
-			or user_in.integration_tokens is not None
-			or user_in.usage_quotas is not None
-			or user_in.role_ids is not None
-		):
+		admin_fields = {
+			"email",
+			"password",
+			"is_active",
+			"is_superuser",
+			"integration_tokens",
+			"usage_quotas",
+			"role_ids",
+		}
+		if admin_fields & changed:
 			raise HTTPException(
 				status_code=status.HTTP_400_BAD_REQUEST,
 				detail="unsupported fields",
 			)
-		has_self_field = (
-			user_in.preferences is not None
-			or user_in.display_name is not None
-			or user_in.avatar_url is not None
-			or user_in.username is not None
-			or user_in.bio is not None
-			or user_in.find_by_email is not None
-			or user_in.privacy is not None
-		)
-		if not has_self_field:
+		self_fields = {
+			"preferences",
+			"display_name",
+			"avatar_url",
+			"username",
+			"bio",
+			"find_by_email",
+			"privacy",
+		}
+		if not self_fields & changed:
 			raise HTTPException(
 				status_code=status.HTTP_400_BAD_REQUEST,
 				detail="no updatable fields provided",
@@ -286,39 +455,57 @@ async def update_user(
 
 	user = await get_user(user_id, session, principal=principal)
 
-	if user_in.preferences is not None:
-		user.preferences = user_in.preferences.model_dump(
+	# capture pre-mutation role membership so we can compute the symmetric
+	# difference and invalidate only the affected role subjects.
+	old_role_ids: set[TypeID] = set()
+	new_role_ids: set[TypeID] = set()
+	if principal.is_admin and "role_ids" in changed:
+		old_role_ids = {
+			TypeID(row[0])
+			for row in (
+				await session.execute(
+					select(user_role_association.c.role_id).where(
+						user_role_association.c.user_id == str(user.id)
+					)
+				)
+			).all()
+		}
+
+	update_data = user_in.model_dump(
+		exclude_unset=True,
+		exclude={"password", "preferences", "privacy", "role_ids"},
+	)
+	for key, value in update_data.items():
+		setattr(user, key, value)
+
+	if "preferences" in changed:
+		preferences = user_in.model_dump(
+			exclude_unset=True,
 			mode="json",
 			by_alias=True,
-			exclude_none=True,
-		)
-
-	# allow non-admin users to update their own display name and avatar
-	if user_in.display_name is not None:
-		user.display_name = user_in.display_name
-	if user_in.avatar_url is not None:
-		user.avatar_url = user_in.avatar_url
-	if user_in.username is not None:
-		user.username = user_in.username
-	if user_in.bio is not None:
-		user.bio = user_in.bio
-	if user_in.find_by_email is not None:
-		user.find_by_email = user_in.find_by_email
-	if user_in.privacy is not None:
-		user.privacy = user_in.privacy.model_dump(mode="json")
+			include={"preferences"},
+		)["preferences"]
+		user.preferences = preferences
+	if "privacy" in changed:
+		privacy = user_in.model_dump(
+			exclude_unset=True,
+			mode="json",
+			include={"privacy"},
+		)["privacy"]
+		user.privacy = privacy
 
 	if principal.is_admin:
-		if user_in.email is not None:
-			user.email = user_in.email
-		if user_in.is_active is not None:
-			user.is_active = user_in.is_active
-		if user_in.integration_tokens is not None:
-			user.integration_tokens = dict(user_in.integration_tokens)
-		if user_in.usage_quotas is not None:
-			user.usage_quotas = dict(user_in.usage_quotas)
-		if user_in.password is not None:
-			user.hashed_password = hash_password(user_in.password)
-		if user_in.role_ids is not None:
+		if "password" in changed:
+			password = user_in.password
+			if not isinstance(password, str):
+				raise ValueError("invalid password")
+			user.hashed_password = hash_password(password)
+		if "role_ids" in changed:
+			role_ids_data = user_in.model_dump(
+				exclude_unset=True,
+				include={"role_ids"},
+			)["role_ids"]
+			new_role_ids = {TypeID(str(role_id)) for role_id in role_ids_data}
 			# clear existing roles and insert new ones via the secondary table.
 			# FK constraints on user_roles will reject non-existent role IDs.
 			await session.execute(
@@ -326,12 +513,12 @@ async def update_user(
 					user_role_association.c.user_id == str(user.id)
 				)
 			)
-			if user_in.role_ids:
+			if new_role_ids:
 				await session.execute(
 					insert(user_role_association),
 					[
 						{"user_id": str(user.id), "role_id": str(rid)}
-						for rid in user_in.role_ids
+						for rid in new_role_ids
 					],
 				)
 
@@ -357,8 +544,50 @@ async def update_user(
 		) from None
 	await session.refresh(user)
 
+	# precise cache invalidation: only the subjects whose effective access
+	# could have changed. avoids a coarse 'invalidate everything' tag.
+	if principal.is_admin:
+		if "is_superuser" in changed:
+			# superuser recipients changed.
+			await invalidate_accessible_users_for_resource_types(
+				list(ResourceType), session
+			)
+		if "is_active" in changed:
+			# direct user-rule grants for this user can flip in/out of the
+			# accessible_users list. invalidate per-subject:user.
+			await invalidate_accessible_users_for_subject(
+				subject_kind="user", subject_id=user.id, session=session
+			)
+			# default recipients changed.
+			default_resource_types = [
+				resource_type
+				for resource_type in DEFAULT_ACCESS_RESOURCE_TYPES
+				if settings.default_permissions.resource_access.get(resource_type)
+				is not None
+			]
+			if default_resource_types:
+				await invalidate_accessible_users_for_resource_types(
+					default_resource_types, session
+				)
+		if "role_ids" in changed:
+			role_ids_changed = old_role_ids ^ new_role_ids
+			if role_ids_changed:
+				await asyncio.gather(
+					*(
+						invalidate_accessible_users_for_subject(
+							subject_kind="role",
+							subject_id=changed_role_id,
+							session=session,
+						)
+						for changed_role_id in role_ids_changed
+					)
+				)
+				await invalidate_accessible_users_for_role_defaults(
+					list(role_ids_changed), session
+				)
+
 	# emit user.preferences_updated event when preferences changed
-	if user_in.preferences is not None:
+	if "preferences" in changed:
 		event = Event(
 			scope=EventScope.USER,
 			scope_id=user.id,
@@ -369,8 +598,55 @@ async def update_user(
 			},
 			user_id=user.id,
 		)
-		await event_service.publish_event(
+		await event_service.persist_and_fanout_event(
 			session, event=event, origin_session_id=origin_session_id
 		)
 
 	return user
+
+
+async def delete_user(
+	user_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+) -> None:
+	"""delete a user and all their resources."""
+	if not principal.is_admin and not principal.has_permission(
+		str(ActionPermission.USERS_MANAGE)
+	):
+		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+
+	if str(user_id) == principal.user_id:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="cannot delete your own account",
+		)
+
+	result = await session.execute(select(User).where(User.id == user_id))
+	user = result.scalar_one_or_none()
+	if user is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="user not found",
+		)
+
+	if user.is_active and user.is_superuser:
+		active_superuser_count = await session.scalar(
+			select(func.count())
+			.select_from(User)
+			.where(
+				User.id != user.id,
+				User.is_active.is_(True),
+				User.is_superuser.is_(True),
+			)
+		)
+		if (active_superuser_count or 0) == 0:
+			raise HTTPException(
+				status_code=status.HTTP_400_BAD_REQUEST,
+				detail="cannot delete the last active superuser",
+			)
+
+	await invalidate_accessible_users_for_subject("user", user.id, session)
+	await invalidate_accessible_users_for_resource_types(list(ResourceType), session)
+	await session.delete(user)
+	await session.commit()

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { SEARCH_RESOURCE_TYPES, type SearchResourceType } from '$lib/api/streaming'
 	import {
 		categorizeMediaType,
 		type PendingAttachment,
@@ -6,41 +7,54 @@
 		type RunModifiers,
 		uploadFile,
 	} from '$lib/chat/attachments'
-	import type { ThreadAttachment } from '$lib/chat/types'
+	import { getSourceConfig } from '$lib/citations/config'
 	import AddContext from '$lib/components/chat/AddContext.svelte'
+	import SearchSettingsPanel from '$lib/components/chat/SearchSettingsPanel.svelte'
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
+	import Funnel from '$lib/components/icons/Funnel.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
+	import Search from '$lib/components/icons/Search.svelte'
 	import Stop from '$lib/components/icons/Stop.svelte'
+	import XMark from '$lib/components/icons/XMark.svelte'
 	import type { ResourceItem } from '$lib/components/widgets/types'
 	import { device } from '$lib/stores/device.svelte'
-	import { files } from '$lib/stores/files.svelte'
+	import { apiFileToResource, files } from '$lib/stores/files.svelte'
+	import { settingsState } from '$lib/stores/settings.svelte'
 	import { tick } from 'svelte'
+
+	type QuickAction = 'none' | 'web_search' | 'think' | 'generate_image'
 
 	interface ChatInputProps {
 		value?: string
+		mode?: 'chat' | 'search'
 		placeholder?: string
 		disabled?: boolean
 		isGenerating?: boolean
+		clearOnSubmit?: boolean
 		focusToken?: number
-		threadAttachments?: ThreadAttachment[]
 		onSubmit?: (message: string, modifiers?: RunModifiers) => void
+		onClear?: () => void
+		searchTypes?: SearchResourceType[]
+		onSearchTypesChange?: (types: SearchResourceType[]) => void
 		onStop?: () => void
 		onKeyDown?: (event: KeyboardEvent) => boolean | void
-		onToggleAttachmentStatus?: (fileId: string, action: 'reveal' | 'reference') => void
 		viewTransitionName?: string
 	}
 
 	let {
 		value = $bindable(''),
+		mode = 'chat',
 		placeholder = 'send a message',
 		disabled = false,
 		isGenerating = false,
+		clearOnSubmit = true,
 		focusToken,
-		threadAttachments = [],
 		onSubmit,
+		onClear,
+		searchTypes = SEARCH_RESOURCE_TYPES,
+		onSearchTypesChange,
 		onStop,
 		onKeyDown,
-		onToggleAttachmentStatus,
 		viewTransitionName,
 	}: ChatInputProps = $props()
 
@@ -48,54 +62,52 @@
 	let formEl = $state<HTMLFormElement | null>(null)
 	let isComposing = $state(false)
 	let isAddContextOpen = $state(false)
+	let isSearchSettingsOpen = $state(false)
 	let isMultiLine = $state(false)
+	const isSearchMode = $derived(mode === 'search')
+	const chatInputMaxChars = $derived(settingsState.data?.limits?.max_chat_input_chars ?? null)
+	const activeSearchTypes = $derived(searchTypes.length > 0 ? searchTypes : SEARCH_RESOURCE_TYPES)
+	const isSearchFiltered = $derived(activeSearchTypes.length < SEARCH_RESOURCE_TYPES.length)
 
 	// attachment + modifier state
 	let webSearchEnabled = $state(false)
 	let thinkLongerEnabled = $state(false)
 	let generateImageEnabled = $state(false)
+	const quickAction = $derived<QuickAction>(
+		webSearchEnabled
+			? 'web_search'
+			: thinkLongerEnabled
+				? 'think'
+				: generateImageEnabled
+					? 'generate_image'
+					: 'none'
+	)
+	let extraPluginIds = $state<string[]>([])
 	let pendingAttachments = $state<PendingAttachment[]>([])
 	let isUploading = $state(false)
 
-	// combine pending uploads and thread-level attachments for the tray
+	// pending uploads + picked resources for THIS message's input tray
 	const pendingAsNative = $derived(
 		pendingAttachments.map((att) => ({
 			id: att.fileId,
+			resourceType: att.resourceType,
 			filename: att.filename,
 			type: att.category as 'image' | 'audio' | 'video' | 'file',
-			status: 'active' as const,
 			isPending: true,
 			previewUrl: att.previewUrl,
+			resource: pendingToResource(att),
 		}))
 	)
-	const threadAsNative = $derived(
-		threadAttachments.map((att) => ({
-			id: att.fileId,
-			filename: att.filename ?? att.fileId,
-			type: att.category,
-			status: att.status,
-			isPending: false,
-			previewUrl: files.getThumbnailUrl(att.fileId),
-		}))
-	)
-	const activeAttachments = $derived([...pendingAsNative, ...threadAsNative])
-
-	// ensure thread attachment files are cached and thumbnails loaded
-	$effect(() => {
-		for (const att of threadAttachments) {
-			void files.ensure(att.fileId).then((f) => {
-				if (f) void files.loadThumbnail(att.fileId)
-			})
-		}
-	})
+	const activeAttachments = $derived(pendingAsNative)
 
 	// track whether context is active for the badge indicator
 	const hasContextActive = $derived(
-		pendingAttachments.length > 0 ||
-			threadAttachments.length > 0 ||
-			webSearchEnabled ||
-			thinkLongerEnabled ||
-			generateImageEnabled
+		!isSearchMode &&
+			(pendingAttachments.length > 0 ||
+				webSearchEnabled ||
+				thinkLongerEnabled ||
+				generateImageEnabled ||
+				extraPluginIds.length > 0)
 	)
 
 	$effect(() => {
@@ -114,16 +126,43 @@
 	// trigger resize when value is changed externally (e.g. quote insertion)
 	$effect(() => {
 		void value
+		const maxChars = chatInputMaxChars
+		if (maxChars !== null && value.length > maxChars) {
+			value = value.slice(0, maxChars)
+		}
 		tick().then(resize)
 	})
+
+	function cappedInput(value: string): string {
+		const maxChars = chatInputMaxChars
+		return maxChars !== null && value.length > maxChars ? value.slice(0, maxChars) : value
+	}
 
 	function closeAddContext() {
 		isAddContextOpen = false
 	}
 
+	function closeSearchSettings() {
+		isSearchSettingsOpen = false
+	}
+
 	function toggleAddContext() {
+		if (isSearchMode) return
 		isAddContextOpen = !isAddContextOpen
 	}
+
+	function toggleSearchSettings() {
+		if (!isSearchMode) return
+		isSearchSettingsOpen = !isSearchSettingsOpen
+	}
+
+	$effect(() => {
+		if (isSearchMode) {
+			isAddContextOpen = false
+			return
+		}
+		isSearchSettingsOpen = false
+	})
 
 	async function handleFileUpload(files: FileList) {
 		isUploading = true
@@ -147,21 +186,95 @@
 		}
 	}
 
+	/** return the chat-attachable resource type for a picked item. */
+	function attachmentTypeForResource(
+		type: ResourceItem['type']
+	): PendingAttachment['resourceType'] | null {
+		switch (type) {
+			case 'file':
+			case 'note':
+			case 'thread':
+			case 'project':
+			case 'reminder':
+			case 'reminder_list':
+			case 'calendar_event':
+			case 'calendar':
+				return type
+		}
+	}
+
+	/** build a display ResourceItem for a pending attachment (tray rendering). */
+	function pendingToResource(att: PendingAttachment): ResourceItem {
+		if (att.resource) return att.resource
+		if (att.resourceType === 'file') {
+			const cached = files.all.find((f) => f.id === att.fileId)
+			if (cached) return apiFileToResource(cached)
+			return {
+				id: att.fileId,
+				type: 'file',
+				title: att.filename,
+				href: getSourceConfig('file').href(att.fileId),
+				updatedAt: Date.now(),
+				createdAt: Date.now(),
+				meta: {
+					mime_type: att.mediaType,
+					category: att.category,
+					file_type: '',
+					file_size: 0,
+					source: '',
+					owner_id: '',
+					project_ids: [],
+				},
+			}
+		}
+		const cfg = getSourceConfig(att.resourceType)
+		return {
+			id: att.fileId,
+			type: cfg.resourceType,
+			title: att.filename,
+			href: cfg.href(att.fileId),
+			updatedAt: Date.now(),
+			createdAt: Date.now(),
+		}
+	}
+
+	/** convert a picker resource into the pending attachment list. */
 	function handleAttachResource(resource: ResourceItem) {
-		if (resource.type !== 'file') return
-		if (pendingAttachments.some((a) => a.fileId === resource.id)) return
-		const mime = (resource.meta?.mime_type as string) ?? 'application/octet-stream'
+		const resourceType = attachmentTypeForResource(resource.type)
+		if (!resourceType) return
+		if (
+			pendingAttachments.some(
+				(a) => a.resourceType === resourceType && a.fileId === resource.id
+			)
+		) {
+			return
+		}
+		const mime =
+			resourceType === 'file'
+				? ((resource.meta?.mime_type as string) ?? 'application/octet-stream')
+				: 'application/x-nokodo-resource'
 		pendingAttachments = [
 			...pendingAttachments,
 			{
 				fileId: resource.id,
+				resourceType,
 				filename: resource.title,
 				mediaType: mime,
-				category: categorizeMediaType(mime),
-				previewUrl: files.getThumbnailUrl(resource.id),
+				category: resourceType === 'file' ? categorizeMediaType(mime) : 'file',
+				previewUrl:
+					resourceType === 'file' ? files.getThumbnailUrl(resource.id) : undefined,
 				source: 'resource',
+				resource,
 			},
 		]
+	}
+
+	function toggleExtraPlugin(pluginId: string) {
+		if (extraPluginIds.includes(pluginId)) {
+			extraPluginIds = extraPluginIds.filter((id) => id !== pluginId)
+		} else {
+			extraPluginIds = [...extraPluginIds, pluginId]
+		}
 	}
 
 	function resize() {
@@ -172,28 +285,49 @@
 		isMultiLine = textarea.scrollHeight > 32
 	}
 
-	function handleInput() {
+	function handleInput(event: Event) {
+		const target = event.currentTarget
+		const maxChars = chatInputMaxChars
+		if (
+			target instanceof HTMLTextAreaElement &&
+			maxChars !== null &&
+			target.value.length > maxChars
+		) {
+			value = target.value.slice(0, maxChars)
+			target.value = value
+		}
 		resize()
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
 		if (onKeyDown?.(event)) return
 		// on touch devices, enter inserts a newline (users need it for multiline).
-		// on desktop, bare enter sends the message.
+		// on desktop, bare enter sends the message. while a run is active,
+		// submit still works - upstream routes it through steering (enqueue
+		// into the running loop) instead of starting a new run.
 		if (event.key === 'Enter' && !event.shiftKey && !isComposing && !device.isTouch) {
 			event.preventDefault()
-			if (!isGenerating) handleSubmit()
+			handleSubmit()
 		}
 	}
 
 	function handleSubmit() {
 		const hasAttachments = pendingAttachments.length > 0
-		if ((!value.trim() && !hasAttachments) || disabled || !onSubmit) return
+		const message = cappedInput(value)
+		if ((!message.trim() && (!hasAttachments || isSearchMode)) || disabled || !onSubmit) return
+
+		if (isSearchMode) {
+			onSubmit(message)
+			if (clearOnSubmit) value = ''
+			void tick().then(resize)
+			return
+		}
 
 		const modifiers: RunModifiers = {
 			webSearch: webSearchEnabled,
 			thinkLonger: thinkLongerEnabled,
 			generateImage: generateImageEnabled,
+			extraPlugins: [...extraPluginIds],
 			attachments: [...pendingAttachments],
 		}
 
@@ -201,21 +335,43 @@
 			modifiers.webSearch ||
 			modifiers.thinkLonger ||
 			modifiers.generateImage ||
+			modifiers.extraPlugins.length > 0 ||
 			modifiers.attachments.length > 0
 
-		onSubmit(value, hasModifiers ? modifiers : undefined)
+		onSubmit(message, hasModifiers ? modifiers : undefined)
 
 		// reset state after send
-		value = ''
+		if (clearOnSubmit) value = ''
 		isMultiLine = false
 		revokePreviewUrls(pendingAttachments)
 		pendingAttachments = []
 		webSearchEnabled = false
 		thinkLongerEnabled = false
 		generateImageEnabled = false
+		extraPluginIds = []
 		if (textarea) {
 			textarea.style.height = 'auto'
 		}
+	}
+
+	function handleClearSearch() {
+		if (!isSearchMode || disabled) return
+		value = ''
+		onClear?.()
+		void tick().then(() => {
+			resize()
+			textarea?.focus()
+		})
+	}
+
+	function handleSearchTypesChange(types: SearchResourceType[]): void {
+		onSearchTypesChange?.(types)
+	}
+
+	function setQuickAction(action: QuickAction): void {
+		webSearchEnabled = action === 'web_search'
+		thinkLongerEnabled = action === 'think'
+		generateImageEnabled = action === 'generate_image'
 	}
 
 	function handleCompositionStart() {
@@ -258,37 +414,60 @@
 					class:items-center={!isMultiLine}
 					class:items-end={isMultiLine}
 				>
-					<button
-						type="button"
-						aria-label="add context"
-						aria-haspopup="dialog"
-						aria-expanded={isAddContextOpen}
-						class="text-foreground/65 hover:text-foreground relative flex cursor-pointer items-center justify-center bg-transparent p-0 transition-colors duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-						{disabled}
-						onclick={toggleAddContext}
-					>
-						<Plus class="h-8 w-8" strokeWidth="2" />
-						{#if hasContextActive}
-							<span
-								class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full"
-								style="background-color: var(--accent-primary);"
-							></span>
-						{/if}
-					</button>
+					{#if isSearchMode}
+						<button
+							type="button"
+							aria-label="search filters"
+							aria-haspopup="dialog"
+							aria-expanded={isSearchSettingsOpen}
+							class="text-foreground/65 hover:text-foreground relative flex h-8 w-8 cursor-pointer items-center justify-center bg-transparent p-0 transition-colors duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+							{disabled}
+							onclick={toggleSearchSettings}
+						>
+							<Funnel class="h-5 w-5" strokeWidth="2" />
+							{#if isSearchFiltered}
+								<span
+									class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full"
+									style="background-color: var(--accent-primary);"
+								></span>
+							{/if}
+						</button>
+					{:else}
+						<button
+							type="button"
+							aria-label="add context"
+							aria-haspopup="dialog"
+							aria-expanded={isAddContextOpen}
+							class="text-foreground/65 hover:text-foreground relative flex cursor-pointer items-center justify-center bg-transparent p-0 transition-colors duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+							{disabled}
+							onclick={toggleAddContext}
+						>
+							<Plus class="h-8 w-8" strokeWidth="2" />
+							{#if hasContextActive}
+								<span
+									class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full"
+									style="background-color: var(--accent-primary);"
+								></span>
+							{/if}
+						</button>
+					{/if}
 				</div>
 
 				<div class="flex flex-1 items-center px-1">
 					<textarea
 						bind:this={textarea}
 						bind:value
-						{placeholder}
+						maxlength={chatInputMaxChars ?? undefined}
+						placeholder={isGenerating && !isSearchMode
+							? 'enqueue a message'
+							: placeholder}
 						{disabled}
 						oninput={handleInput}
 						onkeydown={handleKeyDown}
 						oncompositionstart={handleCompositionStart}
 						oncompositionend={handleCompositionEnd}
 						rows="1"
-						class="scrollbar-thin scrollbar-track-transparent scrollbar-thumb-foreground/20 hover:scrollbar-thumb-foreground/30 text-foreground/96 placeholder:text-foreground/40 m-0 max-h-96 min-h-6 w-full resize-none overflow-y-auto border-0 bg-transparent px-1 py-0 font-[inherit] text-[0.9375rem] leading-6 outline-none"
+						class="scrollbar-thumb-foreground/20 hover:scrollbar-thumb-foreground/30 text-foreground/96 placeholder:text-foreground/40 m-0 max-h-96 min-h-6 w-full resize-none scrollbar-thin scrollbar-track-transparent overflow-y-auto border-0 bg-transparent px-1 py-0 font-[inherit] text-[0.9375rem] leading-6 outline-none"
 					></textarea>
 				</div>
 
@@ -301,15 +480,40 @@
 						<button
 							type="button"
 							aria-label="stop generating"
-							class="rounded-circle bg-foreground text-background hover:bg-foreground/90 flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95"
+							class="rounded-circle bg-foreground/15 text-foreground hover:bg-foreground/25 flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95"
 							onclick={onStop}
 						>
 							<Stop class="h-5 w-5" />
 						</button>
+					{/if}
+					{#if isSearchMode}
+						{#if value.length > 0}
+							<button
+								type="button"
+								aria-label="clear search"
+								class="rounded-circle bg-foreground/15 text-foreground hover:bg-foreground/25 flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+								{disabled}
+								onclick={handleClearSearch}
+							>
+								<XMark class="h-5 w-5" />
+							</button>
+						{/if}
+						<button
+							type="submit"
+							aria-label="search"
+							class="send-btn rounded-circle flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {value.trim() &&
+							!disabled
+								? 'hover:brightness-110'
+								: 'bg-foreground/10 text-foreground/35'}"
+							disabled={!value.trim() || disabled}
+						>
+							<Search class="h-4.5 w-4.5" strokeWidth="2" />
+						</button>
 					{:else}
 						<button
 							type="submit"
-							aria-label="send message"
+							aria-label={isGenerating ? 'enqueue message' : 'send message'}
+							title={isGenerating ? 'enqueue into the running agent' : undefined}
 							class="send-btn rounded-circle flex h-8 w-8 cursor-pointer items-center justify-center transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {!(
 								(value.trim() === '' && pendingAttachments.length === 0) ||
 								disabled
@@ -328,22 +532,31 @@
 	</div>
 </form>
 
-<AddContext
-	open={isAddContextOpen}
-	onClose={closeAddContext}
-	{activeAttachments}
-	{isUploading}
-	{webSearchEnabled}
-	{thinkLongerEnabled}
-	{generateImageEnabled}
-	onFileUpload={handleFileUpload}
-	onAttachResource={handleAttachResource}
-	onToggleWebSearch={() => (webSearchEnabled = !webSearchEnabled)}
-	onToggleThinkLonger={() => (thinkLongerEnabled = !thinkLongerEnabled)}
-	onToggleGenerateImage={() => (generateImageEnabled = !generateImageEnabled)}
-	onToggleAttachmentStatus={(id, action) => onToggleAttachmentStatus?.(id, action)}
-	onRemoveAttachment={removeAttachment}
-/>
+{#if isSearchMode}
+	<SearchSettingsPanel
+		open={isSearchSettingsOpen}
+		onClose={closeSearchSettings}
+		selectedTypes={activeSearchTypes}
+		onChange={handleSearchTypesChange}
+	/>
+{:else}
+	<AddContext
+		open={isAddContextOpen}
+		onClose={closeAddContext}
+		{activeAttachments}
+		{isUploading}
+		{webSearchEnabled}
+		{thinkLongerEnabled}
+		{generateImageEnabled}
+		{quickAction}
+		{extraPluginIds}
+		onFileUpload={handleFileUpload}
+		onAttachResource={handleAttachResource}
+		onQuickActionChange={setQuickAction}
+		onToggleExtraPlugin={toggleExtraPlugin}
+		onRemoveAttachment={removeAttachment}
+	/>
+{/if}
 
 <style>
 	.chat-input {

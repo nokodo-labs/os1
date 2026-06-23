@@ -8,10 +8,16 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessRule
+from api.models.agent import Agent
 from api.models.model import ModelType
 from api.models.user import User
 from api.permissions import AccessLevel
-from api.schemas.agent import AgentCreate, AgentUpdate
+from api.schemas.agent import (
+	DEFAULT_AGENT_PLUGIN_IDS,
+	AgentConfig,
+	AgentCreate,
+	AgentUpdate,
+)
 from api.schemas.model import ModelCreate
 from api.schemas.provider import ProviderCreate
 from api.v1.service import agents as agent_service
@@ -23,7 +29,6 @@ from nokodo_ai.utils.typeid import new_typeid
 
 async def _principal(
 	session: AsyncSession,
-	*,
 	is_admin: bool,
 ) -> Principal:
 	uid = new_typeid("user")
@@ -47,7 +52,7 @@ async def test_create_agent(db_session: AsyncSession) -> None:
 		description="Test Agent",
 		system_prompt="You are a test agent.",
 		plugin_ids=[],
-		config={},
+		config=AgentConfig(),
 	)
 	principal = await _principal(db_session, is_admin=True)
 	agent = await agent_service.create_agent(
@@ -56,6 +61,25 @@ async def test_create_agent(db_session: AsyncSession) -> None:
 		principal=principal,
 	)
 	assert agent.name == "test-agent"
+	assert agent.plugin_ids == []
+
+
+def test_agent_create_defaults_runtime_filters() -> None:
+	agent_in = AgentCreate(name="default-filter-agent")
+	assert agent_in.plugin_ids == list(DEFAULT_AGENT_PLUGIN_IDS)
+
+
+@pytest.mark.asyncio
+async def test_create_agent_persists_default_plugins(
+	db_session: AsyncSession,
+) -> None:
+	principal = await _principal(db_session, is_admin=True)
+	agent = await agent_service.create_agent(
+		AgentCreate(name="agent-default-plugins"),
+		db_session,
+		principal=principal,
+	)
+	assert agent.plugin_ids == list(DEFAULT_AGENT_PLUGIN_IDS)
 
 
 @pytest.mark.asyncio
@@ -67,7 +91,7 @@ async def test_list_agents(db_session: AsyncSession) -> None:
 		AgentCreate(
 			name="agent-1",
 			plugin_ids=[],
-			config={},
+			config=AgentConfig(),
 		),
 		db_session,
 		principal=principal,
@@ -76,7 +100,7 @@ async def test_list_agents(db_session: AsyncSession) -> None:
 		AgentCreate(
 			name="agent-2",
 			plugin_ids=[],
-			config={},
+			config=AgentConfig(),
 		),
 		db_session,
 		principal=principal,
@@ -97,7 +121,7 @@ async def test_get_agent(db_session: AsyncSession) -> None:
 		AgentCreate(
 			name="agent-get",
 			plugin_ids=[],
-			config={},
+			config=AgentConfig(),
 		),
 		db_session,
 		principal=principal,
@@ -105,8 +129,44 @@ async def test_get_agent(db_session: AsyncSession) -> None:
 
 	fetched = await agent_service.get_agent(agent.id, db_session, principal=principal)
 	assert fetched is not None
+	assert isinstance(fetched, Agent)
 	assert fetched.id == agent.id
 	assert fetched.name == "agent-get"
+
+
+@pytest.mark.asyncio
+async def test_get_agent_payload_checks_access_before_cache(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""cache is not queried before agent access succeeds."""
+	admin = await _principal(db_session, is_admin=True)
+	non_admin = await _principal(db_session, is_admin=False)
+	agent = await agent_service.create_agent(
+		AgentCreate(
+			name="agent-cache-guard",
+			plugin_ids=[],
+			config=AgentConfig(),
+		),
+		db_session,
+		principal=admin,
+	)
+
+	async def fail_get_or_set(*_args: object) -> object:
+		pytest.fail("cache should not be queried before access succeeds")
+
+	monkeypatch.setattr(
+		agent_service,
+		"get_or_set_resource_payload_cache",
+		fail_get_or_set,
+	)
+
+	with pytest.raises(HTTPException):
+		await agent_service.get_agent_payload(
+			agent.id,
+			db_session,
+			principal=non_admin,
+		)
 
 
 @pytest.mark.asyncio
@@ -117,7 +177,7 @@ async def test_update_agent(db_session: AsyncSession) -> None:
 		AgentCreate(
 			name="agent-update",
 			plugin_ids=[],
-			config={},
+			config=AgentConfig(),
 		),
 		db_session,
 		principal=principal,
@@ -142,7 +202,7 @@ async def test_delete_agent(db_session: AsyncSession) -> None:
 		AgentCreate(
 			name="agent-delete",
 			plugin_ids=[],
-			config={},
+			config=AgentConfig(),
 		),
 		db_session,
 		principal=principal,
@@ -162,7 +222,7 @@ async def test_create_agent_invalid_model(db_session: AsyncSession) -> None:
 	agent_in = AgentCreate(
 		name="agent-invalid-model",
 		plugin_ids=[],
-		config={},
+		config=AgentConfig(),
 		model_id=new_typeid("model"),  # valid format but doesn't exist
 	)
 	with pytest.raises(HTTPException) as exc:
@@ -178,7 +238,7 @@ async def test_update_agent_with_model_invalid(db_session: AsyncSession) -> None
 		AgentCreate(
 			name="agent-update-model",
 			plugin_ids=[],
-			config={},
+			config=AgentConfig(),
 		),
 		db_session,
 		principal=principal,
@@ -204,7 +264,7 @@ async def test_create_agent_no_model(db_session: AsyncSession) -> None:
 	agent_in = AgentCreate(
 		name="agent-no-model",
 		plugin_ids=[],
-		config={},
+		config=AgentConfig(),
 		model_id=None,
 	)
 	agent = await agent_service.create_agent(agent_in, db_session, principal=principal)
@@ -216,7 +276,7 @@ async def test_agent_hidden_without_access_rule(db_session: AsyncSession) -> Non
 	"""non-admin cannot get an agent unless an access rule grants access."""
 	admin = await _principal(db_session, is_admin=True)
 	agent = await agent_service.create_agent(
-		AgentCreate(name="hidden-agent", plugin_ids=[], config={}),
+		AgentCreate(name="hidden-agent", plugin_ids=[], config=AgentConfig()),
 		db_session,
 		principal=admin,
 	)
@@ -250,7 +310,7 @@ async def test_create_agent_with_model(db_session: AsyncSession) -> None:
 	agent_in = AgentCreate(
 		name="agent-with-model",
 		plugin_ids=[],
-		config={},
+		config=AgentConfig(),
 		model_id=model.id,
 	)
 	agent = await agent_service.create_agent(agent_in, db_session, principal=principal)
@@ -285,12 +345,12 @@ async def test_list_agents_filters_by_access_rules(
 	"""non-admin sees only agents with a matching access rule."""
 	admin_principal = await _principal(db_session, is_admin=True)
 	accessible = await agent_service.create_agent(
-		AgentCreate(name="list-accessible", plugin_ids=[], config={}),
+		AgentCreate(name="list-accessible", plugin_ids=[], config=AgentConfig()),
 		db_session,
 		principal=admin_principal,
 	)
 	await agent_service.create_agent(
-		AgentCreate(name="list-hidden", plugin_ids=[], config={}),
+		AgentCreate(name="list-hidden", plugin_ids=[], config=AgentConfig()),
 		db_session,
 		principal=admin_principal,
 	)

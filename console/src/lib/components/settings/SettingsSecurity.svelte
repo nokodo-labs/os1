@@ -1,5 +1,6 @@
 <script lang="ts">
 	import RolePicker from '$lib/components/RolePicker.svelte'
+	import SettingsPublicBadge from '$lib/components/settings/SettingsPublicBadge.svelte'
 	import {
 		Card,
 		CardContent,
@@ -30,6 +31,7 @@
 		oidcOnly?: boolean
 		// read-only (write-locked)
 		secretKeyConfigured?: boolean
+		secretKeyUsesDefault?: boolean
 		jwtAlgorithm?: string
 		enableOauth?: boolean
 		corsOrigins?: string
@@ -52,6 +54,7 @@
 		oidcScopes = $bindable(''),
 		oidcOnly = $bindable(false),
 		secretKeyConfigured = false,
+		secretKeyUsesDefault = false,
 		jwtAlgorithm = '',
 		enableOauth = false,
 		corsOrigins = '',
@@ -77,11 +80,23 @@
 				</div>
 				<Input
 					id="secret_key"
-					value={secretKeyConfigured ? '(configured)' : '(not set)'}
+					value={secretKeyUsesDefault
+						? '(default dev key)'
+						: secretKeyConfigured
+							? '(overridden)'
+							: '(not set)'}
 					disabled
 					class="rounded-xl"
 				/>
-				<p class="text-xs text-zinc-500">set via environment variables only.</p>
+				<p
+					class={secretKeyUsesDefault
+						? 'text-xs text-amber-400'
+						: 'text-xs text-zinc-500'}
+				>
+					{secretKeyUsesDefault
+						? 'production startup will fail until this is overridden.'
+						: 'set via environment variables only.'}
+				</p>
 			</div>
 			<div class="space-y-2">
 				<div class="flex items-center justify-between gap-2">
@@ -151,6 +166,7 @@
 				<Input
 					id="access_expire"
 					type="number"
+					placeholder="30"
 					bind:value={accessTokenExpireMinutes}
 					class="rounded-xl"
 				/>
@@ -163,6 +179,7 @@
 				<Input
 					id="refresh_expire"
 					type="number"
+					placeholder="90"
 					bind:value={refreshTokenExpireDays}
 					class="rounded-xl"
 				/>
@@ -178,6 +195,7 @@
 				<Input
 					id="session_timeout"
 					type="number"
+					placeholder="30"
 					bind:value={sessionTimeoutMinutes}
 					class="rounded-xl"
 				/>
@@ -198,7 +216,10 @@
 
 		<div class="flex items-center justify-between">
 			<div class="space-y-0.5">
-				<Label for="allow_signups">allow new user signups</Label>
+				<div class="flex items-center gap-2">
+					<Label for="allow_signups">allow new user signups</Label>
+					<SettingsPublicBadge />
+				</div>
 				<p class="text-xs text-zinc-500">
 					when off, admins or users with users:manage only.
 				</p>
@@ -311,7 +332,10 @@
 
 				<div class="mt-4 flex items-center justify-between">
 					<div class="space-y-0.5">
-						<Label for="oidc_only">oidc only</Label>
+						<div class="flex items-center gap-2">
+							<Label for="oidc_only">oidc only</Label>
+							<SettingsPublicBadge />
+						</div>
 						<p class="text-xs text-zinc-500">
 							disable password login. requires oidc to be enabled &amp; configured.
 						</p>

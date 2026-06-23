@@ -1,107 +1,109 @@
 # PWA CDN asset setup
 
 The backend compiles a PWA web app manifest at `GET /system/manifest.json`.
-When `branding.public_cdn_origin` is set, the manifest references icons,
-shortcut icons, and screenshots from a well-known directory tree on the CDN.
+Leave `branding.pwa_manifest_url` blank to use it. Set that URL only when you
+want to replace the whole generated manifest with a static file.
 
-If the CDN origin is not configured, the manifest is still served but contains
-no asset references - basic install still works, just without branded icons or
-screenshots.
+Each generated manifest asset has its own source setting:
 
----
+| source     | behavior                                                                                           |
+| ---------- | -------------------------------------------------------------------------------------------------- |
+| `default`  | use the built-in nokodo URL, except shortcut icons which use the frontend `/shortcuts/*.png` files |
+| `cdn`      | use the same well-known path under `branding.public_cdn_origin`, or default when no CDN is set     |
+| `custom`   | use the asset's full custom URL                                                                    |
+| `disabled` | omit that asset reference from the generated manifest                                              |
 
-## CDN configuration
+If `pwa_manifest_url` is set, these generated-manifest asset settings do not
+change the external manifest file. Frontend media settings still apply to
+non-manifest resources like the browser favicon and sidebar logo.
 
-Set the CDN origin in settings (env or admin console):
+The generated manifest always uses absolute `start_url`, `scope`, shortcut URLs,
+and default shortcut icon URLs. Set `branding.public_frontend_origin` explicitly
+in production. When it is blank, the backend derives the frontend origin from
+the API request host and the default frontend port `888`. If no request origin
+is available, the API origin is assumed to be `http://localhost:1383`, so the
+frontend origin becomes `http://localhost:888`.
 
-```
+## CDN origin
+
+Set the CDN origin in settings when you want selected assets to use CDN-default:
+
+```env
 NOKODO__BRANDING__PUBLIC_CDN_ORIGIN=https://cdn.example.com
 ```
 
-All asset paths below are relative to this origin.
+The CDN-default path root is:
 
----
-
-## required directory layout
-
-```
+```text
 {cdn}/static/os1/
-├── icon-1024-maskable.png       - 1024x1024 px, PNG, maskable safe zone
-├── icon-512-maskable.png        -  512x512  px, PNG, maskable safe zone
-├── favicon.svg                  - square SVG favicon
-├── shortcuts/
-│   ├── notes-1024.png           - 1024x1024 px, PNG
-│   ├── reminders-1024.png       - 1024x1024 px, PNG
-│   ├── projects-1024.png        - 1024x1024 px, PNG
-│   ├── library-1024.png         - 1024x1024 px, PNG
-│   └── social-1024.png          - 1024x1024 px, PNG
-└── screenshots/
-    ├── narrow-1-1770x3835.png   \
-    ├── narrow-2-1770x3835.png    |  mobile screenshots
-    ├── narrow-3-1770x3835.png    |  1770x3835 px, PNG, form_factor: narrow
-    ├── narrow-4-1770x3835.png    |
-    ├── narrow-5-1770x3835.png   /
-    ├── wide-1-3840x2160.png     \
-    ├── wide-2-3840x2160.png      |
-    ├── wide-3-3840x2160.png      |  desktop screenshots
-    ├── wide-4-3840x2160.png      |  3840x2160 px, PNG, form_factor: wide
-    ├── wide-5-3840x2160.png      |
-    ├── wide-6-3840x2160.png      |
-    ├── wide-7-3840x2160.png      |
-    └── wide-8-3840x2160.png     /
 ```
 
----
+## Generated manifest asset paths
 
-## asset specs
+App icons:
 
-### app icons
+| asset setting        | default URL                                            | CDN-default path                          |
+| -------------------- | ------------------------------------------------------ | ----------------------------------------- |
+| `icon_1024_maskable` | `https://nokodo.net/static/os1/icon-1024-maskable.png` | `{cdn}/static/os1/icon-1024-maskable.png` |
+| `icon_512_any`       | `https://nokodo.net/static/os1/icon-512-any.png`       | `{cdn}/static/os1/icon-512-any.png`       |
 
-| file                     | size         | notes                                                       |
-| ------------------------ | ------------ | ----------------------------------------------------------- |
-| `icon-1024-maskable.png` | 1024x1024    | important content within the inner 80% (maskable safe zone) |
-| `icon-512-maskable.png`  | 512x512      | same safe zone rule                                         |
-| `favicon.svg`            | any (square) | used as `purpose: any maskable`; keep it simple and square  |
+`icon_1024_maskable` is emitted with manifest `purpose: maskable`.
+`icon_512_any` is emitted with `purpose: any`. Browser favicons and Apple touch
+icons are frontend media assets, not manifest icon entries.
 
-### shortcut icons
+Shortcut icons:
 
-All shortcut icons: **1024x1024 px PNG**. These appear in the app install
-prompt and long-press home screen menu on Android/Chrome. Keep them simple -
-a single recognizable symbol on a transparent or solid background.
+| asset setting        | default URL                          | CDN-default path                           | shortcut URL |
+| -------------------- | ------------------------------------ | ------------------------------------------ | ------------ |
+| `shortcut_notes`     | `{frontend}/shortcuts/notes.png`     | `{cdn}/static/os1/shortcuts/notes.png`     | `/notes`     |
+| `shortcut_reminders` | `{frontend}/shortcuts/reminders.png` | `{cdn}/static/os1/shortcuts/reminders.png` | `/reminders` |
+| `shortcut_calendar`  | `{frontend}/shortcuts/calendar.png`  | `{cdn}/static/os1/shortcuts/calendar.png`  | `/calendar`  |
+| `shortcut_messages`  | `{frontend}/shortcuts/messages.png`  | `{cdn}/static/os1/shortcuts/messages.png`  | `/messages`  |
+| `shortcut_projects`  | `{frontend}/shortcuts/projects.png`  | `{cdn}/static/os1/shortcuts/projects.png`  | `/projects`  |
+| `shortcut_library`   | `{frontend}/shortcuts/library.png`   | `{cdn}/static/os1/shortcuts/library.png`   | `/library`   |
+| `shortcut_social`    | `{frontend}/shortcuts/social.png`    | `{cdn}/static/os1/shortcuts/social.png`    | `/social`    |
+| `shortcut_settings`  | `{frontend}/shortcuts/settings.png`  | `{cdn}/static/os1/shortcuts/settings.png`  | `/settings`  |
 
-| file                           | shortcut     |
-| ------------------------------ | ------------ |
-| `shortcuts/notes-1024.png`     | `/notes`     |
-| `shortcuts/reminders-1024.png` | `/reminders` |
-| `shortcuts/projects-1024.png`  | `/projects`  |
-| `shortcuts/library-1024.png`   | `/library`   |
-| `shortcuts/social-1024.png`    | `/social`    |
+Screenshot assets:
 
-### screenshots
+| asset settings                                      | default URL pattern                                                     | CDN-default path pattern                                   |
+| --------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `screenshot_narrow_1` through `screenshot_narrow_5` | `https://nokodo.net/static/os1/screenshots/narrow-{1..5}-1770x3835.png` | `{cdn}/static/os1/screenshots/narrow-{1..5}-1770x3835.png` |
+| `screenshot_wide_1` through `screenshot_wide_8`     | `https://nokodo.net/static/os1/screenshots/wide-{1..8}-3840x2160.png`   | `{cdn}/static/os1/screenshots/wide-{1..8}-3840x2160.png`   |
 
-Screenshots are shown in the install prompt on supported browsers.
+## Asset specs
 
-| dimension | form factor     | count | naming                        |
-| --------- | --------------- | ----- | ----------------------------- |
-| 1770x3835 | narrow (mobile) | 5     | `narrow-{1..5}-1770x3835.png` |
-| 3840x2160 | wide (desktop)  | 8     | `wide-{1..8}-3840x2160.png`   |
+| file type                | size      | notes                                                          |
+| ------------------------ | --------- | -------------------------------------------------------------- |
+| maskable app icon PNG    | 1024x1024 | keep important content inside the inner 80% maskable safe zone |
+| any-purpose app icon PNG | 512x512   | used for the manifest `any` icon and default Apple touch icon  |
+| shortcut PNG             | 192x192   | transparent PNG recommended                                    |
+| narrow screenshot PNG    | 1770x3835 | mobile install prompt screenshot                               |
+| wide screenshot PNG      | 3840x2160 | desktop install prompt screenshot                              |
 
-Capture at 2x device pixel ratio (actual pixel dimensions above). PNG only.
+## Frontend media assets
 
----
+Frontend media settings use the same source idea, without `disabled`:
 
-## CORS and caching
+| media asset      | default URL                                      | CDN-default path                    |
+| ---------------- | ------------------------------------------------ | ----------------------------------- |
+| favicon          | `https://nokodo.net/static/os1/favicon.svg`      | `{cdn}/static/os1/favicon.svg`      |
+| Apple touch icon | `https://nokodo.net/static/os1/icon-512-any.png` | `{cdn}/static/os1/icon-512-any.png` |
+| sidebar logo     | `https://nokodo.net/media/images/logo_full.svg`  | `{cdn}/static/os1/sidebar-logo.svg` |
+| splash logo      | `https://nokodo.net/media/images/logo_full.svg`  | `{cdn}/static/os1/splash-logo.svg`  |
 
-- Serve all files with `Access-Control-Allow-Origin: *` (required for browsers
-  to load manifest-referenced resources cross-origin).
-- Recommend `Cache-Control: public, max-age=31536000, immutable` for all assets
-  (use content-hashed filenames or versioned paths if you need to rotate them).
+## CORS, MIME, and caching
 
----
+- Serve CDN files with `Access-Control-Allow-Origin: *` when they are loaded
+  cross-origin from the manifest.
+- Serve static manifest overrides with `Content-Type: application/manifest+json`.
+  Chrome can ignore a valid-looking manifest if it is served as plain JSON.
+- Use long-lived caching for versioned assets, for example
+  `Cache-Control: public, max-age=31536000, immutable`.
 
-## manifest cache invalidation
+## Manifest cache invalidation
 
-The compiled manifest is cached in-memory on the backend. It is automatically
-invalidated whenever settings are updated via the admin API. If you update CDN
-assets at the same paths without changing settings, restart the backend process
-or trigger a settings PATCH to force recompilation.
+The compiled manifest is cached in memory on the backend and invalidated when
+settings change through the admin API. If you replace CDN files at the same URL
+without changing settings, restart the backend process or submit a no-op
+settings PATCH to force recompilation.

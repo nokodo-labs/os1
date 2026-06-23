@@ -2,35 +2,36 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
 from api.database import get_db
-from api.models.access_rule import AccessLevel, AccessRule
+from api.models.access_rule import AccessLevel
 from api.models.event import Event
 from api.models.message import Message
 from api.models.thread import Thread
 from api.permissions import ResourceType
-from api.schemas.access_rule import (
-	AccessRuleCreate,
-	AccessRuleResponse,
-)
 from api.schemas.event import Event as EventSchema
 from api.schemas.event import EventsByMessageIDsRequest
 from api.schemas.message import Message as MessageSchema
 from api.schemas.message import MessageCreate, MessageUpdate
-from api.schemas.runs import ThreadCreateAndRunRequest
-from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
+from api.schemas.runs import (
+	ThreadCreateAndRunRequest,
+)
+from api.schemas.search import Page, SearchMode, SearchParams
 from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.thread import (
 	Thread as ThreadSchema,
 )
 from api.schemas.thread import (
 	ThreadCreate,
-	ThreadMetadataGenerateRequest,
+	ThreadListFilters,
+	ThreadMaintenanceRunRequest,
+	ThreadSearchFilters,
+	ThreadSortBy,
 	ThreadSwitchRequest,
 	ThreadSwitchResponse,
 	ThreadUpdate,
@@ -41,28 +42,42 @@ from api.schemas.thread_participant import (
 from api.schemas.thread_participant import (
 	ThreadUnreadCount,
 )
-from api.v1.service import access_rules as access_rules_service
+from api.v1.routers.resource_access import create_resource_access_router
+from api.v1.routers.thread_summaries import create_thread_summaries_router
 from api.v1.service import runs as runs_service
 from api.v1.service import threads as thread_service
 from api.v1.service.auth import Principal, get_current_principal
-from api.v1.service.authorization import (
-	get_effective_access_level,
-	require_admin,
-	require_thread_access,
-)
-from api.v1.service.chat.run_status import run_status_store
+from api.v1.service.authorization import require_admin, require_thread_access
 from api.v1.service.events import SessionId
+from api.v1.tasks.threads import run_thread_maintenance_backfill_sweep
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.sse import sse_response
-from nokodo_ai.utils.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID, assert_typeid
 
 
 router = APIRouter(prefix="/threads", tags=["threads"])
 
 
-ThreadSortBy = Literal[
-	"last_activity_at",
-	"title",
-]
+def resolve_thread_id(thread_id: str) -> TypeID:
+	try:
+		return TypeID(assert_typeid(thread_id))
+	except ValueError as exc:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="thread not found",
+		) from exc
+
+
+ThreadIDPath = Annotated[TypeID, Depends(resolve_thread_id)]
+
+router.include_router(
+	create_resource_access_router(
+		ResourceType.THREAD,
+		"thread_id",
+		resolve_resource_id=resolve_thread_id,
+	)
+)
+router.include_router(create_thread_summaries_router(resolve_thread_id))
 
 
 @router.post("", response_model=ThreadSchema, status_code=status.HTTP_201_CREATED)
@@ -97,7 +112,7 @@ async def create_and_run(
 			detail="non-streaming runs are not yet implemented",
 		)
 
-	if not req.input or (not req.input.text and not req.input.attachment_ids):
+	if not req.input or (not req.input.text and not req.input.attachments):
 		raise HTTPException(
 			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="input is required when creating a new thread",
@@ -115,19 +130,18 @@ async def create_and_run(
 		client_context=req.client_context,
 		origin_session_id=x_session_id,
 		tool_choice=req.tool_choice,
+		extra_plugins=req.extra_plugins,
 	)
 	return sse_response(stream)
 
 
 @router.get("", response_model=list[ThreadSchema])
 async def list_threads(
-	owner_id: TypeID | None = None,
+	filters: Annotated[ThreadListFilters, Depends()],
 	skip: int = 0,
 	limit: int = 20,
-	sort_by: CommonSortBy | ThreadSortBy = "updated_at",
+	sort_by: ThreadSortBy = "updated_at",
 	sort_dir: SortDir = "desc",
-	include_hidden: bool = False,
-	is_archived: bool | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Thread]:
@@ -135,33 +149,51 @@ async def list_threads(
 	return await thread_service.list_threads(
 		db,
 		principal=principal,
-		owner_id=owner_id,
+		filters=filters,
 		skip=skip,
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
-		include_hidden=include_hidden,
-		is_archived=is_archived,
 	)
 
 
-@router.get("/search", response_model=CursorPage[SearchResultItem])
+@router.get("/count", response_model=int)
+async def count_threads(
+	filters: Annotated[ThreadListFilters, Depends()],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> int:
+	"""count threads matching the list filters."""
+	return await thread_service.count_threads(
+		db,
+		principal=principal,
+		filters=filters,
+	)
+
+
+@router.get("/search", response_model=Page[ThreadSchema])
 async def search_threads(
+	filters: Annotated[ThreadSearchFilters, Depends()],
 	q: str = Query(min_length=1, max_length=500),
 	limit: int = Query(default=10, ge=1, le=50),
-	cursor: str | None = Query(default=None),
+	offset: int = Query(default=0, ge=0),
 	mode: SearchMode = Query(default=SearchMode.FULL),
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> CursorPage[SearchResultItem]:
-	"""search threads with cursor-based pagination."""
-	return await thread_service.search_threads(
+) -> Page[ThreadSchema]:
+	"""search threads returning ranked thread objects."""
+	scored = await thread_service.search_threads(
 		q,
 		db,
 		principal=principal,
-		limit=limit,
-		cursor=cursor,
+		limit=limit + 1,
+		offset=offset,
 		search_params=SearchParams(mode=mode),
+		filters=filters,
+	)
+	return Page(
+		items=[ThreadSchema.model_validate(hit.item) for hit in scored[:limit]],
+		has_more=len(scored) > limit,
 	)
 
 
@@ -174,6 +206,27 @@ async def revectorize_threads(
 	require_admin(principal)
 	count = await thread_service.vectorize_all_threads(db)
 	return {"vectorized": count}
+
+
+@router.post("/maintenance-backfill/run")
+async def run_thread_maintenance_backfill(
+	batch_size: Annotated[int | None, Query(ge=1, le=200)] = None,
+	max_lookback_days: Annotated[int | None, Query(ge=1, le=365)] = None,
+	min_inactivity_hours: Annotated[int | None, Query(ge=1, le=24 * 30)] = None,
+	principal: Principal = Depends(get_current_principal),
+) -> JSONObject:
+	"""manually run one batch of the retroactive thread maintenance sweep.
+
+	admin-only. this intentionally ignores the scheduled backfill enabled flag
+	so admins can spot-check the sweep without leaving the periodic schedule on.
+	"""
+	require_admin(principal)
+	return await run_thread_maintenance_backfill_sweep(
+		batch_size=batch_size,
+		max_lookback_days=max_lookback_days,
+		min_inactivity_hours=min_inactivity_hours,
+		respect_enabled=False,
+	)
 
 
 @router.get("/unread-counts", response_model=list[ThreadUnreadCount])
@@ -194,13 +247,13 @@ async def get_unread_counts(
 
 @router.get("/{thread_id}", response_model=ThreadSchema)
 async def get_thread(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	include_hidden: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> Thread:
+) -> ThreadSchema:
 	"""fetch a single thread."""
-	return await thread_service.get_thread(
+	return await thread_service.get_thread_payload(
 		thread_id,
 		db,
 		principal=principal,
@@ -210,7 +263,7 @@ async def get_thread(
 
 @router.patch("/{thread_id}", response_model=ThreadSchema)
 async def update_thread(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	thread_in: ThreadUpdate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -226,45 +279,75 @@ async def update_thread(
 	)
 
 
-@router.post("/{thread_id}/metadata/generate", response_model=ThreadSchema)
-async def generate_thread_metadata(
-	thread_id: TypeID,
-	req: ThreadMetadataGenerateRequest | None = None,
+@router.post("/{thread_id}/maintenance/run", response_model=ThreadSchema)
+async def run_thread_maintenance(
+	thread_id: ThreadIDPath,
+	req: ThreadMaintenanceRunRequest | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
 ) -> Thread:
-	"""generate thread title/tags using a chat model.
+	"""generate thread title, tags, and catalog summary using maintenance.
 
-	uses the task model configured in settings (ai.tasks).
-	when replace is false, only fills in missing metadata.
+	uses the thread maintenance task model configured in settings. when replace is
+	false, only fills in missing metadata, while still refreshing a stale or
+	missing catalog summary.
 	"""
-	request = req or ThreadMetadataGenerateRequest()
-	return await thread_service.generate_thread_metadata(
+	request = req or ThreadMaintenanceRunRequest()
+	await require_thread_access(
+		thread_id,
 		db,
-		thread_id=thread_id,
+		principal,
+		required_level=AccessLevel.ADMIN,
+	)
+	await thread_service.maintain_thread_metadata(
+		thread_id,
+		db,
 		principal=principal,
-		replace=request.replace,
+		replace_metadata=request.replace_metadata,
 		origin_session_id=x_session_id,
 	)
+	await db.flush()
+	return await thread_service.get_thread(thread_id, db, principal=principal)
 
 
 @router.delete("/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_thread(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
+	permanent: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
 ) -> None:
-	"""delete a thread."""
+	"""delete a thread. pass permanent=true (admin only) to hard-delete."""
 	await thread_service.delete_thread(
-		thread_id, db, principal=principal, origin_session_id=x_session_id
+		thread_id,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
+		permanent=permanent,
+	)
+
+
+@router.post("/{thread_id}/restore", response_model=ThreadSchema)
+async def restore_thread(
+	thread_id: ThreadIDPath,
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+	x_session_id: SessionId = None,
+) -> Thread:
+	"""restore a soft-deleted thread. admin only."""
+	return await thread_service.restore_thread(
+		thread_id,
+		db,
+		principal=principal,
+		origin_session_id=x_session_id,
 	)
 
 
 @router.get("/{thread_id}/messages", response_model=list[MessageSchema])
 async def list_messages(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	skip: int = 0,
 	limit: int = 100,
 	sort_by: CommonSortBy = "created_at",
@@ -293,7 +376,7 @@ async def list_messages(
 	response_model=list[EventSchema],
 )
 async def list_events_for_message_ids(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	req: EventsByMessageIDsRequest,
 	include_hidden: bool = False,
 	principal: Principal = Depends(get_current_principal),
@@ -311,7 +394,7 @@ async def list_events_for_message_ids(
 
 @router.get("/{thread_id}/branch", response_model=list[MessageSchema])
 async def get_current_branch(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	include_hidden: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -327,7 +410,7 @@ async def get_current_branch(
 
 @router.get("/{thread_id}/tree", response_model=list[MessageSchema])
 async def get_message_tree(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	include_hidden: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -347,7 +430,7 @@ async def get_message_tree(
 	status_code=status.HTTP_201_CREATED,
 )
 async def create_message(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	message_in: MessageCreate,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -368,7 +451,7 @@ async def create_message(
 	response_model=MessageSchema,
 )
 async def update_user_message(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	message_id: TypeID,
 	message_in: MessageUpdate,
 	principal: Principal = Depends(get_current_principal),
@@ -391,7 +474,7 @@ async def update_user_message(
 	status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_user_message_turn(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	message_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -413,7 +496,7 @@ async def delete_user_message_turn(
 
 @router.post("/{thread_id}/switch", response_model=ThreadSwitchResponse)
 async def switch_branch(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	req: ThreadSwitchRequest,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
@@ -430,83 +513,12 @@ async def switch_branch(
 	return ThreadSwitchResponse(ok=True, current_message_id=thread.current_message_id)
 
 
-@router.get("/{thread_id}/access-rules", response_model=list[AccessRuleResponse])
-async def list_thread_access_rules(
-	thread_id: TypeID,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[AccessRule]:
-	"""list access rules for a thread."""
-	return await access_rules_service.list_access_rules(
-		ResourceType.THREAD, thread_id, db, principal=principal
-	)
-
-
-@router.put("/{thread_id}/access-rules", response_model=list[AccessRuleResponse])
-async def set_thread_access_rules(
-	thread_id: TypeID,
-	rules: list[AccessRuleCreate],
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[AccessRule]:
-	"""replace access rules for a thread."""
-	return await access_rules_service.set_access_rules(
-		ResourceType.THREAD, thread_id, rules, db, principal=principal
-	)
-
-
-@router.get("/{thread_id}/access-level", response_model=AccessLevel)
-async def get_thread_access_level(
-	thread_id: TypeID,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> AccessLevel:
-	"""return the requester's effective access level on a thread."""
-	level = await get_effective_access_level(
-		db,
-		principal,
-		ResourceType.THREAD,
-		thread_id,
-	)
-	if level is None:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="thread not found",
-		)
-	return level
-
-
-@router.post("/{thread_id}/runs/{run_id}/cancel")
-async def cancel_run(
-	thread_id: TypeID,
-	run_id: str,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
-	"""cancel an active agent run on a thread."""
-	await require_thread_access(
-		thread_id,
-		db,
-		principal,
-		required_level=AccessLevel.EDITOR,
-	)
-	# verify run belongs to this thread
-	rs = await run_status_store.get_run(run_id)
-	if rs is None or rs.thread_id != str(thread_id):
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="run not found",
-		)
-	await run_status_store.fail_run(run_id)
-	return {"status": "cancelled"}
-
-
 @router.post(
 	"/{thread_id}/read",
 	response_model=ThreadParticipantSchema,
 )
 async def mark_thread_read(
-	thread_id: TypeID,
+	thread_id: ThreadIDPath,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,

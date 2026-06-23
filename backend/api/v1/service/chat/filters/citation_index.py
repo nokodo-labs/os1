@@ -1,11 +1,11 @@
 """citation index filter - assigns citation indices to tool results.
 
-runs before each model call. scans context for tool messages with
-citable_sources metadata, assigns conversation-cumulative [n] indices,
+runs before each model call. scans context for citeable tool outputs,
+assigns conversation-cumulative [n] indices,
 rewrites tool output to include markers, and injects a reference card
 into the system prompt so the model knows which sources are available.
 
-citation state is seeded from ``next_citation_index`` stored in assistant
+citation state is seeded from ``_next_citation_index`` stored in assistant
 message metadata, so partial branch loads (future) don't require walking
 the full history.
 """
@@ -21,10 +21,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
-from api.schemas.citations import Citation, CitationSource
+from api.schemas.message import Citation, CitationSource
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters.base import Filter
-from api.v1.service.prompt_runtime import SENTINEL_CITATION_SOURCES
+from api.v1.service.chat.message_metadata import (
+	CITABLE_SOURCES_KEY,
+	CITATIONS_ASSIGNED_KEY,
+	CITATIONS_KEY,
+	NEXT_CITATION_INDEX_KEY,
+	get_message_id,
+)
+from api.v1.service.prompts import SENTINEL_CITATION_SOURCES
+from nokodo_ai.agents import AgentIterationState
+from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
 	AssistantMessage as SDKAssistantMessage,
 )
@@ -36,28 +45,39 @@ from nokodo_ai.threads import Thread as SDKThread
 
 logger = logging.getLogger(__name__)
 
-# tag stored on tool message metadata after citation indices are assigned
-_CITATIONS_ASSIGNED_KEY = "_citations_assigned"
-
-# metadata key on assistant messages holding the running index
-_NCI_KEY = "next_citation_index"
-
 
 class CitationIndexFilter(Filter):
-	"""assign citation indices to tool results and build a reference card."""
+	"""assign citation indices to tool results and build a reference card.
+
+	tools can attach private ``_citable_sources`` metadata to their output.
+	this filter turns those sources into stable numbered citations, appends
+	the numbers to the tool result visible to the model, emits per-message
+	source events for the UI, and replaces the citation sentinel in the
+	system prompt with a compact source list.
+
+	indices continue from persisted ``_next_citation_index`` metadata so a
+	windowed thread does not reuse old citation numbers.
+	"""
 
 	name: str = Field(default="citation_index")
 	description: str = Field(
-		default="assigns [n] citation markers to tool results",
+		default=(
+			"turns citeable tool sources into stable numbered citations and "
+			"adds the source list to the prompt"
+		),
 	)
 
 	async def process(
 		self,
-		thread: SDKThread,
+		state: AgentIterationState[AppContext],
+		agent_context: AgentContext,
 		app_context: AppContext | None,
-	) -> SDKThread:
+	) -> AgentIterationState[AppContext]:
+		"""assign citation indices and inject the citation manifest for a run."""
+		_ = agent_context
 		if app_context is None:
-			return thread
+			return state
+		thread = state.thread
 
 		entries = app_context.citations
 
@@ -95,7 +115,7 @@ class CitationIndexFilter(Filter):
 					)
 				)
 
-		return thread
+		return state
 
 	def _assign_new_citations(
 		self,
@@ -103,7 +123,7 @@ class CitationIndexFilter(Filter):
 		entries: list[Citation],
 		nci: int,
 	) -> dict[str, list[Citation]]:
-		"""find tool messages with citable_sources and assign indices.
+		"""find tool messages with citeable sources and assign indices.
 
 		deduplicates by (source_type, source_id): if the same source was
 		already assigned an index (within the current window), reuse it
@@ -121,16 +141,18 @@ class CitationIndexFilter(Filter):
 			if not isinstance(msg, SDKToolMessage):
 				continue
 			meta = msg.metadata or {}
-			if meta.get(_CITATIONS_ASSIGNED_KEY):
+			if meta.get(CITATIONS_ASSIGNED_KEY):
 				continue
-			sources = meta.get("citable_sources")
-			if not sources or not isinstance(sources, list):
+			sources = meta.get(CITABLE_SOURCES_KEY)
+			if sources is None:
 				continue
+			if not isinstance(sources, list):
+				raise TypeError("_citable_sources must be a list")
 
 			assigned: list[Citation] = []
 			for src in sources:
-				if not isinstance(src, dict) or "source_type" not in src:
-					continue
+				if not isinstance(src, dict):
+					raise TypeError("_citable_sources items must be objects")
 				src_type = str(src["source_type"])
 				src_id = str(src.get("source_id", ""))
 				dedup_key = (src_type, src_id)
@@ -154,9 +176,9 @@ class CitationIndexFilter(Filter):
 				continue
 
 			# track per source tool message for event scoping
-			msg_id = meta.get("message_id")
+			msg_id = get_message_id(msg)
 			if msg_id:
-				by_message.setdefault(str(msg_id), []).extend(assigned)
+				by_message.setdefault(msg_id, []).extend(assigned)
 
 			# rewrite tool output to append citation markers
 			source_lines = [
@@ -165,7 +187,7 @@ class CitationIndexFilter(Filter):
 			]
 			new_output = msg.tool_output + "\n\nsources:\n" + "\n".join(source_lines)
 			# mark as processed so we don't re-assign on next iteration
-			new_meta = {**meta, _CITATIONS_ASSIGNED_KEY: True}
+			new_meta = {**meta, CITATIONS_ASSIGNED_KEY: True}
 			thread.messages[i] = msg.model_copy(
 				update={
 					"tool_output": new_output,
@@ -194,7 +216,7 @@ class CitationIndexFilter(Filter):
 		self._replace_sentinel(thread, SENTINEL_CITATION_SOURCES, manifest)
 
 
-# -- helpers (module-level for testability) ------------------------------------
+# helpers (module-level for testability)
 
 
 def _next_index(entries: list[Citation], nci: int) -> int:
@@ -230,7 +252,7 @@ def _find_nci_in_window(thread: SDKThread) -> int | None:
 		if not isinstance(msg, SDKAssistantMessage):
 			continue
 		meta = msg.metadata or {}
-		val = meta.get(_NCI_KEY)
+		val = meta.get(NEXT_CITATION_INDEX_KEY)
 		if isinstance(val, int) and val > 1:
 			if best is None or val > best:
 				best = val
@@ -240,9 +262,9 @@ def _find_nci_in_window(thread: SDKThread) -> int | None:
 def _oldest_message_id(thread: SDKThread) -> str | None:
 	"""get message_id of the first loaded message (oldest in branch)."""
 	for msg in thread.messages:
-		mid = (msg.metadata or {}).get("message_id")
+		mid = get_message_id(msg)
 		if mid:
-			return str(mid)
+			return mid
 	return None
 
 
@@ -279,12 +301,14 @@ async def _overfetch_nci(
 	# join back to messages to read metadata, filter to assistant + has key
 	stmt = (
 		select(
-			msg_t.c.metadata[_NCI_KEY].astext.cast(type_=String).label("nci"),
+			msg_t.c.metadata[NEXT_CITATION_INDEX_KEY]
+			.astext.cast(type_=String)
+			.label("nci"),
 		)
 		.join(ancestors_cte, msg_t.c.id == ancestors_cte.c.cur_id)
 		.where(
 			msg_t.c.type == "assistant",
-			msg_t.c.metadata.has_key(_NCI_KEY),
+			msg_t.c.metadata.has_key(NEXT_CITATION_INDEX_KEY),
 		)
 		.order_by(ancestors_cte.c.depth.asc())
 		.limit(1)
@@ -295,7 +319,7 @@ async def _overfetch_nci(
 	if row is not None:
 		try:
 			return int(row.nci)
-		except (TypeError, ValueError):
+		except TypeError, ValueError:
 			pass
 	return None
 
@@ -310,7 +334,7 @@ def _rebuild_from_existing(
 		if not isinstance(msg, SDKAssistantMessage):
 			continue
 		msg_meta = msg.metadata or {}
-		raw_citations = msg_meta.get("citations")
+		raw_citations = msg_meta.get(CITATIONS_KEY)
 		if not isinstance(raw_citations, list):
 			continue
 		for citation_data in raw_citations:

@@ -15,9 +15,9 @@ from api.schemas.search import (
 	SearchResultItem,
 	SearchResultType,
 )
-from api.v1.service import search as search_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.authorization import require_admin
+from api.v1.service.search import aggregator as search_service
 from nokodo_ai.utils.sse import sse_done, sse_encode, sse_response
 
 
@@ -28,6 +28,9 @@ _GLOBAL_TYPES = [
 	SearchResultType.NOTE,
 	SearchResultType.THREAD,
 	SearchResultType.REMINDER,
+	SearchResultType.CALENDAR_EVENT,
+	SearchResultType.PROJECT,
+	SearchResultType.FILE,
 ]
 
 

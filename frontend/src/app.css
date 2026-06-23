@@ -34,8 +34,7 @@
 :root {
 	--radius-container-base: 2.5rem;
 	--radius-popup-base: 1.5rem;
-	/* dynamic app height: defaults to 100dvh (adapts to browser chrome).
-	   overridden to visualViewport.height by device store when virtual keyboard is open. */
+	/* dynamic app height: defaults to 100dvh and is synced to visualViewport on mobile. */
 	--app-height: 100dvh;
 	/* Island chrome offset: container top padding + Island height + container bottom padding.
 	   used by pages that need content to clear the sticky Island (e.g., chat). */
@@ -207,8 +206,7 @@
 		user-select: none;
 	}
 
-	/* app viewport height: uses --app-height which adapts to
-	   browser chrome (100dvh) and virtual keyboard (visualViewport) */
+	/* app viewport height: uses --app-height from the device store on mobile */
 	.h-app {
 		height: var(--app-height, 100dvh);
 	}
@@ -362,6 +360,19 @@
 	animation: 260ms ease 80ms both vt-fade-in;
 }
 
+/* central home chat/search banners cross-fade on same-path mode switches */
+::view-transition-old(mode-banner) {
+	animation: 180ms ease both vt-fade-out;
+}
+
+::view-transition-new(mode-banner) {
+	animation: 240ms ease 80ms both vt-fade-in;
+}
+
+.home-mode-banner {
+	animation: 220ms ease both vt-fade-in;
+}
+
 /* thread body fades away when leaving /c/[id] */
 ::view-transition-old(thread-body) {
 	animation: 220ms ease both vt-fade-out;
@@ -393,16 +404,28 @@
 	animation: 320ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-out-left;
 }
 
-/* chat sidebar transitions
-	- persisted across pages (shared element): no forced slide; allow hero-move/morph.
-	- not persisted (exists only in old or only in new): slide out/in.
-	`:only-child` matches when the snapshot has no counterpart.
-*/
-::view-transition-old(chat-sidebar):only-child {
+::view-transition-old(master-detail-content) {
+	animation: 220ms ease both vt-fade-out;
+}
+
+::view-transition-new(master-detail-content) {
+	animation: 260ms ease 90ms both vt-fade-in;
+}
+
+html[data-vt-chat-sidebar='1'] .chat-sidebar {
+	view-transition-name: chat-sidebar;
+}
+
+html[data-vt-chat-sidebar='1']::view-transition-group(chat-sidebar) {
+	animation-duration: 320ms;
+	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html[data-vt-chat-sidebar='1']::view-transition-old(chat-sidebar):only-child {
 	animation: 300ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-out-left;
 }
 
-::view-transition-new(chat-sidebar):only-child {
+html[data-vt-chat-sidebar='1']::view-transition-new(chat-sidebar):only-child {
 	animation: 420ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-in-left;
 }
 
@@ -423,30 +446,29 @@
 	animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* during ViewTransitions, force remove backdrop-filters on sidebars.
-	otherwise, it will not transition with the element but will linger for the duration of the transition then pop out.
-	whitelisted: transitions between homepage and chat pages keep the filter intact.
-*/
-html[data-vt-active='1']:not([data-vt-keep-filter]) .chat-sidebar {
+/* during view transitions, remove sidebar backdrop filters before snapshots are captured. */
+html[data-vt-active='1'] .chat-sidebar {
+	transition: none;
 	-webkit-backdrop-filter: none;
 	backdrop-filter: none;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
+/*
    mobile layout adjustments
    888px matches DEVICE_MOBILE_BREAKPOINT_PX from device.svelte.ts
    in mobile mode, pages are full-width with minimal insets for space efficiency.
-   ═══════════════════════════════════════════════════════════════════════════ */
+ */
 @media (max-width: 888px) {
 	:root {
 		--spacing-page-x: var(--spacing-mobile-inset);
+		--spacing-header-content: 1.25rem;
 	}
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
+/*
    PWA standalone mode
    hides browser-only UI when running as an installed app.
-   ═══════════════════════════════════════════════════════════════════════════ */
+ */
 @media (display-mode: standalone) {
 	/* hide elements marked as browser-only in standalone PWA mode */
 	.browser-only {

@@ -3,11 +3,45 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
-from pydantic import Base64Bytes
+from pydantic import Base64Bytes, BaseModel, Field
 
-from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+from api.schemas.common import (
+	MISSING,
+	MetadataModel,
+	MetadataUpdateModel,
+	MissingType,
+	TimestampedModel,
+)
+from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
+
+
+type MemorySortBy = (
+	CommonSortBy
+	| Literal[
+		"tags",
+		"content_length",
+		"last_accessed_at",
+		"confidence",
+	]
+)
+
+
+class MemoryListFilters(BaseModel):
+	"""filters for listing memories."""
+
+	owner_id: TypeID | None = None
+	search: str | None = Field(default=None, min_length=1, max_length=500)
+	tags: list[str] | None = None
+
+
+class MemorySearchFilters(BaseModel):
+	"""structured filters applied to memory search (vector + autocomplete)."""
+
+	owner_id: TypeID | None = None
+	tags: list[str] | None = None
 
 
 class MemoryBase(MetadataModel):
@@ -16,7 +50,7 @@ class MemoryBase(MetadataModel):
 	content: str
 	source_message_id: TypeID | None = None
 	confidence: float | None = None
-	category: str | None = None
+	tags: list[str] | None = None
 
 
 class MemoryCreate(MemoryBase):
@@ -28,9 +62,9 @@ class MemoryCreate(MemoryBase):
 class MemoryUpdate(MetadataUpdateModel):
 	"""payload to update a memory."""
 
-	content: str | None = None
-	confidence: float | None = None
-	category: str | None = None
+	content: str | MissingType = MISSING
+	confidence: float | None | MissingType = MISSING
+	tags: list[str] | None | MissingType = MISSING
 
 
 class Memory(MemoryBase, TimestampedModel):

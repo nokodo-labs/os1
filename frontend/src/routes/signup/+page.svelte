@@ -4,7 +4,14 @@
 	import { resolve } from '$app/paths'
 	import { api } from '$lib/api/client'
 	import { getSystemStatus } from '$lib/api/system'
+	import {
+		parseSignupBackendErrors,
+		signupSubmissionErrorMessage,
+		type FieldErrors,
+		type SignupField,
+	} from '$lib/auth/signupErrors'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
+	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { settingsState } from '$lib/stores/settings.svelte'
 	import { onMount } from 'svelte'
@@ -17,7 +24,19 @@
 	let isSubmitting = $state(false)
 	let isInitialized = $state<boolean | null>(null)
 	let errorMessage = $state<string | null>(null)
+
+	let touched = $state<Record<SignupField, boolean>>({
+		displayName: false,
+		username: false,
+		email: false,
+		password: false,
+		passwordConfirm: false,
+	})
+	let submitted = $state(false)
+	let serverFieldErrors = $state<FieldErrors>({})
 	let consoleOriginOverride = $state<string | null>(null)
+	const USERNAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._]{1,28}[a-zA-Z0-9]$/
+	const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 	pageTitleStore.pageTitle = 'sign up'
 
@@ -42,15 +61,81 @@
 		}
 	})
 
+	const clientFieldErrors = $derived(validateFields())
 	const canSubmit = $derived(
-		username.trim().length > 0 &&
-			email.trim().length > 0 &&
-			password.length >= 1 &&
-			passwordConfirm.length >= 1 &&
-			password === passwordConfirm &&
-			isInitialized !== false &&
-			allowSignups
+		!hasErrors(clientFieldErrors) && isInitialized !== false && allowSignups
 	)
+
+	$effect(() => {
+		const formValues = [username, email, displayName, password, passwordConfirm]
+		if (formValues.length === 0) return
+		serverFieldErrors = {}
+	})
+
+	function hasErrors(errors: FieldErrors): boolean {
+		return Object.values(errors).some(Boolean)
+	}
+
+	function validateFields(): FieldErrors {
+		const errors: FieldErrors = {}
+		const cleanUsername = username.trim()
+		const cleanEmail = email.trim()
+		const cleanDisplayName = displayName.trim()
+
+		if (cleanDisplayName.length > 80) {
+			errors.displayName = 'name must be 80 characters or fewer'
+		}
+
+		if (!cleanUsername) {
+			errors.username = 'username is required'
+		} else if (cleanUsername.length < 3 || cleanUsername.length > 30) {
+			errors.username = 'username must be 3 to 30 characters'
+		} else if (!USERNAME_RE.test(cleanUsername)) {
+			errors.username =
+				'use letters, numbers, periods, or underscores; start and end with a letter or number'
+		} else if (cleanUsername.includes('..')) {
+			errors.username = 'username cannot contain consecutive periods'
+		}
+
+		if (!cleanEmail) {
+			errors.email = 'email is required'
+		} else if (!EMAIL_RE.test(cleanEmail)) {
+			errors.email = 'enter a valid email address'
+		}
+
+		if (!password) {
+			errors.password = 'password is required'
+		} else if (password.length < 8) {
+			errors.password = 'password must be at least 8 characters'
+		}
+
+		if (!passwordConfirm) {
+			errors.passwordConfirm = 'confirm your password'
+		} else if (password !== passwordConfirm) {
+			errors.passwordConfirm = 'passwords do not match'
+		}
+
+		return errors
+	}
+
+	function markTouched(field: SignupField): void {
+		touched[field] = true
+	}
+
+	function fieldError(field: SignupField): string | null {
+		const serverError = serverFieldErrors[field]
+		if (serverError) return serverError
+		if (!submitted && !touched[field]) return null
+		return clientFieldErrors[field] ?? null
+	}
+
+	function inputClass(field: SignupField): string {
+		const hasError = Boolean(fieldError(field))
+		const stateClass = hasError
+			? 'border-red-400/70 bg-red-500/10 text-red-50 placeholder:text-red-300/45 focus:border-red-300/80'
+			: 'border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20'
+		return `${stateClass} w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none`
+	}
 
 	async function onSubmit(event: SubmitEvent) {
 		event.preventDefault()
@@ -58,10 +143,13 @@
 		if (isInitialized === false) return
 		if (!allowSignups) return
 
+		submitted = true
 		errorMessage = null
+		serverFieldErrors = {}
 
-		if (password !== passwordConfirm) {
-			errorMessage = 'passwords do not match'
+		const validationErrors = validateFields()
+		if (hasErrors(validationErrors)) {
+			errorMessage = 'fix the highlighted fields'
 			return
 		}
 
@@ -89,11 +177,17 @@
 					if (typeof origin === 'string' && origin) consoleOriginOverride = origin
 					if (typeof message === 'string' && message) throw new Error(message)
 				}
+				const parsed = parseSignupBackendErrors(detail)
+				if (hasErrors(parsed.fields)) {
+					serverFieldErrors = parsed.fields
+					throw new Error(parsed.message ?? 'check the highlighted fields')
+				}
+				if (parsed.message) throw new Error(parsed.message)
 				throw new Error(response.statusText || 'failed to create account')
 			}
 			await goto(resolve('/login'), { state: { email: email.trim() } })
 		} catch (err) {
-			errorMessage = err instanceof Error ? err.message : 'failed to create account'
+			errorMessage = signupSubmissionErrorMessage(err)
 		} finally {
 			isSubmitting = false
 		}
@@ -117,11 +211,15 @@
 
 						<form class="space-y-4" onsubmit={onSubmit}>
 							{#if isInitialized === false}
-								<div
-									class="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
-									role="alert"
-								>
-									setup is required before accounts can be created.
+								<div class="space-y-2" role="alert">
+									<div
+										class="flex min-h-10 items-center justify-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-center text-sm text-amber-200"
+									>
+										<ExclamationTriangle class="size-4 shrink-0" />
+										<span
+											>setup is required before accounts can be created.</span
+										>
+									</div>
 									{#if consoleOrigin}
 										{#if consoleOrigin.startsWith('http:')}
 											<a
@@ -147,10 +245,11 @@
 							{/if}
 							{#if !allowSignups}
 								<div
-									class="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+									class="flex min-h-10 items-center justify-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-center text-sm text-amber-200"
 									role="alert"
 								>
-									signups are currently disabled.
+									<ExclamationTriangle class="size-4 shrink-0" />
+									<span>signups are currently disabled.</span>
 								</div>
 							{/if}
 							<div class="space-y-2">
@@ -163,9 +262,21 @@
 									type="text"
 									autocomplete="name"
 									bind:value={displayName}
+									onblur={() => markTouched('displayName')}
 									placeholder="optional"
-									class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20 w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none"
+									aria-invalid={Boolean(fieldError('displayName'))}
+									aria-describedby="displayName-error"
+									class={inputClass('displayName')}
 								/>
+								{#if fieldError('displayName')}
+									<p
+										id="displayName-error"
+										class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-center text-xs text-red-200"
+									>
+										<ExclamationTriangle class="size-3.5 shrink-0" />
+										<span>{fieldError('displayName')}</span>
+									</p>
+								{/if}
 							</div>
 
 							<div class="space-y-2">
@@ -178,9 +289,21 @@
 									autocomplete="username"
 									required
 									bind:value={username}
+									onblur={() => markTouched('username')}
 									placeholder="3 to 30 characters"
-									class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20 w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none"
+									aria-invalid={Boolean(fieldError('username'))}
+									aria-describedby="username-error"
+									class={inputClass('username')}
 								/>
+								{#if fieldError('username')}
+									<p
+										id="username-error"
+										class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-center text-xs text-red-200"
+									>
+										<ExclamationTriangle class="size-3.5 shrink-0" />
+										<span>{fieldError('username')}</span>
+									</p>
+								{/if}
 							</div>
 
 							<div class="space-y-2">
@@ -193,9 +316,21 @@
 									autocomplete="email"
 									required
 									bind:value={email}
+									onblur={() => markTouched('email')}
 									placeholder="you@nokodo.net"
-									class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20 w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none"
+									aria-invalid={Boolean(fieldError('email'))}
+									aria-describedby="email-error"
+									class={inputClass('email')}
 								/>
+								{#if fieldError('email')}
+									<p
+										id="email-error"
+										class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-center text-xs text-red-200"
+									>
+										<ExclamationTriangle class="size-3.5 shrink-0" />
+										<span>{fieldError('email')}</span>
+									</p>
+								{/if}
 							</div>
 
 							<div class="space-y-2">
@@ -208,9 +343,21 @@
 									autocomplete="new-password"
 									required
 									bind:value={password}
+									onblur={() => markTouched('password')}
 									placeholder="••••••••"
-									class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20 w-full rounded-full border px-4 py-3 text-sm transition-colors outline-none"
+									aria-invalid={Boolean(fieldError('password'))}
+									aria-describedby="password-error"
+									class={inputClass('password')}
 								/>
+								{#if fieldError('password')}
+									<p
+										id="password-error"
+										class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-center text-xs text-red-200"
+									>
+										<ExclamationTriangle class="size-3.5 shrink-0" />
+										<span>{fieldError('password')}</span>
+									</p>
+								{/if}
 							</div>
 
 							<div class="space-y-2">
@@ -224,21 +371,30 @@
 									autocomplete="new-password"
 									required
 									bind:value={passwordConfirm}
+									onblur={() => markTouched('passwordConfirm')}
 									placeholder="••••••••"
-									class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/35 focus:border-foreground/20 w-full rounded-2xl border px-4 py-3 text-sm transition-colors outline-none"
+									aria-invalid={Boolean(fieldError('passwordConfirm'))}
+									aria-describedby="passwordConfirm-error"
+									class={inputClass('passwordConfirm')}
 								/>
+								{#if fieldError('passwordConfirm')}
+									<p
+										id="passwordConfirm-error"
+										class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-center text-xs text-red-200"
+									>
+										<ExclamationTriangle class="size-3.5 shrink-0" />
+										<span>{fieldError('passwordConfirm')}</span>
+									</p>
+								{/if}
 							</div>
-
-							{#if passwordConfirm.length > 0 && password !== passwordConfirm}
-								<div class="text-sm text-amber-300/80">passwords must match</div>
-							{/if}
 
 							{#if errorMessage}
 								<div
-									class="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+									class="flex min-h-10 items-center justify-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2 text-center text-sm text-red-200"
 									role="alert"
 								>
-									{errorMessage}
+									<ExclamationTriangle class="size-4 shrink-0" />
+									<span>{errorMessage}</span>
 								</div>
 							{/if}
 

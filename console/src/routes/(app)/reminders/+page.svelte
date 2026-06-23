@@ -1,30 +1,33 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
+	import { page } from '$app/state'
 	import { api, unwrap, type Schemas } from '$lib/api'
 
 	type ReminderListWithCounts = Schemas['ReminderListWithCounts']
-	type SearchResultItem = Schemas['SearchResultItem']
+	type Reminder = Schemas['Reminder']
 
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ReminderListDetailsModal from '$lib/components/ReminderListDetailsModal.svelte'
-	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
-	import { auth } from '$lib/auth.svelte'
 	import { Button } from '$lib/components/ui/button'
+	import UserDetailsModal from '$lib/components/UserDetailsModal.svelte'
 
 	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import {
 		ArrowDown,
 		ArrowUp,
+		ChevronLeft,
+		ChevronRight,
 		Circle,
 		CircleCheck,
 		Clock,
 		Hash,
 		ListChecks,
+		RefreshCw,
 		Search,
 		User,
-		RefreshCw,
 	} from '@lucide/svelte'
+	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type ListSortKey = 'updated_at' | 'created_at' | 'name' | 'position'
 	type SortDir = 'asc' | 'desc'
@@ -35,6 +38,8 @@
 		{ value: 'name', label: 'name' },
 		{ value: 'position', label: 'position' },
 	]
+	const REMINDER_LIST_PAGE_LIMIT = 50
+	const USER_PARAM = 'user'
 
 	function defaultSortDir(sort: ListSortKey): SortDir {
 		if (sort === 'name') return 'asc'
@@ -44,14 +49,18 @@
 
 	let sortKey = $state<ListSortKey>('updated_at')
 	let sortDir = $state<SortDir>('desc')
+	let ownerIdFilter = $state<string | null>(null)
 	let searchQuery = $state('')
 	let refreshToken = $state(0)
 
 	let lists = $state<ReminderListWithCounts[]>([])
+	let pageIndex = $state(0)
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
+	let total = $state(0)
+	let listRequestId = 0
 
-	let searchResults = $state<SearchResultItem[]>([])
+	let searchResults = $state<Reminder[]>([])
 	let isSearching = $state(false)
 	let searchError = $state<string | null>(null)
 	let _searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -72,7 +81,9 @@
 		}
 		isSearching = true
 		_searchTimer = setTimeout(() => {
-			api.GET('/v1/reminders/search', { params: { query: { q } } })
+			api.GET('/v1/reminder-lists/search', {
+				params: { query: { q, limit: 20 } },
+			})
 				.then((r) => unwrap(r))
 				.then((page) => {
 					searchResults = page.items
@@ -102,14 +113,60 @@
 		refreshToken += 1
 	}
 
+	function replaceUrl(target: string) {
+		if (!browser) return
+		history.replaceState(history.state, '', target)
+	}
+
+	function updateQueryParams(updates: Record<string, string | null>) {
+		if (!browser) return
+		const url = page.url
+		const params = new SvelteURLSearchParams(url.searchParams)
+		for (const [key, value] of Object.entries(updates)) {
+			if (!value) params.delete(key)
+			else params.set(key, value)
+		}
+		const qs = params.toString()
+		replaceUrl(qs ? `${url.pathname}?${qs}` : url.pathname)
+	}
+
 	function setSort(next: ListSortKey) {
 		sortKey = next
 		sortDir = defaultSortDir(next)
+		pageIndex = 0
 	}
 
 	function toggleSortDir() {
 		sortDir = sortDir === 'asc' ? 'desc' : 'asc'
+		pageIndex = 0
 	}
+
+	function clearOwnerFilter() {
+		ownerIdFilter = null
+		pageIndex = 0
+		updateQueryParams({ [USER_PARAM]: null })
+	}
+
+	function pageOffset(index: number): number {
+		return Math.max(0, Math.trunc(index)) * REMINDER_LIST_PAGE_LIMIT
+	}
+
+	function previousPage() {
+		pageIndex = Math.max(0, pageIndex - 1)
+	}
+
+	function nextPage() {
+		if (lists.length < REMINDER_LIST_PAGE_LIMIT) return
+		pageIndex += 1
+	}
+
+	$effect(() => {
+		if (!browser) return
+		const user = page.url.searchParams.get(USER_PARAM)
+		const nextOwner = user?.trim() || null
+		if (ownerIdFilter !== nextOwner) pageIndex = 0
+		ownerIdFilter = nextOwner
+	})
 
 	$effect(() => {
 		if (!browser) return
@@ -119,48 +176,41 @@
 
 		isLoading = true
 		error = null
+		const requestId = ++listRequestId
 
 		Promise.all([
-			api.GET('/v1/reminders/lists', {
-				params: {
-					query: {
-						include_counts: true,
-						sort_by: sortKey,
-						sort_dir: sortDir,
-						limit: 200,
+			api
+				.GET('/v1/reminder-lists', {
+					params: {
+						query: {
+							owner_id: ownerIdFilter ?? undefined,
+							include_counts: true,
+							sort_by: sortKey,
+							sort_dir: sortDir,
+							skip: pageOffset(pageIndex),
+							limit: REMINDER_LIST_PAGE_LIMIT,
+						},
 					},
-				},
-			}).then((r) => unwrap(r)),
-			api.GET('/v1/reminders/counts', {})
-				.then((r) => r.data)
-				.catch(() => undefined)
+				})
+				.then((r) => unwrap(r)),
+			api
+				.GET('/v1/reminder-lists/count', {
+					params: { query: { owner_id: ownerIdFilter ?? undefined } },
+				})
+				.then((r) => unwrap(r)),
 		])
-			.then(([listsResult, defaultCounts]) => {
-				const mergedLists = [...listsResult]
-				if (defaultCounts && defaultCounts.total_count > 0) {
-					// @ts-expect-error: We need a synthetic ID for UI logic
-					mergedLists.unshift({
-						id: '',
-						owner_id: auth.user?.id || '',
-						name: 'default list',
-						description: 'reminders without a specific list',
-						position: -1,
-						color: '#52525b', // zinc-500
-						created_at: new Date().toISOString(),
-						updated_at: new Date().toISOString(),
-						total_count: defaultCounts.total_count,
-						pending_count: defaultCounts.pending_count,
-						completed_count: defaultCounts.completed_count,
-					})
-				}
-				lists = mergedLists as typeof lists
+			.then(([listsResult, count]) => {
+				if (requestId !== listRequestId) return
+				lists = listsResult
+				total = count
 			})
 			.catch((e: unknown) => {
+				if (requestId !== listRequestId) return
 				error = e instanceof Error ? e.message : 'failed to load reminder lists'
 				lists = []
 			})
 			.finally(() => {
-				isLoading = false
+				if (requestId === listRequestId) isLoading = false
 			})
 	})
 </script>
@@ -212,6 +262,16 @@
 				</Button>
 			</div>
 			<div class="flex w-full items-center gap-2 sm:w-auto">
+				{#if ownerIdFilter}
+					<Button
+						variant="outline"
+						class="flex-1 rounded-xl sm:flex-none"
+						onclick={clearOwnerFilter}
+						disabled={isLoading}
+					>
+						owner: {ownerIdFilter}
+					</Button>
+				{/if}
 				<Button
 					variant="outline"
 					class="flex-1 rounded-xl sm:flex-none"
@@ -234,10 +294,36 @@
 	{/if}
 
 	<div class="flex flex-col gap-4">
-		<div class="text-sm text-zinc-400">
-			{searchQuery.trim()
-				? `${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`
-				: `${lists.length} list${lists.length === 1 ? '' : 's'}`}
+		<div class="flex items-center justify-between gap-3">
+			<div class="text-sm text-zinc-400">
+				{searchQuery.trim()
+					? `${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`
+					: total > 0
+						? `items ${pageIndex * REMINDER_LIST_PAGE_LIMIT + 1}–${pageIndex * REMINDER_LIST_PAGE_LIMIT + lists.length} of ${total}`
+						: `${lists.length} list${lists.length === 1 ? '' : 's'}`}
+			</div>
+			{#if !searchQuery.trim()}
+				<div class="flex items-center gap-2">
+					<Button
+						variant="outline"
+						class="rounded-xl"
+						onclick={previousPage}
+						disabled={pageIndex === 0 || isLoading}
+					>
+						<ChevronLeft class="mr-1.5 h-4 w-4" />
+						prev
+					</Button>
+					<Button
+						variant="outline"
+						class="rounded-xl"
+						onclick={nextPage}
+						disabled={lists.length < REMINDER_LIST_PAGE_LIMIT || isLoading}
+					>
+						next
+						<ChevronRight class="ml-1.5 h-4 w-4" />
+					</Button>
+				</div>
+			{/if}
 		</div>
 		<div class="flex flex-col space-y-2">
 			{#if searchQuery.trim()}
@@ -273,9 +359,9 @@
 										<Circle class="h-4 w-4 text-zinc-500" />
 										<span class="truncate font-medium">{r.title}</span>
 									</div>
-									{#if r.preview}
+									{#if r.description}
 										<div class="line-clamp-1 text-sm text-zinc-400">
-											{r.preview}
+											{r.description}
 										</div>
 									{/if}
 									<span
@@ -285,11 +371,6 @@
 										{r.id}
 									</span>
 								</div>
-								{#if r.score != null}
-									<span class="shrink-0 text-xs text-zinc-500"
-										>{(r.score * 100).toFixed(1)}%</span
-									>
-								{/if}
 							</div>
 						</div>
 					{/each}
@@ -314,30 +395,32 @@
 
 				{#each lists as list (list.id)}
 					<div
-					role="button"
-					tabindex="0"
-					class="flex w-full items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
-					onclick={(e: MouseEvent) => {
-						if (
-							(e.target as HTMLElement).closest('button:not([data-row-click])') ==
-							null
-						) {
-							openList(list.id)
-						}
-					}}
-					onkeydown={(e: KeyboardEvent) => {
-						if (e.key === 'Enter' || e.key === ' ') {
-							e.preventDefault()
-							openList(list.id)
-						}
-					}}
-				>
-					<div class="flex min-w-0 flex-1 items-center gap-4">
-						<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
-							<ListChecks class="h-5 w-5" />
-						</div>
-						<div class="min-w-0 flex-1 space-y-1">
-							<div class="flex flex-wrap items-center gap-2">
+						role="button"
+						tabindex="0"
+						class="flex w-full items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
+						onclick={(e: MouseEvent) => {
+							if (
+								(e.target as HTMLElement).closest('button:not([data-row-click])') ==
+								null
+							) {
+								openList(list.id)
+							}
+						}}
+						onkeydown={(e: KeyboardEvent) => {
+							if (e.key === 'Enter' || e.key === ' ') {
+								e.preventDefault()
+								openList(list.id)
+							}
+						}}
+					>
+						<div class="flex min-w-0 flex-1 items-center gap-4">
+							<div
+								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-sky-400"
+							>
+								<ListChecks class="h-5 w-5" />
+							</div>
+							<div class="min-w-0 flex-1 space-y-1">
+								<div class="flex flex-wrap items-center gap-2">
 									{#if list.color}
 										<span
 											class="inline-block h-3 w-3 rounded-full"
@@ -351,8 +434,12 @@
 										{list.description}
 									</div>
 								{/if}
-								<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-									<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+								<div
+									class="flex flex-wrap items-center gap-3 text-xs text-zinc-500"
+								>
+									<span
+										class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50"
+									>
 										<Hash class="h-3 w-3" />
 										{list.id}
 									</span>
@@ -369,15 +456,21 @@
 											{list.owner_id}
 										</button>
 									</span>
-									<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase"
+									>
 										<ListChecks class="h-3 w-3" />
 										total {list.total_count}
 									</span>
-									<span class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-amber-400 uppercase">
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-amber-400 uppercase"
+									>
 										<Circle class="h-3 w-3" />
 										pending {list.pending_count}
 									</span>
-									<span class="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-emerald-400 uppercase">
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-emerald-400 uppercase"
+									>
 										<CircleCheck class="h-3 w-3" />
 										completed {list.completed_count}
 									</span>

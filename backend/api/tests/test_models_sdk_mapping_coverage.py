@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 from api.models.message import Message, MessageType
 from api.models.thread import Thread
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 def _make_message(
-	*,
 	msg_type: object,
 	content: list[dict[str, object]] | None = None,
 ) -> Message:
@@ -71,7 +72,8 @@ def test_message_to_sdk_all_types() -> None:
 	assert tool_sdk.tool_output == "tool output"
 	assert tool_sdk.is_error is True
 
-	assert unknown.to_sdk().role == "user"
+	with pytest.raises(ValueError, match="unsupported message type"):
+		unknown.to_sdk()
 
 
 def test_message_to_sdk_tool_without_content() -> None:

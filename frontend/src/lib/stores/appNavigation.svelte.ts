@@ -12,17 +12,32 @@ export type SettingsRouteId =
 	| '/settings/debug'
 
 export type NotesRouteId = '/notes' | `/notes/${string}`
-export type RemindersRouteId = '/reminders' | `/reminders/lists/${string}`
+type ReminderListRouteId = `/reminders/lists/${string}`
+export type RemindersRouteId = '/reminders' | ReminderListRouteId
+export type CalendarRouteId = '/calendar'
+export type MessagesRouteId = '/messages'
+export type ResearchRouteId = '/research'
 
 export type SocialRouteId = '/social/friends' | '/social/groups'
 
 export type ProjectsRouteId = '/projects' | `/projects/${string}`
 
-export type AppId = 'settings' | 'notes' | 'reminders' | 'social' | 'projects'
+export type AppId =
+	| 'settings'
+	| 'notes'
+	| 'reminders'
+	| 'calendar'
+	| 'messages'
+	| 'research'
+	| 'social'
+	| 'projects'
 
 export const DEFAULT_SETTINGS_ROUTE: SettingsRouteId = '/settings/appearance'
 export const DEFAULT_NOTES_ROUTE: NotesRouteId = '/notes'
 export const DEFAULT_REMINDERS_ROUTE: RemindersRouteId = '/reminders'
+export const DEFAULT_CALENDAR_ROUTE: CalendarRouteId = '/calendar'
+export const DEFAULT_MESSAGES_ROUTE: MessagesRouteId = '/messages'
+export const DEFAULT_RESEARCH_ROUTE: ResearchRouteId = '/research'
 export const DEFAULT_SOCIAL_ROUTE: SocialRouteId = '/social/friends'
 export const DEFAULT_PROJECTS_ROUTE: ProjectsRouteId = '/projects'
 
@@ -54,9 +69,20 @@ function isNotesRoute(pathname: string): pathname is NotesRouteId {
 	return /^\/notes\/[^/]+$/.test(pathname)
 }
 
-function isRemindersRoute(pathname: string): pathname is RemindersRouteId {
-	if (pathname === '/reminders') return true
+function isReminderListRoute(pathname: string): pathname is ReminderListRouteId {
 	return /^\/reminders\/lists\/[^/]+$/.test(pathname)
+}
+
+function isCalendarRoute(pathname: string): pathname is CalendarRouteId {
+	return pathname === '/calendar'
+}
+
+function isMessagesRoute(pathname: string): pathname is MessagesRouteId {
+	return pathname === '/messages'
+}
+
+function isResearchRoute(pathname: string): pathname is ResearchRouteId {
+	return pathname === '/research'
 }
 
 function isSocialRoute(pathname: string): pathname is SocialRouteId {
@@ -95,7 +121,40 @@ function readStoredReminders(): RemindersRouteId | '' {
 	try {
 		const raw = window.localStorage.getItem(`${STORAGE_PREFIX}reminders`) ?? ''
 		const normalized = normalizePath(raw)
-		return isRemindersRoute(normalized) ? normalized : ''
+		return isReminderListRoute(normalized) ? normalized : ''
+	} catch {
+		return ''
+	}
+}
+
+function readStoredCalendar(): CalendarRouteId | '' {
+	if (!browser) return ''
+	try {
+		const raw = window.localStorage.getItem(`${STORAGE_PREFIX}calendar`) ?? ''
+		const normalized = normalizePath(raw)
+		return isCalendarRoute(normalized) ? normalized : ''
+	} catch {
+		return ''
+	}
+}
+
+function readStoredMessages(): MessagesRouteId | '' {
+	if (!browser) return ''
+	try {
+		const raw = window.localStorage.getItem(`${STORAGE_PREFIX}messages`) ?? ''
+		const normalized = normalizePath(raw)
+		return isMessagesRoute(normalized) ? normalized : ''
+	} catch {
+		return ''
+	}
+}
+
+function readStoredResearch(): ResearchRouteId | '' {
+	if (!browser) return ''
+	try {
+		const raw = window.localStorage.getItem(`${STORAGE_PREFIX}research`) ?? ''
+		const normalized = normalizePath(raw)
+		return isResearchRoute(normalized) ? normalized : ''
 	} catch {
 		return ''
 	}
@@ -127,17 +186,42 @@ class AppNavigationStore {
 	lastSettingsRoute = $state<SettingsRouteId | ''>(readStoredSettings())
 	lastNotesRoute = $state<NotesRouteId | ''>(readStoredNotes())
 	lastRemindersRoute = $state<RemindersRouteId | ''>(readStoredReminders())
+	lastCalendarRoute = $state<CalendarRouteId | ''>(readStoredCalendar())
+	lastMessagesRoute = $state<MessagesRouteId | ''>(readStoredMessages())
+	lastResearchRoute = $state<ResearchRouteId | ''>(readStoredResearch())
 	lastSocialRoute = $state<SocialRouteId | ''>(readStoredSocial())
 	lastProjectsRoute = $state<ProjectsRouteId | ''>(readStoredProjects())
 
 	getEntryRoute(appId: 'settings'): SettingsRouteId
 	getEntryRoute(appId: 'notes'): NotesRouteId
 	getEntryRoute(appId: 'reminders'): RemindersRouteId
+	getEntryRoute(appId: 'calendar'): CalendarRouteId
+	getEntryRoute(appId: 'messages'): MessagesRouteId
+	getEntryRoute(appId: 'research'): ResearchRouteId
 	getEntryRoute(appId: 'social'): SocialRouteId
 	getEntryRoute(appId: 'projects'): ProjectsRouteId
 	getEntryRoute(
 		appId: AppId
-	): SettingsRouteId | NotesRouteId | RemindersRouteId | SocialRouteId | ProjectsRouteId {
+	):
+		| SettingsRouteId
+		| NotesRouteId
+		| RemindersRouteId
+		| CalendarRouteId
+		| MessagesRouteId
+		| ResearchRouteId
+		| SocialRouteId
+		| ProjectsRouteId
+	getEntryRoute(
+		appId: AppId
+	):
+		| SettingsRouteId
+		| NotesRouteId
+		| RemindersRouteId
+		| CalendarRouteId
+		| MessagesRouteId
+		| ResearchRouteId
+		| SocialRouteId
+		| ProjectsRouteId {
 		switch (appId) {
 			case 'settings':
 				return this.lastSettingsRoute || DEFAULT_SETTINGS_ROUTE
@@ -145,6 +229,12 @@ class AppNavigationStore {
 				return this.lastNotesRoute || DEFAULT_NOTES_ROUTE
 			case 'reminders':
 				return this.lastRemindersRoute || DEFAULT_REMINDERS_ROUTE
+			case 'calendar':
+				return this.lastCalendarRoute || DEFAULT_CALENDAR_ROUTE
+			case 'messages':
+				return this.lastMessagesRoute || DEFAULT_MESSAGES_ROUTE
+			case 'research':
+				return this.lastResearchRoute || DEFAULT_RESEARCH_ROUTE
 			case 'social':
 				return this.lastSocialRoute || DEFAULT_SOCIAL_ROUTE
 			case 'projects':
@@ -155,8 +245,12 @@ class AppNavigationStore {
 	setLastVisited(appId: 'settings', pathname: string): void
 	setLastVisited(appId: 'notes', pathname: string): void
 	setLastVisited(appId: 'reminders', pathname: string): void
+	setLastVisited(appId: 'calendar', pathname: string): void
+	setLastVisited(appId: 'messages', pathname: string): void
+	setLastVisited(appId: 'research', pathname: string): void
 	setLastVisited(appId: 'social', pathname: string): void
 	setLastVisited(appId: 'projects', pathname: string): void
+	setLastVisited(appId: AppId, pathname: string): void
 	setLastVisited(appId: AppId, pathname: string): void {
 		const normalized = normalizePath(pathname)
 
@@ -174,9 +268,27 @@ class AppNavigationStore {
 				return
 			}
 			case 'reminders': {
-				if (!isRemindersRoute(normalized)) return
+				if (!isReminderListRoute(normalized)) return
 				this.lastRemindersRoute = normalized
 				this.persist('reminders', normalized)
+				return
+			}
+			case 'calendar': {
+				if (!isCalendarRoute(normalized)) return
+				this.lastCalendarRoute = normalized
+				this.persist('calendar', normalized)
+				return
+			}
+			case 'messages': {
+				if (!isMessagesRoute(normalized)) return
+				this.lastMessagesRoute = normalized
+				this.persist('messages', normalized)
+				return
+			}
+			case 'research': {
+				if (!isResearchRoute(normalized)) return
+				this.lastResearchRoute = normalized
+				this.persist('research', normalized)
 				return
 			}
 			case 'social': {
@@ -200,6 +312,9 @@ class AppNavigationStore {
 			| SettingsRouteId
 			| NotesRouteId
 			| RemindersRouteId
+			| CalendarRouteId
+			| MessagesRouteId
+			| ResearchRouteId
 			| SocialRouteId
 			| ProjectsRouteId
 	) {

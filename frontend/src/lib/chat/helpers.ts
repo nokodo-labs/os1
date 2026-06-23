@@ -4,19 +4,20 @@
  */
 
 import { parseToolCalls, parseToolResult, type ToolCall, type ToolResult } from '$lib/tools'
+import { SvelteDate } from 'svelte/reactivity'
 import type {
 	ApiCitation,
 	ApiMessage,
-	AttachmentMediaCategory,
-	AttachmentStatus,
+	ChatContext,
 	FileContentPart,
 	MediaContentPart,
 	OptimisticUserMessage,
 	PendingAttachment,
+	ResourceAttachment,
+	RunActivityState,
 	RunBlock,
 	RunItem,
 	StreamingAssistantState,
-	ThreadAttachment,
 } from './types'
 
 export type {
@@ -57,6 +58,61 @@ export function contentPartsToText(parts: ApiMessage['content']): string {
 		.join('\n')
 }
 
+/**
+ * persist the current streaming assistant's partial content into the message
+ * tree (marked partial) so a transport failure or stop keeps whatever text was
+ * already rendered instead of discarding it. callers typically follow this
+ * with a fresh error bubble in a separate placeholder.
+ */
+export function finalizeStreamingAssistantAsPartial(ctx: ChatContext): void {
+	const streaming = ctx.streamingAssistant
+	if (!streaming) return
+	// apply any buffered streamed tokens before snapshotting the partial content
+	ctx.flushStreamingText()
+
+	const existingMessage = ctx.messageTree.get(streaming.messageId)
+	const content = streaming.content.trim() || contentPartsToText(existingMessage?.content).trim()
+	const createdAt = existingMessage?.created_at ?? new SvelteDate().toISOString()
+	const updatedAt = new SvelteDate().toISOString()
+	const parentId = existingMessage?.parent_id ?? ctx.streamingAssistantParentId
+	const streamCitations = ctx.citationSources.get(streaming.messageId)
+	const citedIndices = new Set(
+		[...content.matchAll(/\[\^?(\d+)\]/g)].map((match) => Number(match[1]))
+	)
+	const citedSources = streamCitations?.filter((citation) => citedIndices.has(citation.index))
+	const metadata: NonNullable<ApiMessage['metadata_']> = {
+		...(existingMessage?.metadata_ ?? {}),
+		partial: true,
+		partial_reason: 'cancelled',
+	}
+	if (streaming.runId) metadata.run_id = streaming.runId
+
+	const finalized = {
+		id: streaming.messageId,
+		thread_id: existingMessage?.thread_id ?? ctx.thread?.id ?? '',
+		parent_id: parentId,
+		type: 'assistant',
+		content: content ? [{ type: 'text', text: content }] : [],
+		tool_calls: streaming.toolCalls.map((toolCall) => ({
+			id: toolCall.id,
+			name: toolCall.name,
+			arguments: toolCall.arguments,
+		})),
+		citations: citedSources?.length ? citedSources : existingMessage?.citations,
+		metadata_: metadata,
+		sender_agent_id: streaming.senderAgentId,
+		sender_user_id: null,
+		created_at: createdAt,
+		updated_at: updatedAt,
+	} satisfies ApiMessage
+
+	ctx.messageTree.set(finalized.id, finalized)
+	ctx.citationTargetMessageId = finalized.id
+	ctx.streamingLeafId = finalized.id
+	if (ctx.viewingStreamingBranch) ctx.currentLeafId = finalized.id
+	ctx.streamingAssistantParentId = finalized.id
+}
+
 // content part extraction
 
 /**
@@ -85,7 +141,6 @@ export function extractMediaParts(
 					filename: part.filename,
 					mediaType: part.media_type,
 					fileId,
-					attachmentStatus: part.metadata?.attachment_status as string | undefined,
 				})
 			}
 		} else if (part.type === 'file') {
@@ -103,7 +158,6 @@ export function extractMediaParts(
 						filename: part.filename,
 						mediaType: part.media_type,
 						fileId,
-						attachmentStatus: part.metadata?.attachment_status as string | undefined,
 					})
 				}
 			}
@@ -136,7 +190,6 @@ export function extractFileParts(
 			filename: part.filename,
 			mediaType: part.media_type,
 			fileId,
-			attachmentStatus: part.metadata?.attachment_status as string | undefined,
 		})
 	}
 	return results
@@ -150,89 +203,51 @@ export function hasAttachmentParts(parts: ApiMessage['content']): boolean {
 	return parts.some((p) => p && (p.type === 'image' || p.type === 'file'))
 }
 
-function classifyMediaCategory(mime: string | null | undefined): AttachmentMediaCategory {
-	if (!mime) return 'file'
-	const lower = mime.toLowerCase()
-	if (lower.startsWith('image/')) return 'image'
-	if (lower.startsWith('audio/')) return 'audio'
-	if (lower.startsWith('video/')) return 'video'
-	return 'file'
+function isAttachmentRefType(value: unknown): value is ResourceAttachment['type'] {
+	return (
+		value === 'file' ||
+		value === 'note' ||
+		value === 'thread' ||
+		value === 'project' ||
+		value === 'reminder' ||
+		value === 'reminder_list' ||
+		value === 'calendar_event' ||
+		value === 'calendar'
+	)
 }
 
 /**
- * derive all unique file attachments from the current message branch
- * with status determined from the event-derived state map.
+ * extract attachment resource refs ({type, id}) from a message.
  *
- * attachmentStates is populated from backend events (attachment.decayed,
- * attachment.revealed) so the frontend displays authoritative state
- * rather than guessing decay client-side.
+ * refs live in two places depending on the message representation:
+ * - complete (ORM) messages carry them in the dedicated `attachments` column.
+ * - streamed (SDK/delta) messages carry them in `metadata_.attachments`.
  *
- * attachments without an entry in attachmentStates default to 'active'
- * (newly uploaded files before the first run).
+ * this reads both sources and de-dupes by `type:id`, so callers get one
+ * uniform list regardless of which representation produced the message.
  */
-export function computeThreadAttachments(
-	messages: ApiMessage[],
-	attachmentStates?: Map<string, AttachmentStatus>
-): ThreadAttachment[] {
-	// compute turn indices (same logic as backend _compute_turn_indices)
-	const turnIndices: number[] = []
-	let currentTurn = 0
-	let sawUserInTurn = false
+export function extractAttachmentRefs(
+	msg: Pick<ApiMessage, 'attachments' | 'metadata_'>
+): ResourceAttachment[] {
+	const seen = new Set<string>()
+	const refs: ResourceAttachment[] = []
 
-	for (const msg of messages) {
-		if (msg.type === 'system') {
-			turnIndices.push(currentTurn)
-			continue
-		}
-		if (msg.type === 'user') {
-			sawUserInTurn = true
-			turnIndices.push(currentTurn)
-			continue
-		}
-		if (msg.type === 'assistant') {
-			turnIndices.push(currentTurn)
-			if (sawUserInTurn) {
-				currentTurn++
-				sawUserInTurn = false
-			}
-			continue
-		}
-		// tool or unknown
-		turnIndices.push(currentTurn)
+	const push = (value: unknown): void => {
+		if (!value || typeof value !== 'object') return
+		const ref = value as Record<string, unknown>
+		const { type, id } = ref
+		if (!isAttachmentRefType(type) || typeof id !== 'string') return
+		const key = `${type}:${id}`
+		if (seen.has(key)) return
+		seen.add(key)
+		refs.push({ type, id })
 	}
 
-	// collect unique attachments (earliest occurrence)
-	const seen = new Map<string, ThreadAttachment>()
+	for (const ref of msg.attachments ?? []) push(ref)
+	const metaRefs = msg.metadata_?.attachments
+	if (Array.isArray(metaRefs)) for (const ref of metaRefs) push(ref)
 
-	for (let i = 0; i < messages.length; i++) {
-		const msg = messages[i]
-		if (!msg.content) continue
-
-		for (const part of msg.content) {
-			if (!part || (part.type !== 'image' && part.type !== 'file')) continue
-			const fileId = (part.metadata as Record<string, unknown> | undefined)?.file_id
-			if (!fileId || typeof fileId !== 'string') continue
-			if (seen.has(fileId)) continue
-
-			const mime = part.media_type ?? null
-			const category = classifyMediaCategory(mime)
-			const turn = turnIndices[i] ?? 0
-
-			// use event-derived state if available, else default to active
-			const status = attachmentStates?.get(fileId) ?? 'active'
-
-			seen.set(fileId, {
-				fileId,
-				filename: part.filename ?? null,
-				mediaType: mime,
-				category,
-				status,
-				turn,
-			})
-		}
-	}
-
-	return [...seen.values()]
+	return refs
 }
 
 /**
@@ -270,10 +285,49 @@ export function getRunId(msg: Pick<ApiMessage, 'metadata_' | 'id'>): string {
 }
 
 /**
+ * extract the agent id that produced a response message, if known.
+ */
+export function getMessageAgentId(
+	msg: Pick<ApiMessage, 'sender_agent_id' | 'metadata_'>
+): string | null {
+	if (typeof msg.sender_agent_id === 'string' && msg.sender_agent_id) return msg.sender_agent_id
+	return msg.metadata_ && typeof msg.metadata_.agent_id === 'string'
+		? msg.metadata_.agent_id
+		: null
+}
+
+/**
  * parse message created_at to Date.
  */
 export function getMessageCreatedAt(msg: ApiMessage): Date {
 	return msg.created_at ? new Date(msg.created_at) : new Date(0)
+}
+
+function getUserRunItemAuthor(item: RunItem): string | null {
+	if (item.kind === 'user') return item.message.sender_user_id ?? `align:${item.align}`
+	if (item.kind === 'optimistic_user') return 'optimistic:user'
+	return null
+}
+
+function getUserRunItemCreatedAt(item: RunItem): Date | null {
+	if (item.kind === 'user') return getMessageCreatedAt(item.message)
+	if (item.kind === 'optimistic_user') return item.timestamp
+	return null
+}
+
+export function getUserRunItemTimestamp(
+	item: RunItem,
+	previousItem: RunItem | undefined
+): Date | undefined {
+	const timestamp = getUserRunItemCreatedAt(item)
+	if (!timestamp) return undefined
+	if (!previousItem) return timestamp
+
+	const previousTimestamp = getUserRunItemCreatedAt(previousItem)
+	if (!previousTimestamp) return timestamp
+	if (timestamp.getTime() !== previousTimestamp.getTime()) return timestamp
+	if (getUserRunItemAuthor(item) !== getUserRunItemAuthor(previousItem)) return timestamp
+	return undefined
 }
 
 /**
@@ -362,6 +416,7 @@ export interface BuildRunBlocksInput {
 	streamingAssistant: StreamingAssistantState | null
 	optimisticUserMessage: OptimisticUserMessage | null
 	viewingStreamingBranch: boolean
+	runActivities?: RunActivityState[]
 }
 
 export interface BuildRunBlocksResult {
@@ -377,35 +432,88 @@ export interface BuildRunBlocksResult {
  * pure function - no reactive state or side effects.
  */
 export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult {
-	const { messages, userId, streamingAssistant, optimisticUserMessage, viewingStreamingBranch } =
-		input
-
-	const sorted = messages.slice().sort((a, b) => {
-		return getMessageCreatedAt(a).getTime() - getMessageCreatedAt(b).getTime()
-	})
+	const {
+		messages,
+		userId,
+		streamingAssistant,
+		optimisticUserMessage,
+		viewingStreamingBranch,
+		runActivities = [],
+	} = input
 
 	const blocks: RunBlock[] = []
-	const byRun = new Map<string, RunBlock>()
-	const seenToolCalls = new Map<string, Set<string>>()
 	const collectedToolCalls: ToolCall[] = []
 	const collectedToolResults: ToolResult[] = []
+	type ActiveBlock = {
+		block: RunBlock
+		sourceRunId: string
+		sourceAgentId: string | null
+		seenToolCalls: Set<string>
+	}
+	let activeBlock: ActiveBlock | null = null
+	const activitiesByMessage = new Map<string, RunActivityState[]>()
+	for (const activity of runActivities) {
+		const current = activitiesByMessage.get(activity.messageId) ?? []
+		current.push(activity)
+		activitiesByMessage.set(activity.messageId, current)
+	}
+	for (const activities of activitiesByMessage.values()) {
+		activities.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime())
+	}
+	/** place run activities immediately after their timeline anchor message. */
+	const pushRunActivities = (block: RunBlock, messageId: string): void => {
+		for (const activity of activitiesByMessage.get(messageId) ?? []) {
+			block.items.push({ kind: 'run_activity', activity })
+		}
+	}
 
-	const ensureBlock = (runId: string, startedAt: Date, title: string): RunBlock => {
-		const existing = byRun.get(runId)
-		if (existing) return existing
+	const createBlock = (
+		sourceRunId: string,
+		sourceAgentId: string | null,
+		startedAt: Date,
+		title: string,
+		anchorId: string
+	): ActiveBlock => {
 		const block: RunBlock = {
-			runId,
+			runId: `${sourceRunId}:${anchorId}`,
+			agentId: sourceAgentId,
 			startedAt,
 			title,
 			items: [],
 			responseRootId: null,
 		}
-		byRun.set(runId, block)
 		blocks.push(block)
-		return block
+		return { block, sourceRunId, sourceAgentId, seenToolCalls: new Set() }
 	}
 
-	for (const msg of sorted) {
+	const hasResponseItems = (block: RunBlock): boolean =>
+		block.items.some((item) => item.kind !== 'user' && item.kind !== 'optimistic_user')
+
+	const ensureResponseBlock = (
+		sourceRunId: string,
+		sourceAgentId: string | null,
+		msg: ApiMessage
+	): ActiveBlock => {
+		if (activeBlock && activeBlock.sourceRunId === sourceRunId) {
+			if (activeBlock.sourceAgentId === sourceAgentId) return activeBlock
+			if (!activeBlock.sourceAgentId && sourceAgentId) {
+				activeBlock.sourceAgentId = sourceAgentId
+				activeBlock.block.agentId = sourceAgentId
+				return activeBlock
+			}
+			if (!hasResponseItems(activeBlock.block)) return activeBlock
+		}
+		activeBlock = createBlock(
+			sourceRunId,
+			sourceAgentId,
+			getMessageCreatedAt(msg),
+			'assistant',
+			msg.id
+		)
+		return activeBlock
+	}
+
+	for (const msg of messages) {
 		if (streamingAssistant && msg.id === streamingAssistant.messageId) continue
 
 		// tool results don't contribute visible items to blocks - handle early
@@ -413,23 +521,45 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		if (msg.type === 'tool') {
 			const result = parseToolResult(msg)
 			if (result) collectedToolResults.push(result)
+			const sourceRunId = getRunId(msg)
+			const sourceAgentId =
+				activeBlock && activeBlock.sourceRunId === sourceRunId
+					? activeBlock.sourceAgentId
+					: null
+			const blockState = ensureResponseBlock(sourceRunId, sourceAgentId, msg)
+			if (blockState.block.responseRootId === null) {
+				blockState.block.responseRootId = msg.id
+			}
+			pushRunActivities(blockState.block, msg.id)
 			continue
 		}
 
-		const runId = getRunId(msg)
-		const block = ensureBlock(runId, getMessageCreatedAt(msg), 'assistant')
-		let seen = seenToolCalls.get(runId)
-		if (!seen) {
-			seen = new Set()
-			seenToolCalls.set(runId, seen)
-		}
+		const sourceRunId = getRunId(msg)
 
 		if (msg.type === 'user') {
+			if (
+				!activeBlock ||
+				activeBlock.sourceRunId !== sourceRunId ||
+				hasResponseItems(activeBlock.block)
+			) {
+				activeBlock = createBlock(
+					sourceRunId,
+					null,
+					getMessageCreatedAt(msg),
+					'assistant',
+					msg.id
+				)
+			}
 			const align: 'left' | 'right' =
 				userId && msg.sender_user_id && msg.sender_user_id !== userId ? 'left' : 'right'
-			block.items.push({ kind: 'user', message: msg, align })
+			activeBlock.block.items.push({ kind: 'user', message: msg, align })
+			pushRunActivities(activeBlock.block, msg.id)
 			continue
 		}
+
+		const sourceAgentId = getMessageAgentId(msg)
+		const blockState = ensureResponseBlock(sourceRunId, sourceAgentId, msg)
+		const block = blockState.block
 
 		if (block.responseRootId === null) {
 			block.responseRootId = msg.id
@@ -440,21 +570,57 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 			if (text.length > 0) block.items.push({ kind: 'assistant', message: msg })
 			for (const tc of parseToolCalls(msg)) {
 				collectedToolCalls.push(tc)
-				if (!seen.has(tc.id)) {
-					seen.add(tc.id)
+				if (!blockState.seenToolCalls.has(tc.id)) {
+					blockState.seenToolCalls.add(tc.id)
 					block.items.push({ kind: 'tool', toolCallId: tc.id })
 				}
 			}
+			pushRunActivities(block, msg.id)
 			continue
 		}
 	}
 
 	if (streamingAssistant && viewingStreamingBranch) {
-		const runId = streamingAssistant.runId ?? `legacy-${streamingAssistant.messageId}`
-		const block = ensureBlock(runId, streamingAssistant.timestamp, 'assistant')
+		const sourceRunId = streamingAssistant.runId ?? `legacy-${streamingAssistant.messageId}`
+		const sourceAgentId = streamingAssistant.senderAgentId
+		const completedToolCallIds = new Set(
+			collectedToolResults.map((result) => result.toolCallId)
+		)
+		if (
+			!activeBlock ||
+			activeBlock.sourceRunId !== sourceRunId ||
+			(hasResponseItems(activeBlock.block) &&
+				activeBlock.sourceAgentId !== null &&
+				activeBlock.sourceAgentId !== sourceAgentId)
+		) {
+			activeBlock = createBlock(
+				sourceRunId,
+				sourceAgentId,
+				streamingAssistant.timestamp,
+				'assistant',
+				streamingAssistant.messageId
+			)
+		} else if (!activeBlock.sourceAgentId && sourceAgentId) {
+			activeBlock.sourceAgentId = sourceAgentId
+			activeBlock.block.agentId = sourceAgentId
+		} else if (!hasResponseItems(activeBlock.block)) {
+			activeBlock.sourceAgentId = sourceAgentId
+			activeBlock.block.agentId = sourceAgentId
+		}
+		const block = activeBlock.block
 
 		if (optimisticUserMessage) {
-			block.items.push({
+			if (hasResponseItems(block)) {
+				activeBlock = createBlock(
+					sourceRunId,
+					sourceAgentId,
+					optimisticUserMessage.timestamp,
+					'pending',
+					`optimistic-${optimisticUserMessage.timestamp.getTime()}`
+				)
+			}
+			const targetBlock = activeBlock.block
+			targetBlock.items.push({
 				kind: 'optimistic_user',
 				text: optimisticUserMessage.text,
 				attachments: optimisticUserMessage.attachments,
@@ -462,26 +628,47 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 			})
 		}
 
-		if (block.responseRootId === null) {
-			block.responseRootId = streamingAssistant.messageId
+		const targetBlockState = activeBlock
+		const targetBlock = targetBlockState.block
+		if (targetBlock.responseRootId === null) {
+			targetBlock.responseRootId = streamingAssistant.messageId
 		}
 
-		let seen = seenToolCalls.get(runId)
-		if (!seen) {
-			seen = new Set()
-			seenToolCalls.set(runId, seen)
+		const hasStreamingText = streamingAssistant.content.trim().length > 0
+		const hasUnresolvedPreviousToolCalls = Array.from(targetBlockState.seenToolCalls).some(
+			(toolCallId) => !completedToolCallIds.has(toolCallId)
+		)
+		// only unresolved streaming tool calls suppress the text placeholder.
+		// once a tool result arrives, the placeholder must reappear so the
+		// "thinking" animation shows again before the model's next token.
+		const hasUnresolvedStreamingToolCalls = streamingAssistant.toolCalls.some(
+			(toolCall) => !completedToolCallIds.has(toolCall.id)
+		)
+		const userMessagePending = optimisticUserMessage !== null
+		if (
+			hasStreamingText ||
+			(!userMessagePending &&
+				!hasUnresolvedPreviousToolCalls &&
+				!hasUnresolvedStreamingToolCalls)
+		) {
+			targetBlock.items.push({ kind: 'streaming_assistant' })
 		}
-		block.items.push({ kind: 'streaming_assistant' })
 		for (const tc of streamingAssistant.toolCalls) {
 			collectedToolCalls.push(tc)
-			if (!seen.has(tc.id)) {
-				seen.add(tc.id)
-				block.items.push({ kind: 'streaming_tool', toolCallId: tc.id })
+			if (!targetBlockState.seenToolCalls.has(tc.id)) {
+				targetBlockState.seenToolCalls.add(tc.id)
+				targetBlock.items.push({ kind: 'streaming_tool', toolCallId: tc.id })
 			}
 		}
 	} else if (optimisticUserMessage && viewingStreamingBranch) {
 		const runId = `pending-user-${optimisticUserMessage.timestamp.getTime()}`
-		const block = ensureBlock(runId, optimisticUserMessage.timestamp, 'pending')
+		const block = createBlock(
+			runId,
+			null,
+			optimisticUserMessage.timestamp,
+			'pending',
+			`optimistic-${optimisticUserMessage.timestamp.getTime()}`
+		).block
 		block.items.push({
 			kind: 'optimistic_user',
 			text: optimisticUserMessage.text,
@@ -490,18 +677,26 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		})
 	}
 
-	return { blocks, toolCalls: collectedToolCalls, toolResults: collectedToolResults }
+	return {
+		blocks: blocks.filter((block) => block.items.length > 0),
+		toolCalls: collectedToolCalls,
+		toolResults: collectedToolResults,
+	}
 }
 
 // run block queries
 
-export function getBlockResponseItems(
-	block: RunBlock
-): Array<
-	| { kind: 'assistant'; message: ApiMessage }
-	| { kind: 'tool'; toolCallId: string }
-	| { kind: 'streaming_assistant' }
-	| { kind: 'streaming_tool'; toolCallId: string }
+export function getBlockResponseItems(block: RunBlock): Array<
+	Exclude<
+		RunItem,
+		| { kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
+		| {
+				kind: 'optimistic_user'
+				text: string
+				attachments: PendingAttachment[]
+				timestamp: Date
+		  }
+	>
 > {
 	return block.items.filter(
 		(
@@ -525,7 +720,9 @@ export function getBlockFirstAssistant(block: RunBlock): ApiMessage | null {
 }
 
 export function blockHasStreamingAssistant(block: RunBlock): boolean {
-	return block.items.some((item) => item.kind === 'streaming_assistant')
+	return block.items.some(
+		(item) => item.kind === 'streaming_assistant' || item.kind === 'streaming_tool'
+	)
 }
 
 /** convert pending attachments to media parts for optimistic rendering before the real message arrives */
@@ -568,6 +765,7 @@ type ResponseItem = ReturnType<typeof getBlockResponseItems>[number]
 
 export type ResponseSegment =
 	| { type: 'assistant'; item: { kind: 'assistant'; message: ApiMessage } }
+	| { type: 'run_activity'; activity: RunActivityState }
 	| { type: 'streaming_assistant'; item: { kind: 'streaming_assistant' } }
 	| { type: 'tool_group'; toolCallIds: string[] }
 
@@ -593,6 +791,8 @@ export function groupResponseItems(items: ResponseItem[]): ResponseSegment[] {
 			flushTools()
 			if (item.kind === 'assistant') {
 				segments.push({ type: 'assistant', item })
+			} else if (item.kind === 'run_activity') {
+				segments.push({ type: 'run_activity', activity: item.activity })
 			} else if (item.kind === 'streaming_assistant') {
 				segments.push({ type: 'streaming_assistant', item })
 			}

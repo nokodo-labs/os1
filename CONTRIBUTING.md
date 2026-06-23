@@ -49,11 +49,12 @@ feat!: change API response format
 
 ### python (backend)
 
-- python 3.13+ features and type hints everywhere
+- python 3.14+ features and type hints everywhere
 - SQLAlchemy 2.0+ with `Mapped` annotations
 - Pydantic v2.11+ for validation
 - tabs for indentation, unix line endings
 - Ruff for formatting and linting
+- ty for type checking
 - no `type: ignore` or `noqa` comments - fix the actual issue
 - no `Any` type unless absolutely necessary
 - no `cast()` unless it's the only way
@@ -64,6 +65,7 @@ feat!: change API response format
 cd backend
 uv run ruff format .
 uv run ruff check . --fix
+uv run ty check . ../tools/autogen-migration.py ../tools/export-openapi.py
 uv run pytest -v
 ```
 

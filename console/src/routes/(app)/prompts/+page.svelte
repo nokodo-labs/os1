@@ -15,16 +15,16 @@
 		ArrowDown,
 		ArrowUp,
 		BookOpen,
+		ChevronLeft,
+		ChevronRight,
 		Clock,
 		Hash,
 		Plus,
+		RefreshCw,
+		Save,
 		Terminal,
 		Trash2,
 		X,
-		ChevronLeft,
-		ChevronRight,
-		Save,
-		RefreshCw,
 	} from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
@@ -60,6 +60,7 @@
 	let error = $state<string | null>(null)
 	let modalError = $state<string | null>(null)
 	let hasNext = $state(false)
+	let total = $state(0)
 
 	let showModal = $state(false)
 	let modalMode = $state<'create' | 'edit'>('create')
@@ -129,13 +130,18 @@
 
 		isLoading = true
 		error = null
-		api.GET('/v1/prompts', {
-			params: { query: { skip, limit, sort_by: sortKey, sort_dir: sortDir } },
-		})
-			.then((r) => unwrap(r))
-			.then((result) => {
+		Promise.all([
+			api
+				.GET('/v1/prompts', {
+					params: { query: { skip, limit, sort_by: sortKey, sort_dir: sortDir } },
+				})
+				.then((r) => unwrap(r)),
+			api.GET('/v1/prompts/count').then((r) => unwrap(r)),
+		])
+			.then(([result, count]) => {
 				prompts = result
-				hasNext = result.length === limit
+				total = count
+				hasNext = (pageIndex + 1) * limit < count
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load prompts'
@@ -312,7 +318,9 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{prompts.length > 0 ? ` \u00b7 ${prompts.length} items` : ''}
+					{total > 0
+						? `items ${pageIndex * limit + 1}–${pageIndex * limit + prompts.length} of ${total}`
+						: ''}
 				</span>
 				<Button
 					variant="outline"
@@ -357,12 +365,18 @@
 						>
 							<div class="flex items-start justify-between gap-4">
 								<div class="flex min-w-0 flex-1 items-start gap-4">
-									<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+									<div
+										class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fuchsia-500/15 text-fuchsia-400"
+									>
 										<Terminal class="h-5 w-5" />
 									</div>
 									<div class="min-w-0 flex-1 space-y-1">
-										<span class="truncate text-base font-medium text-zinc-100">{p.command}</span>
-										<div class="font-mono text-[10px] opacity-50 flex items-center gap-1.5">
+										<span class="truncate text-base font-medium text-zinc-100"
+											>{p.command}</span
+										>
+										<div
+											class="flex items-center gap-1.5 font-mono text-[10px] opacity-50"
+										>
 											<Hash class="h-3 w-3" />
 											{p.id}
 										</div>
@@ -372,7 +386,7 @@
 									<Button
 										variant="ghost"
 										size="icon"
-										class="h-8 w-8 text-zinc-400 hover:text-red-500 hover:bg-red-500/10"
+										class="h-8 w-8 text-zinc-400 hover:bg-red-500/10 hover:text-red-500"
 										onclick={(e: Event) => {
 											e.stopPropagation()
 											handleDelete(p.id)
@@ -409,6 +423,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[min(768px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
 		>
 			<div

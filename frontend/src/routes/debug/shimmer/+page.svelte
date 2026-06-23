@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { browser, dev } from '$app/environment'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import { DropdownSelect } from '$lib/components/primitives'
 	import { onDestroy } from 'svelte'
 
 	type PreviewBackground = 'glass' | 'dark' | 'light'
@@ -11,6 +12,11 @@
 	let fontSizeRem = $state(3.25)
 	let shimmerSeconds = $state(1.8)
 	let background = $state<PreviewBackground>('glass')
+	const backgroundOptions = [
+		{ value: 'glass', label: 'glass' },
+		{ value: 'dark', label: 'dark' },
+		{ value: 'light', label: 'light' },
+	]
 
 	let isDark = $state<boolean>(false)
 	let previousDarkClass: boolean | null = null
@@ -106,7 +112,7 @@
 			<div class="border-foreground/10 mt-4 overflow-hidden rounded-2xl border bg-black/30">
 				<iframe
 					src={splashPreviewSrc}
-					class="h-[780px] w-full"
+					class="h-195 w-full"
 					bind:this={splashIframe}
 					title="splash preview"
 				></iframe>
@@ -150,19 +156,18 @@
 
 				<label class="flex items-center justify-between gap-3 text-sm">
 					<span class="text-muted-foreground">background</span>
-					<select
-						class="border-foreground/10 rounded-xl border bg-black/30 px-3 py-2 text-sm"
-						bind:value={background}
-					>
-						<option value="glass">glass</option>
-						<option value="dark">dark</option>
-						<option value="light">light</option>
-					</select>
+					<DropdownSelect
+						options={backgroundOptions}
+						value={background}
+						onchange={(value) => (background = value as PreviewBackground)}
+						ariaLabel="preview background"
+						buttonClass="rounded-xl px-3 py-2"
+					/>
 				</label>
 			</div>
 
 			<div class="border-foreground/10 mt-5 overflow-hidden rounded-2xl border">
-				<div class="grid min-h-[780px] place-items-center p-10 {backgroundClass}">
+				<div class="grid min-h-195 place-items-center p-10 {backgroundClass}">
 					<div style={loaderVars}>
 						<NokodoLoader {shimmer} {expanded} className="opacity-100" />
 					</div>

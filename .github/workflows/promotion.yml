@@ -49,7 +49,7 @@ jobs:
       - name: check for differences between branches
         id: diff
         if: steps.config.outputs.has_config == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const { data } = await github.rest.repos.compareCommits({
@@ -76,9 +76,40 @@ jobs:
         run: |
           git fetch origin "+refs/heads/${{ steps.config.outputs.target_branch }}:refs/heads/${{ steps.config.outputs.target_branch }}"
 
+      - name: create conflict-free promotion branch
+        if: steps.config.outputs.has_config == 'true' && steps.diff.outputs.has_diff == 'true'
+        id: merge
+        run: |
+          set -euo pipefail
+
+          SOURCE="${{ steps.config.outputs.source_branch }}"
+          TARGET="${{ steps.config.outputs.target_branch }}"
+          MERGE_BRANCH="promote/${SOURCE}-to-${TARGET}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # create the promotion branch from source
+          git checkout -B "$MERGE_BRANCH" "origin/$SOURCE"
+
+          # merge target into it so the PR is always conflict-free.
+          # -X ours resolves conflicts (typically version files diverged by
+          # independent releases on each branch) in favor of source.
+          if ! git merge "origin/$TARGET" --no-edit -X ours; then
+            echo "::warning::merge conflicts auto-resolved via -X ours"
+            git checkout --ours -- . 2>/dev/null || true
+            git add -A
+            git -c core.editor=true merge --continue
+          fi
+
+          git push origin "$MERGE_BRANCH" --force
+          git checkout "$SOURCE"
+
+          echo "branch=$MERGE_BRANCH" >> $GITHUB_OUTPUT
+
       - name: setup Node.js
         if: steps.config.outputs.has_config == 'true' && steps.diff.outputs.has_diff == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
 
@@ -117,6 +148,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SOURCE_BRANCH: ${{ steps.config.outputs.source_branch }}
           TARGET_BRANCH: ${{ steps.config.outputs.target_branch }}
+          MERGE_BRANCH: ${{ steps.merge.outputs.branch }}
           PR_TITLE: "chore(promotion): promote ${{ steps.config.outputs.source_branch }} to ${{ steps.config.outputs.target_branch }}"
           PR_BODY: |
             ## 🤖 automated promotion
@@ -130,7 +162,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          pr_number=$(gh pr list --head "$SOURCE_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          pr_number=$(gh pr list --head "$MERGE_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number' 2>/dev/null || echo "")
 
           if [ -n "$pr_number" ]; then
             echo "updating existing PR #$pr_number"
@@ -144,6 +176,13 @@ jobs:
               --title "$PR_TITLE" \
               --body-file - \
               --base "$TARGET_BRANCH" \
-              --head "$SOURCE_BRANCH" \
+              --head "$MERGE_BRANCH" \
               --label "bot,promotion"
+          fi
+
+          # close any legacy promotion PR that used the source branch directly
+          legacy_pr=$(gh pr list --head "$SOURCE_BRANCH" --base "$TARGET_BRANCH" --label "promotion" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          if [ -n "$legacy_pr" ]; then
+            echo "closing legacy promotion PR #$legacy_pr"
+            gh pr close "$legacy_pr" --comment "superseded by merge-branch promotion PR for conflict-free updates." 2>/dev/null || true
           fi

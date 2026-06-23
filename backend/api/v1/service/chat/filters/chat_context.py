@@ -1,4 +1,4 @@
-"""chat context filter - injects context from other chats into the system prompt."""
+"""chat context filter. injects context from other chats into the system prompt."""
 
 from __future__ import annotations
 
@@ -12,14 +12,19 @@ from sqlalchemy.orm import selectinload
 
 from api.models.access_rule import AccessLevel
 from api.models.thread import Thread
+from api.models.thread_summary import SummaryPurpose
+from api.permissions import ResourceType
+from api.schemas.preferences import AIPreferences
 from api.schemas.search import SearchMode, SearchParams
 from api.settings import settings as app_settings
 from api.settings.settings import AIChatContextSettings
 from api.v1.service import threads as thread_service
-from api.v1.service.authorization import thread_access_predicate
+from api.v1.service.authorization import resource_access_predicate
 from api.v1.service.chat.filters.base import Filter
-from api.v1.service.prompt_runtime import SENTINEL_CHAT_CONTEXT
-from api.v1.service.sorting import apply_sort
+from api.v1.service.listing import apply_sort
+from api.v1.service.prompts import SENTINEL_CHAT_CONTEXT
+from nokodo_ai.agents import AgentIterationState
+from nokodo_ai.context import AgentContext
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
@@ -33,6 +38,11 @@ logger = logging.getLogger(__name__)
 
 class ChatContextFilter(Filter):
 	"""pre-filter that injects context from other conversations.
+
+	this filter is intentionally sentinel-driven: it only writes chat
+	context when the agent prompt contains ``{{ chat_context }}``. that lets
+	admins decide exactly where recalled chat context should appear in the
+	system prompt, and leaves agents that omit the sentinel unchanged.
 
 	supports two modes controlled by settings.ai.chat_context.mode:
 	- recent: top K chats ordered by last_activity_at descending.
@@ -49,30 +59,47 @@ class ChatContextFilter(Filter):
 
 	name: str = Field(default="chat_context")
 	description: str = Field(
-		default="injects context from other conversations into the system prompt"
+		default=(
+			"fills the chat_context prompt variable with relevant or recent "
+			"conversation context"
+		)
 	)
 
 	async def process(
 		self,
-		thread: SDKThread,
+		state: AgentIterationState[AppContext],
+		agent_context: AgentContext,
 		app_context: AppContext | None,
-	) -> SDKThread:
+	) -> AgentIterationState[AppContext]:
+		_ = agent_context
 		if app_context is None:
 			raise ValueError("AppContext is required for ChatContextFilter")
+		thread = state.thread
 
 		cfg = app_settings.ai.chat_context
 		if not cfg.enabled:
 			self._replace_sentinel(thread, SENTINEL_CHAT_CONTEXT, "")
-			return thread
+			return state
 
 		# locate system message and check for the injection sentinel.
 		system_msg = thread.system_message
 		if system_msg is None:
-			return thread
+			return state
 
 		system_text = system_msg.text
 		if not system_text or SENTINEL_CHAT_CONTEXT not in system_text:
-			return thread
+			return state
+
+		ai = app_context.principal.user.prefs.ai
+		if isinstance(ai, AIPreferences) and (
+			ai.memories_enabled is False or ai.chat_recall is False
+		):
+			logger.info(
+				"chat context: user has disabled chat recall or memories; "
+				"skipping context injection"
+			)
+			self._replace_sentinel(thread, SENTINEL_CHAT_CONTEXT, "")
+			return state
 
 		current_thread_id = app_context.thread_id
 
@@ -87,14 +114,13 @@ class ChatContextFilter(Filter):
 
 		content = self._format_threads(threads) if threads else ""
 		self._replace_sentinel(thread, SENTINEL_CHAT_CONTEXT, content)
-		return thread
+		return state
 
-	# -- mode implementations --
+	# mode implementations
 
 	async def _fetch_recent(
 		self,
 		app_context: AppContext,
-		*,
 		cfg: AIChatContextSettings,
 		exclude_id: TypeID | None,
 	) -> list[Thread]:
@@ -106,8 +132,9 @@ class ChatContextFilter(Filter):
 			select(Thread)
 			.options(selectinload(Thread.summaries))
 			.where(
-				thread_access_predicate(
+				resource_access_predicate(
 					principal,
+					ResourceType.THREAD,
 					required_level=AccessLevel.READER,
 				),
 				Thread.is_temporary.is_(False),
@@ -132,7 +159,6 @@ class ChatContextFilter(Filter):
 		self,
 		thread: SDKThread,
 		app_context: AppContext,
-		*,
 		cfg: AIChatContextSettings,
 		exclude_id: TypeID | None,
 	) -> list[Thread]:
@@ -155,7 +181,7 @@ class ChatContextFilter(Filter):
 			query_text = "\n".join(_turns)
 
 		try:
-			page = await thread_service.search_threads(
+			scored = await thread_service.search_threads(
 				query_text,
 				session,
 				principal=principal,
@@ -167,29 +193,24 @@ class ChatContextFilter(Filter):
 			logger.exception("chat context: relevant search failed")
 			return []
 
-		if not page.items:
+		if not scored:
 			return []
 
-		# split by score presence: vector results have a score, autocomplete do not.
-		scored = [
-			item
-			for item in page.items
-			if item.score is not None and item.score >= cfg.similarity_threshold
-		]
-		unscored = [item for item in page.items if item.score is None]
+		# above-threshold hits first, then weaker matches fill remaining slots.
+		above = [s for s in scored if s.score >= cfg.similarity_threshold]
+		below = [s for s in scored if s.score < cfg.similarity_threshold]
 
-		# scored results first, then fill remaining slots with unscored.
-		merged: list = []
+		merged: list[Thread] = []
 		seen: set[str] = set()
-		for item in (*scored, *unscored):
-			sid = str(item.id)
+		for s in (*above, *below):
+			sid = str(s.item.id)
 			if sid not in seen:
-				merged.append(item)
+				merged.append(s.item)
 				seen.add(sid)
 			if len(merged) >= cfg.top_k:
 				break
 
-		result_ids = [item.id for item in merged]
+		result_ids = [thread.id for thread in merged]
 		# exclude current thread
 		if exclude_id is not None:
 			result_ids = [rid for rid in result_ids if str(rid) != str(exclude_id)]
@@ -207,7 +228,7 @@ class ChatContextFilter(Filter):
 		# preserve relevance order
 		return [by_id[str(rid)] for rid in result_ids if str(rid) in by_id]
 
-	# -- helpers --
+	# helpers
 
 	def _format_threads(self, threads: list[Thread]) -> str:
 		"""serialize thread context as a JSON document."""
@@ -219,11 +240,23 @@ class ChatContextFilter(Filter):
 			if t.tags:
 				entry["tags"] = t.tags
 
-			# prefer the most recent summary if available
+			# prefer catalog summaries for cross-chat context.
 			summary_text = None
 			if t.summaries:
-				latest = max(t.summaries, key=lambda s: s.created_at)
-				summary_text = latest.content
+				active = [
+					summary
+					for summary in t.summaries
+					if getattr(summary, "superseded_by_id", None) is None
+				]
+				catalog = [
+					summary
+					for summary in active
+					if getattr(summary, "purpose", None) == SummaryPurpose.CATALOG
+				]
+				latest_pool = catalog or active
+				if latest_pool:
+					latest = max(latest_pool, key=lambda summary: summary.created_at)
+					summary_text = latest.content
 
 			if summary_text:
 				entry["summary"] = summary_text

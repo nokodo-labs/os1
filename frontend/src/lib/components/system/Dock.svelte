@@ -1,15 +1,18 @@
 <script lang="ts">
-	import AdjustmentsHorizontal from '$lib/components/icons/AdjustmentsHorizontal.svelte'
+	import EmptyState from '$lib/components/EmptyState.svelte'
 	import Bell from '$lib/components/icons/Bell.svelte'
 	import BellSlash from '$lib/components/icons/BellSlash.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
+	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
 	import ChevronUp from '$lib/components/icons/ChevronUp.svelte'
-	import Computer from '$lib/components/icons/Computer.svelte'
 	import Eye from '$lib/components/icons/Eye.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import Map from '$lib/components/icons/Map.svelte'
 	import Moon from '$lib/components/icons/Moon.svelte'
+	import Pencil from '$lib/components/icons/Pencil.svelte'
+	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import Sun from '$lib/components/icons/Sun.svelte'
+	import XMark from '$lib/components/icons/XMark.svelte'
 	import Notification from '$lib/components/system/Notification.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { useTheme, type ThemeMode } from '$lib/contexts/themeContext.svelte'
@@ -19,6 +22,7 @@
 		type Notification as NotificationType,
 	} from '$lib/stores/notifications.svelte'
 	import { session } from '$lib/stores/session.svelte'
+	import SvelteVirtualList from '@humanspeak/svelte-virtual-list'
 	import type { Component } from 'svelte'
 	import { cubicOut } from 'svelte/easing'
 	import { slide } from 'svelte/transition'
@@ -35,6 +39,20 @@
 
 	type QuickActionId = 'dnd' | 'theme' | 'location' | 'offline'
 	let quickActionOrder = $state<QuickActionId[]>(['dnd', 'theme', 'location', 'offline'])
+
+	type DockNotificationRow =
+		| { kind: 'notification'; id: string; notification: NotificationType }
+		| { kind: 'dismiss-all'; id: 'dismiss-all' }
+
+	const notificationRows = $derived.by((): DockNotificationRow[] => {
+		const rows: DockNotificationRow[] = notifications.list.map((notification) => ({
+			kind: 'notification',
+			id: notification.id,
+			notification,
+		}))
+		if (notifications.list.length > 0) rows.push({ kind: 'dismiss-all', id: 'dismiss-all' })
+		return rows
+	})
 
 	// -- notification lifecycle --
 
@@ -63,17 +81,18 @@
 
 	function getNotificationTitle(notif: NotificationType): string {
 		const data = notif.event?.data as Record<string, unknown> | undefined
-		return (data?.title as string) || notif.event?.type || 'notification'
+		return notif.title || (data?.title as string) || notif.event?.type || 'notification'
 	}
 
 	function getNotificationBody(notif: NotificationType): string {
 		const data = notif.event?.data as Record<string, unknown> | undefined
-		return (data?.body as string) || ''
+		return notif.body || (data?.body as string) || ''
 	}
 
 	function getNotificationIcon(notif: NotificationType): string | null {
 		const data = notif.event?.data as Record<string, unknown> | undefined
-		const explicit = data && typeof data.icon_url === 'string' ? data.icon_url : null
+		const explicit =
+			notif.icon_url || (data && typeof data.icon_url === 'string' ? data.icon_url : null)
 		if (explicit) return explicit
 		const agentId = data && typeof data.agent_id === 'string' ? data.agent_id : null
 		if (!agentId) return null
@@ -82,7 +101,9 @@
 
 	function getNotificationImage(notif: NotificationType): string | null {
 		const data = notif.event?.data as Record<string, unknown> | undefined
-		return data && typeof data.image_url === 'string' ? data.image_url : null
+		return (
+			notif.image_url || (data && typeof data.image_url === 'string' ? data.image_url : null)
+		)
 	}
 
 	function handleMarkRead(notifId: string): void {
@@ -105,7 +126,7 @@
 	}
 
 	function cycleTheme(): void {
-		const modes: ThemeMode[] = ['system', 'light', 'dark']
+		const modes: ThemeMode[] = ['auto', 'light', 'dark']
 		const idx = modes.indexOf(theme.mode)
 		theme.setMode(modes[(idx + 1) % modes.length])
 	}
@@ -116,7 +137,7 @@
 
 	function isActionActive(id: QuickActionId): boolean {
 		if (id === 'dnd') return isDnD
-		if (id === 'theme') return theme.mode !== 'system'
+		if (id === 'theme') return theme.mode !== 'auto'
 		if (id === 'location') return isLocationOn
 		if (id === 'offline') return isAppearOffline
 		return false
@@ -129,7 +150,7 @@
 		if (id === 'theme') {
 			if (theme.mode === 'light') return Sun as IconComp
 			if (theme.mode === 'dark') return Moon as IconComp
-			return Computer as IconComp
+			return Sparkles as IconComp
 		}
 		if (id === 'location') return Map as IconComp
 		if (id === 'offline') return isAppearOffline ? (EyeSlash as IconComp) : (Eye as IconComp)
@@ -164,12 +185,23 @@
 	}
 </script>
 
-<aside class="relative h-full w-full" aria-hidden={!chrome.isDockOpen}>
-	<div class="flex h-full flex-col gap-4" data-dock-panel>
+<aside class="relative h-full w-full" inert={!chrome.isDockOpen}>
+	<div class="flex h-full flex-col gap-3" data-dock-panel>
 		<!-- notifications -->
-		<div class="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
-			<div class="flex items-center justify-between px-5">
-				<div class="text-foreground/70 text-sm font-semibold">
+		<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+			<div class="flex shrink-0 items-center justify-between px-3 pb-2">
+				<button
+					type="button"
+					class="text-foreground relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full border border-transparent bg-transparent transition-all"
+					onclick={() => chrome.closeDock()}
+					aria-label="close dock"
+				>
+					<ChevronRight class="h-8 w-8" />
+				</button>
+
+				<div
+					class="text-foreground/70 flex min-w-0 items-center justify-end text-sm font-semibold"
+				>
 					notifications
 					{#if notifications.unreadCount > 0}
 						<span
@@ -179,54 +211,62 @@
 						</span>
 					{/if}
 				</div>
-				{#if notifications.list.length > 0}
-					<button
-						type="button"
-						class="interactive-subtle text-muted-foreground hover:text-foreground/80 text-xs"
-						onclick={handleDismissAll}
+			</div>
+
+			<div class="dock-notifications-rule" aria-hidden="true"></div>
+
+			<div class="relative min-h-0 flex-1 overflow-hidden" aria-label="notifications">
+				{#if !session.isLoggedIn}
+					<EmptyState label="log in to see notifications" compact class="h-full" />
+				{:else if notifications.list.length === 0}
+					<EmptyState label="no notifications" compact class="h-full" />
+				{:else}
+					<SvelteVirtualList
+						items={notificationRows}
+						defaultEstimatedItemHeight={96}
+						bufferSize={10}
+						containerClass="relative h-full min-h-0 w-full overflow-hidden"
+						viewportClass="dock-notifications-scroll absolute inset-0 w-full overflow-y-auto"
+						contentClass="relative min-h-full w-full"
+						itemsClass="absolute top-0 left-0 flex w-full flex-col gap-2 px-3 py-2"
 					>
-						dismiss all
-					</button>
+						{#snippet renderItem(row)}
+							{#if row.kind === 'notification'}
+								{@const notif = row.notification}
+								<Notification
+									notification={notif}
+									iconUrl={getNotificationIcon(notif)}
+									imageUrl={getNotificationImage(notif)}
+									title={getNotificationTitle(notif)}
+									body={getNotificationBody(notif)}
+									timestamp={new Date(notif.created_at)}
+									isUnread={!notif.read_at}
+									onMarkRead={handleMarkRead}
+									onDismiss={handleDismiss}
+								/>
+							{:else}
+								<div class="pt-1">
+									<button
+										type="button"
+										class="interactive-subtle text-muted-foreground hover:text-foreground/80 flex w-full items-center justify-center gap-1.5 py-2 text-xs"
+										onclick={handleDismissAll}
+									>
+										<XMark class="h-3.5 w-3.5" />
+										dismiss all
+									</button>
+								</div>
+							{/if}
+						{/snippet}
+					</SvelteVirtualList>
 				{/if}
 			</div>
 
-			<div
-				class="flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto"
-				aria-label="notifications"
-			>
-				{#if !session.isLoggedIn}
-					<div
-						class="rounded-popup bg-muted/20 text-muted-foreground px-4 py-3 text-center text-sm"
-					>
-						log in to see notifications
-					</div>
-				{:else if notifications.list.length === 0}
-					<div
-						class="rounded-popup bg-muted/20 text-muted-foreground px-4 py-3 text-center text-sm"
-					>
-						no notifications
-					</div>
-				{:else}
-					{#each notifications.list as notif (notif.id)}
-						<Notification
-							notification={notif}
-							iconUrl={getNotificationIcon(notif)}
-							imageUrl={getNotificationImage(notif)}
-							title={getNotificationTitle(notif)}
-							body={getNotificationBody(notif)}
-							timestamp={new Date(notif.created_at)}
-							isUnread={!notif.read_at}
-							onMarkRead={handleMarkRead}
-							onDismiss={handleDismiss}
-						/>
-					{/each}
-				{/if}
-			</div>
+			<div class="dock-notifications-rule" aria-hidden="true"></div>
 		</div>
 
 		<!-- control center (android quick settings style) -->
 		<section
-			class="rounded-popup bg-muted/15 shrink-0 overflow-hidden"
+			class="dock-control-center rounded-popup bg-muted/15 shrink-0 overflow-hidden"
 			data-dock-panel
 			aria-label="control center"
 		>
@@ -245,7 +285,7 @@
 							aria-pressed={isManaging}
 							onclick={() => (isManaging = !isManaging)}
 						>
-							<AdjustmentsHorizontal class="h-4 w-4" />
+							<Pencil class="h-4 w-4" />
 						</button>
 					{/if}
 					<button
@@ -256,7 +296,7 @@
 							: 'expand control center'}
 						onclick={toggleCC}
 					>
-						<ChevronDown
+						<ChevronUp
 							class="h-4 w-4 transition-transform duration-300 {isCCExpanded
 								? 'rotate-180'
 								: ''}"
@@ -336,7 +376,7 @@
 							appearance
 						</div>
 						<div class="grid grid-cols-3 gap-1.5">
-							{#each ['system', 'light', 'dark'] as ThemeMode[] as modeOpt (modeOpt)}
+							{#each ['auto', 'light', 'dark'] as ThemeMode[] as modeOpt (modeOpt)}
 								{@const isSelected = theme.mode === modeOpt}
 								<button
 									type="button"
@@ -346,8 +386,8 @@
 										: 'bg-muted/10 text-foreground/50 hover:bg-muted/20 hover:text-foreground/70'}"
 									onclick={() => setThemeMode(modeOpt)}
 								>
-									{#if modeOpt === 'system'}
-										<Computer class="h-5 w-5" />
+									{#if modeOpt === 'auto'}
+										<Sparkles class="h-5 w-5" />
 									{:else if modeOpt === 'light'}
 										<Sun class="h-5 w-5" />
 									{:else}
@@ -369,3 +409,21 @@
 		</section>
 	</div>
 </aside>
+
+<style>
+	.dock-notifications-rule {
+		height: 1px;
+		width: 100%;
+		background: linear-gradient(
+			90deg,
+			transparent,
+			color-mix(in oklch, var(--foreground) 18%, transparent),
+			transparent
+		);
+	}
+
+	.dock-control-center {
+		margin-right: 0.75rem;
+		margin-left: 0.75rem;
+	}
+</style>

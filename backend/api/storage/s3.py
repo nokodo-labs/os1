@@ -42,7 +42,6 @@ class S3StorageBackend(StorageBackend):
 
 	def __init__(
 		self,
-		*,
 		bucket: str,
 		region: str = "us-east-1",
 		endpoint_url: str | None = None,

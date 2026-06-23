@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.models.role import Role
 from api.models.user import User
-from api.schemas import SortDir
 from api.schemas.role import Role as RoleSchema
-from api.schemas.role import RoleCreate, RoleUpdate
+from api.schemas.role import RoleCreate, RoleListFilters, RoleSortBy, RoleUpdate
+from api.schemas.sorting import SortDir
 from api.schemas.user import User as UserSchema
 from api.v1.service import roles as roles_service
 from api.v1.service.auth import Principal, get_current_principal
@@ -22,11 +24,11 @@ router = APIRouter(prefix="/roles", tags=["roles"])
 
 @router.get("", response_model=list[RoleSchema])
 async def read_roles(
+	filters: Annotated[RoleListFilters, Depends()],
 	skip: int = 0,
 	limit: int = 100,
-	sort_by: str = "priority",
+	sort_by: RoleSortBy = "priority",
 	sort_dir: SortDir = "desc",
-	user_id: TypeID | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[Role]:
@@ -38,7 +40,21 @@ async def read_roles(
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
-		user_id=str(user_id) if user_id else None,
+		filters=filters,
+	)
+
+
+@router.get("/count", response_model=int)
+async def count_roles(
+	filters: Annotated[RoleListFilters, Depends()],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> int:
+	"""count roles matching the list filters."""
+	return await roles_service.count_roles(
+		db,
+		principal=principal,
+		filters=filters,
 	)
 
 
@@ -108,6 +124,4 @@ async def set_role_members(
 	db: AsyncSession = Depends(get_db),
 ) -> list[User]:
 	"""replace the entire member list for a role with the given user IDs."""
-	return await roles_service.set_role_members(
-		role_id, [str(uid) for uid in body], db, principal=principal
-	)
+	return await roles_service.set_role_members(role_id, body, db, principal=principal)

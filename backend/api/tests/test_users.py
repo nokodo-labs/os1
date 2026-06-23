@@ -1,14 +1,93 @@
 """Tests for user endpoints."""
 
+from datetime import UTC, datetime
+from uuid import uuid4
+
 import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.block import Block
+from api.models.friendship import Friendship, FriendshipStatus
+from api.permissions import ActionPermission
 from api.schemas.user import UserCreate
+from api.settings import settings
 from api.v1.service import users as user_service
 from api.v1.service.auth import Principal
 from nokodo_ai.utils.typeid import new_typeid
+
+
+def auth_headers(auth: dict[str, object]) -> dict[str, str]:
+	headers = auth["headers"]
+	assert isinstance(headers, dict)
+	result: dict[str, str] = {}
+	for key, value in headers.items():
+		assert isinstance(key, str)
+		assert isinstance(value, str)
+		result[key] = value
+	return result
+
+
+def auth_user(auth: dict[str, object]) -> dict[str, object]:
+	user = auth["user"]
+	assert isinstance(user, dict)
+	result: dict[str, object] = {}
+	for key, value in user.items():
+		assert isinstance(key, str)
+		result[key] = value
+	return result
+
+
+async def create_test_user(
+	client: AsyncClient,
+	admin_headers: dict[str, str],
+	prefix: str,
+) -> dict[str, object]:
+	unique = uuid4().hex[:10]
+	response = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"{prefix}-{unique}@example.com",
+			"username": f"{prefix}{unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert response.status_code == 201
+	return response.json()
+
+
+async def grant_social_permissions(
+	client: AsyncClient,
+	admin_headers: dict[str, str],
+	user_id: object,
+	permissions: list[ActionPermission],
+) -> None:
+	assert isinstance(user_id, str)
+	unique = uuid4().hex[:10]
+	role_resp = await client.post(
+		"/v1/roles",
+		headers=admin_headers,
+		json={
+			"name": f"social-moderator-{unique}",
+			"default_permissions": {
+				"action_permissions": [permission.value for permission in permissions]
+			},
+		},
+	)
+	assert role_resp.status_code == 201
+	role = role_resp.json()
+	role_id = role["id"]
+	assert isinstance(role_id, str)
+
+	patch_resp = await client.patch(
+		f"/v1/users/{user_id}",
+		headers=admin_headers,
+		json={"role_ids": [role_id]},
+	)
+	assert patch_resp.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -33,6 +112,7 @@ async def test_create_user(client: AsyncClient) -> None:
 
 	data = response.json()
 	assert data["email"] == user_data["email"]
+	assert data["find_by_email"] is False
 	assert "id" in data
 	assert "created_at" in data
 
@@ -40,8 +120,7 @@ async def test_create_user(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_get_users(client: AsyncClient, admin_auth: dict[str, object]) -> None:
 	"""Test retrieving list of users."""
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = auth_headers(admin_auth)
 	response = await client.get("/v1/users", headers=headers)
 	assert response.status_code == 200
 	assert isinstance(response.json(), list)
@@ -52,8 +131,7 @@ async def test_get_users_sorting(
 	client: AsyncClient, admin_auth: dict[str, object]
 ) -> None:
 	"""List users supports server-side sort_by + sort_dir."""
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = auth_headers(admin_auth)
 
 	# Use lowercase alnum-only local parts so ordering is stable across DB collations.
 	created_emails = [
@@ -97,19 +175,20 @@ async def test_get_user_by_id(
 	user_auth: dict[str, object],
 ) -> None:
 	"""Test retrieving a specific user by ID."""
-	user = user_auth["user"]
-	assert isinstance(user, dict)
+	user = auth_user(user_auth)
 	user_id = user["id"]
+	assert isinstance(user_id, str)
+	user_email = user["email"]
+	assert isinstance(user_email, str)
 
 	# Then retrieve it
-	headers = user_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = auth_headers(user_auth)
 	response = await client.get(f"/v1/users/{user_id}", headers=headers)
 	assert response.status_code == 200
 
 	data = response.json()
 	assert data["id"] == user_id
-	assert data["email"] == user["email"]
+	assert data["email"] == user_email
 
 
 @pytest.mark.asyncio
@@ -117,10 +196,880 @@ async def test_get_nonexistent_user(
 	client: AsyncClient, admin_auth: dict[str, object]
 ) -> None:
 	"""Test retrieving a user that doesn't exist."""
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = auth_headers(admin_auth)
 	response = await client.get(f"/v1/users/{new_typeid('user')}", headers=headers)
 	assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_bulk_user_lookup_omits_inaccessible_users(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""bulk lookup returns active unblocked users with privacy redaction."""
+	admin_headers = auth_headers(admin_auth)
+	user_headers = auth_headers(user_auth)
+	current_user = auth_user(user_auth)
+	other_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": "bulk-private@example.com",
+			"username": "bulk_private",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert other_resp.status_code == 201
+	other_id = other_resp.json()["id"]
+
+	response = await client.post(
+		"/v1/users/bulk",
+		headers=user_headers,
+		json={"user_ids": [current_user["id"], other_id]},
+	)
+
+	assert response.status_code == 200
+	data = response.json()
+	assert [user["id"] for user in data] == [current_user["id"], other_id]
+	assert "email" not in data[0]
+	assert "email" not in data[1]
+
+
+@pytest.mark.asyncio
+async def test_admin_bulk_user_lookup_returns_requested_users(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+) -> None:
+	"""admins can resolve requested user summaries in bulk."""
+	headers = auth_headers(admin_auth)
+	admin_user = auth_user(admin_auth)
+	other_resp = await client.post(
+		"/v1/users",
+		headers=headers,
+		json={
+			"email": "bulk-admin-visible@example.com",
+			"username": "bulk_admin_visible",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert other_resp.status_code == 201
+
+	response = await client.post(
+		"/v1/users/bulk",
+		headers=headers,
+		json={"user_ids": [other_resp.json()["id"], admin_user["id"]]},
+	)
+
+	assert response.status_code == 200
+	assert [user["id"] for user in response.json()] == [
+		other_resp.json()["id"],
+		admin_user["id"],
+	]
+
+
+@pytest.mark.asyncio
+async def test_admin_user_list_q_matches_exact_id_only(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+) -> None:
+	"""admin q filters match IDs exactly, not by substring."""
+	headers = auth_headers(admin_auth)
+	unique = uuid4().hex[:10]
+	other_resp = await client.post(
+		"/v1/users",
+		headers=headers,
+		json={
+			"email": f"exact-id-{unique}@example.com",
+			"username": f"exactid{unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert other_resp.status_code == 201
+	target = other_resp.json()
+
+	exact_resp = await client.get(
+		"/v1/users",
+		headers=headers,
+		params={"q": target["id"]},
+	)
+	assert exact_resp.status_code == 200
+	assert target["id"] in [user["id"] for user in exact_resp.json()]
+
+	partial_resp = await client.get(
+		"/v1/users",
+		headers=headers,
+		params={"q": target["id"][-10:]},
+	)
+	assert partial_resp.status_code == 200
+	assert target["id"] not in [user["id"] for user in partial_resp.json()]
+
+
+@pytest.mark.asyncio
+async def test_user_search_respects_email_discoverability(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""email search only matches users that explicitly allow email discovery."""
+	admin_headers = auth_headers(admin_auth)
+	user_headers = auth_headers(user_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"hidden-email-{unique}@example.com",
+			"username": f"hiddenemail{unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={
+			"find_by_email": False,
+			"privacy": {
+				"allow_friend_requests": "private",
+			},
+		},
+	)
+	assert patch_resp.status_code == 200
+
+	hidden_resp = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": target["email"]},
+	)
+	assert hidden_resp.status_code == 200
+	assert target["id"] not in [user["id"] for user in hidden_resp.json()]
+
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={"find_by_email": True},
+	)
+	assert patch_resp.status_code == 200
+
+	visible_resp = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": target["email"]},
+	)
+	assert visible_resp.status_code == 200
+	results = [user for user in visible_resp.json() if user["id"] == target["id"]]
+	assert len(results) == 1
+	assert results[0]["email"] is None
+
+
+@pytest.mark.asyncio
+async def test_admin_social_search_bypasses_profile_privacy(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	db_session: AsyncSession,
+) -> None:
+	"""admins can search and view users despite privacy or block settings."""
+	admin_headers = auth_headers(admin_auth)
+	admin_user = auth_user(admin_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"admin-social-hidden-{unique}@example.com",
+			"username": f"adminsocial{unique}",
+			"display_name": f"Admin Hidden {unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={
+			"find_by_email": False,
+			"privacy": {"real_name": "private", "bio": "private"},
+		},
+	)
+	assert patch_resp.status_code == 200
+
+	name_resp = await client.get(
+		"/v1/users/search",
+		headers=admin_headers,
+		params={"q": target["display_name"]},
+	)
+	assert name_resp.status_code == 200
+	name_results = [user for user in name_resp.json() if user["id"] == target["id"]]
+	assert len(name_results) == 1
+	assert name_results[0]["display_name"] == target["display_name"]
+	assert name_results[0]["email"] == target["email"]
+
+	email_resp = await client.get(
+		"/v1/users/search",
+		headers=admin_headers,
+		params={"q": target["email"]},
+	)
+	assert email_resp.status_code == 200
+	assert target["id"] in [user["id"] for user in email_resp.json()]
+
+	username_resp = await client.get(
+		"/v1/users/search",
+		headers=admin_headers,
+		params={"q": target["username"]},
+	)
+	assert username_resp.status_code == 200
+	username_results = [
+		user for user in username_resp.json() if user["id"] == target["id"]
+	]
+	assert len(username_results) == 1
+	assert username_results[0]["display_name"] == target["display_name"]
+	assert username_results[0]["email"] == target["email"]
+
+	db_session.add(
+		Block(blocker_id=str(target["id"]), blocked_id=str(admin_user["id"]))
+	)
+	await db_session.commit()
+	blocked_resp = await client.get(
+		"/v1/users/search",
+		headers=admin_headers,
+		params={"q": target["username"]},
+	)
+	assert blocked_resp.status_code == 200
+	blocked_results = [
+		user for user in blocked_resp.json() if user["id"] == target["id"]
+	]
+	assert len(blocked_results) == 1
+	assert blocked_results[0]["display_name"] == target["display_name"]
+	assert blocked_results[0]["email"] == target["email"]
+
+
+@pytest.mark.asyncio
+async def test_user_blocks_can_be_managed_independently(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""blocks can be created, listed, and deleted outside friendship routes."""
+	admin_headers = auth_headers(admin_auth)
+	current_user = auth_user(user_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"blocked-{unique}@example.com",
+			"username": f"blocked{unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+
+	create_resp = await client.post(
+		f"/v1/users/{current_user['id']}/blocks",
+		headers=admin_headers,
+		json={"blocked_id": target["id"]},
+	)
+	assert create_resp.status_code == 201
+	created = create_resp.json()
+	assert created["blocker_id"] == current_user["id"]
+	assert created["blocked_id"] == target["id"]
+
+	list_resp = await client.get(
+		f"/v1/users/{current_user['id']}/blocks",
+		headers=admin_headers,
+	)
+	assert list_resp.status_code == 200
+	blocks = list_resp.json()
+	assert [block["blocked_id"] for block in blocks] == [target["id"]]
+
+	delete_resp = await client.delete(
+		f"/v1/users/{current_user['id']}/blocks/{target['id']}",
+		headers=admin_headers,
+	)
+	assert delete_resp.status_code == 204
+
+	after_delete_resp = await client.get(
+		f"/v1/users/{current_user['id']}/blocks",
+		headers=admin_headers,
+	)
+	assert after_delete_resp.status_code == 200
+	assert after_delete_resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_friend_request_write_uses_authenticated_user(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""admins can manage another user's friend requests via the path user."""
+	admin_headers = auth_headers(admin_auth)
+	current_user = auth_user(user_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"friend-target-{unique}@example.com",
+			"username": f"friendtarget{unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+
+	create_resp = await client.post(
+		f"/v1/users/{current_user['id']}/friends/requests",
+		headers=admin_headers,
+		json={"addressee_id": target["id"]},
+	)
+	assert create_resp.status_code == 201
+	created = create_resp.json()
+	assert created["requester_id"] == current_user["id"]
+	assert created["addressee_id"] == target["id"]
+
+
+@pytest.mark.asyncio
+async def test_regular_user_cannot_manage_other_users_social_graph(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""cross-user social graph writes require admin or delegated permissions."""
+	admin_headers = auth_headers(admin_auth)
+	user_headers = auth_headers(user_auth)
+	subject = await create_test_user(client, admin_headers, "socialsubject")
+	block_target = await create_test_user(client, admin_headers, "socialblock")
+	friend_target = await create_test_user(client, admin_headers, "socialfriend")
+
+	block_resp = await client.post(
+		f"/v1/users/{subject['id']}/blocks",
+		headers=user_headers,
+		json={"blocked_id": block_target["id"]},
+	)
+	assert block_resp.status_code == 403
+
+	friend_resp = await client.post(
+		f"/v1/users/{subject['id']}/friends/requests",
+		headers=user_headers,
+		json={"addressee_id": friend_target["id"]},
+	)
+	assert friend_resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_social_manage_permissions_allow_cross_user_social_graph_writes(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""delegated social permissions can manage another user's graph."""
+	admin_headers = auth_headers(admin_auth)
+	moderator_headers = auth_headers(user_auth)
+	moderator = auth_user(user_auth)
+	await grant_social_permissions(
+		client,
+		admin_headers,
+		moderator["id"],
+		[
+			ActionPermission.USER_FRIENDSHIPS_CREATE,
+			ActionPermission.USER_FRIENDSHIPS_MANAGE,
+			ActionPermission.USER_BLOCKS_CREATE,
+			ActionPermission.USER_BLOCKS_MANAGE,
+		],
+	)
+	subject = await create_test_user(client, admin_headers, "managedsubject")
+	block_target = await create_test_user(client, admin_headers, "managedblock")
+	friend_target = await create_test_user(client, admin_headers, "managedfriend")
+
+	block_resp = await client.post(
+		f"/v1/users/{subject['id']}/blocks",
+		headers=moderator_headers,
+		json={"blocked_id": block_target["id"]},
+	)
+	assert block_resp.status_code == 201
+	created_block = block_resp.json()
+	assert created_block["blocker_id"] == subject["id"]
+	assert created_block["blocked_id"] == block_target["id"]
+
+	friend_resp = await client.post(
+		f"/v1/users/{subject['id']}/friends/requests",
+		headers=moderator_headers,
+		json={"addressee_id": friend_target["id"]},
+	)
+	assert friend_resp.status_code == 201
+	created_request = friend_resp.json()
+	assert created_request["requester_id"] == subject["id"]
+	assert created_request["addressee_id"] == friend_target["id"]
+
+
+@pytest.mark.asyncio
+async def test_user_without_create_permission_cannot_create_block(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+) -> None:
+	"""a user stripped of the create permission cannot block anyone."""
+	admin_headers = auth_headers(admin_auth)
+	actor = await create_test_user(client, admin_headers, "nocreateblock")
+	target = await create_test_user(client, admin_headers, "nocreatetarget")
+
+	actor_auth = await client.post(
+		"/v1/auth/login/access-token",
+		data={"username": actor["email"], "password": "password"},
+	)
+	assert actor_auth.status_code == 200
+	actor_headers = {"Authorization": f"Bearer {actor_auth.json()['access_token']}"}
+
+	# strip the create permission from global defaults for this request
+	original = settings.default_permissions.action_permissions
+	settings.default_permissions.action_permissions = [
+		p for p in original if p != ActionPermission.USER_BLOCKS_CREATE
+	]
+	try:
+		block_resp = await client.post(
+			f"/v1/users/{actor['id']}/blocks",
+			headers=actor_headers,
+			json={"blocked_id": target["id"]},
+		)
+		assert block_resp.status_code == 403
+	finally:
+		settings.default_permissions.action_permissions = original
+
+
+@pytest.mark.asyncio
+async def test_user_without_create_permission_cannot_send_friend_request(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+) -> None:
+	"""a user stripped of the create permission cannot send friend requests."""
+	admin_headers = auth_headers(admin_auth)
+	actor = await create_test_user(client, admin_headers, "nocreatefriend")
+	target = await create_test_user(client, admin_headers, "nocreatefrtarget")
+
+	actor_auth = await client.post(
+		"/v1/auth/login/access-token",
+		data={"username": actor["email"], "password": "password"},
+	)
+	assert actor_auth.status_code == 200
+	actor_headers = {"Authorization": f"Bearer {actor_auth.json()['access_token']}"}
+
+	# strip the create permission from global defaults for this request
+	original = settings.default_permissions.action_permissions
+	settings.default_permissions.action_permissions = [
+		p for p in original if p != ActionPermission.USER_FRIENDSHIPS_CREATE
+	]
+	try:
+		friend_resp = await client.post(
+			f"/v1/users/{actor['id']}/friends/requests",
+			headers=actor_headers,
+			json={"addressee_id": target["id"]},
+		)
+		assert friend_resp.status_code == 403
+	finally:
+		settings.default_permissions.action_permissions = original
+
+
+@pytest.mark.asyncio
+async def test_user_cannot_accept_other_users_friend_request(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""a user cannot accept a friend request addressed to someone else."""
+	admin_headers = auth_headers(admin_auth)
+	attacker_headers = auth_headers(user_auth)
+	recipient = await create_test_user(client, admin_headers, "acceptrecip")
+	sender = await create_test_user(client, admin_headers, "acceptsender")
+
+	# sign in as sender to send a friend request to recipient
+	sender_auth = await client.post(
+		"/v1/auth/login/access-token",
+		data={"username": sender["email"], "password": "password"},
+	)
+	assert sender_auth.status_code == 200
+	sender_headers = {"Authorization": f"Bearer {sender_auth.json()['access_token']}"}
+	req_resp = await client.post(
+		f"/v1/users/{sender['id']}/friends/requests",
+		headers=sender_headers,
+		json={"addressee_id": recipient["id"]},
+	)
+	assert req_resp.status_code == 201
+	friendship_id = req_resp.json()["id"]
+
+	# attacker tries to accept the request via recipient's path
+	accept_resp = await client.post(
+		f"/v1/users/{recipient['id']}/friends/requests/{friendship_id}/accept",
+		headers=attacker_headers,
+	)
+	assert accept_resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_user_cannot_cancel_other_users_friend_request(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""a user cannot cancel a friend request they did not send."""
+	admin_headers = auth_headers(admin_auth)
+	attacker_headers = auth_headers(user_auth)
+	sender = await create_test_user(client, admin_headers, "cancelsender")
+	recipient = await create_test_user(client, admin_headers, "cancelrecip")
+
+	sender_auth = await client.post(
+		"/v1/auth/login/access-token",
+		data={"username": sender["email"], "password": "password"},
+	)
+	assert sender_auth.status_code == 200
+	sender_headers = {"Authorization": f"Bearer {sender_auth.json()['access_token']}"}
+	req_resp = await client.post(
+		f"/v1/users/{sender['id']}/friends/requests",
+		headers=sender_headers,
+		json={"addressee_id": recipient["id"]},
+	)
+	assert req_resp.status_code == 201
+	friendship_id = req_resp.json()["id"]
+
+	# attacker tries to cancel via sender's path
+	cancel_resp = await client.delete(
+		f"/v1/users/{sender['id']}/friends/requests/{friendship_id}",
+		headers=attacker_headers,
+	)
+	assert cancel_resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_can_accept_friend_request_on_behalf_of_user(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+) -> None:
+	"""admins can accept friend requests on behalf of any user."""
+	admin_headers = auth_headers(admin_auth)
+	sender = await create_test_user(client, admin_headers, "admaccsender")
+	recipient = await create_test_user(client, admin_headers, "admaccrecip")
+
+	sender_auth = await client.post(
+		"/v1/auth/login/access-token",
+		data={"username": sender["email"], "password": "password"},
+	)
+	assert sender_auth.status_code == 200
+	sender_headers = {"Authorization": f"Bearer {sender_auth.json()['access_token']}"}
+	req_resp = await client.post(
+		f"/v1/users/{sender['id']}/friends/requests",
+		headers=sender_headers,
+		json={"addressee_id": recipient["id"]},
+	)
+	assert req_resp.status_code == 201
+	friendship_id = req_resp.json()["id"]
+
+	# admin accepts on behalf of recipient
+	accept_resp = await client.post(
+		f"/v1/users/{recipient['id']}/friends/requests/{friendship_id}/accept",
+		headers=admin_headers,
+	)
+	assert accept_resp.status_code == 200
+	assert accept_resp.json()["status"] == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_user_search_username_is_baseline_when_profile_is_private(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""username search is available even when other discovery is private."""
+	admin_headers = auth_headers(admin_auth)
+	user_headers = auth_headers(user_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"baseline-private-{unique}@example.com",
+			"username": f"baselineprivate{unique}",
+			"display_name": f"Baseline Private {unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={
+			"find_by_email": False,
+			"privacy": {
+				"real_name": "private",
+				"bio": "private",
+				"email": "private",
+				"allow_friend_requests": "private",
+			},
+		},
+	)
+	assert patch_resp.status_code == 200
+
+	response = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": target["username"]},
+	)
+	assert response.status_code == 200
+	results = [user for user in response.json() if user["id"] == target["id"]]
+	assert len(results) == 1
+	assert results[0]["display_name"] is None
+	assert results[0]["email"] is None
+
+
+@pytest.mark.asyncio
+async def test_user_search_respects_bio_privacy(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""bio text is searchable only when the bio field is visible."""
+	admin_headers = auth_headers(admin_auth)
+	user_headers = auth_headers(user_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"bio-search-{unique}@example.com",
+			"username": f"biosearch{unique}",
+			"bio": f"needle biography {unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={"bio": f"needle biography {unique}"},
+	)
+	assert patch_resp.status_code == 200
+
+	visible_resp = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": f"needle biography {unique}"},
+	)
+	assert visible_resp.status_code == 200
+	assert target["id"] in [user["id"] for user in visible_resp.json()]
+
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={"privacy": {"bio": "private"}},
+	)
+	assert patch_resp.status_code == 200
+
+	hidden_resp = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": f"needle biography {unique}"},
+	)
+	assert hidden_resp.status_code == 200
+	assert target["id"] not in [user["id"] for user in hidden_resp.json()]
+
+
+@pytest.mark.asyncio
+async def test_friend_email_visibility_is_privacy_controlled(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+	db_session: AsyncSession,
+) -> None:
+	"""accepted friends only see email when the target's email setting allows it."""
+	admin_headers = auth_headers(admin_auth)
+	user_headers = auth_headers(user_auth)
+	current_user = auth_user(user_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"friend-email-{unique}@example.com",
+			"username": f"friendemail{unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+	db_session.add(
+		Friendship(
+			requester_id=str(current_user["id"]),
+			addressee_id=str(target["id"]),
+			status=FriendshipStatus.ACCEPTED,
+			accepted_at=datetime.now(UTC),
+		)
+	)
+	await db_session.commit()
+
+	private_resp = await client.get(
+		f"/v1/users/{current_user['id']}/friends",
+		headers=user_headers,
+	)
+	assert private_resp.status_code == 200
+	private_results = [
+		user for user in private_resp.json() if user["id"] == target["id"]
+	]
+	assert len(private_results) == 1
+	assert private_results[0]["email"] is None
+
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={"privacy": {"email": "friends"}},
+	)
+	assert patch_resp.status_code == 200
+
+	visible_resp = await client.get(
+		f"/v1/users/{current_user['id']}/friends",
+		headers=user_headers,
+	)
+	assert visible_resp.status_code == 200
+	visible_results = [
+		user for user in visible_resp.json() if user["id"] == target["id"]
+	]
+	assert len(visible_results) == 1
+	assert visible_results[0]["email"] == target["email"]
+
+
+@pytest.mark.asyncio
+async def test_user_search_respects_display_name_privacy_and_friendship(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+	db_session: AsyncSession,
+) -> None:
+	"""display names are searchable only when visible to the requester."""
+	admin_headers = auth_headers(admin_auth)
+	user_headers = auth_headers(user_auth)
+	current_user = auth_user(user_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"display-private-{unique}@example.com",
+			"username": f"displayprivate{unique}",
+			"display_name": f"Private Name {unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={"privacy": {"real_name": "private"}},
+	)
+	assert patch_resp.status_code == 200
+
+	private_name_resp = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": target["display_name"]},
+	)
+	assert private_name_resp.status_code == 200
+	assert target["id"] not in [user["id"] for user in private_name_resp.json()]
+
+	username_resp = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": target["username"]},
+	)
+	assert username_resp.status_code == 200
+	username_results = [
+		user for user in username_resp.json() if user["id"] == target["id"]
+	]
+	assert len(username_results) == 1
+	assert username_results[0]["display_name"] is None
+
+	patch_resp = await client.patch(
+		f"/v1/users/{target['id']}",
+		headers=admin_headers,
+		json={"privacy": {"real_name": "friends"}},
+	)
+	assert patch_resp.status_code == 200
+	db_session.add(
+		Friendship(
+			requester_id=str(current_user["id"]),
+			addressee_id=str(target["id"]),
+			status=FriendshipStatus.ACCEPTED,
+			accepted_at=datetime.now(UTC),
+		)
+	)
+	await db_session.commit()
+
+	friend_name_resp = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": target["display_name"]},
+	)
+	assert friend_name_resp.status_code == 200
+	friend_results = [
+		user for user in friend_name_resp.json() if user["id"] == target["id"]
+	]
+	assert len(friend_results) == 1
+	assert friend_results[0]["display_name"] == target["display_name"]
+
+
+@pytest.mark.asyncio
+async def test_user_search_excludes_blocked_users(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+	db_session: AsyncSession,
+) -> None:
+	"""blocked users are excluded from user discovery."""
+	admin_headers = auth_headers(admin_auth)
+	user_headers = auth_headers(user_auth)
+	current_user = auth_user(user_auth)
+	unique = uuid4().hex[:10]
+	target_resp = await client.post(
+		"/v1/users",
+		headers=admin_headers,
+		json={
+			"email": f"blocked-{unique}@example.com",
+			"username": f"blocked{unique}",
+			"password": "password",
+			"is_superuser": False,
+		},
+	)
+	assert target_resp.status_code == 201
+	target = target_resp.json()
+	db_session.add(
+		Block(blocker_id=str(target["id"]), blocked_id=str(current_user["id"]))
+	)
+	await db_session.commit()
+
+	response = await client.get(
+		"/v1/users/search",
+		headers=user_headers,
+		params={"q": target["username"]},
+	)
+	assert response.status_code == 200
+	assert target["id"] not in [user["id"] for user in response.json()]
 
 
 @pytest.mark.asyncio
@@ -134,8 +1083,7 @@ async def test_create_duplicate_user(
 		"username": "duplicate_test",
 		"password": "password",
 	}
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	headers = auth_headers(admin_auth)
 	resp1 = await client.post("/v1/users", json=user_data, headers=headers)
 	assert resp1.status_code == 201
 
@@ -143,6 +1091,50 @@ async def test_create_duplicate_user(
 	resp2 = await client.post("/v1/users", json=user_data, headers=headers)
 	assert resp2.status_code == 400
 	assert resp2.json()["detail"] == "email already registered"
+
+	resp3 = await client.post(
+		"/v1/users",
+		json={
+			"email": "duplicate-username@example.com",
+			"username": "duplicate_test",
+			"password": "password",
+		},
+		headers=headers,
+	)
+	assert resp3.status_code == 400
+	assert resp3.json()["detail"] == "username already taken"
+
+
+@pytest.mark.asyncio
+async def test_delete_user(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+) -> None:
+	admin_headers = auth_headers(admin_auth)
+	user = await create_test_user(client, admin_headers, "deleteuser")
+	user_id = user["id"]
+	assert isinstance(user_id, str)
+
+	delete_resp = await client.delete(f"/v1/users/{user_id}", headers=admin_headers)
+	assert delete_resp.status_code == 204
+
+	get_resp = await client.get(f"/v1/users/{user_id}", headers=admin_headers)
+	assert get_resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_user_rejects_self_delete(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+) -> None:
+	admin_headers = auth_headers(admin_auth)
+	admin = auth_user(admin_auth)
+	admin_id = admin["id"]
+	assert isinstance(admin_id, str)
+
+	delete_resp = await client.delete(f"/v1/users/{admin_id}", headers=admin_headers)
+	assert delete_resp.status_code == 400
+	assert delete_resp.json()["detail"] == "cannot delete your own account"
 
 
 @pytest.mark.asyncio
@@ -164,6 +1156,7 @@ async def test_service_create_user(db_session: AsyncSession) -> None:
 	)
 	user = await user_service.create_user(user_in, db_session)
 	assert user.email == user_in.email
+	assert user.find_by_email is False
 	assert user.id is not None
 
 
@@ -283,6 +1276,20 @@ async def test_service_create_duplicate_user(db_session: AsyncSession) -> None:
 			principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
 		)
 	assert exc.value.status_code == 400
+	assert exc.value.detail == "email already registered"
+
+	with pytest.raises(HTTPException) as exc:
+		await user_service.create_user(
+			UserCreate(
+				email="duplicate_service_username@example.com",
+				username="duplicate_svc",
+				password="password123",
+			),
+			db_session,
+			principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+		)
+	assert exc.value.status_code == 400
+	assert exc.value.detail == "username already taken"
 
 
 @pytest.mark.asyncio

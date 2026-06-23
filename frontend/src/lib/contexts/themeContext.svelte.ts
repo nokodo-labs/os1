@@ -1,12 +1,14 @@
 import { browser } from '$app/environment'
 import { accentStore, type AccentColorKey } from '$lib/stores/accent.svelte'
+import { background } from '$lib/stores/background.svelte'
 import { preferences, type AccentColor, type ThemeMode } from '$lib/stores/preferences.svelte'
-import { getContext, onMount, setContext } from 'svelte'
+import { getContext, setContext } from 'svelte'
 
 export type { AccentColor, AccentColorKey, ThemeMode }
 const THEME_CONTEXT_KEY = Symbol('theme-context')
 
-let prefersDark = $state(false)
+// localStorage key read by the boot script in app.html to avoid a theme flash
+const RESOLVED_MODE_KEY = 'theme-resolved'
 
 // accent color maps for Tailwind classes
 // we'll use CSS variables for more flexibility, but these helpers can be useful
@@ -84,12 +86,26 @@ export const accentColors: Record<
 		border: 'rgba(66, 133, 244, 0.2)',
 		shadow: 'rgba(66, 133, 244, 0.25)',
 	},
+	calendar: {
+		primary: '#d45446', // paper calendar red
+		rgb: '212 84 70',
+		bg: 'rgba(212, 84, 70, 0.02)',
+		border: 'rgba(212, 84, 70, 0.2)',
+		shadow: 'rgba(212, 84, 70, 0.24)',
+	},
 	lilac: {
 		primary: '#c4b5fd', // lilac (violet-300)
 		rgb: '196 181 253',
 		bg: 'rgba(196, 181, 253, 0.02)',
 		border: 'rgba(196, 181, 253, 0.2)',
 		shadow: 'rgba(196, 181, 253, 0.25)',
+	},
+	petrol: {
+		primary: '#0f766e',
+		rgb: '15 118 110',
+		bg: 'rgba(15, 118, 110, 0.03)',
+		border: 'rgba(15, 118, 110, 0.24)',
+		shadow: 'rgba(15, 118, 110, 0.28)',
 	},
 }
 
@@ -135,12 +151,7 @@ interface ThemeContext {
 }
 
 export function createThemeContext(): ThemeContext {
-	// keep preferences hydrated based on session state (tracked reactively)
-	$effect(() => {
-		return preferences.startSync()
-	})
-
-	const mode = $derived(preferences.data.appearance.themeMode ?? 'system')
+	const mode = $derived(preferences.data.appearance.themeMode ?? 'auto')
 	const accent = $derived(preferences.data.appearance.accent ?? 'purple')
 	const autoAccentColors = $derived(preferences.data.appearance.autoAccentColors ?? true)
 
@@ -152,26 +163,21 @@ export function createThemeContext(): ThemeContext {
 		return accent
 	})
 
+	// auto mode matches the theme to the active background's luminance
 	const resolvedMode = $derived.by((): 'light' | 'dark' => {
 		if (mode === 'dark') return 'dark'
 		if (mode === 'light') return 'light'
-		return prefersDark ? 'dark' : 'light'
-	})
-
-	onMount(() => {
-		if (!browser) return
-
-		// listen for system theme changes
-		const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-		prefersDark = mediaQuery.matches
-		const handleChange = () => (prefersDark = mediaQuery.matches)
-		mediaQuery.addEventListener('change', handleChange)
-		return () => mediaQuery.removeEventListener('change', handleChange)
+		return background.resolvedLuminance === 'dark' ? 'dark' : 'light'
 	})
 
 	$effect(() => {
 		if (!browser) return
 		updateDOM(resolvedMode, resolvedAccent)
+		try {
+			localStorage.setItem(RESOLVED_MODE_KEY, resolvedMode)
+		} catch {
+			// ignore storage failures
+		}
 	})
 
 	return {

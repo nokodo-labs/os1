@@ -6,15 +6,15 @@ plus endpoints to list all available plugins including native ones.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.models.plugin import Plugin
 from api.schemas.plugin import Plugin as PluginSchema
-from api.schemas.plugin import PluginCreate, PluginInfo, PluginUpdate
+from api.schemas.plugin import PluginCreate, PluginInfo, PluginListFilters, PluginUpdate
 from api.v1.service import plugins as plugin_service
 from api.v1.service.auth import Principal, get_current_principal
 from nokodo_ai.utils.typeid import TypeID
@@ -26,32 +26,32 @@ router = APIRouter(
 )
 
 
-PluginTypeFilter = Literal["tool", "filter", "hook"] | None
-
-
-@router.get("/available", response_model=list[PluginInfo])
-async def list_available_plugins(
-	plugin_type: PluginTypeFilter = Query(default=None),
+@router.get("", response_model=list[PluginInfo])
+async def list_plugins(
+	filters: Annotated[PluginListFilters, Depends()],
+	skip: int = 0,
+	limit: int = 50,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[PluginInfo]:
-	"""list all available plugins (native and user-defined).
-
-	native plugins are built into the system and cannot be modified.
-	use the plugin_type query parameter to filter by type.
-	"""
+	"""list plugin catalog items."""
 	return await plugin_service.list_plugins(
-		db, principal=principal, include_native=True, plugin_type=plugin_type
+		db,
+		principal=principal,
+		include_native=True,
+		filters=filters,
+		skip=skip,
+		limit=limit,
 	)
 
 
-@router.get("/available/{plugin_id}", response_model=PluginInfo)
-async def get_available_plugin(
+@router.get("/{plugin_id}", response_model=PluginInfo)
+async def get_plugin(
 	plugin_id: str,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> PluginInfo:
-	"""get details about a specific available plugin (native or user-defined)."""
+	"""get details about a plugin catalog item."""
 	return await plugin_service.get_plugin(
 		plugin_id, db, principal=principal, include_native=True
 	)
@@ -65,25 +65,6 @@ async def create_plugin(
 ) -> Plugin:
 	"""create a plugin record."""
 	return await plugin_service.create_plugin(plugin_in, db, principal=principal)
-
-
-@router.get("", response_model=list[PluginSchema])
-async def list_plugins(
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> list[Plugin]:
-	"""list all plugin records."""
-	return await plugin_service.list_plugins(db, principal=principal)
-
-
-@router.get("/{plugin_id}", response_model=PluginSchema)
-async def get_plugin(
-	plugin_id: TypeID,
-	principal: Principal = Depends(get_current_principal),
-	db: AsyncSession = Depends(get_db),
-) -> Plugin:
-	"""fetch a plugin record by id."""
-	return await plugin_service.get_plugin(plugin_id, db, principal=principal)
 
 
 @router.patch("/{plugin_id}", response_model=PluginSchema)

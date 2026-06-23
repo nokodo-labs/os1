@@ -11,6 +11,7 @@ import tempfile
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import BinaryIO
 
 from api.storage.base import FileInfo, MimeType, StorageBackend
 
@@ -154,7 +155,7 @@ class LocalStorageBackend(StorageBackend):
 
 async def _stream_file(path: Path) -> AsyncIterator[bytes]:
 	"""yield file contents in chunks via the thread pool."""
-	fd = await asyncio.to_thread(open, path, "rb")
+	fd: BinaryIO = open(path, "rb")
 	try:
 		while True:
 			chunk = await asyncio.to_thread(fd.read, _CHUNK_SIZE)

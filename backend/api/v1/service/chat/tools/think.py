@@ -8,7 +8,8 @@ from time import monotonic
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.v1.service.chat.context import AppContext
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
@@ -30,7 +31,7 @@ class Thought(BaseModel):
 		max_length=50,
 		description=(
 			"a very brief summary of this thought, ideally 3-5 words. "
-			"used to display to users an overview of your thought process."
+			"displayed to users as an overview of your thought process."
 		),
 	)
 
@@ -65,7 +66,9 @@ class ThinkingTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
@@ -75,13 +78,14 @@ class ThinkingTool(Tool[AppContext]):
 		first created (i.e. when the first streaming delta for this
 		tool call arrived), capturing the chat model's generation time.
 		"""
-		elapsed_time = monotonic() - __agent_context__.tool_call_start_time
+		start_time = __tool_call_context__.tool_call_start_time
+		elapsed_time = monotonic() - start_time
 		try:
 			chain = ChainOfThoughts.model_validate(kwargs)
 		except Exception:
 			return self.error(
 				json.dumps({"error": "invalid thought structure"}),
-				__agent_context__,
+				__tool_call_context__,
 			)
 		return self.success(
 			json.dumps(
@@ -90,5 +94,5 @@ class ThinkingTool(Tool[AppContext]):
 					"thought_count": len(chain.thoughts),
 				}
 			),
-			__agent_context__,
+			__tool_call_context__,
 		)

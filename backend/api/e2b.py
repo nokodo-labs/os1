@@ -10,6 +10,7 @@ import base64
 import logging
 import mimetypes
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from e2b_code_interpreter import AsyncSandbox, FileType
@@ -18,8 +19,6 @@ from e2b_code_interpreter import AsyncSandbox, FileType
 logger = logging.getLogger(__name__)
 
 _DEFAULT_TEMPLATE = "code-interpreter-v1"
-_DEFAULT_TIMEOUT = 60
-_MAX_FILE_DOWNLOAD_BYTES = 10 * 1024 * 1024  # 10 MB cap per file
 
 # directories to watch for new/modified files after code execution
 _WATCH_DIRS = ("/tmp", "/home", "/root", "/code", "/output", ".")
@@ -56,12 +55,15 @@ class E2BClient:
 
 	def __init__(
 		self,
-		*,
 		api_key: str,
 		template: str = _DEFAULT_TEMPLATE,
+		timeout: int = 60,
+		max_file_download_bytes: int = 10 * 1024 * 1024,
 	) -> None:
 		self._api_key = api_key
 		self._template = template
+		self._timeout = timeout
+		self._max_file_download_bytes = max_file_download_bytes
 		self._sandbox: AsyncSandbox | None = None
 
 	@property
@@ -107,14 +109,13 @@ class E2BClient:
 	async def run_code(
 		self,
 		code: str,
-		*,
-		timeout: int = _DEFAULT_TIMEOUT,
+		timeout: int | None = None,
 	) -> ExecutionResult:
 		"""execute Python code in the sandbox.
 
 		args:
 			code: Python source code to execute.
-			timeout: max execution time in seconds.
+			timeout: max execution time in seconds. defaults to instance timeout.
 
 		returns:
 			ExecutionResult with stdout, stderr, results, and error.
@@ -125,10 +126,12 @@ class E2BClient:
 		if self._sandbox is None:
 			raise RuntimeError("not connected to a sandbox")
 
+		effective_timeout = timeout if timeout is not None else self._timeout
+
 		# snapshot filesystem before execution
 		pre_files = await self._snapshot_working_dir()
 
-		execution = await self._sandbox.run_code(code, timeout=timeout)
+		execution = await self._sandbox.run_code(code, timeout=effective_timeout)
 
 		stdout = ""
 		if execution.logs.stdout:
@@ -191,6 +194,8 @@ class E2BClient:
 			content = await self._sandbox.files.read(filename, format="bytes")
 			if isinstance(content, str):
 				return content.encode("utf-8")
+			if isinstance(content, bytearray):
+				return bytes(content)
 			return content
 		except Exception:
 			return None
@@ -227,7 +232,6 @@ class E2BClient:
 	async def _detect_new_files(
 		self,
 		pre_snapshot: dict[str, int],
-		*,
 		exclude: set[str],
 	) -> list[FileEntry]:
 		"""detect and download files created or modified during execution."""
@@ -252,7 +256,7 @@ class E2BClient:
 					continue
 				if path in pre_snapshot and size == pre_snapshot[path]:
 					continue
-				if size > _MAX_FILE_DOWNLOAD_BYTES:
+				if size > self._max_file_download_bytes:
 					continue
 				content = await self.download_file(path)
 				if content is None:
@@ -280,10 +284,10 @@ class E2BClient:
 		saves images to the sandbox filesystem and returns metadata.
 		"""
 		images: list[FileEntry] = []
-		if not hasattr(results, "__iter__"):
+		if not isinstance(results, Iterable):
 			return images
 
-		for result in results:  # type: ignore[union-attr]
+		for result in results:
 			for ext in ("png", "jpeg", "svg", "pdf"):
 				data_b64 = getattr(result, ext, None)
 				if not data_b64:

@@ -6,7 +6,7 @@ import json
 import logging
 from collections.abc import AsyncIterator, Awaitable
 from time import time
-from typing import TYPE_CHECKING, Literal, cast, overload
+from typing import TYPE_CHECKING, Literal, overload
 
 import openai
 
@@ -28,12 +28,14 @@ from ...messages import (
 from ...tool import ToolDefinition
 from ...types import JSONObject
 from ...utils.provider_meta import (
+	RunIdTracker,
 	get_provider_tool_call_id,
 	provider_tool_call_metadata,
 )
 from ...utils.validators import warn_known_model
 from ..base.chat import BaseChatAdapter, ChatGenerationParams
 from .base import BaseOpenAIAdapter
+from .exceptions import map_openai_generation_exceptions
 from .types import (
 	OpenAIAsyncStream,
 	OpenAIChatCompletion,
@@ -118,6 +120,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 			)
 		return self._generate_once(messages, model=model, tools=tools, params=params)
 
+	@map_openai_generation_exceptions
 	async def _generate_once(
 		self,
 		messages: list[Message],
@@ -164,6 +167,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 
 		return _chat_completion_to_assistant_message(response)
 
+	@map_openai_generation_exceptions
 	async def _generate_streaming(
 		self,
 		messages: list[Message],
@@ -178,6 +182,7 @@ class OpenAIChatCompletionsAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 			model=warn_known_model(model, OpenAIChatModel),
 			messages=_messages_to_openai_chatcompletions(messages),
 			stream=True,
+			stream_options={"include_usage": True},
 			tools=_tools_to_openai_chatcompletions(tools) or openai.omit,
 			tool_choice=_tool_choice_to_openai_chatcompletions(params.tool_choice)
 			if tools and params and params.tool_choice is not None
@@ -307,8 +312,16 @@ async def _openai_stream_to_assistant_messages(
 	tc_created_at: dict[str, float] = {}
 	tc_metadata: dict[str, JSONObject] = {}
 
+	run_tracker = RunIdTracker("openai.chat_completions")
+
 	async for chunk in stream:
 		now = time()
+
+		chunk_id = getattr(chunk, "id", None)
+		if chunk_id:
+			meta_chunk = run_tracker.observe(chunk_id)
+			if meta_chunk is not None:
+				yield meta_chunk
 
 		if chunk.usage is not None:
 			usage = _openai_usage_to_usage(chunk.usage)
@@ -327,7 +340,7 @@ async def _openai_stream_to_assistant_messages(
 					"tool_calls",
 					"content_filter",
 				):
-					finish_reason = cast(FinishReason, choice.finish_reason)
+					finish_reason = choice.finish_reason
 				else:
 					logger.warning("unknown openai finish reason")
 
@@ -480,7 +493,7 @@ def _chat_completion_to_assistant_message(
 				finish_reason = "content_filter"
 				content.append(RefusalContent(reason=refusal_reason))
 			elif choice.finish_reason in ("stop", "length", "tool_calls"):
-				finish_reason = cast(FinishReason, choice.finish_reason)
+				finish_reason = choice.finish_reason
 	return AssistantMessage(
 		content=content,
 		tool_calls=tool_calls,

@@ -11,7 +11,9 @@ from pydantic import ValidationError
 
 from nokodo_ai.adapters.chat import resolve_chat_adapter
 from nokodo_ai.adapters.openai.base import BaseOpenAIAdapter
+from nokodo_ai.agents import AgentIterationSnapshot, AgentIterationState
 from nokodo_ai.chat_models import ChatModel
+from nokodo_ai.context import AgentContext
 from nokodo_ai.deltas import (
 	AgentDelta,
 	stream_agent_deltas,
@@ -30,6 +32,7 @@ from nokodo_ai.messages import (
 	UserMessage,
 )
 from nokodo_ai.threads import Thread
+from nokodo_ai.types.json import JSONValue
 from nokodo_ai.utils.dicts import deep_merge
 from nokodo_ai.utils.json_schema import schema_from_callable
 from nokodo_ai.utils.validators import (
@@ -164,11 +167,11 @@ def test_schema_from_callable_skips_self_dunder_and_varargs() -> None:
 			self,
 			a: int,
 			b: str = "x",
-			__agent_context__: object | None = None,
+			__tool_call_context__: object | None = None,
 			*args: object,
 			**kwargs: object,
 		) -> None:
-			_ = (a, b, __agent_context__, args, kwargs)
+			_ = (a, b, __tool_call_context__, args, kwargs)
 
 	schema = schema_from_callable(X.f)
 	assert "properties" in schema
@@ -176,7 +179,7 @@ def test_schema_from_callable_skips_self_dunder_and_varargs() -> None:
 	assert isinstance(props, dict)
 	assert "a" in props
 	assert "b" in props
-	assert "__agent_context__" not in props
+	assert "__tool_call_context__" not in props
 
 	schema2 = schema_from_callable(X.f, skip_fields={"b"})
 	props2 = schema2.get("properties") or {}
@@ -375,21 +378,37 @@ def test_embedding_model_resolve_adapter_config_unknown_and_ok() -> None:
 @pytest.mark.asyncio
 async def test_filters_and_hooks_not_implemented_raise_async() -> None:
 	class MyFilter(Filter[None]):
-		async def process(self, thread: Thread, app_context: None) -> Thread:
-			return cast(Thread, await cast(Any, super()).process(thread, app_context))
+		async def process(
+			self,
+			state: AgentIterationState[None],
+			agent_context: AgentContext,
+			app_context: None,
+		) -> AgentIterationState[None]:
+			return await cast(Any, super()).process(
+				state,
+				agent_context,
+				app_context,
+			)
 
 	class MyHook(Hook[None]):
-		async def execute(self, thread: Thread, app_context: None) -> None:
-			await cast(Any, super()).execute(thread, app_context)
+		async def execute(
+			self,
+			state: AgentIterationSnapshot[None],
+			agent_context: AgentContext,
+			app_context: None,
+		) -> None:
+			await cast(Any, super()).execute(state, agent_context, app_context)
 
 	f = MyFilter(name="f")
 	h = MyHook(name="h")
+	state = AgentIterationState[None](thread=Thread(), tools=[])
+	agent_context = AgentContext(model=ChatModel.model_construct(model_name="test"))
 
 	with pytest.raises(NotImplementedError, match="process method must be"):
-		await f.process(Thread(), None)
+		await f.process(state, agent_context, None)
 
 	with pytest.raises(NotImplementedError, match="execute method must be"):
-		await h.execute(Thread(), None)
+		await h.execute(state.snapshot(), agent_context, None)
 
 
 # deep_merge
@@ -434,7 +453,7 @@ def test_process_schema_recurses_into_anyof_list() -> None:
 	"""process_schema must apply transformations inside anyOf list elements."""
 	from nokodo_ai.utils.json_schema import process_schema
 
-	schema: dict[str, object] = {
+	schema: JSONValue = {
 		"anyOf": [
 			{
 				"type": "object",
@@ -473,7 +492,7 @@ def test_process_schema_recurses_into_oneof_list() -> None:
 	"""process_schema must apply transformations inside oneOf list elements."""
 	from nokodo_ai.utils.json_schema import process_schema
 
-	schema: dict[str, object] = {
+	schema: JSONValue = {
 		"oneOf": [
 			{
 				"type": "object",
@@ -496,15 +515,17 @@ def test_process_schema_recurses_into_oneof_list() -> None:
 	assert isinstance(result, dict)
 	one_of = result["oneOf"]
 	assert isinstance(one_of, list)
-	assert one_of[0].get("additionalProperties") is False
-	assert one_of[0].get("required") == ["a"]
+	first = one_of[0]
+	assert isinstance(first, dict)
+	assert first.get("additionalProperties") is False
+	assert first.get("required") == ["a"]
 
 
 def test_process_schema_recurses_into_allof_list() -> None:
 	"""process_schema must apply transformations inside allOf list elements."""
 	from nokodo_ai.utils.json_schema import process_schema
 
-	schema: dict[str, object] = {
+	schema: JSONValue = {
 		"allOf": [
 			{
 				"type": "object",
@@ -528,15 +549,23 @@ def test_process_schema_recurses_into_allof_list() -> None:
 	assert isinstance(result, dict)
 	all_of = result["allOf"]
 	assert isinstance(all_of, list)
-	assert all_of[0].get("additionalProperties") is False
-	assert sorted(all_of[0].get("required", [])) == ["x", "y"]
+	first = all_of[0]
+	assert isinstance(first, dict)
+	required = first.get("required", [])
+	assert isinstance(required, list)
+	required_strings: list[str] = []
+	for item in required:
+		assert isinstance(item, str)
+		required_strings.append(item)
+	assert first.get("additionalProperties") is False
+	assert sorted(required_strings) == ["x", "y"]
 
 
 def test_process_schema_recurses_into_prefixitems_list() -> None:
 	"""process_schema must apply transformations inside prefixItems elements."""
 	from nokodo_ai.utils.json_schema import process_schema
 
-	schema: dict[str, object] = {
+	schema: JSONValue = {
 		"type": "array",
 		"prefixItems": [
 			{
@@ -560,5 +589,7 @@ def test_process_schema_recurses_into_prefixitems_list() -> None:
 	assert isinstance(result, dict)
 	prefix = result["prefixItems"]
 	assert isinstance(prefix, list)
-	assert prefix[0].get("additionalProperties") is False
-	assert prefix[0].get("required") == ["label"]
+	first = prefix[0]
+	assert isinstance(first, dict)
+	assert first.get("additionalProperties") is False
+	assert first.get("required") == ["label"]

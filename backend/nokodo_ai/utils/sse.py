@@ -6,16 +6,23 @@ across the codebase.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncGenerator, AsyncIterator, Mapping
 from typing import Any
 
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 
+# SSE comment frame emitted when the source is idle. comment lines (leading
+# ':') are ignored by every spec-compliant client, so this only keeps the
+# connection warm without reaching application code.
+_SSE_PING = b": ping\n\n"
+
+
 def sse_encode(
-	*,
 	event: str,
 	data: Mapping[str, Any] | BaseModel | None = None,
 ) -> bytes:
@@ -52,16 +59,55 @@ def sse_done() -> bytes:
 	return sse_encode(event="done", data={})
 
 
+async def sse_heartbeat(
+	stream: AsyncIterator[bytes],
+	interval: float = 15.0,
+) -> AsyncGenerator[bytes]:
+	"""interleave keep-alive ping comments into an idle SSE stream.
+
+	when the source yields nothing for ``interval`` seconds a comment frame is
+	emitted so intermediaries (proxies, load balancers) do not treat the
+	connection as dead during long gaps between events. the source generator's
+	cleanup still runs on disconnect via ``aclose()`` in the finally block.
+	"""
+	agen = stream.__aiter__()
+	pending: asyncio.Task[bytes] | None = asyncio.ensure_future(agen.__anext__())
+	try:
+		while pending is not None:
+			done, _ = await asyncio.wait({pending}, timeout=interval)
+			if not done:
+				# idle window elapsed - keep the same pending read alive.
+				yield _SSE_PING
+				continue
+			try:
+				frame = pending.result()
+			except StopAsyncIteration:
+				pending = None
+				break
+			yield frame
+			pending = asyncio.ensure_future(agen.__anext__())
+	finally:
+		if pending is not None:
+			pending.cancel()
+			with contextlib.suppress(asyncio.CancelledError, Exception):
+				await pending
+		if isinstance(agen, AsyncGenerator):
+			with contextlib.suppress(Exception):
+				await agen.aclose()
+
+
 def sse_response(
 	stream: AsyncIterator[bytes],
-	*,
 	headers: dict[str, str] | None = None,
+	heartbeat_interval: float | None = 15.0,
 ) -> StreamingResponse:
 	"""wrap an SSE bytes stream in a StreamingResponse with correct headers.
 
 	args:
 		stream: async iterator yielding SSE-formatted bytes
 		headers: optional additional headers to include
+		heartbeat_interval: seconds between keep-alive pings when the source is
+			idle; pass None to disable heartbeats
 
 	returns:
 		a ready-to-return StreamingResponse
@@ -73,8 +119,13 @@ def sse_response(
 	}
 	if headers:
 		base_headers.update(headers)
+	body = (
+		stream
+		if heartbeat_interval is None
+		else sse_heartbeat(stream, heartbeat_interval)
+	)
 	return StreamingResponse(
-		stream,
+		body,
 		media_type="text/event-stream",
 		headers=base_headers,
 	)

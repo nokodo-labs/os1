@@ -63,6 +63,17 @@
 		// embeddings
 		embeddingsVectorSize?: string
 		embeddingsBatchSize?: string
+		embeddingsMaxConcurrency?: string
+		// content vectorization
+		contentVectorizationLoader?: string
+		contentVectorizationChunkingAlgorithm?: string
+		contentVectorizationMaxBytes?: string
+		contentVectorizationTargetTokens?: string
+		contentVectorizationOverlapTokens?: string
+		contentVectorizationMaxChunks?: string
+		// descriptions
+		descriptionsMaxInputChars?: string
+		descriptionsMaxChars?: string
 		// rerank
 		rerankDefaultStrategy?: string
 		rerankTopK?: string
@@ -105,6 +116,15 @@
 		vectorNormalizeScores = $bindable(true),
 		embeddingsVectorSize = $bindable(''),
 		embeddingsBatchSize = $bindable(''),
+		embeddingsMaxConcurrency = $bindable(''),
+		contentVectorizationLoader = $bindable('auto'),
+		contentVectorizationChunkingAlgorithm = $bindable('auto'),
+		contentVectorizationMaxBytes = $bindable(''),
+		contentVectorizationTargetTokens = $bindable(''),
+		contentVectorizationOverlapTokens = $bindable(''),
+		contentVectorizationMaxChunks = $bindable(''),
+		descriptionsMaxInputChars = $bindable(''),
+		descriptionsMaxChars = $bindable(''),
 		rerankDefaultStrategy = $bindable('native'),
 		rerankTopK = $bindable(''),
 		storageBackend = $bindable('local'),
@@ -312,7 +332,7 @@
 				<Input
 					id="assets_collection_template"
 					bind:value={vectorCollectionTemplate}
-					placeholder="{'{model}'}_bm25"
+					placeholder="nokodo-ai__{'{model}'}_bm25"
 					class="rounded-xl"
 				/>
 				<p class="text-xs text-zinc-500">
@@ -397,6 +417,20 @@
 					type="number"
 					bind:value={embeddingsBatchSize}
 					placeholder="64"
+					class="rounded-xl"
+				/>
+			</div>
+			<div class="space-y-2">
+				<Label for="assets_max_concurrency">max concurrency</Label>
+				<p class="text-xs text-zinc-500">
+					max concurrent embedding batches; leave empty for unbounded.
+				</p>
+				<Input
+					id="assets_max_concurrency"
+					type="number"
+					min="1"
+					placeholder="unbounded"
+					bind:value={embeddingsMaxConcurrency}
 					class="rounded-xl"
 				/>
 			</div>
@@ -554,7 +588,7 @@
 						id="s3_multipart_threshold"
 						type="number"
 						bind:value={storageS3MultipartThreshold}
-						placeholder="8388608"
+						placeholder="104857600"
 						class="rounded-xl"
 					/>
 				</div>
@@ -565,7 +599,7 @@
 						id="s3_multipart_chunk"
 						type="number"
 						bind:value={storageS3MultipartChunkSize}
-						placeholder="8388608"
+						placeholder="10485760"
 						class="rounded-xl"
 					/>
 				</div>
@@ -602,6 +636,129 @@
 				</div>
 			</div>
 		{/if}
+
+		<h4 class="pt-2 text-sm font-medium text-zinc-400">content vectorization</h4>
+		<div class="grid gap-4 md:grid-cols-2">
+			<div class="space-y-2">
+				<Label for="cv_loader">loader</Label>
+				<p class="text-xs text-zinc-500">text extraction method for asset files.</p>
+				<Select
+					value={contentVectorizationLoader}
+					onValueChange={(v: string) => (contentVectorizationLoader = v)}
+				>
+					<SelectTrigger id="cv_loader" class="rounded-xl">
+						{contentVectorizationLoader}
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value="auto">auto</SelectItem>
+						<SelectItem value="plain">plain</SelectItem>
+						<SelectItem value="markitdown">markitdown</SelectItem>
+						<SelectItem value="chatmodel">chat model</SelectItem>
+					</SelectContent>
+				</Select>
+			</div>
+			<div class="space-y-2">
+				<Label for="cv_chunking">chunking algorithm</Label>
+				<p class="text-xs text-zinc-500">algorithm used to split content into chunks.</p>
+				<Select
+					value={contentVectorizationChunkingAlgorithm}
+					onValueChange={(v: string) => (contentVectorizationChunkingAlgorithm = v)}
+				>
+					<SelectTrigger id="cv_chunking" class="rounded-xl">
+						{contentVectorizationChunkingAlgorithm}
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value="auto">auto</SelectItem>
+						<SelectItem value="recursive">recursive</SelectItem>
+						<SelectItem value="markdown">markdown</SelectItem>
+					</SelectContent>
+				</Select>
+			</div>
+			<div class="space-y-2">
+				<Label for="cv_target_tokens">target tokens per chunk</Label>
+				<p class="text-xs text-zinc-500">target token count for each content chunk.</p>
+				<Input
+					id="cv_target_tokens"
+					type="number"
+					min="50"
+					placeholder="512"
+					bind:value={contentVectorizationTargetTokens}
+					class="rounded-xl"
+				/>
+			</div>
+			<div class="space-y-2">
+				<Label for="cv_overlap_tokens">overlap tokens</Label>
+				<p class="text-xs text-zinc-500">token overlap between adjacent chunks.</p>
+				<Input
+					id="cv_overlap_tokens"
+					type="number"
+					min="0"
+					placeholder="50"
+					bind:value={contentVectorizationOverlapTokens}
+					class="rounded-xl"
+				/>
+			</div>
+			<div class="space-y-2">
+				<Label for="cv_max_bytes">max bytes</Label>
+				<p class="text-xs text-zinc-500">
+					max bytes read from an asset file; leave empty for unlimited.
+				</p>
+				<Input
+					id="cv_max_bytes"
+					type="number"
+					min="1"
+					placeholder="unlimited"
+					bind:value={contentVectorizationMaxBytes}
+					class="rounded-xl"
+				/>
+			</div>
+			<div class="space-y-2">
+				<Label for="cv_max_chunks">max chunks</Label>
+				<p class="text-xs text-zinc-500">
+					max chunks per asset; leave empty for unlimited.
+				</p>
+				<Input
+					id="cv_max_chunks"
+					type="number"
+					min="1"
+					placeholder="unlimited"
+					bind:value={contentVectorizationMaxChunks}
+					class="rounded-xl"
+				/>
+			</div>
+		</div>
+
+		<h4 class="pt-2 text-sm font-medium text-zinc-400">asset descriptions</h4>
+		<div class="grid gap-4 md:grid-cols-2">
+			<div class="space-y-2">
+				<Label for="desc_max_input_chars">max input characters</Label>
+				<p class="text-xs text-zinc-500">
+					max extracted text sent to the description model; leave empty for unlimited.
+				</p>
+				<Input
+					id="desc_max_input_chars"
+					type="number"
+					min="100"
+					placeholder="unlimited"
+					bind:value={descriptionsMaxInputChars}
+					class="rounded-xl"
+				/>
+			</div>
+			<div class="space-y-2">
+				<Label for="desc_max_chars">max description characters</Label>
+				<p class="text-xs text-zinc-500">
+					max stored description characters; leave empty for unlimited.
+				</p>
+				<Input
+					id="desc_max_chars"
+					type="number"
+					min="50"
+					placeholder="unlimited"
+					bind:value={descriptionsMaxChars}
+					class="rounded-xl"
+				/>
+			</div>
+		</div>
 
 		{#if modelsError}
 			<p class="mt-3 text-xs text-red-300">{modelsError}</p>

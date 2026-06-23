@@ -63,7 +63,8 @@ def schema_from_callable(
 	if not fields:
 		return {}
 
-	dynamic_model = create_model(f"{func.__name__}_params", **fields)
+	func_name = getattr(func, "__name__", "callable")
+	dynamic_model = create_model(f"{func_name}_params", **fields)
 	schema: JSONObject = {k: v for k, v in dynamic_model.model_json_schema().items()}
 	return schema
 
@@ -457,7 +458,8 @@ def process_schema(
 	if result.get("type") == "object":
 		props_val = result.get("properties")
 		if make_all_required and isinstance(props_val, dict):
-			result["required"] = list(props_val.keys())
+			required_keys: list[JSONValue] = list(props_val.keys())
+			result["required"] = required_keys
 		if set_additionalproperties_field:
 			result["additionalProperties"] = False
 
@@ -634,7 +636,9 @@ def _process_enum_field_with_description_array(
 		json_type = validate_homogeneous_types(enum_values)
 		result["type"] = json_type
 		if enum_descriptions:
-			enum_desc_array = [enum_descriptions.get(str(v), "") for v in enum_values]
+			enum_desc_array: list[JSONValue] = [
+				enum_descriptions.get(str(v), "") for v in enum_values
+			]
 			result[strategy] = enum_desc_array
 
 	else:

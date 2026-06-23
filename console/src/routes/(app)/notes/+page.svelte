@@ -4,7 +4,6 @@
 	import { api, unwrap, type Schemas } from '$lib/api'
 
 	type Note = Schemas['Note']
-	type SearchResultItem = Schemas['SearchResultItem']
 
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import NoteDetailsModal from '$lib/components/NoteDetailsModal.svelte'
@@ -13,7 +12,20 @@
 
 	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp, Clock, FileText, Hash, Search, Tag, User, RefreshCw, X, ChevronLeft, ChevronRight } from '@lucide/svelte'
+	import {
+		ArrowDown,
+		ArrowUp,
+		ChevronLeft,
+		ChevronRight,
+		Clock,
+		FileText,
+		Hash,
+		RefreshCw,
+		Search,
+		Tag,
+		User,
+		X,
+	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'updated_at' | 'created_at' | 'title'
@@ -46,9 +58,10 @@
 	let searchQuery = $state('')
 	let isLoading = $state(false)
 	let hasNext = $state(false)
+	let total = $state(0)
 	let error = $state<string | null>(null)
 
-	let searchResults = $state<SearchResultItem[]>([])
+	let searchResults = $state<Note[]>([])
 	let isSearching = $state(false)
 	let searchError = $state<string | null>(null)
 	let _searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -167,21 +180,33 @@
 		isLoading = true
 		error = null
 
-		api.GET('/v1/notes', {
-			params: {
-				query: {
-					user_id: ownerIdFilter ?? undefined,
-					skip,
-					limit,
-					sort_by: sortKey,
-					sort_dir: sortDir,
-				},
-			},
-		})
-			.then((r) => unwrap(r))
-			.then((result) => {
+		Promise.all([
+			api
+				.GET('/v1/notes', {
+					params: {
+						query: {
+							owner_id: ownerIdFilter ?? undefined,
+							include_deleted: true,
+							skip,
+							limit,
+							sort_by: sortKey,
+							sort_dir: sortDir,
+						},
+					},
+				})
+				.then((r) => unwrap(r)),
+			api
+				.GET('/v1/notes/count', {
+					params: {
+						query: { owner_id: ownerIdFilter ?? undefined, include_deleted: true },
+					},
+				})
+				.then((r) => unwrap(r)),
+		])
+			.then(([result, count]) => {
 				notes = result
-				hasNext = result.length === limit
+				total = count
+				hasNext = (pageIndex + 1) * limit < count
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load notes'
@@ -249,7 +274,7 @@
 						disabled={isLoading}
 					>
 						<X class="mr-2 h-4 w-4" />
-						user: {ownerIdFilter}
+						owner: {ownerIdFilter}
 					</Button>
 				{/if}
 				<Button
@@ -288,7 +313,9 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{notes.length > 0 ? ` \u00b7 ${notes.length} items` : ''}
+					{total > 0
+						? `items ${pageIndex * limit + 1}–${pageIndex * limit + notes.length} of ${total}`
+						: ''}
 				</span>
 				<Button
 					variant="outline"
@@ -337,9 +364,9 @@
 										<FileText class="h-4 w-4 text-zinc-500" />
 										<span class="truncate font-medium">{r.title}</span>
 									</div>
-									{#if r.preview}
+									{#if r.content}
 										<div class="line-clamp-1 text-sm text-zinc-400">
-											{r.preview}
+											{r.content}
 										</div>
 									{/if}
 									<div class="flex items-center gap-2 text-xs text-zinc-400">
@@ -351,11 +378,6 @@
 										</span>
 									</div>
 								</div>
-								{#if r.score != null}
-									<span class="shrink-0 text-xs text-zinc-500"
-										>{(r.score * 100).toFixed(1)}%</span
-									>
-								{/if}
 							</div>
 						</div>
 					{/each}
@@ -386,14 +408,20 @@
 						onclick={() => openNote(n)}
 					>
 						<div class="flex min-w-0 flex-1 items-center gap-4">
-							<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+							<div
+								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-400"
+							>
 								<FileText class="h-5 w-5" />
 							</div>
 							<div class="min-w-0 flex-1 space-y-1">
 								<div class="flex flex-wrap items-center gap-2">
-									<span class="truncate text-base font-medium text-zinc-100">{n.title}</span>
+									<span class="truncate text-base font-medium text-zinc-100"
+										>{n.title}</span
+									>
 									{#if n.deleted_at}
-										<span class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-red-400 uppercase">
+										<span
+											class="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-[10px] font-medium tracking-wider text-red-400 uppercase"
+										>
 											deleted
 										</span>
 									{/if}
@@ -403,8 +431,12 @@
 										{n.content}
 									</div>
 								{/if}
-								<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-									<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+								<div
+									class="flex flex-wrap items-center gap-3 text-xs text-zinc-500"
+								>
+									<span
+										class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50"
+									>
 										<Hash class="h-3 w-3" />
 										{n.id}
 									</span>
@@ -423,7 +455,9 @@
 									</span>
 									{#if (n.labels ?? []).length > 0}
 										{#each n.labels ?? [] as label (label)}
-											<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+											<span
+												class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase"
+											>
 												<Tag class="h-3 w-3" />
 												{label}
 											</span>

@@ -1,9 +1,26 @@
+<script module lang="ts">
+	export type WheelZoomActivation = 'modifier' | 'hover' | 'both'
+
+	// shared wheel-zoom activation: 'modifier' (ctrl + scroll), 'hover' (scroll
+	// after a brief hover), or 'both'. mermaid is rendered inside streamdown so it
+	// has no prop channel from the page - this module rune bridges that gap and
+	// lets the debug page flip the mode live for every chart.
+	export const wheelZoom = $state<{ mode: WheelZoomActivation }>({ mode: 'modifier' })
+</script>
+
 <script lang="ts">
 	import type { Tokens } from 'marked'
 	import type { MermaidConfig } from 'mermaid'
-	import { onMount } from 'svelte'
+	import { onDestroy, onMount } from 'svelte'
 	import { useStreamdown } from 'svelte-streamdown'
-	import { fitViewIcon, fullscreenIcon, zoomInIcon, zoomOutIcon } from './icons.ts'
+	import {
+		checkIcon,
+		copyIcon,
+		fitViewIcon,
+		fullscreenIcon,
+		zoomInIcon,
+		zoomOutIcon,
+	} from './icons.ts'
 	import MermaidDownload from './MermaidDownload.svelte'
 	import { usePanzoom } from './utils/panzoom.svelte.js'
 
@@ -32,16 +49,38 @@
 	let mermaidConfigKey = ''
 	let lastRenderedCode = ''
 	let renderSeq = 0
+	let renderTimer: ReturnType<typeof setTimeout> | null = null
+	let hasRendered = $state(false)
+	let hasRenderError = $state(false)
+	let copied = $state(false)
+	let copyTimer: ReturnType<typeof setTimeout> | null = null
+	// only fall back to raw source if a diagram never rendered; once one renders,
+	// later partial snapshots that fail keep the last good render.
+	const showFallback = $derived(hasRenderError && !hasRendered)
 	onMount(async () => {
 		mermaid = (await import('mermaid')).default
 	})
+	onDestroy(() => {
+		if (renderTimer) clearTimeout(renderTimer)
+		if (copyTimer) clearTimeout(copyTimer)
+	})
 
+	// copy the raw mermaid source as a fenced markdown block, like code blocks.
+	const copyRaw = async () => {
+		await navigator.clipboard.writeText(`\`\`\`mermaid\n${token.text.trim()}\n\`\`\`\n`)
+		copied = true
+		if (copyTimer) clearTimeout(copyTimer)
+		copyTimer = setTimeout(() => (copied = false), 2000)
+	}
+
+	// wheel-zoom activation comes from the shared wheelZoom module rune above.
 	const panzoom = usePanzoom({
-		minZoom: 0.5,
-		maxZoom: 4,
+		minZoom: 0.02,
+		maxZoom: 32,
 		zoomSpeed: 1,
-		modifierKey: 'Control', // Check for Ctrl key
-		activateMouseWheel: true, // Enable wheel logic (which checks modifierKey)
+		modifierKey: 'Control',
+		activateMouseWheel: true,
+		wheelActivation: wheelZoom.mode,
 	})
 
 	const sanitizeMermaidCode = (code: string): string => {
@@ -60,22 +99,22 @@
 				return out
 			}
 
-			// 1. Remove Byte Order Mark (BOM)
+			// 1. remove byte order mark (BOM)
 			sanitized = sanitized.replace(/^\uFEFF/, '')
 
-			// 2. Normalize Unicode (NFC form for consistent rendering)
+			// 2. normalize unicode (NFC form for consistent rendering)
 			sanitized = sanitized.normalize('NFC')
 
-			// 3. Remove invisible/zero-width characters
+			// 3. remove invisible/zero-width characters
 			sanitized = sanitized.replace(/[\u200B-\u200F\u2028-\u202F\u205F-\u206F]/g, '')
 
-			// 4. Remove control characters (except tab, line feed, carriage return)
+			// 4. remove control characters (except tab, line feed, carriage return)
 			sanitized = stripControlChars(sanitized)
 
-			// 5. Normalize line endings to LF
+			// 5. normalize line endings to LF
 			sanitized = sanitized.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 
-			// 6. Decode common HTML entities that might appear in Mermaid code
+			// 6. decode common HTML entities that might appear in mermaid code
 			const htmlEntities: Record<string, string> = {
 				'&lt;': '<',
 				'&gt;': '>',
@@ -97,54 +136,23 @@
 				sanitized = sanitized.replace(new RegExp(entity, 'g'), replacement)
 			}
 
-			// 7. Convert smart quotes and other quote variants to standard quotes
+			// 7. convert smart quotes and other quote variants to standard quotes
 			sanitized = sanitized
-				.replace(/[\u2018\u2019]/g, "'") // Smart single quotes
-				.replace(/[\u201C\u201D]/g, '"') // Smart double quotes
-				.replace(/[\u2013\u2014]/g, '-') // Em/en dashes
-				.replace(/\u2026/g, '...') // Horizontal ellipsis
+				.replace(/[\u2018\u2019]/g, "'") // smart single quotes
+				.replace(/[\u201C\u201D]/g, '"') // smart double quotes
+				.replace(/[\u2013\u2014]/g, '-') // em/en dashes
+				.replace(/\u2026/g, '...') // horizontal ellipsis
 
-			// 8. Trim leading/trailing whitespace from each line and remove empty lines
-			sanitized = sanitized
-				.split('\n')
-				.map((line) => line.trim())
-				.filter((line) => line.length > 0)
-				.join('\n')
-
-			// 9. Normalize multiple spaces/tabs to single space (but preserve indentation in code blocks)
-			sanitized = sanitized.replace(/[ \t]+/g, ' ')
-
-			// 10. Handle over-escaped characters (common in copied code)
-			// Convert double backslashes to single (except in JSON strings)
-			sanitized = sanitized.replace(/\\\\(?![\\"])/g, '\\')
-
-			// 11. Remove non-breaking spaces and other special spaces
+			// 8. remove non-breaking spaces and other special spaces
 			sanitized = sanitized.replace(
 				/[\u00A0\u1680\u180E\u2000-\u200A\u202F\u205F\u3000]/g,
 				' '
 			)
 
-			// 12. Ensure proper spacing around operators and keywords
-			// Add space after commas if missing (common in CSV-like data)
-			sanitized = sanitized.replace(/,([^\s])/g, ', $1')
-
-			// 13. Clean up Mermaid-specific issues
-			// Remove trailing semicolons that might break parsing
+			// 9. remove trailing semicolons that might break parsing
 			sanitized = sanitized.replace(/;+\s*$/gm, '')
 
-			// Normalize common edge label syntax: "A -- Yes --> B" -> "A --|Yes|--> B"
-			sanitized = sanitized.replace(
-				/--\s*(?!\|)(?!")([^\n]+?)\s*-->/g,
-				(_, label: string) => `--|${label.trim()}|-->`
-			)
-
-			// Ensure proper spacing in flowchart syntax
-			sanitized = sanitized.replace(
-				/([A-Za-z0-9_]+)(--|-->|-\.-|-\.->|==|==>|=\.=>|=\.->)/g,
-				'$1 $2'
-			)
-
-			// 14. Final cleanup: trim and ensure single trailing newline
+			// 10. trim outer whitespace and ensure a single trailing newline
 			sanitized = sanitized.trim()
 			if (sanitized && !sanitized.endsWith('\n')) {
 				sanitized += '\n'
@@ -153,20 +161,60 @@
 			return sanitized
 		} catch (error) {
 			console.warn('Error during Mermaid code sanitization:', error)
-			// Return original code if sanitization fails
 			return code
 		}
+	}
+
+	const applyRenderedSvg = (svgTarget: SVGSVGElement, uniqueId: string, svgString: string) => {
+		const parsed = new DOMParser().parseFromString(svgString, 'image/svg+xml')
+		const renderedSvg = parsed.documentElement
+		if (renderedSvg.nodeName.toLowerCase() === 'parsererror') {
+			svgTarget.innerHTML = svgString
+			return
+		}
+
+		for (const attribute of Array.from(svgTarget.attributes)) {
+			if (attribute.name !== 'data-mermaid-svg') svgTarget.removeAttribute(attribute.name)
+		}
+
+		svgTarget.id = uniqueId
+		for (const attribute of Array.from(renderedSvg.attributes)) {
+			if (attribute.name !== 'id') svgTarget.setAttribute(attribute.name, attribute.value)
+		}
+
+		const viewBox = renderedSvg.getAttribute('viewBox')
+		const viewBoxParts = viewBox?.split(/[\s,]+/).map((part) => Number(part)) ?? []
+		const viewBoxWidth = viewBoxParts.length === 4 ? viewBoxParts[2] : Number.NaN
+		const viewBoxHeight = viewBoxParts.length === 4 ? viewBoxParts[3] : Number.NaN
+		const attrWidth = Number.parseFloat(renderedSvg.getAttribute('width') ?? '')
+		const attrHeight = Number.parseFloat(renderedSvg.getAttribute('height') ?? '')
+		const width = Number.isFinite(viewBoxWidth) && viewBoxWidth > 0 ? viewBoxWidth : attrWidth
+		const height =
+			Number.isFinite(viewBoxHeight) && viewBoxHeight > 0 ? viewBoxHeight : attrHeight
+		if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
+			svgTarget.parentElement?.style.setProperty(
+				'--mermaid-aspect-ratio',
+				`${width} / ${height}`
+			)
+			svgTarget.setAttribute('width', String(width))
+			svgTarget.setAttribute('height', String(height))
+			svgTarget.style.width = `${width}px`
+			svgTarget.style.height = `${height}px`
+			svgTarget.style.maxWidth = 'none'
+			svgTarget.style.maxHeight = 'none'
+		}
+
+		svgTarget.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+		svgTarget.innerHTML = renderedSvg.innerHTML
 	}
 
 	const renderMermaid = async (code: string, element: HTMLElement) => {
 		try {
 			if (!mermaid) return
-			// Sanitize the code first
 			const sanitizedCode = sanitizeMermaidCode(code)
-			const svgTarget = element.querySelector('[data-mermaid-svg]') as SVGElement | null
+			const svgTarget = element.querySelector('[data-mermaid-svg]') as SVGSVGElement | null
 			if (sanitizedCode === lastRenderedCode && svgTarget?.innerHTML) return
 
-			// Default configuration
 			const defaultConfig: MermaidConfig = {
 				theme: 'base',
 				startOnLoad: false,
@@ -175,7 +223,7 @@
 				suppressErrorRendering: true,
 
 				flowchart: {
-					useMaxWidth: true,
+					useMaxWidth: false,
 					htmlLabels: true,
 					curve: 'basis',
 				},
@@ -197,33 +245,31 @@
 				.substring(2, 9)}`
 			const seq = ++renderSeq
 
-			// Render the diagram
 			const { svg: svgString } = await mermaid.render(uniqueId, sanitizedCode)
 			if (seq !== renderSeq) return
 
-			// Insert the SVG into the target element
 			if (svgTarget) {
-				svgTarget.innerHTML = svgString
-				svgTarget.id = uniqueId
-
-				// Apply any additional attributes from the rendered SVG
-				const tempSvg = new DOMParser().parseFromString(
-					svgString,
-					'image/svg+xml'
-				).documentElement
-				Array.from(tempSvg.attributes).forEach((attribute) => {
-					if (attribute.name !== 'id') {
-						svgTarget.setAttribute(attribute.name, attribute.value)
-					}
-				})
+				applyRenderedSvg(svgTarget, uniqueId, svgString)
 
 				panzoom.zoomToFit()
 				lastRenderedCode = sanitizedCode
+				hasRendered = true
+				hasRenderError = false
 			}
 		} catch (err) {
 			console.warn('Mermaid rendering error:', err)
-			// Could show error state in UI here
+			hasRenderError = true
 		}
+	}
+
+	// debounce: streamed source changes rapidly and is often incomplete, so
+	// rendering every snapshot spams parse errors and janks. render once it settles.
+	const scheduleRender = (code: string, element: HTMLElement) => {
+		if (renderTimer) clearTimeout(renderTimer)
+		renderTimer = setTimeout(() => {
+			renderTimer = null
+			void renderMermaid(code, element)
+		}, 180)
 	}
 </script>
 
@@ -232,11 +278,16 @@
 		<div
 			style={streamdown.isMounted ? streamdown.animationBlockStyle : ''}
 			class={streamdown.theme.mermaid.base}
-			{@attach (node) => renderMermaid(token.text, node)}
+			{@attach (node) => scheduleRender(token.text, node)}
 			data-expanded="false"
+			data-fallback={showFallback}
 		>
-			{#if streamdown.controls.mermaid}
-				<div class={streamdown.theme.mermaid.buttons}>
+			<svg {@attach panzoom.attach} data-mermaid-svg></svg>
+			{#if showFallback}
+				<pre class="mermaid-fallback"><code>{token.text}</code></pre>
+			{/if}
+			{#if streamdown.controls.mermaid && !showFallback}
+				<div class={`${streamdown.theme.mermaid.buttons} mermaid-controls`}>
 					<button
 						class={streamdown.theme.components.button}
 						aria-label="zoom to fit"
@@ -298,10 +349,21 @@
 							></span>
 						{/if}
 					</button>
+					<button
+						class={streamdown.theme.components.button}
+						aria-label={copied ? 'copied' : 'copy diagram source'}
+						onclick={() => void copyRaw()}
+						data-panzoom-ignore
+					>
+						<span
+							class="h-4 w-4"
+							aria-hidden="true"
+							{@attach attachSvg(copied ? checkIcon : copyIcon)}
+						></span>
+					</button>
 					<MermaidDownload {id} />
 				</div>
 			{/if}
-			<svg {@attach panzoom.attach} data-mermaid-svg></svg>
 		</div>
 	{:else}
 		<div class={streamdown.theme.mermaid.base}></div>
@@ -311,21 +373,83 @@
 <style>
 	:global([data-expanded='true']) {
 		position: fixed;
-		top: 16px;
+		top: max(16px, env(safe-area-inset-top));
+		right: 16px;
+		bottom: max(16px, env(safe-area-inset-bottom));
 		left: 16px;
-		width: calc(100vw - 32px);
-		height: calc(100vh - 32px);
+		width: auto;
+		height: auto;
 		z-index: 2147483647;
 		margin: 0px;
+		overflow: hidden;
+		border-radius: clamp(18px, 2.4vw, 32px);
+		box-shadow: 0 24px 72px rgba(0, 0, 0, 0.38);
 	}
 
-	/* Mobile UX: allow vertical scroll over charts unless fullscreen.
-	   We disable SVG hit-testing so swipes become normal page scroll.
-	*/
+	:global([data-expanded='true'] svg[data-mermaid-svg]) {
+		border-radius: inherit;
+	}
+
+	:global([data-streamdown-mermaid] [data-expanded]) {
+		position: relative;
+		overflow: hidden;
+	}
+
+	:global([data-streamdown-mermaid] [data-expanded='false']) {
+		/* pin the width so the aspect-ratio derives height from it. without this,
+		   the upstream min-height (500px) on a wide diagram makes the box grow its
+		   own width to satisfy the ratio, overflowing the parent and forcing
+		   horizontal page scroll. */
+		width: 100%;
+		aspect-ratio: var(--mermaid-aspect-ratio, 16 / 9);
+	}
+
+	/* failed diagrams: drop the fixed aspect-ratio box and show raw source */
+	:global([data-streamdown-mermaid] [data-fallback='true']) {
+		aspect-ratio: auto;
+		overflow: auto;
+	}
+
+	:global([data-streamdown-mermaid] [data-fallback='true'] svg[data-mermaid-svg]) {
+		display: none;
+	}
+
+	.mermaid-fallback {
+		position: relative;
+		z-index: 1;
+		margin: 0;
+		padding: 0.75rem 1rem;
+		overflow-x: auto;
+		font-family: var(--font-mono, monospace);
+		font-size: 0.8125rem;
+		line-height: 1.5;
+		white-space: pre;
+		color: var(--muted-foreground, inherit);
+	}
+
+	:global([data-streamdown-mermaid] svg[data-mermaid-svg]) {
+		position: absolute;
+		top: 0;
+		left: 0;
+		z-index: 0;
+		display: block;
+		width: auto;
+		height: auto;
+	}
+
+	:global([data-streamdown-mermaid] .mermaid-controls) {
+		position: absolute;
+		top: 0.75rem;
+		right: 0.75rem;
+		z-index: 20;
+		pointer-events: auto;
+	}
+
+	/* mobile: let swipes scroll the page over charts, and keep wide diagrams
+	   clipped to their box so they never force horizontal page scroll */
 	@media (pointer: coarse) {
 		:global([data-streamdown-mermaid] [data-expanded='false']) {
 			touch-action: pan-y !important;
-			overflow: visible !important;
 		}
 
 		:global([data-streamdown-mermaid] [data-expanded='false'] svg[data-mermaid-svg]) {
@@ -333,7 +457,7 @@
 		}
 	}
 
-	/* Hide Mermaid's temporary rendering containers */
+	/* hide mermaid's temporary rendering containers */
 	:global(div[id^='dmermaid-']) {
 		position: absolute !important;
 		left: -9999px !important;

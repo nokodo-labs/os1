@@ -24,19 +24,12 @@
 	aria-hidden="true"
 	class={className}
 	{...rest}
-	><path d="M2 2l20 20" stroke-linecap="round" stroke-linejoin="round"></path><path
-		d="M8.5 16.5a5 5 0 0 1 7 0"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-	></path><path d="M2 8.82a15 15 0 0 1 4.17-2.65" stroke-linecap="round" stroke-linejoin="round"
-	></path><path
-		d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-	></path><path
-		d="M16.85 11.25a10 10 0 0 1 2.22 1.68"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-	></path><path d="M5 12.86a10 10 0 0 1 5.17-2.89" stroke-linecap="round" stroke-linejoin="round"
-	></path><path d="M12 20h.01" stroke-linecap="round" stroke-linejoin="round"></path></svg
 >
+	<path d="M12 20h.01" stroke-linecap="round" stroke-linejoin="round" />
+	<path d="M8.5 16.5a5 5 0 0 1 7 0" stroke-linecap="round" stroke-linejoin="round" />
+	<path d="M5 13a10 10 0 0 1 5.17-2.69" stroke-linecap="round" stroke-linejoin="round" />
+	<path d="M19 13a10 10 0 0 0-2-1.52" stroke-linecap="round" stroke-linejoin="round" />
+	<path d="M2 8.5a15 15 0 0 1 4.18-2.65" stroke-linecap="round" stroke-linejoin="round" />
+	<path d="M22 8.5a15 15 0 0 0-11.29-3.76" stroke-linecap="round" stroke-linejoin="round" />
+	<path d="m2 2 20 20" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

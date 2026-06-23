@@ -11,12 +11,14 @@
 		<script>
 			;(function () {
 				try {
-					const mode = localStorage.getItem('theme-mode') || 'system'
-					const isDark =
-						mode === 'dark' ||
-						(mode === 'system' &&
-							window.matchMedia('(prefers-color-scheme: dark)').matches)
-					document.documentElement.classList.toggle('dark', isDark)
+					// 'theme-resolved' is persisted by the theme context as the final
+					// 'light'/'dark' value; fall back to OS preference before hydration.
+					const resolved =
+						localStorage.getItem('theme-resolved') ||
+						(window.matchMedia('(prefers-color-scheme: dark)').matches
+							? 'dark'
+							: 'light')
+					document.documentElement.classList.toggle('dark', resolved === 'dark')
 				} catch {
 					// ignore
 				}

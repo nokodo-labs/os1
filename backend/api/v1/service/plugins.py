@@ -2,34 +2,56 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal, overload
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from api.models.plugin import Plugin
-from api.schemas.plugin import PluginCreate, PluginInfo, PluginTypeStr, PluginUpdate
+from api.permissions import ActionPermission
+from api.schemas.agent import AgentConfig
+from api.schemas.plugin import (
+	PluginCreate,
+	PluginInfo,
+	PluginListFilters,
+	PluginTypeStr,
+	PluginUpdate,
+)
 from api.v1.service.auth import Principal
 from api.v1.service.authorization import require_permission
+from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters import (
 	FILTER_REGISTRY,
+	resolve_filters,
 )
 from api.v1.service.chat.filters import (
 	get_registered_names as get_filter_names,
 )
 from api.v1.service.chat.hooks import (
 	HOOK_REGISTRY,
+	resolve_hooks,
 )
 from api.v1.service.chat.hooks import (
 	get_registered_names as get_hook_names,
 )
-from api.v1.service.chat.tools import (
-	TOOL_REGISTRY,
+from api.v1.service.chat.tools.external import (
+	get_external_tool_plugin,
+	list_external_tool_plugins,
 )
-from api.v1.service.chat.tools import (
+from api.v1.service.chat.tools.registry import (
+	TOOL_REGISTRY,
+	resolve_extra_tools,
+	resolve_tools,
+)
+from api.v1.service.chat.tools.registry import (
 	get_registered_names as get_tool_names,
 )
+from nokodo_ai import Filter as SDKFilter
+from nokodo_ai import Hook as SDKHook
+from nokodo_ai.tool import Tool
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -58,7 +80,7 @@ def _build_native_info(
 		name=name,
 		description=description,
 		type=plugin_type,
-		is_native=True,
+		source="native",
 	)
 
 
@@ -114,14 +136,33 @@ def _db_plugin_to_info(plugin: Plugin) -> PluginInfo:
 		name=plugin.name,
 		description=plugin.description or "",
 		type=plugin.type.value,
-		is_native=False,
+		source="custom",
 	)
+
+
+def _apply_plugin_filters(stmt: Select, filters: PluginListFilters) -> Select:
+	"""apply plugin filters to a DB query."""
+	if filters.plugin_type is not None:
+		stmt = stmt.where(Plugin.type == filters.plugin_type)
+	return stmt
+
+
+def _apply_plugin_catalog_filters(
+	plugins: list[PluginInfo],
+	filters: PluginListFilters,
+) -> list[PluginInfo]:
+	"""apply plugin filters to in-memory catalog items."""
+	return [
+		plugin
+		for plugin in plugins
+		if (filters.source is None or plugin.source == filters.source)
+		and (filters.plugin_type is None or plugin.type == filters.plugin_type)
+	]
 
 
 async def _ensure_name_available(
 	name: str,
 	session: AsyncSession,
-	*,
 	exclude_id: TypeID | None = None,
 ) -> None:
 	if _is_native_name(name):
@@ -145,7 +186,6 @@ async def _ensure_name_available(
 async def create_plugin(
 	plugin_in: PluginCreate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Plugin:
 	require_permission(principal, "plugins:manage")
@@ -170,10 +210,9 @@ async def create_plugin(
 @overload
 async def list_plugins(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	include_native: Literal[False] = ...,
-	plugin_type: PluginTypeFilter = ...,
+	filters: PluginListFilters | None = ...,
 	skip: int = ...,
 	limit: int = ...,
 ) -> list[Plugin]: ...
@@ -182,10 +221,9 @@ async def list_plugins(
 @overload
 async def list_plugins(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	include_native: Literal[True],
-	plugin_type: PluginTypeFilter = ...,
+	filters: PluginListFilters | None = ...,
 	skip: int = ...,
 	limit: int = ...,
 ) -> list[PluginInfo]: ...
@@ -193,38 +231,60 @@ async def list_plugins(
 
 async def list_plugins(
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	include_native: bool = False,
-	plugin_type: PluginTypeFilter = None,
+	filters: PluginListFilters | None = None,
 	skip: int = 0,
 	limit: int = 50,
 ) -> list[Plugin] | list[PluginInfo]:
 	"""list plugins.
 
 	when include_native is False, returns only database Plugin ORM objects.
-	when include_native is True, returns a merged list of PluginInfo (native + db).
+	when include_native is True, returns PluginInfo catalog items from all sources.
 	"""
-	require_permission(principal, "plugins:read")
+	plugin_filters = filters or PluginListFilters()
+	can_read_full_catalog = principal.has_permission(ActionPermission.PLUGINS_READ)
+	can_read_user_mcp = principal.has_permission(ActionPermission.USER_MCP_MANAGE)
+	if not can_read_full_catalog and not can_read_user_mcp:
+		require_permission(principal, ActionPermission.PLUGINS_READ)
+	if not can_read_full_catalog:
+		if not include_native:
+			return []
+		if plugin_filters.plugin_type not in (None, "tool"):
+			return []
+		if plugin_filters.source not in (None, "external"):
+			return []
+		plugins = await list_external_tool_plugins(session, principal, "tool")
+		plugins = _apply_plugin_catalog_filters(plugins, plugin_filters)
+		plugins.sort(key=lambda p: p.name)
+		return plugins[skip : skip + limit]
 
 	if not include_native:
-		stmt = select(Plugin).order_by(Plugin.created_at.desc())
-		if plugin_type is not None:
-			stmt = stmt.where(Plugin.type == plugin_type)
+		if plugin_filters.source not in (None, "custom"):
+			return []
+		stmt = _apply_plugin_filters(
+			select(Plugin).order_by(Plugin.created_at.desc()), plugin_filters
+		)
 		result = await session.execute(stmt.offset(skip).limit(limit))
 		return list(result.scalars().all())
 
-	# merged mode: native + database as PluginInfo
-	plugins: list[PluginInfo] = _list_native(plugin_type)
+	# Catalog mode: native + external runtime + database as PluginInfo.
+	plugins: list[PluginInfo] = []
+	if plugin_filters.source in (None, "native"):
+		plugins.extend(_list_native())
+	if plugin_filters.source in (None, "external"):
+		plugins.extend(await list_external_tool_plugins(session, principal, None))
 
-	stmt = select(Plugin).order_by(Plugin.created_at.desc())
-	if plugin_type is not None:
-		stmt = stmt.where(Plugin.type == plugin_type)
-	result = await session.execute(stmt)
+	if plugin_filters.source in (None, "custom"):
+		stmt = _apply_plugin_filters(
+			select(Plugin).order_by(Plugin.created_at.desc()), plugin_filters
+		)
+		result = await session.execute(stmt)
 
-	for db_plugin in result.scalars().all():
-		plugins.append(_db_plugin_to_info(db_plugin))
+		for db_plugin in result.scalars().all():
+			plugins.append(_db_plugin_to_info(db_plugin))
 
+	plugins = _apply_plugin_catalog_filters(plugins, plugin_filters)
 	plugins.sort(key=lambda p: p.name)
 	return plugins[skip : skip + limit]
 
@@ -233,7 +293,6 @@ async def list_plugins(
 async def get_plugin(
 	plugin_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	include_native: Literal[False] = ...,
 ) -> Plugin: ...
@@ -243,7 +302,6 @@ async def get_plugin(
 async def get_plugin(
 	plugin_id: TypeID | str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	include_native: Literal[True],
 ) -> PluginInfo: ...
@@ -252,7 +310,6 @@ async def get_plugin(
 async def get_plugin(
 	plugin_id: TypeID | str,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 	include_native: bool = False,
 ) -> Plugin | PluginInfo:
@@ -263,12 +320,30 @@ async def get_plugin(
 	when include_native is False, looks up only database plugins and returns
 	the Plugin ORM object.
 	"""
-	require_permission(principal, "plugins:read")
+	can_read_full_catalog = principal.has_permission(ActionPermission.PLUGINS_READ)
+	can_read_user_mcp = principal.has_permission(ActionPermission.USER_MCP_MANAGE)
+	if not can_read_full_catalog and not can_read_user_mcp:
+		require_permission(principal, ActionPermission.PLUGINS_READ)
 
 	if include_native:
+		if not can_read_full_catalog:
+			external_plugin = await get_external_tool_plugin(
+				str(plugin_id), session, principal
+			)
+			if external_plugin is not None:
+				return external_plugin
+			raise HTTPException(
+				status_code=status.HTTP_404_NOT_FOUND,
+				detail="plugin not found",
+			)
 		native = _get_native(str(plugin_id))
 		if native:
 			return native
+		external_plugin = await get_external_tool_plugin(
+			str(plugin_id), session, principal
+		)
+		if external_plugin is not None:
+			return external_plugin
 		db_plugin = await _get_db_plugin(TypeID(plugin_id), session)
 		return _db_plugin_to_info(db_plugin)
 
@@ -279,7 +354,6 @@ async def update_plugin(
 	plugin_id: TypeID,
 	plugin_in: PluginUpdate,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> Plugin:
 	require_permission(principal, "plugins:manage")
@@ -287,9 +361,12 @@ async def update_plugin(
 
 	update_data = plugin_in.model_dump(exclude_unset=True, by_alias=True)
 
-	if plugin_in.name is not None:
+	if "name" in plugin_in.model_fields_set:
+		name = plugin_in.name
+		if not isinstance(name, str):
+			raise ValueError("invalid plugin name")
 		await _ensure_name_available(
-			plugin_in.name,
+			name,
 			session,
 			exclude_id=plugin_id,
 		)
@@ -305,10 +382,67 @@ async def update_plugin(
 async def delete_plugin(
 	plugin_id: TypeID,
 	session: AsyncSession,
-	*,
 	principal: Principal,
 ) -> None:
 	require_permission(principal, "plugins:manage")
 	plugin = await _get_db_plugin(plugin_id, session)
 	await session.delete(plugin)
 	await session.commit()
+
+
+# agent plugin resolution
+
+
+@dataclass(slots=True)
+class ResolvedPlugins:
+	"""instantiated plugins resolved from an agent's flat plugin id list."""
+
+	tools: list[Tool[AppContext]]
+	filters: list[SDKFilter[AppContext]]
+	hooks: list[SDKHook[AppContext]]
+
+
+def _tool_candidate_plugin_ids(plugin_ids: list[str]) -> list[str]:
+	"""return plugin ids the tool registry should attempt to resolve.
+
+	drops ids that are known filters / hooks (but not also tools) so the tool
+	resolver does not warn on them. unknown ids are kept so external / MCP tool
+	sources still get a chance to resolve them.
+	"""
+	tool_names = get_tool_names()
+	non_tool_names = (get_filter_names() | get_hook_names()) - tool_names
+	return [plugin_id for plugin_id in plugin_ids if plugin_id not in non_tool_names]
+
+
+async def resolve_plugins(
+	plugin_ids: list[str],
+	app_context: AppContext,
+	agent_config: AgentConfig,
+	extra_plugins: list[str] | None = None,
+) -> ResolvedPlugins:
+	"""resolve a flat plugin id list into instantiated tools, filters, and hooks.
+
+	``extra_plugins`` are request-scoped tool ids (e.g. user MCP tools) merged
+	into the resolved tool list, de-duplicated by tool name.
+	"""
+	tools = await resolve_tools(
+		tool_ids=_tool_candidate_plugin_ids(plugin_ids),
+		app_context=app_context,
+	)
+	if extra_plugins:
+		extra_tools = await resolve_extra_tools(
+			tool_ids=extra_plugins,
+			app_context=app_context,
+			agent_config=agent_config,
+		)
+		seen_tool_names = {tool.name for tool in tools}
+		for tool in extra_tools:
+			if tool.name in seen_tool_names:
+				continue
+			seen_tool_names.add(tool.name)
+			tools.append(tool)
+	return ResolvedPlugins(
+		tools=tools,
+		filters=resolve_filters(plugin_ids),
+		hooks=resolve_hooks(plugin_ids),
+	)

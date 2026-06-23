@@ -41,7 +41,39 @@ async def test_lifespan_initializes_database(monkeypatch: pytest.MonkeyPatch) ->
 	async def fake_init_db() -> None:
 		called["init"] = True
 
+	async def fake_noop() -> None:
+		return None
+
+	async def fake_start_invalidation_subscriber() -> None:
+		return None
+
+	async def fake_start_remote_fanout_relay() -> None:
+		return None
+
 	monkeypatch.setattr(main_module, "init_db", fake_init_db)
+	monkeypatch.setattr(main_module, "startup_taskiq", fake_noop)
+	monkeypatch.setattr(main_module, "shutdown_taskiq", fake_noop)
+	monkeypatch.setattr(
+		main_module,
+		"reconcile_calendar_event_notification_schedules",
+		fake_noop,
+	)
+	monkeypatch.setattr(
+		main_module,
+		"reconcile_reminder_notification_schedules",
+		fake_noop,
+	)
+	monkeypatch.setattr(
+		main_module,
+		"start_invalidation_subscriber",
+		fake_start_invalidation_subscriber,
+	)
+	monkeypatch.setattr(
+		main_module,
+		"start_remote_fanout_relay",
+		fake_start_remote_fanout_relay,
+	)
+	monkeypatch.setattr(boot_settings, "ENV", "dev")
 	original_testing = boot_settings.TESTING
 	boot_settings.TESTING = False
 	try:
@@ -94,3 +126,13 @@ async def test_public_settings_endpoint(client: AsyncClient) -> None:
 	assert "public_frontend_origin" in data["data"]["branding"]
 	assert "public_cdn_origin" in data["data"]["branding"]
 	assert "public_console_origin" in data["data"]["branding"]
+	assert data["data"]["media"]["favicon"]["url"] == (
+		"https://nokodo.net/static/os1/favicon.svg"
+	)
+	assert "assets" not in data["data"]
+	assert "cache" not in data["data"]
+	assert "tasks" not in data["data"]
+	assert "web_search" not in data["data"]
+	assert set(data["data"]["ai"]) == {"default_agent_ids"}
+	assert set(data["data"]["security"]) == {"allow_signups", "oidc"}
+	assert set(data["data"]["security"]["oidc"]) == {"only"}

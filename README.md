@@ -1,11 +1,10 @@
 <div align="center">
 
-<img src="https://nokodo.net/media/images/logo_full.svg" alt="nokodo" width=83% />
+<img src="https://nokodo.net/static/os1/sidebar-logo.svg" alt="nokodo" width=83% />
 <div style="height: 30px;"></div>
 
 **the AI workspace you actually want to use**
 
-[![License](https://img.shields.io/github/license/nokodo-labs/os1)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/nokodo-labs/os1?style=social)](https://github.com/nokodo-labs/os1/stargazers)
 [![Discord](https://img.shields.io/badge/discord-join-5865F2)](https://discord.gg/VsYwyTqzDM)
 [![Issues](https://img.shields.io/github/issues/nokodo-labs/os1)](https://github.com/nokodo-labs/os1/issues)
@@ -121,7 +120,7 @@ https://github.com/user-attachments/assets/ddedb7be-1b99-4d25-b2b0-6c2dcfb28a65
 
 ### 🖌️ self-hostable, no restrictions
 
-- **fully open source** - BSD 3-Clause, use and modify freely
+- **fully open source** - permissive for commercial use, see [LICENSE](LICENSE)
 - **rebrand-friendly** - swap logos and colors, make it yours
 - **complete data control** - all data stays in your infrastructure
 
@@ -129,82 +128,17 @@ https://github.com/user-attachments/assets/ddedb7be-1b99-4d25-b2b0-6c2dcfb28a65
 
 ## 🚀 quickstart
 
-create a `docker-compose.yml`:
-
-```yaml
-services:
-    db:
-        image: postgres:17-alpine
-        restart: unless-stopped
-        environment:
-            POSTGRES_USER: nokodo
-            POSTGRES_PASSWORD: nokodo
-            POSTGRES_DB: nokodo
-        volumes:
-            - postgres_data:/var/lib/postgresql/data
-        healthcheck:
-            test: ["CMD-SHELL", "pg_isready -U nokodo"]
-            interval: 10s
-            retries: 5
-
-    qdrant:
-        image: qdrant/qdrant:v1.16.2
-        restart: unless-stopped
-        volumes:
-            - qdrant_data:/qdrant/storage
-
-    backend:
-        image: ghcr.io/nokodo-labs/os1-backend:latest
-        restart: unless-stopped
-        ports:
-            - "1383:1383"
-        environment:
-            DATABASE_URL: postgresql+psycopg://nokodo:nokodo@db:5432/nokodo
-            NOKODO__SECURITY__SECRET_KEY: change-me
-            NOKODO__SECURITY__CORS_ORIGINS: "http://localhost:888,http://localhost:8383"
-            NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN: "http://localhost:888"
-            NOKODO__BRANDING__PUBLIC_CONSOLE_ORIGIN: "http://localhost:8383"
-        depends_on:
-            db:
-                condition: service_healthy
-        volumes:
-            - uploads:/app/data
-
-    frontend:
-        image: ghcr.io/nokodo-labs/os1-frontend:latest
-        restart: unless-stopped
-        ports:
-            - "888:80"
-        environment:
-            API_ORIGIN: http://localhost:1383
-        depends_on:
-            - backend
-
-    console:
-        image: ghcr.io/nokodo-labs/os1-console:latest
-        restart: unless-stopped
-        ports:
-            - "8383:80"
-        environment:
-            API_ORIGIN: http://localhost:1383
-        depends_on:
-            - backend
-
-volumes:
-    postgres_data:
-    qdrant_data:
-    uploads:
-```
-
-then:
+clone the repo and use the production-ready compose file in `.docker/`:
 
 ```bash
+git clone https://github.com/nokodo-labs/os1.git
+cd os1/.docker
 docker compose up -d
 ```
 
 open `http://localhost:888` for the main app or `http://localhost:8383` for the admin console.
 
-> change `NOKODO__SECURITY__SECRET_KEY` to a long random string. for a custom domain, update the CORS setting plus the frontend and console origin vars to your URLs.
+> before going live, update `NOKODO__SECURITY__SECRET_KEY` to a long random string and set `NOKODO__SECURITY__CORS_ORIGINS`, `NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN`, and `API_ORIGIN` to your actual domain URLs. see [`.docker/docker-compose.yml`](.docker/docker-compose.yml) for all available options.
 
 for environment variable reference, building from source, and development setup see [docs/setup.md](docs/setup.md).
 
@@ -220,7 +154,9 @@ contributions are welcome! see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
 
 ## 📄 license
 
-BSD 3-Clause - see [LICENSE](LICENSE) for details.
+OS1 is open-source under a permissive attribution license built on AGPL-3.0 with
+additional permissions that allow commercial and closed-source use. See
+[LICENSE](LICENSE) for details.
 
 ---
 

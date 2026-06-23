@@ -22,6 +22,7 @@
 				thread: null,
 				project: null,
 				file: null,
+				calendar: null,
 				note: null,
 				group: null,
 				reminder_list: null,

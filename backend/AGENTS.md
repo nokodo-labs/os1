@@ -2,11 +2,12 @@
 
 ## code style
 
-- Python 3.13+ features, type hints everywhere
+- Python 3.14+ features, type hints everywhere
 - SQLAlchemy 2.0+ `Mapped` annotations
 - Pydantic v2.11+ for validation
 - tabs, unix line endings
 - Ruff for linting/formatting/imports
+- ty for type checking
 - pytest for testing with fixtures and coverage
 - adhere to `nokodo` brand rule of **no auto-capitalization** in comments, docstrings, logging, or any user-facing text. only proper nouns, acronyms and other intentional capitalizations are allowed.
 
@@ -18,7 +19,8 @@
 > 4.  NO use of getattr/setattr/delattr unless it's the only way. it defeats type checkers and is ugly.
 > 5.  AVOID direct cast() usage. use only when it's the only way.
 > 6.  AVOID use of Any type. only use when absolutely necessary.
-> 7.  patterns 1, 4, 5 and 6 can be used to **bypass typing issues**, which is **strictly forbidden**.
+> 7.  AVOID lazy imports. they can hide circular dependencies. only use when strictly NEEDED, and no other architectural changes can be made to avoid them.
+> 8.  patterns 1, 4, 5 and 6 can be used to **bypass typing issues**, which is **strictly forbidden**.
 
 ## backend codebase map
 
@@ -26,47 +28,64 @@
 backend/
 ├── api/                         # FastAPI backend app
 │   ├── main.py                  # app entrypoint and startup wiring
-│   ├── exceptions.py            # exception handlers
-│   ├── logging.py               # logging configuration and utilities
-│   ├── openapi.py               # OpenAPI response defaults
-│   ├── runtime.py               # event loop and runtime configuration
-│   ├── tasks.py                 # shared background task utilities
-│   ├── ...                      # perplexity, tavily, searxng API clients, etc.
-│   ├── database/                # DB init and search cursor helpers
-│   ├── middleware/              # API versioning, request id, logging, headers
+│   ├── boot_settings.py         # early boot settings (loaded before full settings)
+│   ├── permissions.py           # permission enums + DefaultPermissions (shared by models/settings)
+│   ├── local_tasks.py           # in-process fire-and-forget asyncio task helpers
+│   ├── taskiq.py                # TaskIQ broker startup/shutdown wiring
+│   ├── ...                      # exceptions, logging, openapi, runtime, constants, external API clients
+│   ├── database/                # DB engine init, async session, search cursor helpers
+│   ├── middleware/              # rate limiting, request id, logging, api version, security headers
 │   ├── migrations/              # Alembic config and migration scripts
-│   ├── models/                  # SQLAlchemy ORM models
+│   ├── models/                  # SQLAlchemy ORM models (one file per entity)
+│   ├── redis/                   # Redis client, pub/sub, cache, cache invalidation
 │   ├── routers/                 # top-level/system routers
-│   ├── schemas/                 # shared Pydantic schemas and API DTOs
-│   ├── settings/                # settings models and DB/env loading
+│   ├── schemas/                 # shared Pydantic schemas and API DTOs (one file per domain)
+│   ├── settings/                # settings models + DB/env loading
 │   ├── storage/                 # storage backends (local/s3)
+│   ├── tasks/                   # top-level TaskIQ task registry
 │   ├── tests/                   # API/service/unit coverage for backend package
 │   └── v1/                      # versioned API composition
-│       ├── app.py               # v1 app setup
 │       ├── router.py            # v1 router mount
-│       ├── routers/             # v1 route handlers
-│       ├── schemas/             # v1-only schemas
-│       ├── service/             # v1 service layer (auth/chat/files/etc.)
-│       │   ├── chat/            # ai chat orchestration
+│       ├── routers/             # v1 route handlers (one file per domain) + integrations/
+│       ├── schemas/             # v1-only schemas (auth, settings, web_search)
+│       ├── service/             # v1 service layer
+│       │   ├── chat/            # AI chat orchestration
+│       │   │   ├── run_bus.py   # cross-worker run SSE bus (Redis pub/sub + catchup log)
+│       │   │   ├── models.py    # chat model resolution + JSON schema calls
 │       │   │   ├── tools/       # chat tool implementations + registry
-│       │   │   ├── hooks/       # post-execution hooks + registry
-│       │   │   ├── filters/     # pre-execution filters (context injection)
-│       │   │   └── models.py    # chat model resolution + JSON schema calls
-│       │   ├── web_search/      # agentic web search + web loaders
+│       │   │   ├── hooks/       # post-execution hooks
+│       │   │   ├── filters/     # pre-execution filters (context injection, windowing, citations, etc.)
+│       │   │   └── ...          # agents, context, steering, summarization, windowing, etc.
+│       │   ├── threads/         # thread CRUD, messages, participants, summaries, search, maintenance
+│       │   ├── calendar/        # calendar + event management, recurrence, search, cache
+│       │   ├── reminders/       # reminder CRUD, lists, search, cache
+│       │   ├── scheduling/      # recurrence rule helpers
+│       │   ├── web_search/      # agentic web search, loaders, progress tracking
 │       │   ├── media/           # media generation (images, video, audio)
-│       │   └── ...              # auth, files, memories, threads, etc.
-│       └── tasks/               # v1 async/background task modules
+│       │   ├── integrations/    # third-party integration services (open_webui)
+│       │   ├── social/          # friendship, privacy, visibility helpers
+│       │   ├── event_bus.py     # cross-process WebSocket fanout relay (Redis pub/sub)
+│       │   ├── task_bus.py      # cross-worker task SSE bus (Redis pub/sub)
+│       │   ├── collaborative_documents.py  # CRDT-based collaborative doc editing
+│       │   ├── listing.py       # shared list-endpoint filtering + sorting helpers
+│       │   ├── resource_payload_cache.py   # per-resource Redis payload cache
+│       │   └── ...              # auth, events, files, friends, groups, memories, models, notes,
+│       │                        #   notifications, plugins, projects, prompts, providers, roles,
+│       │                        #   runs, search, settings, tasks, users, vectorstores, web_push, ...
+│       └── tasks/               # v1 TaskIQ task modules (calendar, reminders, threads, open_webui)
 ├── nokodo_ai/                   # standalone SDK/runtime library
-│   ├── adapters/                # provider adapters + base adapter contracts
+│   ├── adapters/                # provider adapters (openai, anthropic, google, ollama, qdrant) + base/
 │   ├── agents.py                # agent orchestration
 │   ├── chat_models.py           # chat model abstractions
-│   ├── embeddings.py            # embedding abstractions
-│   ├── vectorstores.py          # vectorstore abstractions
 │   ├── messages.py              # message domain primitives
 │   ├── threads.py               # thread domain primitives
 │   ├── tool.py                  # tool interfaces/decorators
+│   ├── filters.py               # filter pipeline interfaces
+│   ├── hooks.py                 # hook pipeline interfaces
+│   ├── deltas.py                # streaming delta primitives
+│   ├── ...                      # audio/image/video models, embeddings, vectorstores, context, token_estimation
 │   ├── types/                   # SDK type helpers
-│   ├── utils/                   # SDK utility helpers
+│   ├── utils/                   # SDK utilities (typeid, sse, tokens, security, vectors, etc.)
 │   └── tests/                   # SDK unit tests
 └── tests/                       # backend integration/e2e-style tests
 ```
@@ -97,16 +116,24 @@ to run backend tests manually instead:
 1.  follow the steps in `to run backend` above to ensure correct environment setup.
 2.  run `uv run pytest` from within the `backend/` directory.
 
+### to run type checks:
+
+- run `uv run ty check . ../tools/autogen-migration.py ../tools/export-openapi.py` from within the `backend/` directory.
+
 ## database migrations
 
-migrations are handled by Alembic and are located in `backend/api/migrations`.
-the backend is configured to **automatically run `uv run alembic upgrade head` on startup** using the same configuration the CLI uses.
+migrations live in `backend/api/migrations`; applied automatically on startup.
 
-- **manual**: you can still run Alembic manually if needed:
-    ```bash
-    cd backend
-    alembic -c api/migrations/alembic.ini upgrade head
-    ```
+to create a new migration, use the **`backend: autogen migration` VS Code task** or:
+
+```bash
+uv run python tools/autogen-migration.py --message "description"
+```
+
+creates a temp DB, upgrades to `head`, autogenerates against the model diff, saves to `temp/alembic-autogen/`. review, edit, move to `backend/api/migrations/versions/`.
+to check for drift without generating a file, use `--check`, no message needed.
+
+never run bare `alembic revision --autogenerate` against the live dev DB - local drift causes false positives.
 
 ## M2M relationships
 

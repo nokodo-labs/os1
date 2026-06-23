@@ -1,3 +1,3 @@
 """FastAPI backend application."""
 
-__version__ = "0.2.0"
+__version__ = "1.0.0-rc.2"

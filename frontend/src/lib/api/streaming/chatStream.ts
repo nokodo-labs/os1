@@ -13,6 +13,7 @@ import { getClientContext } from '$lib/stores/device.svelte'
 import { preferences } from '$lib/stores/preferences.svelte'
 import { getApiBaseUrl, refreshAccessToken } from '../client'
 import { getSessionId } from '../sessionId'
+import type { components } from '../types'
 
 export interface RawSseFrame {
 	event: string
@@ -50,6 +51,7 @@ export interface TextDelta {
 /** error event payload. */
 export interface StreamError {
 	message: string
+	run_id?: string
 }
 
 /** tool_result event payload. */
@@ -62,6 +64,7 @@ export interface ToolResultDelta {
 /** delta event envelope (faithfully forwards backend AgentDelta). */
 export interface AgentDeltaEnvelope {
 	run_id: string
+	agent_id?: string | null
 	message_id: string | null
 	parent_id: string | null
 	delta: unknown
@@ -183,10 +186,33 @@ async function streamSseFrames(opts: {
 	}
 
 	if (!response.ok || !response.body) {
-		throw new Error(`stream request failed: ${response.status}`)
+		throw new Error(await streamErrorMessage(response, 'stream request failed'))
 	}
 
 	return response.body.getReader()
+}
+
+async function streamErrorMessage(response: Response, fallback: string): Promise<string> {
+	try {
+		const parsed: unknown = await response.clone().json()
+		if (parsed && typeof parsed === 'object' && 'detail' in parsed) {
+			const detail = (parsed as { detail?: unknown }).detail
+			if (typeof detail === 'string' && detail.trim()) return detail
+		}
+	} catch {
+		// fall through to status-only message.
+	}
+	return `${fallback}: ${response.status}`
+}
+
+/** error thrown when an SSE stream request fails with a non-2xx status. */
+export class StreamHttpError extends Error {
+	status: number
+	constructor(status: number, message?: string) {
+		super(message ?? `stream request failed: ${status}`)
+		this.name = 'StreamHttpError'
+		this.status = status
+	}
 }
 
 async function streamSseGet(opts: {
@@ -218,7 +244,10 @@ async function streamSseGet(opts: {
 	}
 
 	if (!response.ok || !response.body) {
-		throw new Error(`resume stream failed: ${response.status}`)
+		throw new StreamHttpError(
+			response.status,
+			await streamErrorMessage(response, 'resume stream failed')
+		)
 	}
 
 	return response.body.getReader()
@@ -264,18 +293,20 @@ async function* readSseFrames(
 			}
 		}
 	} finally {
+		try {
+			await reader.cancel()
+		} catch {
+			// stream may already be closed or aborted by the fetch signal.
+		}
 		reader.releaseLock()
 	}
 }
 
 // run input shape
 
-/** structured input for a run request. */
-export interface RunInput {
-	text?: string | null
-	attachment_ids?: string[]
-	attachment_actions?: Record<string, 'reveal' | 'reference'> | null
-}
+export type ResourceAttachment = components['schemas']['ResourceAttachment']
+export type RunAttachmentType = ResourceAttachment['type']
+export type RunInput = components['schemas']['RunInput']
 
 // run chat stream
 
@@ -286,6 +317,7 @@ export interface ChatStreamOptions {
 	parentId?: string | null
 	persist?: boolean
 	toolChoice?: ToolChoiceValue | null
+	extraPlugins?: string[]
 	signal?: AbortSignal
 }
 
@@ -316,6 +348,7 @@ export async function* runChatStream(
 	if (opts.threadId) body.thread_id = opts.threadId
 	if (opts.persist === false) body.persist = false
 	if (opts.toolChoice) body.tool_choice = opts.toolChoice
+	if (opts.extraPlugins && opts.extraPlugins.length > 0) body.extra_plugins = opts.extraPlugins
 	if (clientContext) body.clientContext = clientContext
 
 	const reader = await streamSseFrames({ url, body, signal: opts.signal })
@@ -349,6 +382,7 @@ export interface CreateAndRunStreamOptions {
 	tags?: string[]
 	projectIds?: string[]
 	toolChoice?: ToolChoiceValue | null
+	extraPlugins?: string[]
 	signal?: AbortSignal
 }
 
@@ -380,6 +414,7 @@ export async function* runCreateAndRunStream(
 	}
 	if (opts.threadId) body.thread_id = opts.threadId
 	if (opts.toolChoice) body.tool_choice = opts.toolChoice
+	if (opts.extraPlugins && opts.extraPlugins.length > 0) body.extra_plugins = opts.extraPlugins
 	if (clientContext) body.clientContext = clientContext
 
 	const reader = await streamSseFrames({ url, body, signal: opts.signal })

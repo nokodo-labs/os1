@@ -8,7 +8,13 @@ from typing import Annotated
 from pydantic import StringConstraints, field_validator
 
 from api.models.provider import ProviderStatus, ProviderType
-from api.schemas.common import MetadataModel, MetadataUpdateModel, TimestampedModel
+from api.schemas.common import (
+	MISSING,
+	MetadataModel,
+	MetadataUpdateModel,
+	MissingType,
+	TimestampedModel,
+)
 
 
 class ProviderBase(MetadataModel):
@@ -22,7 +28,6 @@ class ProviderBase(MetadataModel):
 	additional_headers: dict[str, str] | None = None
 	status: ProviderStatus = ProviderStatus.ENABLED
 	is_autofetch_enabled: bool = True
-	last_synced_at: datetime | None = None
 
 
 class ProviderCreate(ProviderBase):
@@ -34,22 +39,22 @@ class ProviderCreate(ProviderBase):
 class ProviderUpdate(MetadataUpdateModel):
 	"""partial provider update payload."""
 
-	name: str | None = None
-	adapter_type: str | None = None
-	provider_type: ProviderType | None = None
-	base_url: str | None = None
-	api_key: str | None = None
-	encrypted_api_key: str | None = None
-	additional_headers: dict[str, str] | None = None
-	status: ProviderStatus | None = None
-	is_autofetch_enabled: bool | None = None
-	last_synced_at: datetime | None = None
+	name: str | MissingType = MISSING
+	adapter_type: str | MissingType = MISSING
+	provider_type: ProviderType | MissingType = MISSING
+	base_url: str | None | MissingType = MISSING
+	api_key: str | None | MissingType = MISSING
+	encrypted_api_key: str | None | MissingType = MISSING
+	additional_headers: dict[str, str] | None | MissingType = MISSING
+	status: ProviderStatus | MissingType = MISSING
+	is_autofetch_enabled: bool | MissingType = MISSING
 
 
 class Provider(ProviderBase, TimestampedModel):
 	"""response schema."""
 
 	id: str
+	last_synced_at: datetime | None = None
 
 	@field_validator("name", mode="before")
 	@classmethod

@@ -3,13 +3,13 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import { deleteThread, updateThread } from '$lib/chat/threadActions'
+	import { archiveThread, deleteThread, updateThread } from '$lib/chat/threadActions'
 	import ChatSidebarChatsSection from '$lib/components/chat/sidebar/ChatSidebarChatsSection.svelte'
 	import ChatSidebarHeader from '$lib/components/chat/sidebar/ChatSidebarHeader.svelte'
 	import ChatSidebarTopActions from '$lib/components/chat/sidebar/ChatSidebarTopActions.svelte'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
-	import EditChatModal from '$lib/components/modals/EditChatModal.svelte'
+	import ChatPropertiesModal from '$lib/components/modals/ChatPropertiesModal.svelte'
 	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { chat, type Thread } from '$lib/stores/chat.svelte'
 	import { device } from '$lib/stores/device.svelte'
@@ -45,7 +45,7 @@
 	let openThreadMenuId = $state<string | null>(null)
 	let editThread = $state<Thread | null>(null)
 	let editTitle = $state('')
-	let editTagsCsv = $state('')
+	let editTags = $state<string[]>([])
 	let isSavingEdit = $state(false)
 	let editError = $state<string | null>(null)
 
@@ -57,6 +57,7 @@
 	let showTopLabels = $state(false)
 	let renderExpandedContent = $state(sidebar.isChatSidebarOpen)
 	let expandedContentVisible = $state(false)
+	let didRequestInitialThreads = $state(false)
 
 	$effect(() => {
 		const isOpen = sidebar.isChatSidebarOpen
@@ -105,11 +106,11 @@
 
 	function handleSearchClick() {
 		sidebar.selectChat(null)
-		const isAlreadyHome = page.url.pathname === '/' && chatParam === null
-		if (isAlreadyHome && browser) {
-			window.dispatchEvent(new CustomEvent('focus:chat-input'))
+		const isAlreadySearch = page.url.pathname === '/' && page.url.searchParams.has('search')
+		if (isAlreadySearch && browser) {
+			window.dispatchEvent(new CustomEvent('focus:home-search'))
 		} else {
-			void goto(resolve('/'), { keepFocus: true, noScroll: true })
+			void goto(resolve('/?search' as unknown as '/'), { keepFocus: true, noScroll: true })
 		}
 		if (device.isMobile) sidebar.closeChatSidebar()
 	}
@@ -146,7 +147,17 @@
 	]
 
 	$effect(() => {
-		if (session.isLoggedIn) void chat.refreshThreads({ limit: 25 })
+		if (!session.isLoggedIn) {
+			didRequestInitialThreads = false
+			return
+		}
+		if (didRequestInitialThreads) return
+		didRequestInitialThreads = true
+		if (chat.recentThreads.length === 0) {
+			void chat.refreshThreads({ limit: 25 })
+			return
+		}
+		void chat.fetchUnreadCounts()
 	})
 
 	function toggleThreadMenu(threadId: string) {
@@ -195,19 +206,29 @@
 		}
 	}
 
+	async function handleArchiveThread(thread: Thread): Promise<boolean> {
+		const ok = await archiveThread(thread.id)
+		if (!ok) return false
+
+		if (page.url.pathname === `/c/${thread.id}`) {
+			sidebar.selectChat(null)
+			await goto(resolve('/'), {
+				keepFocus: true,
+				noScroll: true,
+			})
+		}
+
+		return true
+	}
+
 	$effect(() => {
 		if (!editThread) return
 		editTitle = editThread.title ?? ''
-		editTagsCsv = Array.isArray(editThread.tags) ? editThread.tags.join(', ') : ''
+		editTags = Array.isArray(editThread.tags) ? [...editThread.tags] : []
 	})
 
 	function closeEditModal(): void {
 		if (isSavingEdit) return
-		editThread = null
-		editError = null
-	}
-
-	function cancelEditModal(): void {
 		editThread = null
 		editError = null
 	}
@@ -221,18 +242,29 @@
 
 			const threadId = editThread.id
 			const newTitle = editTitle.trim()
-			const newTags = editTagsCsv
-				.split(',')
-				.map((t) => t.trim())
-				.filter(Boolean)
-
-			editThread = null
+			const newTags = editTags
 
 			const ok = await updateThread(threadId, newTitle, newTags)
-			if (!ok) editError = 'could not save changes'
+			if (ok) {
+				editThread = null
+			} else {
+				editError = 'could not save changes'
+			}
 
 			isSavingEdit = false
 		})()
+	}
+
+	function shareEditThread(): void {
+		if (!editThread) return
+		const thread = editThread
+		editThread = null
+		editError = null
+		modals.open('resource-access', {
+			resourceType: 'thread',
+			resourceId: thread.id,
+			title: thread.title ?? thread.id,
+		})
 	}
 
 	let routeChatId = $derived.by((): string | null => {
@@ -294,9 +326,7 @@
 		: device.isMobile
 			? 'pointer-events-none -translate-x-full'
 			: 'translate-x-0'}"
-	style="background-color: var(--accent-bg);{device.isMobile
-		? ''
-		: ' view-transition-name: chat-sidebar;'}"
+	style="background-color: var(--accent-bg);"
 	inert={device.isMobile ? !sidebar.isChatSidebarOpen : undefined}
 	use:expandOnClick
 >
@@ -341,25 +371,29 @@
 				threads={chat.recentThreads}
 				selectedChatId={sidebar.selectedChatId}
 				{openThreadMenuId}
+				isLoadingMoreThreads={chat.isLoadingMoreThreads}
+				hasMoreThreads={chat.hasMoreThreads}
 				onPrefetchThread={(threadId) => chat.threadCache.prefetchThread(threadId)}
 				onOpenThread={openThread}
+				onLoadMoreThreads={() => chat.loadMoreThreads()}
 				onToggleMenu={toggleThreadMenu}
 				onCloseMenu={closeThreadMenu}
 				onRequestEdit={requestEditThread}
+				onArchiveThread={handleArchiveThread}
 				onDeleteThread={handleDeleteThread}
 			/>
 		{/if}
 	</div>
 </aside>
 
-<EditChatModal
+<ChatPropertiesModal
 	open={editThread !== null}
 	thread={editThread}
 	bind:title={editTitle}
-	bind:tagsCsv={editTagsCsv}
+	bind:tags={editTags}
 	error={editError}
 	isSaving={isSavingEdit}
 	onClose={closeEditModal}
-	onCancel={cancelEditModal}
+	onShare={shareEditThread}
 	onSave={saveEditModal}
 />

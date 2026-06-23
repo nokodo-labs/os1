@@ -1,4 +1,6 @@
 <script lang="ts">
+	/** renders the expanded memory recall tool card. */
+
 	import Brain from '$lib/components/icons/Brain.svelte'
 	import { formatToolEventLine, type ToolExecution } from '$lib/tools'
 	import BaseToolCard from './BaseToolCard.svelte'
@@ -33,14 +35,15 @@
 <BaseToolCard {execution} {compact}>
 	{#snippet icon()}
 		<Brain
-			className={`h-4 w-4 text-foreground/80 ${execution.status === 'running' ? 'animate-pulse' : ''}`}
+			class={`text-foreground/80 h-4 w-4 ${execution.status === 'running' ? 'animate-pulse' : ''}`}
 		/>
 	{/snippet}
 
 	{#snippet body()}
 		{#if recallQuery}
 			<div class="text-foreground/60 mb-3 text-sm">
-				<span class="text-foreground/50">searching for:</span> "{recallQuery}"
+				<span class="text-foreground/50">searching for:</span>
+				{recallQuery}
 			</div>
 		{/if}
 

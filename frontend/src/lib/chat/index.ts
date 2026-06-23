@@ -5,12 +5,17 @@ export { createChatState } from './createChatState.svelte'
 
 // types
 export type {
-	AttachmentStatus,
 	ChatContext,
 	ChatState,
 	OptimisticUserMessage,
+	QueuedSteeringMessage,
+	RunActivityEvent,
+	RunActivityOutcome,
+	RunActivityPhase,
+	RunActivityState,
+	RunActivityStatus,
+	SteeringState,
 	StreamDeltaContext,
-	ThreadAttachment,
 } from './types'
 
 // helpers (pure functions + types)
@@ -22,14 +27,15 @@ export {
 	buildRunBlocks,
 	computeBlockCitations,
 	computeIsAtBottom,
-	computeThreadAttachments,
 	contentPartsToText,
+	extractAttachmentRefs,
 	extractFileParts,
 	extractMediaParts,
 	getBlockFirstAssistant,
 	getBlockResponseItems,
 	getMessageCreatedAt,
 	getRunId,
+	getUserRunItemTimestamp,
 	groupResponseItems,
 	hasAttachmentParts,
 	pendingAttachmentsToFileParts,
@@ -50,6 +56,13 @@ export {
 // stream processing
 export { consumeStream, processDelta, resumeCreateAndRun, runThreadStream } from './streamProcessor'
 
+export {
+	parseRunActivityEvent,
+	reduceRunActivityEvent,
+	RUN_ACTIVITY_EVENT_PREFIX,
+	runActivityKey,
+} from './runActivities'
+
 // tree navigation
 export {
 	findRunUserMessage,
@@ -66,6 +79,7 @@ export {
 	loadOlderMessages,
 	loadTree,
 	syncCacheAfterRun,
+	ThreadNotFoundError,
 } from './dataLoader'
 
 // user actions
@@ -80,7 +94,7 @@ export {
 } from './userActions'
 
 // event subscriptions
-export { sendTypingEvent, subscribeToChatEvents } from './eventSubscriptions'
+export { sendTypingEvent, subscribeToChatEvents } from './eventSubscriptions.svelte'
 
 // thread actions
-export { deleteThread, updateThread } from './threadActions'
+export { deleteThread, unarchiveThread, updateThread } from './threadActions'

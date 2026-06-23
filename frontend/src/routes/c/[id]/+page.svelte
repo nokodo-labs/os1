@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
+	import { EntranceController, type EntranceMode } from '$lib/animations/entrance.svelte'
 	import { getApiBaseUrl } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
 	import {
@@ -9,20 +10,26 @@
 		computeBlockCitations,
 		contentPartsToText,
 		createChatState,
+		extractAttachmentRefs,
 		extractFileParts,
 		extractMediaParts,
-		fetchThreadAccessLevel,
 		getBlockFirstAssistant,
 		getBlockResponseItems,
 		getMessageCreatedAt,
+		getUserRunItemTimestamp,
 		groupResponseItems,
 		hasAttachmentParts,
 		pendingAttachmentsToFileParts,
 		pendingAttachmentsToMediaParts,
+		ThreadNotFoundError,
+		unarchiveThread,
 		type ApiMessage,
 	} from '$lib/chat'
+	import type { RunModifiers } from '$lib/chat/attachments'
+	import { RunActivity } from '$lib/components/chat/activities'
 	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
 	import AssistantChatMessage from '$lib/components/chat/AssistantChatMessage.svelte'
+	import AttachmentRefs from '$lib/components/chat/AttachmentRefs.svelte'
 	import ChatGptLoadingIndicator from '$lib/components/chat/ChatGptLoadingIndicator.svelte'
 	import ChatInput from '$lib/components/chat/ChatInput.svelte'
 	import ChatSidebarToggleButton from '$lib/components/chat/ChatSidebarToggleButton.svelte'
@@ -33,16 +40,21 @@
 	import MediaAttachments from '$lib/components/chat/MediaAttachments.svelte'
 	import MessageActionButton from '$lib/components/chat/MessageActionButton.svelte'
 	import RegenerateMenu from '$lib/components/chat/RegenerateMenu.svelte'
+	import SteeringQueue from '$lib/components/chat/SteeringQueue.svelte'
 	import { ToolGroup } from '$lib/components/chat/tools'
 	import TypingIndicator from '$lib/components/chat/TypingIndicator.svelte'
 	import UserChatMessage from '$lib/components/chat/UserChatMessage.svelte'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
-	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
+	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
 	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
+	import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte'
+	import ChatPlus from '$lib/components/icons/ChatPlus.svelte'
+	import Clock from '$lib/components/icons/Clock.svelte'
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte'
 	import GarbageBin from '$lib/components/icons/GarbageBin.svelte'
 	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import { useSidebar } from '$lib/contexts/sidebarContext.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { accentStore } from '$lib/stores/accent.svelte'
 	import { agents } from '$lib/stores/agents.svelte'
@@ -50,6 +62,7 @@
 	import { device } from '$lib/stores/device.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
+	import { canEditAccessLevel, resourceAccess } from '$lib/stores/resourceAccess.svelte'
 	import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { untrack } from 'svelte'
@@ -60,11 +73,118 @@
 	const chat = createChatState()
 	const threadId = $derived(chat.thread?.id ?? null)
 
+	// outgoing-bubble entrance, driven by the bubbleAnimation preference.
+	// mode is 'morph' (FLIP ghost) | 'flyup' (WAAPI slide-in) | 'none'.
+	const reducedMotion =
+		typeof window !== 'undefined' &&
+		typeof window.matchMedia === 'function' &&
+		window.matchMedia('(prefers-reduced-motion: reduce)').matches
+	const entranceMode = $derived.by((): EntranceMode => {
+		if (reducedMotion) return 'none'
+		return (preferences.data.appearance.bubbleAnimation ?? 'morph') as EntranceMode
+	})
+	const entrance = new EntranceController(() => entranceMode)
+	let optimisticMsgEl = $state<HTMLElement | null>(null)
+	let inputBoxEl = $state<HTMLElement | null>(null)
+	// the optimistic bubble hides its own clock while the ghost is carrying it.
+	const optimisticClockHidden = $derived(entrance.inFlight)
+	// id of the steering row a morph ghost is currently flying into; that row is
+	// hidden during the flight so the real bubble and the ghost don't both show.
+	let morphingSteeringId = $state<string | null>(null)
+	const hiddenSteeringId = $derived(entrance.inFlight ? morphingSteeringId : null)
+
+	// resolve the last queued steering bubble element (the LiquidGlass child of
+	// the newest queue row), or null if the queue is empty.
+	function lastSteeringBubble(): HTMLElement | null {
+		const queue = document.querySelector('[aria-label="steering queue"]')
+		if (!queue) return null
+		const lastRow = queue.lastElementChild as HTMLElement | null
+		return lastRow?.querySelector('[style*="steering-message-"]') as HTMLElement | null
+	}
+
+	// a user message that arrived live from another session (cross-device sync)
+	// plays the fallback entrance once, on mount.  the mark is set by the WS
+	// handler only for live tail-appends, so history / branch-switch / paging
+	// never animate.  own sends already animated via the optimistic path.
+	function revealOnSync(node: HTMLElement, id: string): void {
+		if (chat.consumeMessageEntrance(id)) entrance.reveal(node)
+	}
+
+	// detect genuine user scroll gestures (wheel / touch) on the message
+	// container.  attached as passive listeners via an action — this keeps the
+	// pin authoritative on scroll-up even while streaming keeps firing
+	// programmatic scrolls, and avoids the a11y static-interaction warning.
+	function detectUserScroll(node: HTMLElement) {
+		const onWheel = (e: WheelEvent) => chat.onUserScrollGesture(e.deltaY < 0 ? 'up' : 'down')
+		const onTouchMove = () => chat.onUserScrollGesture('unknown')
+		node.addEventListener('wheel', onWheel, { passive: true })
+		node.addEventListener('touchmove', onTouchMove, { passive: true })
+		return {
+			destroy() {
+				node.removeEventListener('wheel', onWheel)
+				node.removeEventListener('touchmove', onTouchMove)
+			},
+		}
+	}
+
+	/** send wrapper.  flies a FLIP ghost from the input to the outgoing bubble;
+	 *  morph/flyup/none are resolved by the entrance controller from the
+	 *  bubbleAnimation preference. */
+	async function handleChatSend(content: string, modifiers?: RunModifiers): Promise<void> {
+		const trimmed = content.trim()
+		const startsFreshRun =
+			!chat.isGenerating &&
+			chat.streamingAssistant === null &&
+			chat.thread !== null &&
+			selectedAgent.id !== ''
+		const canAnimate =
+			entranceMode !== 'none' && trimmed.length > 0 && typeof document !== 'undefined'
+
+		if (!canAnimate) {
+			chat.handleSendMessage(content, modifiers)
+			return
+		}
+
+		const source = inputBoxEl
+		if (startsFreshRun) {
+			// not pinned to bottom: the bubble lands below the fold — fly the ghost
+			// down and out of the viewport instead of into an off-screen target.
+			if (!chat.autoScroll) {
+				void chat.handleSendMessage(content, modifiers)
+				await entrance.flyOutDown(source, trimmed)
+				return
+			}
+			void chat.handleSendMessage(content, modifiers)
+			const target = () =>
+				optimisticMsgEl?.querySelector('.bubble-content') as HTMLElement | null
+			// make room (scroll the bubble into its final slot) before the ghost
+			// measures its target, so it doesn't fly to a spot under the input.
+			await entrance.animateFrom(source, target, trimmed, () => chat.scrollToBottom('auto'))
+		} else {
+			// in-progress run: animate into the freshly-queued steering bubble.
+			const queueLenBefore = chat.queuedSteeringMessages.length
+			void chat.handleSendMessage(content, modifiers)
+			if (chat.queuedSteeringMessages.length <= queueLenBefore) return
+			// hide the just-enqueued row while a morph ghost flies into it (a no-op
+			// in flyup mode, where inFlight stays false and the row animates in place).
+			morphingSteeringId = chat.queuedSteeringMessages.at(-1)?.id ?? null
+			try {
+				await entrance.animateFrom(source, lastSteeringBubble, trimmed)
+			} finally {
+				morphingSteeringId = null
+			}
+		}
+	}
+
 	// local UI state
 	let didLoadAgents = $state(false)
 	let inputFocusToken = $state(0)
 	let lastInputFocusKey = $state<string | null>(null)
+	let lastChatRefreshVersion = 0
 	let isReadOnly = $state(false)
+	let threadNotFound = $state(false)
+	let messageListEl = $state<HTMLDivElement | null>(null)
+	let isUnarchivingThread = $state(false)
 
 	// citation sources modal state
 	type Citation = components['schemas']['Citation']
@@ -72,6 +192,7 @@
 
 	// system chrome for agent selector
 	const chrome = useSystemChrome()
+	const sidebar = useSidebar() as { selectChat?: (id: string | null) => void } | null
 
 	// set accent color for auto accent colors feature
 	$effect(() => {
@@ -106,6 +227,10 @@
 	})
 
 	$effect(() => {
+		if (threadNotFound) {
+			pageTitleStore.pageTitle = 'page not found'
+			return
+		}
 		const t = chat.thread?.title
 		pageTitleStore.pageTitle = t && t.trim() ? t : 'untitled chat'
 	})
@@ -130,6 +255,7 @@
 	$effect(() => {
 		const threadId = page.params.id
 		return untrack(() => {
+			threadNotFound = false
 			if (!threadId) {
 				chat.clearThread()
 				return
@@ -168,6 +294,15 @@
 					const loaded = await chat.loadTree(threadId)
 					if (cancelled) return
 					chat.hasLoadedBranch = loaded
+				} catch (err) {
+					if (cancelled) return
+					if (err instanceof ThreadNotFoundError) {
+						threadNotFound = true
+						chat.hasLoadedBranch = false
+						return
+					}
+					console.error('failed to load thread', err)
+					chat.hasLoadedBranch = false
 				} finally {
 					if (!cancelled) chat.isThreadLoading = false
 				}
@@ -180,6 +315,36 @@
 		})
 	})
 
+	$effect(() => {
+		const version = chatStore.refreshVersion
+		const routeThreadId = page.params.id
+		if (version === 0 || version === lastChatRefreshVersion) return
+		if (!routeThreadId || !chat.hasLoadedBranch) return
+		lastChatRefreshVersion = version
+
+		let cancelled = false
+		untrack(() => {
+			void (async () => {
+				try {
+					const loaded = await chat.loadTree(routeThreadId)
+					if (!cancelled) chat.hasLoadedBranch = loaded
+				} catch (err) {
+					if (cancelled) return
+					if (err instanceof ThreadNotFoundError) {
+						threadNotFound = true
+						chat.hasLoadedBranch = false
+						return
+					}
+					console.error('failed to refresh thread', err)
+				}
+			})()
+		})
+
+		return () => {
+			cancelled = true
+		}
+	})
+
 	// effects: Island context actions for agent selector
 	$effect(() => {
 		chrome.setContextActions(islandContextActions)
@@ -189,21 +354,17 @@
 	// effects: resolve read-only access for non-owner threads
 	$effect(() => {
 		const thread = chat.thread
-		const userId = session.currentUser?.id
-		if (!thread || !userId) {
+		if (!thread) {
 			isReadOnly = false
 			return
 		}
-		if (thread.owner_id === userId) {
-			isReadOnly = false
-			return
-		}
-		// non-owner: fetch effective access level
+		isReadOnly = !canEditAccessLevel(resourceAccess.level('thread', thread.id, thread.owner_id))
 		let cancelled = false
-		void fetchThreadAccessLevel(thread.id)
+		void resourceAccess
+			.ensure('thread', thread.id, thread.owner_id)
 			.then((level) => {
 				if (cancelled) return
-				isReadOnly = !level || level === 'reader'
+				isReadOnly = !canEditAccessLevel(level)
 			})
 			.catch(() => {
 				if (!cancelled) isReadOnly = true
@@ -223,6 +384,7 @@
 	$effect(() => {
 		if (chat.thread) return
 		if (!page.params.id) return
+		if (threadNotFound) return
 		// thread was nulled while we're on a /c/[id] route - redirect home
 		if (chat.isThreadLoading) return
 		if (chat.hasLoadedBranch === false && !chatStore.pendingCreateAndRun) return
@@ -289,7 +451,7 @@
 	let isTyping = false
 	$effect(() => {
 		const tid = threadId
-		const typing = hasInput
+		const typing = hasInput && !isReadOnly
 		if (!tid) return
 
 		if (typing) {
@@ -349,6 +511,16 @@
 		return () => ro.disconnect()
 	})
 
+	$effect(() => {
+		if (!messageListEl) return
+		const target = messageListEl
+		const observer = new ResizeObserver(() => {
+			if (chat.autoScroll) void chat.queueScrollToBottom('auto')
+		})
+		observer.observe(target)
+		return () => observer.disconnect()
+	})
+
 	// effects: auto-scroll
 	$effect(() => {
 		const threadId = page.params.id
@@ -392,14 +564,51 @@
 		// local streaming and cross-session incoming messages
 		if (chat.autoScroll) void chat.queueScrollToBottom('auto')
 	})
+
+	function handleNewChat() {
+		sidebar?.selectChat?.(null)
+		window.dispatchEvent(new CustomEvent('focus:chat-input'))
+		void goto(resolve('/?chat=new' as unknown as '/'), { keepFocus: true, noScroll: true })
+	}
+
+	async function handleUnarchiveThread(): Promise<void> {
+		const id = chat.thread?.id
+		if (!id || isUnarchivingThread) return
+		isUnarchivingThread = true
+		try {
+			await unarchiveThread(id)
+		} finally {
+			isUnarchivingThread = false
+		}
+	}
 </script>
 
 {#snippet islandContextActions()}
+	{#if chat.thread?.is_archived}
+		<button
+			type="button"
+			class="group rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
+			disabled={isUnarchivingThread}
+			onclick={() => void handleUnarchiveThread()}
+			aria-label="unarchive chat"
+			title="unarchive chat"
+		>
+			<ArrowUpTray class="h-5 w-5" />
+		</button>
+	{/if}
 	<AgentSelector
 		selectedAgent={selectedAgent.id}
 		onAgentChange={(agentId) => selectedAgent.set(agentId)}
 	/>
 	{#if device.isMobile}
+		<button
+			type="button"
+			class="flex cursor-pointer items-center justify-center opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+			onclick={handleNewChat}
+			aria-label="new chat"
+		>
+			<ChatPlus />
+		</button>
 		<ChatSidebarToggleButton />
 	{/if}
 {/snippet}
@@ -418,8 +627,8 @@
 				aria-label="scroll to bottom"
 				onpointerdown={(e: PointerEvent) => e.preventDefault()}
 				onclick={() => {
-					chat.queueScrollToBottom('smooth')
 					chat.autoScroll = true
+					chat.queueScrollToBottom('smooth')
 				}}
 			>
 				<ArrowUp class="h-4 w-4 rotate-180" />
@@ -432,12 +641,30 @@
 		style="view-transition-name: thread-body; scrollbar-gutter: stable;"
 		bind:this={chat.scrollContainer}
 		onscroll={chat.handleScroll}
+		use:detectUserScroll
 	>
 		<div
+			bind:this={messageListEl}
 			class="mx-auto flex min-h-full w-full flex-col {device.isMobile ? '' : 'max-w-7xl'}"
 			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: var(--chrome-island-offset); padding-bottom: {chat.inputOverlayHeight}px;"
 		>
-			{#if chat.isTemporaryChat && chat.hasLoadedBranch && chat.messages.length === 0 && !chat.optimisticUserMessage && !chat.streamingAssistant}
+			{#if threadNotFound}
+				<div class="flex flex-1 items-center justify-center py-16">
+					<div class="max-w-md text-center">
+						<div
+							class="text-foreground/90 text-[4.75rem] leading-none font-semibold tracking-tight"
+						>
+							404
+						</div>
+						<h2 class="text-foreground/90 mt-3 text-2xl font-semibold">
+							chat not found
+						</h2>
+						<p class="text-foreground/60 mt-2 text-sm">
+							this chat doesn't exist or you don't have access to it.
+						</p>
+					</div>
+				</div>
+			{:else if chat.isTemporaryChat && chat.hasLoadedBranch && chat.messages.length === 0 && !chat.optimisticUserMessage && !chat.streamingAssistant}
 				<div class="flex flex-1 items-center justify-center py-16">
 					<div class="max-w-md text-center">
 						<div
@@ -495,13 +722,27 @@
 											? isFirst
 											: isLast}
 								{#if item.kind === 'user'}
+									{@const timestamp = getUserRunItemTimestamp(
+										item,
+										userItems[itemIndex - 1]
+									)}
 									{@const siblings =
 										chat.messageChildren.get(item.message.parent_id ?? null) ??
 										[]}
+									{@const meta = (item.message.metadata_ ?? {}) as Record<
+										string,
+										unknown
+									>}
+									{@const viewTransitionName =
+										meta.steering_state === 'injected'
+											? `steering-message-${item.message.id}`
+											: undefined}
 									<UserChatMessage
 										content={contentPartsToText(item.message.content)}
 										contentParts={item.message.content}
-										timestamp={getMessageCreatedAt(item.message)}
+										entrance={(node) => revealOnSync(node, item.message.id)}
+										attachmentRefs={extractAttachmentRefs(item.message)}
+										{timestamp}
 										align={item.align}
 										siblingCount={siblings.length}
 										currentSiblingIndex={siblings.indexOf(item.message.id)}
@@ -510,6 +751,7 @@
 										onNext={() => chat.switchBranch(item.message.id, 'next')}
 										tailStyle={bubbleTailStyle}
 										{showTail}
+										{viewTransitionName}
 										onEditSave={item.align === 'right'
 											? (c) => chat.handleSaveEditMessage(item.message.id, c)
 											: undefined}
@@ -536,24 +778,36 @@
 										{/snippet}
 									</UserChatMessage>
 								{:else if item.kind === 'optimistic_user'}
+									{@const timestamp = getUserRunItemTimestamp(
+										item,
+										userItems[itemIndex - 1]
+									)}
 									{@const oMedia = pendingAttachmentsToMediaParts(
 										item.attachments
 									)}
 									{@const oFiles = pendingAttachmentsToFileParts(
 										item.attachments
 									)}
-									<UserChatMessage
-										content={item.text}
-										optimisticMediaParts={oMedia}
-										optimisticFileParts={oFiles}
-										timestamp={item.timestamp}
-										tailStyle={bubbleTailStyle}
-										{showTail}
+									<!-- the optimistic bubble is hidden (opacity) while the entrance ghost
+									     is in flight, then revealed when it lands. -->
+									<div
+										style:opacity={entrance.inFlight ? '0' : '1'}
+										bind:this={optimisticMsgEl}
 									>
-										{#snippet actions()}
-											<CopyButton content={item.text} />
-										{/snippet}
-									</UserChatMessage>
+										<UserChatMessage
+											content={item.text}
+											optimisticMediaParts={oMedia}
+											optimisticFileParts={oFiles}
+											{timestamp}
+											tailStyle={bubbleTailStyle}
+											{showTail}
+											sending={!optimisticClockHidden}
+										>
+											{#snippet actions()}
+												<CopyButton content={item.text} />
+											{/snippet}
+										</UserChatMessage>
+									</div>
 								{/if}
 							{/each}
 
@@ -569,10 +823,9 @@
 									chat.citationSources
 								)}
 								{@const rootId = block.responseRootId}
+								{@const rootMessage = rootId ? chat.messageTree.get(rootId) : null}
 								{@const blockParentId =
-									(rootId
-										? chat.messageTree.get(rootId)?.parent_id
-										: undefined) ??
+									rootMessage?.parent_id ??
 									(isStreamingBlock ? chat.streamingAssistantParentId : null) ??
 									null}
 								{@const assistantSiblings =
@@ -589,6 +842,7 @@
 										: 0)}
 								{@const displayAgent =
 									firstAssistant?.sender_agent_id ??
+									block.agentId ??
 									chat.streamingAssistant?.senderAgentId ??
 									null}
 
@@ -607,9 +861,11 @@
 										: 'default'}
 									timestamp={firstAssistant
 										? getMessageCreatedAt(firstAssistant)
-										: isStreamingBlock
-											? (chat.streamingAssistant?.timestamp ?? new Date())
-											: undefined}
+										: rootMessage
+											? getMessageCreatedAt(rootMessage)
+											: isStreamingBlock
+												? (chat.streamingAssistant?.timestamp ?? new Date())
+												: undefined}
 									isStreaming={Boolean(isStreamingBlock) &&
 										!chat.streamingAssistant?.isError}
 									isRunActive={chat.isGenerating}
@@ -625,8 +881,20 @@
 										{@const segments = groupResponseItems(responseItems)}
 										<div class="relative">
 											{#each segments as segment, idx (idx)}
-												{#if segment.type === 'assistant'}
-													{#if hasAttachmentParts(segment.item.message.content)}
+												{#if segment.type === 'assistant' || segment.type === 'streaming_assistant'}
+													{@const text =
+														segment.type === 'streaming_assistant'
+															? (chat.streamingAssistant?.content ??
+																'')
+															: contentPartsToText(
+																	segment.item.message.content
+																)}
+													{@const citeId =
+														segment.type === 'streaming_assistant'
+															? (chat.streamingAssistant?.messageId ??
+																'')
+															: segment.item.message.id}
+													{#if segment.type === 'assistant' && hasAttachmentParts(segment.item.message.content)}
 														<div class="mb-2">
 															<MediaAttachments
 																mediaParts={extractMediaParts(
@@ -640,19 +908,54 @@
 															/>
 														</div>
 													{/if}
-													<div
-														class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
-													>
-														<MarkdownRenderer
-															content={contentPartsToText(
-																segment.item.message.content
-															)}
-															isStreaming={false}
-															citations={chat.citationSources.get(
-																segment.item.message.id
-															) ?? []}
-														/>
-													</div>
+													{#if segment.type === 'assistant' && extractAttachmentRefs(segment.item.message).length > 0}
+														<div class="mb-2">
+															<AttachmentRefs
+																refs={extractAttachmentRefs(
+																	segment.item.message
+																)}
+															/>
+														</div>
+													{/if}
+													{#if text.trim()}
+														<div
+															class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
+														>
+															<MarkdownRenderer
+																content={text}
+																isStreaming={segment.type ===
+																	'streaming_assistant' &&
+																	!chat.streamingAssistant
+																		?.isError}
+																citations={chat.citationSources.get(
+																	citeId
+																) ?? []}
+															/>
+														</div>
+													{:else if segment.type === 'streaming_assistant' && chat.streamingAssistant && !chat.streamingAssistant.isError && !chat.hasActiveStreamingToolCalls}
+														{@const hasActiveTools = segments.some(
+															(s) =>
+																s.type === 'tool_group' &&
+																s.toolCallIds.some((id) => {
+																	const e =
+																		chat.getToolExecution(id)
+																	return (
+																		e != null &&
+																		(e.status === 'pending' ||
+																			e.status === 'running')
+																	)
+																})
+														)}
+														{#if !hasActiveTools}
+															<div
+																class="assistant-markdown text-foreground/60 text-[0.95rem] leading-relaxed"
+															>
+																<div class="my-3">
+																	<ChatGptLoadingIndicator />
+																</div>
+															</div>
+														{/if}
+													{/if}
 												{:else if segment.type === 'tool_group'}
 													{@const toolExecs = segment.toolCallIds
 														.map((id) => chat.getToolExecution(id))
@@ -663,43 +966,8 @@
 													{#if toolExecs.length > 0}
 														<ToolGroup executions={toolExecs} />
 													{/if}
-												{:else if segment.type === 'streaming_assistant' && chat.streamingAssistant}
-													{@const hasActiveTools = segments.some(
-														(s) =>
-															s.type === 'tool_group' &&
-															s.toolCallIds.some((id) => {
-																const e = chat.getToolExecution(id)
-																return (
-																	e != null &&
-																	(e.status === 'pending' ||
-																		e.status === 'running')
-																)
-															})
-													)}
-													{#if chat.streamingAssistant.content.trim()}
-														<div
-															class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
-														>
-															<MarkdownRenderer
-																content={chat.streamingAssistant
-																	.content}
-																isStreaming={!chat
-																	.streamingAssistant.isError}
-																citations={chat.citationSources.get(
-																	chat.streamingAssistant
-																		.messageId
-																) ?? []}
-															/>
-														</div>
-													{:else if !chat.streamingAssistant.isError && !chat.hasActiveStreamingToolCalls && !hasActiveTools}
-														<div
-															class="assistant-markdown text-foreground/60 text-[0.95rem] leading-relaxed"
-														>
-															<div class="my-3">
-																<ChatGptLoadingIndicator />
-															</div>
-														</div>
-													{/if}
+												{:else if segment.type === 'run_activity'}
+													<RunActivity activity={segment.activity} />
 												{/if}
 											{/each}
 										</div>
@@ -730,7 +998,7 @@
 												)
 											}}
 										/>
-										{#if !isStreamingBlock}
+										{#if !isStreamingBlock && !isReadOnly}
 											<RegenerateMenu
 												onRegenerate={(prompt) => {
 													const userMessageId =
@@ -739,14 +1007,17 @@
 														userMessageId,
 														prompt
 													)
+													// physical keyboard: focus the input for a follow-up
+													if (!device.isMobile) inputFocusToken += 1
 												}}
 											/>
-										{:else if chat.streamingAssistant?.isError}
+										{:else if chat.streamingAssistant?.isError && !isReadOnly}
 											<button
 												type="button"
-												class="text-foreground/70 hover:text-foreground/95 rounded-xl bg-transparent px-3 py-1.5 text-sm transition-colors"
+												class="border-destructive/30 text-destructive hover:bg-destructive/10 flex items-center gap-1.5 rounded-xl border bg-transparent px-3 py-1.5 text-sm font-medium transition-colors"
 												onclick={() => chat.handleRegenerateMessage()}
 											>
+												<ArrowPath class="size-3.5" strokeWidth="2.5" />
 												retry
 											</button>
 										{/if}
@@ -772,9 +1043,11 @@
 					<TypingIndicator typingUserIds={chat.typingUsers} />
 					<FloatingButtons
 						{threadId}
-						onQuote={(content) => {
-							chat.inputValue = content
-						}}
+						onQuote={!isReadOnly
+							? (content) => {
+									chat.inputValue = content
+								}
+							: undefined}
 					/>
 				</div>
 			{:else}
@@ -794,128 +1067,65 @@
 		{/if}
 	</div>
 
-	<div
-		class="absolute right-0 bottom-0 left-0 z-10 pt-4 {device.virtualKeyboardOpen &&
-		device.isMobile
-			? 'pb-2'
-			: 'pb-6'}"
-		bind:this={chat.inputOverlay}
-	>
+	{#if !threadNotFound && !isReadOnly}
 		<div
-			class="relative mx-auto w-full {device.isMobile ? '' : 'max-w-7xl'}"
-			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
+			class="absolute right-0 bottom-0 left-0 z-10 pt-4 {device.virtualKeyboardOpen &&
+			device.isMobile
+				? 'pb-2'
+				: 'pb-6'}"
+			bind:this={chat.inputOverlay}
 		>
-			<div class="transition-all duration-500 ease-in-out">
-				<ChatInput
-					bind:value={chat.inputValue}
-					onSubmit={chat.handleSendMessage}
-					onStop={chat.handleStopGeneration}
-					isGenerating={chat.isGenerating}
-					placeholder="send a message"
-					disabled={isReadOnly}
-					focusToken={inputFocusToken}
-					viewTransitionName="chat-input"
-					threadAttachments={chat.threadAttachments}
-					onToggleAttachmentStatus={chat.toggleAttachmentStatus}
-				/>
-			</div>
-		</div>
-	</div>
-</div>
-
-{#if chat.confirmDeleteMessage}
-	<div
-		class="fixed inset-0 z-60 flex items-center justify-center bg-black/55 px-6"
-		role="button"
-		tabindex="0"
-		onclick={() => {
-			if (!chat.isDeletingMessage) {
-				chat.confirmDeleteMessage = null
-				chat.deleteMessageError = null
-			}
-		}}
-		onkeydown={(e) => {
-			if (chat.isDeletingMessage) return
-			if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
-				chat.confirmDeleteMessage = null
-				chat.deleteMessageError = null
-			}
-		}}
-	>
-		<div
-			class="liquid-glass rounded-container w-full max-w-sm px-6 py-5 shadow-[0_32px_64px_rgba(12,10,30,0.6)]"
-			role="dialog"
-			aria-modal="true"
-			tabindex="-1"
-			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.stopPropagation()}
-		>
-			<div class="relative z-10">
-				<div class="text-foreground/90 text-lg font-semibold">delete message?</div>
-				<div class="text-foreground/60 mt-2 text-sm">
-					{chat.confirmDeleteMessage.preview}
-				</div>
-				<div class="text-foreground/40 mt-2 text-xs">
-					this will also delete all replies and branches below this message.
-				</div>
-
-				{#if chat.deleteMessageError}
-					<div
-						class="border-foreground/10 bg-foreground/5 text-foreground/70 mt-3 rounded-2xl border px-3 py-2 text-sm"
-					>
-						{chat.deleteMessageError}
+			<div
+				class="relative mx-auto w-full {device.isMobile ? '' : 'max-w-7xl'}"
+				style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
+			>
+				<div class="relative transition-all duration-500 ease-in-out">
+					<SteeringQueue
+						messages={chat.queuedSteeringMessages}
+						onDrop={(runId, messageId) => chat.dropSteering(runId, messageId)}
+						entrance={entrance.action}
+						hiddenId={hiddenSteeringId}
+					/>
+					<!-- morph source is the input box only (not the steering queue above it) -->
+					<div bind:this={inputBoxEl}>
+						<ChatInput
+							bind:value={chat.inputValue}
+							onSubmit={handleChatSend}
+							onStop={chat.handleStopGeneration}
+							isGenerating={chat.isGenerating}
+							placeholder="send a message"
+							focusToken={inputFocusToken}
+							viewTransitionName="chat-input"
+						/>
 					</div>
-				{/if}
-
-				<div class="mt-5 flex items-center justify-end gap-2">
-					<button
-						type="button"
-						class="border-foreground/10 text-foreground/80 hover:bg-foreground/5 cursor-pointer rounded-2xl border bg-transparent px-4 py-2 text-sm transition-colors duration-150 disabled:cursor-default"
-						disabled={chat.isDeletingMessage}
-						onclick={() => {
-							chat.confirmDeleteMessage = null
-							chat.deleteMessageError = null
-						}}
-					>
-						cancel
-					</button>
-					<button
-						type="button"
-						class="border-foreground/10 bg-foreground/10 text-foreground/90 hover:bg-foreground/15 cursor-pointer rounded-2xl border px-4 py-2 text-sm transition-colors duration-150 disabled:cursor-default disabled:opacity-60"
-						disabled={chat.isDeletingMessage}
-						onclick={() => {
-							void (async () => {
-								if (!chat.confirmDeleteMessage) return
-								chat.isDeletingMessage = true
-								chat.deleteMessageError = null
-								try {
-									const ok = await chat.deleteUserMessage(
-										chat.confirmDeleteMessage.id
-									)
-									if (!ok) {
-										chat.deleteMessageError = 'could not delete message'
-										return
-									}
-									chat.confirmDeleteMessage = null
-								} catch {
-									chat.deleteMessageError = 'could not delete message'
-								} finally {
-									chat.isDeletingMessage = false
-								}
-							})()
-						}}
-					>
-						{#if chat.isDeletingMessage}
-							<ShimmerText className="inline-block">deleting</ShimmerText>
-						{:else}
-							delete
-						{/if}
-					</button>
 				</div>
 			</div>
 		</div>
-	</div>
-{/if}
+	{/if}
+
+	{#if entrance.ghost}
+		<!-- entrance morph ghost: flies the input box to the outgoing bubble rect.
+		     animates left/top/width/height (no scale) so text never distorts.
+		     carries the sending clock, removed reactively once the message persists. -->
+		<div
+			bind:this={entrance.ghostEl}
+			class="text-foreground pointer-events-none fixed z-50 flex items-center gap-2 overflow-hidden rounded-3xl px-3"
+			aria-hidden="true"
+			style="left: {entrance.ghost.left}px; top: {entrance.ghost.top}px; width: {entrance
+				.ghost.width}px; height: {entrance.ghost
+				.height}px; background-color: var(--accent-primary); box-shadow: 0 4px 16px var(--accent-border);"
+		>
+			{#if entrance.inFlight}
+				<span class="flex size-4 shrink-0 items-center justify-center">
+					<span class="ghost-clock-tick flex size-4 items-center justify-center">
+						<Clock class="h-4 w-4" strokeWidth="2" />
+					</span>
+				</span>
+			{/if}
+			<span class="truncate">{entrance.ghost.text}</span>
+		</div>
+	{/if}
+</div>
 
 <CitationSourcesModal
 	open={sourcesModalCitations !== null}
@@ -924,3 +1134,16 @@
 		sourcesModalCitations = null
 	}}
 />
+
+<style>
+	@keyframes ghostClockTick {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	.ghost-clock-tick {
+		animation: ghostClockTick 1.4s steps(12) infinite;
+		transform-origin: center;
+	}
+</style>

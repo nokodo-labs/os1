@@ -16,11 +16,17 @@ design rules:
 - resources WITHOUT access rules only need ``{domain}:read`` and
   ``{domain}:manage``. manage includes creation, so no separate
   create permission is needed.
+- user social resources (friendships, blocks) require a ``user.{type}:create``
+	permission to create new entries. users can always manage their own
+	existing social resources (accept/decline/cancel/remove). cross-user
+	moderation requires the corresponding ``user.{type}:manage`` permission
+	or superuser access.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -53,6 +59,10 @@ class ActionPermission(StrEnum):
 	# user management
 	USERS_READ = "users:read"
 	USERS_MANAGE = "users:manage"
+	USER_FRIENDSHIPS_CREATE = "user.friendships:create"
+	USER_FRIENDSHIPS_MANAGE = "user.friendships:manage"
+	USER_BLOCKS_CREATE = "user.blocks:create"
+	USER_BLOCKS_MANAGE = "user.blocks:manage"
 
 	# settings
 	SETTINGS_READ = "settings:read"
@@ -68,6 +78,8 @@ class ActionPermission(StrEnum):
 	NOTES_CREATE = "notes:create"
 	GROUPS_CREATE = "groups:create"
 	REMINDERS_CREATE = "reminders:create"
+	# grants creation of calendars and calendar events.
+	CALENDAR_CREATE = "calendar:create"
 	MEMORIES_CREATE = "memories:create"
 	TASKS_CREATE = "tasks:create"
 	AGENTS_CREATE = "agents:create"
@@ -87,6 +99,8 @@ class ActionPermission(StrEnum):
 	MODELS_MANAGE = "models:manage"
 	PROVIDERS_READ = "providers:read"
 	PROVIDERS_MANAGE = "providers:manage"
+	MCP_MANAGE = "mcp:manage"
+	USER_MCP_MANAGE = "user.mcp:manage"
 
 	# app access
 	FRONTEND_ACCESS = "frontend:access"
@@ -103,6 +117,7 @@ class ResourceType(StrEnum):
 	MEMORY = "memory"
 	TASK = "task"
 	FILE = "file"
+	CALENDAR = "calendar"
 	PLUGIN = "plugin"
 	PROMPT = "prompt"
 	GROUP = "group"
@@ -130,6 +145,14 @@ def higher_access(
 	return a if _LEVEL_RANK[a] >= _LEVEL_RANK[b] else b
 
 
+def highest_access(levels: Iterable[AccessLevel | None]) -> AccessLevel | None:
+	"""return the highest access level in an iterable."""
+	result: AccessLevel | None = None
+	for level in levels:
+		result = higher_access(result, level)
+	return result
+
+
 # default resource access - typed model, one field per resource type
 
 
@@ -141,6 +164,7 @@ DEFAULT_ACCESS_RESOURCE_TYPES: frozenset[ResourceType] = frozenset(
 		ResourceType.THREAD,
 		ResourceType.PROJECT,
 		ResourceType.FILE,
+		ResourceType.CALENDAR,
 		ResourceType.NOTE,
 		ResourceType.GROUP,
 		ResourceType.REMINDER_LIST,
@@ -166,6 +190,7 @@ class DefaultResourceAccess(BaseModel):
 	thread: AccessLevel | None = None
 	project: AccessLevel | None = None
 	file: AccessLevel | None = None
+	calendar: AccessLevel | None = None
 	note: AccessLevel | None = None
 	group: AccessLevel | None = None
 	reminder_list: AccessLevel | None = None

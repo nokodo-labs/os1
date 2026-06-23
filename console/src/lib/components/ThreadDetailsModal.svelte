@@ -3,24 +3,48 @@
 	import { api, unwrap, type Schemas } from '$lib/api'
 
 	type Message = Schemas['Message']
+	type Task = Schemas['Task']
 	type Thread = Schemas['Thread']
+	type ThreadSummaryRecord = Schemas['ThreadSummaryRecord']
 
+	import AccessRulesButton from '$lib/components/AccessRulesButton.svelte'
+	import AclModal from '$lib/components/AclModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ThreadFlowView from '$lib/components/thread-flow/ThreadFlowView.svelte'
 	import { Button } from '$lib/components/ui/button'
-	import { ChevronDown, Download, FileJson, FileText, GitBranch, X } from '@lucide/svelte'
+	import {
+		Ban,
+		Brain,
+		ChevronDown,
+		Circle,
+		CircleCheck,
+		Clock3,
+		Download,
+		FileBraces,
+		FileText,
+		GitBranch,
+		LoaderCircle,
+		Pencil,
+		RotateCcw,
+		Save,
+		Trash2,
+		TriangleAlert,
+		X,
+	} from '@lucide/svelte'
 	import { Dialog, DropdownMenu } from 'bits-ui'
 	import { tick } from 'svelte'
 
-	type ViewTab = 'messages' | 'tree'
+	type ViewTab = 'messages' | 'tree' | 'summaries'
 
 	type Props = {
 		open: boolean
 		threadId: string | null
 		onClose?: () => void
+		onUpdated?: (thread: Thread) => void
+		onDeleted?: (threadId: string) => void
 	}
 
-	let { open = $bindable(false), threadId, onClose }: Props = $props()
+	let { open = $bindable(false), threadId, onClose, onUpdated, onDeleted }: Props = $props()
 
 	let thread = $state<Thread | null>(null)
 	let isLoading = $state(false)
@@ -34,8 +58,50 @@
 	let messagesEl = $state<HTMLDivElement | null>(null)
 	let activeTab = $state<ViewTab>('tree')
 	let allMessagesLoaded = $state(false)
+	let summaries = $state<ThreadSummaryRecord[]>([])
+	let isLoadingSummaries = $state(false)
+	let summariesError = $state<string | null>(null)
+	let editingSummaryId = $state<string | null>(null)
+	let summaryDraft = $state('')
+	let summaryActionId = $state<string | null>(null)
+	let summaryActionError = $state<string | null>(null)
+	let summaryDeleteConfirmId = $state<string | null>(null)
+	let threadTasks = $state<Task[]>([])
+	let isLoadingTasks = $state(false)
+	let tasksError = $state<string | null>(null)
+	let isDeleteConfirming = $state(false)
+	let isDeleting = $state(false)
+	let deleteError = $state<string | null>(null)
+	let isWipeConfirming = $state(false)
+	let isWiping = $state(false)
+	let wipeError = $state<string | null>(null)
+	let isRestoring = $state(false)
+	let restoreError = $state<string | null>(null)
+	let showAclModal = $state(false)
 
 	const messagePageSize = 60
+	const summaryTaskNames = [
+		'chat.summarize_messages',
+		'chat.condense_summaries',
+		'thread.maintenance',
+	]
+
+	const activeSummaries = $derived(
+		summaries.filter((summary) => summary.superseded_by_id == null)
+	)
+	const supersededSummaries = $derived(
+		summaries.filter((summary) => summary.superseded_by_id != null)
+	)
+	const currentBranchSummary = $derived(
+		activeSummaries.find(
+			(summary) =>
+				thread?.current_message_id && summary.end_message_id === thread.current_message_id
+		) ?? null
+	)
+	const compactionSummaries = $derived(
+		activeSummaries.filter((summary) => summary.id !== currentBranchSummary?.id)
+	)
+	const summaryTasks = $derived(threadTasks.filter((task) => isSummaryTask(task)))
 
 	type ThreadWithDeletedAt = Thread & { deleted_at?: string | null }
 
@@ -44,8 +110,86 @@
 	}
 
 	function close() {
+		isDeleteConfirming = false
+		isWipeConfirming = false
+		deleteError = null
+		wipeError = null
+		restoreError = null
 		open = false
 		onClose?.()
+	}
+
+	async function deleteThread() {
+		if (!threadId) return
+		isDeleting = true
+		deleteError = null
+		try {
+			unwrap(
+				await api.DELETE('/v1/threads/{thread_id}', {
+					params: { path: { thread_id: threadId } },
+				})
+			)
+			const updated = unwrap(
+				await api.GET('/v1/threads/{thread_id}', {
+					params: {
+						path: { thread_id: threadId },
+						query: { include_hidden: true },
+					},
+				})
+			)
+			thread = updated
+			onUpdated?.(updated)
+			isDeleteConfirming = false
+		} catch (e: unknown) {
+			const message = errorMessage(e)
+			if (message?.includes('not found')) {
+				onDeleted?.(threadId)
+				close()
+				return
+			}
+			deleteError = message || 'delete failed'
+		} finally {
+			isDeleting = false
+		}
+	}
+
+	async function wipeThread() {
+		if (!threadId) return
+		isWiping = true
+		wipeError = null
+		try {
+			unwrap(
+				await api.DELETE('/v1/threads/{thread_id}', {
+					params: { path: { thread_id: threadId }, query: { permanent: true } },
+				})
+			)
+			onDeleted?.(threadId)
+			isWipeConfirming = false
+			close()
+		} catch (e: unknown) {
+			wipeError = errorMessage(e) || 'wipe failed'
+		} finally {
+			isWiping = false
+		}
+	}
+
+	async function restoreThread() {
+		if (!threadId) return
+		isRestoring = true
+		restoreError = null
+		try {
+			const updated = unwrap(
+				await api.POST('/v1/threads/{thread_id}/restore', {
+					params: { path: { thread_id: threadId } },
+				})
+			)
+			thread = updated
+			onUpdated?.(updated)
+		} catch (e: unknown) {
+			restoreError = errorMessage(e) || 'restore failed'
+		} finally {
+			isRestoring = false
+		}
 	}
 
 	function downloadBlob(content: string, filename: string, mime: string) {
@@ -60,7 +204,7 @@
 
 	function exportJson() {
 		if (!thread) return
-		const payload = { thread, messages }
+		const payload = { thread, messages, summaries, tasks: threadTasks }
 		const name = (thread.title ?? thread.id).replace(/[^a-zA-Z0-9_-]/g, '_')
 		downloadBlob(JSON.stringify(payload, null, 2), `thread-${name}.json`, 'application/json')
 	}
@@ -105,6 +249,115 @@
 
 	function errorMessage(e: unknown): string {
 		return e instanceof Error ? e.message : String(e)
+	}
+
+	function formatDate(value: string | null | undefined): string {
+		if (!value) return 'never'
+		const date = new Date(value)
+		if (Number.isNaN(date.getTime())) return 'unknown'
+		return date.toLocaleString()
+	}
+
+	function metadataString(task: Task, key: string): string | null {
+		const value = task.metadata_?.[key]
+		return typeof value === 'string' && value.trim() ? value : null
+	}
+
+	function taskName(task: Task): string {
+		return metadataString(task, 'task_name') ?? task.task_type.replaceAll('_', ' ')
+	}
+
+	function isSummaryTask(task: Task): boolean {
+		const name = metadataString(task, 'task_name')
+		return name != null && summaryTaskNames.includes(name)
+	}
+
+	function taskResultText(task: Task): string | null {
+		if (!task.result) return null
+		return JSON.stringify(task.result, null, 2)
+	}
+
+	function summaryRange(summary: ThreadSummaryRecord): string {
+		if (!summary.start_message_id && !summary.end_message_id) return 'unbound range'
+		return `${summary.start_message_id ?? 'start'} -> ${summary.end_message_id ?? 'end'}`
+	}
+
+	function summaryStateLabel(summary: ThreadSummaryRecord): string {
+		if (summary.superseded_by_id) return 'superseded'
+		if (thread?.current_message_id && summary.end_message_id === thread.current_message_id)
+			return 'current branch'
+		return 'active compaction'
+	}
+
+	function summaryStateClass(summary: ThreadSummaryRecord): string {
+		if (summary.superseded_by_id) return 'border-zinc-700 bg-zinc-800/70 text-zinc-300'
+		if (thread?.current_message_id && summary.end_message_id === thread.current_message_id)
+			return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+		return 'border-sky-500/30 bg-sky-500/10 text-sky-300'
+	}
+
+	function startSummaryEdit(summary: ThreadSummaryRecord) {
+		editingSummaryId = summary.id
+		summaryDraft = summary.content
+		summaryDeleteConfirmId = null
+		summaryActionError = null
+	}
+
+	function cancelSummaryEdit() {
+		editingSummaryId = null
+		summaryDraft = ''
+		summaryActionError = null
+	}
+
+	async function saveSummary(summary: ThreadSummaryRecord) {
+		if (!threadId) return
+		const content = summaryDraft.trim()
+		if (!content) return
+		summaryActionId = summary.id
+		summaryActionError = null
+		try {
+			const updated = unwrap(
+				await api.PATCH('/v1/threads/{thread_id}/summaries/{summary_id}', {
+					params: { path: { thread_id: threadId, summary_id: summary.id } },
+					body: { content },
+				})
+			)
+			summaries = summaries.map((item) => (item.id === updated.id ? updated : item))
+			cancelSummaryEdit()
+		} catch (e: unknown) {
+			summaryActionError = errorMessage(e) || 'failed to save summary'
+		} finally {
+			summaryActionId = null
+		}
+	}
+
+	async function deleteSummary(summary: ThreadSummaryRecord) {
+		if (!threadId) return
+		summaryActionId = summary.id
+		summaryActionError = null
+		try {
+			unwrap(
+				await api.DELETE('/v1/threads/{thread_id}/summaries/{summary_id}', {
+					params: { path: { thread_id: threadId, summary_id: summary.id } },
+				})
+			)
+			summaries = summaries.filter((item) => item.id !== summary.id)
+			if (editingSummaryId === summary.id) cancelSummaryEdit()
+			summaryDeleteConfirmId = null
+		} catch (e: unknown) {
+			summaryActionError = errorMessage(e) || 'failed to delete summary'
+		} finally {
+			summaryActionId = null
+		}
+	}
+
+	function taskStatusClass(task: Task): string {
+		if (task.status === 'running') return 'border-lime-500/20 bg-lime-500/10 text-lime-300'
+		if (task.status === 'pending') return 'border-sky-500/20 bg-sky-500/10 text-sky-300'
+		if (task.status === 'complete')
+			return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+		if (task.status === 'failed') return 'border-red-500/20 bg-red-500/10 text-red-300'
+		return 'border-zinc-600/40 bg-zinc-700/40 text-zinc-300'
 	}
 
 	function contentToText(message: Message) {
@@ -191,6 +444,52 @@
 		}
 	}
 
+	async function loadThreadSummaries(id: string) {
+		isLoadingSummaries = true
+		summariesError = null
+		summaries = []
+
+		try {
+			summaries = unwrap(
+				await api.GET('/v1/threads/{thread_id}/summaries', {
+					params: {
+						path: { thread_id: id },
+						query: { include_superseded: true },
+					},
+				})
+			)
+		} catch (e: unknown) {
+			summariesError = errorMessage(e) || 'failed to load summaries'
+		} finally {
+			isLoadingSummaries = false
+		}
+	}
+
+	async function loadThreadTasks(id: string) {
+		isLoadingTasks = true
+		tasksError = null
+		threadTasks = []
+
+		try {
+			threadTasks = unwrap(
+				await api.GET('/v1/tasks', {
+					params: {
+						query: {
+							spawned_thread_id: id,
+							limit: 50,
+							sort_by: 'last_event_at',
+							sort_dir: 'desc',
+						},
+					},
+				})
+			)
+		} catch (e: unknown) {
+			tasksError = errorMessage(e) || 'failed to load tasks'
+		} finally {
+			isLoadingTasks = false
+		}
+	}
+
 	async function loadOlderMessages() {
 		if (!threadId) return
 		if (!messageHasMore) return
@@ -254,10 +553,24 @@
 		messageSkip = 0
 		messageHasMore = true
 		messageError = null
+		summaries = []
+		summariesError = null
+		threadTasks = []
+		tasksError = null
+		editingSummaryId = null
+		summaryDraft = ''
+		summaryActionId = null
+		summaryActionError = null
+		summaryDeleteConfirmId = null
 		activeTab = 'tree'
 		allMessagesLoaded = false
 
-		Promise.all([loadThreadMeta(threadId), loadLatestMessages(threadId)])
+		Promise.all([
+			loadThreadMeta(threadId),
+			loadLatestMessages(threadId),
+			loadThreadSummaries(threadId),
+			loadThreadTasks(threadId),
+		])
 			.then(() => {
 				void loadAllMessages()
 			})
@@ -270,13 +583,88 @@
 	})
 </script>
 
+{#snippet summaryActions(summary: ThreadSummaryRecord)}
+	<div class="flex shrink-0 flex-wrap items-center gap-2">
+		{#if editingSummaryId === summary.id}
+			<button
+				class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700 bg-emerald-900/30 px-2.5 py-1 text-xs text-emerald-200 transition-colors hover:bg-emerald-800/60 disabled:opacity-50"
+				disabled={summaryActionId === summary.id || summaryDraft.trim().length === 0}
+				onclick={() => saveSummary(summary)}
+			>
+				<Save class="h-3.5 w-3.5" />
+				{summaryActionId === summary.id ? 'saving...' : 'save'}
+			</button>
+			<button
+				class="rounded-lg border border-zinc-700 px-2.5 py-1 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-50"
+				disabled={summaryActionId === summary.id}
+				onclick={cancelSummaryEdit}
+			>
+				cancel
+			</button>
+		{:else if summaryDeleteConfirmId === summary.id}
+			<span class="text-xs text-red-300">delete?</span>
+			<button
+				class="inline-flex items-center gap-1.5 rounded-lg border border-red-700 bg-red-900/30 px-2.5 py-1 text-xs text-red-200 transition-colors hover:bg-red-800/60 disabled:opacity-50"
+				disabled={summaryActionId === summary.id}
+				onclick={() => deleteSummary(summary)}
+			>
+				<Trash2 class="h-3.5 w-3.5" />
+				{summaryActionId === summary.id ? 'deleting...' : 'confirm'}
+			</button>
+			<button
+				class="rounded-lg border border-zinc-700 px-2.5 py-1 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-50"
+				disabled={summaryActionId === summary.id}
+				onclick={() => {
+					summaryDeleteConfirmId = null
+					summaryActionError = null
+				}}
+			>
+				cancel
+			</button>
+		{:else}
+			<button
+				class="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+				onclick={() => startSummaryEdit(summary)}
+			>
+				<Pencil class="h-3.5 w-3.5" />
+				edit
+			</button>
+			<button
+				class="inline-flex items-center gap-1.5 rounded-lg border border-red-900/60 px-2.5 py-1 text-xs text-red-300 transition-colors hover:bg-red-900/30 hover:text-red-100"
+				onclick={() => {
+					summaryDeleteConfirmId = summary.id
+					summaryActionError = null
+				}}
+			>
+				<Trash2 class="h-3.5 w-3.5" />
+				delete
+			</button>
+		{/if}
+	</div>
+	{#if summaryActionError && (editingSummaryId === summary.id || summaryDeleteConfirmId === summary.id)}
+		<div class="text-xs text-red-300">{summaryActionError}</div>
+	{/if}
+{/snippet}
+
+{#snippet summaryContent(summary: ThreadSummaryRecord, maxHeightClass: string, textClass: string)}
+	{#if editingSummaryId === summary.id}
+		<textarea
+			class="min-h-36 w-full resize-y rounded-xl border border-zinc-700 bg-zinc-900 p-3 font-mono text-xs whitespace-pre-wrap text-zinc-100 transition-colors outline-none focus:border-zinc-500"
+			bind:value={summaryDraft}
+		></textarea>
+	{:else}
+		<pre
+			class="{maxHeightClass} overflow-auto rounded-xl border border-zinc-800 bg-zinc-900 p-3 font-mono text-xs whitespace-pre-wrap {textClass}">{summary.content}</pre>
+	{/if}
+{/snippet}
+
 <Dialog.Root bind:open>
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] w-auto max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
 		>
-			<!-- header -->
 			<div
 				class="flex shrink-0 items-center justify-between border-b border-zinc-800 px-6 py-4"
 			>
@@ -286,8 +674,15 @@
 						{threadId ?? ''}
 					</Dialog.Description>
 				</div>
-				<div class="flex items-center gap-2">
-					<!-- export dropdown -->
+				<div class="flex flex-wrap items-center justify-end gap-2">
+					{#if threadId}
+						<AccessRulesButton
+							type="button"
+							variant="outline"
+							size="sm"
+							onclick={() => (showAclModal = true)}
+						/>
+					{/if}
 					{#if thread && messages.length > 0}
 						<DropdownMenu.Root>
 							<DropdownMenu.Trigger
@@ -306,14 +701,14 @@
 										class="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
 										onSelect={exportJson}
 									>
-										<FileJson class="h-3.5 w-3.5" />
+										<FileBraces class="h-3.5 w-3.5" />
 										full thread (json)
 									</DropdownMenu.Item>
 									<DropdownMenu.Item
 										class="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
 										onSelect={exportMessagesOnly}
 									>
-										<FileJson class="h-3.5 w-3.5" />
+										<FileBraces class="h-3.5 w-3.5" />
 										messages only (json)
 									</DropdownMenu.Item>
 									<DropdownMenu.Item
@@ -354,6 +749,104 @@
 					<div class="flex flex-col gap-4 lg:flex-row lg:items-start">
 						<!-- left panel: metadata -->
 						<div class="w-full shrink-0 space-y-3 overflow-y-auto lg:w-72">
+							<!-- wipe action -->
+							<div
+								class="rounded-xl border border-red-900/40 bg-red-950/20 p-3 text-sm"
+							>
+								<div class="mb-2 font-medium text-red-300">danger zone</div>
+								{#if deletedAt(thread)}
+									<div class="mb-3">
+										<button
+											class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-800 bg-emerald-900/20 px-3 py-1.5 text-xs text-emerald-300 transition-colors hover:bg-emerald-900/40 hover:text-emerald-100 disabled:opacity-50"
+											disabled={isRestoring || isWiping}
+											onclick={restoreThread}
+										>
+											<RotateCcw class="h-3.5 w-3.5" />
+											{isRestoring ? 'restoring...' : 'restore thread'}
+										</button>
+										{#if restoreError}
+											<p class="mt-2 text-xs text-red-400">{restoreError}</p>
+										{/if}
+									</div>
+								{/if}
+								{#if !deletedAt(thread)}
+									<div class="mb-3">
+										{#if !isDeleteConfirming}
+											<button
+												class="inline-flex items-center gap-1.5 rounded-lg border border-red-800/70 bg-red-900/20 px-3 py-1.5 text-xs text-red-300 transition-colors hover:bg-red-900/40 hover:text-red-100"
+												onclick={() => (isDeleteConfirming = true)}
+											>
+												<Trash2 class="h-3.5 w-3.5" />
+												delete thread
+											</button>
+										{:else}
+											<p class="mb-2 text-xs text-red-300">
+												This soft-deletes the thread.
+											</p>
+											{#if deleteError}
+												<p class="mb-2 text-xs text-red-400">
+													{deleteError}
+												</p>
+											{/if}
+											<div class="flex gap-2">
+												<button
+													class="inline-flex items-center gap-1.5 rounded-lg border border-red-700 bg-red-800/40 px-3 py-1.5 text-xs text-red-200 transition-colors hover:bg-red-700/60 disabled:opacity-50"
+													disabled={isDeleting}
+													onclick={deleteThread}
+												>
+													{isDeleting ? 'deleting...' : 'confirm delete'}
+												</button>
+												<button
+													class="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 transition-colors hover:bg-zinc-800"
+													disabled={isDeleting}
+													onclick={() => {
+														isDeleteConfirming = false
+														deleteError = null
+													}}
+												>
+													cancel
+												</button>
+											</div>
+										{/if}
+									</div>
+								{/if}
+								{#if !isWipeConfirming}
+									<button
+										class="inline-flex items-center gap-1.5 rounded-lg border border-red-800 bg-red-900/30 px-3 py-1.5 text-xs text-red-300 transition-colors hover:bg-red-900/60 hover:text-red-100"
+										onclick={() => (isWipeConfirming = true)}
+									>
+										<Trash2 class="h-3.5 w-3.5" />
+										full wipe
+									</button>
+								{:else}
+									<p class="mb-2 text-xs text-red-300">
+										This permanently deletes the thread and all its messages.
+										Cannot be undone.
+									</p>
+									{#if wipeError}
+										<p class="mb-2 text-xs text-red-400">{wipeError}</p>
+									{/if}
+									<div class="flex gap-2">
+										<button
+											class="inline-flex items-center gap-1.5 rounded-lg border border-red-700 bg-red-800/50 px-3 py-1.5 text-xs text-red-200 transition-colors hover:bg-red-700/70 disabled:opacity-50"
+											disabled={isWiping}
+											onclick={wipeThread}
+										>
+											{isWiping ? 'wiping...' : 'confirm wipe'}
+										</button>
+										<button
+											class="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 transition-colors hover:bg-zinc-800"
+											disabled={isWiping}
+											onclick={() => {
+												isWipeConfirming = false
+												wipeError = null
+											}}
+										>
+											cancel
+										</button>
+									</div>
+								{/if}
+							</div>
 							<div class="rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm">
 								<div class="font-medium">{thread.title ?? '(untitled)'}</div>
 								<div class="mt-2 space-y-1 text-xs text-zinc-400">
@@ -400,7 +893,7 @@
 											: 'text-zinc-400 hover:text-zinc-200'}"
 										onclick={() => (activeTab = 'messages')}
 									>
-										<FileJson class="h-3.5 w-3.5" />
+										<FileBraces class="h-3.5 w-3.5" />
 										messages
 									</button>
 									<button
@@ -413,8 +906,19 @@
 										<GitBranch class="h-3.5 w-3.5" />
 										tree
 									</button>
+									<button
+										class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-colors {activeTab ===
+										'summaries'
+											? 'bg-zinc-800 text-zinc-100'
+											: 'text-zinc-400 hover:text-zinc-200'}"
+										onclick={() => (activeTab = 'summaries')}
+									>
+										<Brain class="h-3.5 w-3.5" />
+										summaries
+									</button>
 									<span class="ml-auto text-xs text-zinc-500">
-										{messages.length} loaded{messageHasMore ? '+' : ''}
+										{messages.length} messages{messageHasMore ? '+' : ''} / {summaries.length}
+										summaries
 									</span>
 								</div>
 
@@ -509,6 +1013,322 @@
 										</div>
 									{/if}
 								{/if}
+
+								<!-- summaries tab -->
+								{#if activeTab === 'summaries'}
+									<div class="max-h-[60vh] space-y-4 overflow-y-auto p-4">
+										{#if summariesError || tasksError}
+											<div
+												class="rounded-xl border border-red-900/50 bg-red-900/10 p-3 text-sm text-red-200"
+											>
+												{summariesError ?? tasksError}
+											</div>
+										{/if}
+
+										<div class="grid gap-2 sm:grid-cols-3">
+											<div
+												class="rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+											>
+												<div class="text-xs text-zinc-500">
+													active summaries
+												</div>
+												<div
+													class="mt-1 text-2xl font-semibold tabular-nums"
+												>
+													{activeSummaries.length}
+												</div>
+											</div>
+											<div
+												class="rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+											>
+												<div class="text-xs text-zinc-500">
+													superseded summaries
+												</div>
+												<div
+													class="mt-1 text-2xl font-semibold tabular-nums"
+												>
+													{supersededSummaries.length}
+												</div>
+											</div>
+											<div
+												class="rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+											>
+												<div class="text-xs text-zinc-500">
+													related tasks
+												</div>
+												<div
+													class="mt-1 text-2xl font-semibold tabular-nums"
+												>
+													{summaryTasks.length}
+												</div>
+											</div>
+										</div>
+
+										<div
+											class="rounded-xl border border-zinc-800 bg-zinc-950 p-4"
+										>
+											<div
+												class="mb-3 flex items-center justify-between gap-3"
+											>
+												<div>
+													<div class="text-sm font-medium">
+														current branch summary
+													</div>
+													<div class="text-xs text-zinc-500">
+														maintenance summary used for thread metadata
+														and recall.
+													</div>
+												</div>
+												{#if isLoadingSummaries}
+													<LoaderCircle
+														class="h-4 w-4 animate-spin text-zinc-500"
+													/>
+												{/if}
+											</div>
+											{#if currentBranchSummary}
+												<div class="space-y-3">
+													<div
+														class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
+													>
+														<div
+															class="flex flex-wrap items-center gap-2 text-xs text-zinc-500"
+														>
+															<span
+																class="rounded-md border px-2 py-0.5 {summaryStateClass(
+																	currentBranchSummary
+																)}"
+															>
+																{summaryStateLabel(
+																	currentBranchSummary
+																)}
+															</span>
+															<span
+																>{currentBranchSummary.purpose}</span
+															>
+															<span
+																>{currentBranchSummary.message_count}
+																messages</span
+															>
+															<span
+																>{summaryRange(
+																	currentBranchSummary
+																)}</span
+															>
+															<span
+																>{formatDate(
+																	currentBranchSummary.updated_at
+																)}</span
+															>
+														</div>
+														{@render summaryActions(
+															currentBranchSummary
+														)}
+													</div>
+													{@render summaryContent(
+														currentBranchSummary,
+														'max-h-56',
+														'text-zinc-100'
+													)}
+												</div>
+											{:else}
+												<div
+													class="rounded-xl border border-dashed border-zinc-800 p-6 text-center text-sm text-zinc-500"
+												>
+													no current branch summary
+												</div>
+											{/if}
+										</div>
+
+										<div class="space-y-2">
+											<div class="text-sm font-medium">
+												active compaction summaries
+											</div>
+											{#if compactionSummaries.length === 0 && !isLoadingSummaries}
+												<div
+													class="rounded-xl border border-dashed border-zinc-800 p-6 text-center text-sm text-zinc-500"
+												>
+													no live compaction summaries
+												</div>
+											{/if}
+											{#each compactionSummaries as summary (summary.id)}
+												<div
+													class="rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+												>
+													<div
+														class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
+													>
+														<div
+															class="flex flex-wrap items-center gap-2 text-xs text-zinc-500"
+														>
+															<span
+																class="rounded-md border px-2 py-0.5 {summaryStateClass(
+																	summary
+																)}"
+															>
+																{summaryStateLabel(summary)}
+															</span>
+															<span>{summary.purpose}</span>
+															<span
+																>{summary.message_count} messages</span
+															>
+															<span>{summaryRange(summary)}</span>
+															<span
+																>{formatDate(
+																	summary.created_at
+																)}</span
+															>
+														</div>
+														{@render summaryActions(summary)}
+													</div>
+													{@render summaryContent(
+														summary,
+														'max-h-40',
+														'text-zinc-100'
+													)}
+												</div>
+											{/each}
+										</div>
+
+										<div class="space-y-2">
+											<div class="text-sm font-medium">summary tasks</div>
+											{#if isLoadingTasks}
+												<div
+													class="flex items-center gap-2 text-xs text-zinc-500"
+												>
+													<LoaderCircle
+														class="h-3.5 w-3.5 animate-spin"
+													/>
+													loading tasks...
+												</div>
+											{:else if summaryTasks.length === 0}
+												<div
+													class="rounded-xl border border-dashed border-zinc-800 p-6 text-center text-sm text-zinc-500"
+												>
+													no summary tasks found
+												</div>
+											{/if}
+											{#each summaryTasks as task (task.id)}
+												{@const resultText = taskResultText(task)}
+												<div
+													class="rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+												>
+													<div
+														class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
+													>
+														<div class="min-w-0 space-y-1">
+															<div
+																class="flex flex-wrap items-center gap-2"
+															>
+																<span class="text-sm font-medium"
+																	>{taskName(task)}</span
+																>
+																<span
+																	class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs {taskStatusClass(
+																		task
+																	)}"
+																>
+																	{#if task.status === 'running'}
+																		<LoaderCircle
+																			class="h-3 w-3 animate-spin"
+																		/>
+																	{:else if task.status === 'complete'}
+																		<CircleCheck
+																			class="h-3 w-3"
+																		/>
+																	{:else if task.status === 'failed'}
+																		<TriangleAlert
+																			class="h-3 w-3"
+																		/>
+																	{:else if task.status === 'cancelled'}
+																		<Ban class="h-3 w-3" />
+																	{:else if task.status === 'pending'}
+																		<Clock3 class="h-3 w-3" />
+																	{:else}
+																		<Circle class="h-3 w-3" />
+																	{/if}
+																	{task.status}
+																</span>
+															</div>
+															<div
+																class="flex flex-wrap gap-2 text-xs text-zinc-500"
+															>
+																<span>{task.id}</span>
+																{#if task.stage}<span
+																		>{task.stage}</span
+																	>{/if}
+																<span
+																	>{formatDate(
+																		task.last_event_at ??
+																			task.updated_at
+																	)}</span
+																>
+															</div>
+														</div>
+														{#if typeof task.progress === 'number'}
+															<div
+																class="text-xs text-zinc-500 tabular-nums"
+															>
+																{task.progress}%
+															</div>
+														{/if}
+													</div>
+													{#if resultText}
+														<pre
+															class="mt-3 max-h-32 overflow-auto rounded-xl border border-zinc-800 bg-zinc-900 p-2 font-mono text-xs whitespace-pre-wrap text-zinc-300">{resultText}</pre>
+													{/if}
+												</div>
+											{/each}
+										</div>
+
+										{#if supersededSummaries.length > 0}
+											<details
+												class="rounded-xl border border-zinc-800 bg-zinc-950 p-3"
+											>
+												<summary
+													class="cursor-pointer text-sm font-medium text-zinc-300"
+												>
+													superseded summary history
+												</summary>
+												<div class="mt-3 space-y-2">
+													{#each supersededSummaries as summary (summary.id)}
+														<div
+															class="rounded-xl border border-zinc-800 bg-zinc-900 p-3"
+														>
+															<div
+																class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
+															>
+																<div
+																	class="flex flex-wrap gap-2 text-xs text-zinc-500"
+																>
+																	<span>{summary.purpose}</span>
+																	<span
+																		>{summary.message_count} messages</span
+																	>
+																	<span
+																		>{summaryRange(
+																			summary
+																		)}</span
+																	>
+																	{#if summary.superseded_by_id}
+																		<span
+																			>replaced by {summary.superseded_by_id}</span
+																		>
+																	{/if}
+																</div>
+																{@render summaryActions(summary)}
+															</div>
+															{@render summaryContent(
+																summary,
+																'max-h-32',
+																'text-zinc-300'
+															)}
+														</div>
+													{/each}
+												</div>
+											</details>
+										{/if}
+									</div>
+								{/if}
 							</div>
 						</div>
 					</div>
@@ -525,3 +1345,12 @@
 		</Dialog.Content>
 	</Dialog.Portal>
 </Dialog.Root>
+
+{#if threadId}
+	<AclModal
+		bind:open={showAclModal}
+		resourceType="thread"
+		resourceId={threadId}
+		title="thread access rules"
+	/>
+{/if}

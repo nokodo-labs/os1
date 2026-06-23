@@ -38,7 +38,10 @@ async def test_thread_run_stream_headers(
 	) -> AsyncGenerator[bytes]:
 		return _stream()
 
-	monkeypatch.setattr("api.v1.service.runs.chat_run_agent", _stream)
+	monkeypatch.setattr(
+		"api.v1.routers.runs.runs_service.start_thread_run",
+		_fake_start_thread_run,
+	)
 
 	resp = await client.post(
 		"/v1/runs",
@@ -151,7 +154,7 @@ async def test_delete_thread_forbidden_when_editor_not_owner(
 
 	# grant EDITOR access via access rules, but they are not the owner.
 	acl_resp = await client.put(
-		f"/v1/threads/{thread_id}/access-rules",
+		f"/v1/threads/{thread_id}/access/rules",
 		headers=owner_headers,
 		json=[{"subject_user_id": other_user_id, "level": "editor"}],
 	)

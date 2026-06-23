@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.file import FileSource
 from api.settings import settings
 from api.v1.service.chat.models import resolve_video_model
-from api.v1.service.files import store_file
+from api.v1.service.files import ingest_file
 from api.v1.service.media.images import MediaError
 from nokodo_ai.adapters.videos import VideoGenerationParams
 from nokodo_ai.utils.typeid import TypeID
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 class VideoResult:
 	"""result of a video generation request."""
 
-	file_id: str
+	file_id: TypeID | None = None
 	url: str | None = None
 	b64_data: str | None = None
 	mime_type: str = "video/mp4"
@@ -47,7 +47,6 @@ class VideoResult:
 async def generate_video(
 	session: AsyncSession,
 	prompt: str,
-	*,
 	owner_id: TypeID,
 	image: bytes | None = None,
 	duration: float | None = None,
@@ -124,7 +123,7 @@ async def generate_video(
 
 		if file_bytes is not None:
 			ext = vid.mime_type.split("/")[-1] if "/" in vid.mime_type else "mp4"
-			file = await store_file(
+			file = await ingest_file(
 				session,
 				data=file_bytes,
 				owner_id=owner_id,
@@ -136,15 +135,18 @@ async def generate_video(
 				origin_session_id=origin_session_id,
 			)
 			# store generation metadata on the file record
-			gen_meta: dict[str, str] = {"prompt": prompt}
+			gen_meta: dict[str, str] = {
+				"prompt": prompt,
+				"_model_id": str(effective_model_id),
+			}
 			if agent_id:
 				gen_meta["agent_id"] = str(agent_id)
 			file.metadata_ = {**file.metadata_, **gen_meta}
 			await session.flush()
 
-			file_id = str(file.id)
+			file_id = file.id
 		else:
-			file_id = ""
+			file_id = None
 
 		results.append(
 			VideoResult(

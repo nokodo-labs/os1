@@ -31,6 +31,10 @@ engine = create_async_engine(
 	echo=boot_settings.DEBUG,
 	future=True,
 	pool_pre_ping=True,
+	pool_size=boot_settings.DB_POOL_SIZE,
+	max_overflow=boot_settings.DB_MAX_OVERFLOW,
+	pool_timeout=boot_settings.DB_POOL_TIMEOUT,
+	pool_recycle=boot_settings.DB_POOL_RECYCLE,
 )
 
 # Async session factory - accessed via async_session_local() so that test
@@ -64,6 +68,14 @@ async def session_scope(
 	else:
 		async with async_session_local() as new_session:
 			yield new_session
+
+
+async def safe_rollback(session: AsyncSession) -> None:
+	"""rollback the session, swallowing errors if already closed."""
+	try:
+		await session.rollback()
+	except Exception:
+		pass
 
 
 @event.listens_for(Session, "do_orm_execute")

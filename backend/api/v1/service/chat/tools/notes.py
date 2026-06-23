@@ -8,10 +8,14 @@ import logging
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.models.note import Note
 from api.schemas.note import NoteCreate, NoteUpdate
+from api.schemas.search import Page, SearchMode, SearchParams
 from api.v1.service import notes as note_service
 from api.v1.service.chat.context import AppContext
-from nokodo_ai.context import AgentContext
+from api.v1.service.chat.message_metadata import CITABLE_SOURCES_KEY
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject, JSONValue
@@ -19,6 +23,15 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
+
+
+def _note_search_result(note: Note) -> dict[str, object]:
+	"""summarize a note for agent search results."""
+	return {
+		"id": str(note.id),
+		"title": note.title or "",
+		**({"preview": note.content[:50]} if note.content else {}),
+	}
 
 
 class NoteGetInput(BaseModel):
@@ -36,15 +49,22 @@ class NoteGetInput(BaseModel):
 	query: str | None = Field(
 		default=None,
 		description=(
-			"natural language search query. required when note_id is not given. "
-			"hybrid BM25 + semantic search is used."
+			"natural language search query for hybrid search. "
+			"required when note_id is not given."
 		),
+		min_length=1,
+		max_length=500,
 	)
 	limit: int = Field(
 		default=5,
 		description="max notes to return when searching (ignored for direct fetch)",
 		ge=1,
 		le=20,
+	)
+	offset: int = Field(
+		default=0,
+		description="number of search results to skip before this page.",
+		ge=0,
 	)
 
 
@@ -91,12 +111,15 @@ class NoteGetTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
+		"""retrieve a note by id or search notes and return structured results."""
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		inp = NoteGetInput.model_validate(kwargs)
 
 		if inp.note_id:
@@ -108,7 +131,7 @@ class NoteGetTool(Tool[AppContext]):
 					__app_context__.principal,
 				)
 			except HTTPException as exc:
-				return self.error(str(exc.detail), __agent_context__)
+				return self.error(str(exc.detail), __tool_call_context__)
 			result: dict[str, object] = {
 				"status": "success",
 				"message": "note retrieved",
@@ -119,36 +142,42 @@ class NoteGetTool(Tool[AppContext]):
 			if note.labels:
 				result["labels"] = [str(label) for label in note.labels]
 			return ToolMessage(
-				tool_call_id=__agent_context__.tool_call_id,
+				tool_call_id=__tool_call_context__.tool_call_id,
 				tool_output=json.dumps(result),
 				metadata={
-					"citable_sources": [
+					CITABLE_SOURCES_KEY: [
 						{
 							"source_type": "note",
 							"source_id": str(note.id),
 							"title": note.title,
-						},
-					],
+						}
+					]
 				},
 			)
 
 		if not inp.query:
 			return self.error(
 				"provide note_id to fetch a note or query to search",
-				__agent_context__,
+				__tool_call_context__,
 			)
 
 		# search by query
 		try:
-			page = await note_service.search_notes(
+			scored = await note_service.search_notes(
 				inp.query,
 				__app_context__.session,
 				principal=__app_context__.principal,
-				limit=inp.limit,
+				limit=inp.limit + 1,
+				offset=inp.offset,
+				search_params=SearchParams(mode=SearchMode.HYBRID),
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), __agent_context__)
+			return self.error(str(exc.detail), __tool_call_context__)
 
+		page = Page(
+			items=[hit.item for hit in scored[: inp.limit]],
+			has_more=len(scored) > inp.limit,
+		)
 		if not page.items:
 			out = {
 				"status": "success",
@@ -156,27 +185,27 @@ class NoteGetTool(Tool[AppContext]):
 				"count": 0,
 				"results": [],
 			}
-			return self.success(json.dumps(out), __agent_context__)
+			return self.success(json.dumps(out), __tool_call_context__)
 
-		results = [
-			{
-				"id": item.id,
-				"title": item.title,
-				**({"preview": item.preview[:50]} if item.preview else {}),
-			}
-			for item in page.items
-		]
+		results = [_note_search_result(item) for item in page.items]
 		n = len(results)
 		msg = f"found {n} {'note' if n == 1 else 'notes'}"
-		out = {"status": "success", "message": msg, "count": n, "results": results}
 		citable_sources: list[JSONValue] = [
-			{"source_type": "note", "source_id": item.id, "title": item.title}
+			{"source_type": "note", "source_id": str(item.id), "title": item.title}
 			for item in page.items
 		]
+		next_offset = inp.offset + inp.limit if page.has_more else None
+		out = {
+			"status": "success",
+			"message": msg,
+			"count": n,
+			"results": results,
+			"next_offset": next_offset,
+		}
 		return ToolMessage(
-			tool_call_id=__agent_context__.tool_call_id,
+			tool_call_id=__tool_call_context__.tool_call_id,
 			tool_output=json.dumps(out),
-			metadata={"citable_sources": citable_sources},
+			metadata={CITABLE_SOURCES_KEY: citable_sources},
 		)
 
 
@@ -196,36 +225,42 @@ class NoteWriteTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
+		"""create a new note or update an existing note for the current user."""
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		inp = NoteWriteInput.model_validate(kwargs)
 
 		if inp.note_id:
 			# update existing note
+			update_fields: dict[str, object] = {}
+			if inp.title is not None:
+				update_fields["title"] = inp.title
+			if inp.content is not None:
+				update_fields["content"] = inp.content
+			if inp.labels is not None:
+				update_fields["labels"] = inp.labels
 			try:
 				note = await note_service.update_note(
 					TypeID(inp.note_id),
-					NoteUpdate(
-						title=inp.title,
-						content=inp.content,
-						labels=inp.labels,
-					),
+					NoteUpdate.model_validate(update_fields),
 					__app_context__.session,
 					__app_context__.principal,
 				)
 			except HTTPException as exc:
-				return self.error(str(exc.detail), __agent_context__)
+				return self.error(str(exc.detail), __tool_call_context__)
 			out = {"status": "success", "message": "note updated", "id": str(note.id)}
-			return self.success(json.dumps(out), __agent_context__)
+			return self.success(json.dumps(out), __tool_call_context__)
 
 		# create new note
 		if not inp.title:
 			return self.error(
-				"title is required when creating a note", __agent_context__
+				"title is required when creating a note", __tool_call_context__
 			)
 		try:
 			note = await note_service.create_note(
@@ -238,6 +273,6 @@ class NoteWriteTool(Tool[AppContext]):
 				__app_context__.principal,
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), __agent_context__)
+			return self.error(str(exc.detail), __tool_call_context__)
 		out = {"status": "success", "message": "note created", "id": str(note.id)}
-		return self.success(json.dumps(out), __agent_context__)
+		return self.success(json.dumps(out), __tool_call_context__)

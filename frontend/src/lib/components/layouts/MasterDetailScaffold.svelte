@@ -14,6 +14,7 @@
 	 * - children: snippet for the detail/content area
 	 * - masterWidthClass: tailwind width class for the master sidebar (default: 'w-[clamp(280px,30vw,520px)]')
 	 * - ariaLabel: accessibility label for the master sidebar
+	 * - detailBottomPaddingClass: tailwind bottom padding class for the detail/content area
 	 */
 	interface Props {
 		/** master sidebar content (rendered on desktop, or as full page on mobile) */
@@ -24,6 +25,10 @@
 		masterWidthClass?: string
 		/** accessibility label for the master sidebar */
 		ariaLabel?: string
+		/** tailwind bottom padding class for the detail/content area */
+		detailBottomPaddingClass?: string
+		/** remove page padding for mobile master/sidebar pages */
+		mobileFullBleed?: boolean
 	}
 
 	let {
@@ -31,6 +36,8 @@
 		children,
 		masterWidthClass = 'w-[clamp(280px,30vw,520px)]',
 		ariaLabel = 'sidebar',
+		detailBottomPaddingClass = 'pb-10',
+		mobileFullBleed = false,
 	}: Props = $props()
 
 	const chrome = useSystemChrome()
@@ -62,7 +69,7 @@
 	>
 		<div
 			class="relative h-full"
-			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); padding-top: clamp(12px, 1vw, 32px);"
+			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); --master-detail-header-top: var(--chrome-island-top, clamp(12px, 4vw, 32px)); --master-detail-header-height: calc(var(--chrome-island-offset, 0px) - var(--master-detail-header-top));"
 		>
 			{@render master({ isMobile: false })}
 			<!-- separator (doesn't reach top/bottom) -->
@@ -76,12 +83,19 @@
 
 <!-- content area: scrollbar at edge, padding inside content -->
 <div
-	class="absolute inset-0 overflow-y-auto"
-	style="padding-top: calc(var(--chrome-island-offset, 0px) + var(--spacing-island-content));"
+	class="absolute inset-0 box-border flex h-full min-h-0 flex-col {device.isMobile &&
+	mobileFullBleed
+		? 'overflow-hidden'
+		: 'overflow-y-auto'}"
+	style="padding-top: calc(var(--chrome-island-offset, 0px) + var(--spacing-island-content)); view-transition-name: master-detail-content;"
 >
 	<div
-		class="flex min-h-full flex-col pb-10"
-		style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
+		class="flex min-w-0 flex-1 flex-col {device.isMobile && mobileFullBleed
+			? 'h-full min-h-0'
+			: `min-h-full ${detailBottomPaddingClass}`}"
+		style={device.isMobile && mobileFullBleed
+			? 'padding-left: 0; padding-right: 0;'
+			: 'padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);'}
 	>
 		{@render children()}
 	</div>

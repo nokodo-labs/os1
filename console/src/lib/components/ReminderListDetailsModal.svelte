@@ -3,7 +3,7 @@
 	import { api, unwrap, type Schemas } from '$lib/api'
 
 	type ReminderList = Schemas['ReminderList']
-	type Reminder = Schemas['Reminder']
+	type Reminder = Schemas['ReminderWithSubtasks']
 
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
@@ -12,6 +12,8 @@
 	import { Textarea } from '$lib/components/ui/textarea'
 	import {
 		Calendar,
+		ChevronLeft,
+		ChevronRight,
 		Circle,
 		CircleCheck,
 		Clock,
@@ -35,6 +37,8 @@
 
 	let { open = $bindable(false), listId, onViewUser, onUpdated, onDeleted }: Props = $props()
 
+	const REMINDERS_PAGE_LIMIT = 20
+
 	let list = $state<ReminderList | null>(null)
 	let isLoading = $state(false)
 	let loadError = $state<string | null>(null)
@@ -55,8 +59,10 @@
 
 	// reminders in this list
 	let reminders = $state<Reminder[]>([])
+	let remindersPageIndex = $state(0)
 	let isLoadingReminders = $state(false)
 	let remindersError = $state<string | null>(null)
+	let remindersRequestId = 0
 
 	function close() {
 		open = false
@@ -65,6 +71,7 @@
 		saveError = null
 		deleteError = null
 		reminders = []
+		remindersPageIndex = 0
 		remindersError = null
 	}
 
@@ -90,7 +97,7 @@
 		saveError = null
 		saveSuccess = false
 		try {
-			const r = await api.PATCH('/v1/reminders/lists/{list_id}', {
+			const r = await api.PATCH('/v1/reminder-lists/{list_id}', {
 				params: { path: { list_id: list.id } },
 				body: {
 					name: editName.trim() || undefined,
@@ -118,7 +125,7 @@
 		isDeleting = true
 		deleteError = null
 		try {
-			const r = await api.DELETE('/v1/reminders/lists/{list_id}', {
+			const r = await api.DELETE('/v1/reminder-lists/{list_id}', {
 				params: { path: { list_id: list.id } },
 			})
 			unwrap(r)
@@ -131,6 +138,49 @@
 		}
 	}
 
+	function remindersPageOffset(index: number): number {
+		return Math.max(0, Math.trunc(index)) * REMINDERS_PAGE_LIMIT
+	}
+
+	function previousRemindersPage() {
+		remindersPageIndex = Math.max(0, remindersPageIndex - 1)
+	}
+
+	function nextRemindersPage() {
+		if (reminders.length < REMINDERS_PAGE_LIMIT) return
+		remindersPageIndex += 1
+	}
+
+	async function loadReminders(sourceListId: string, pageIndex: number) {
+		const requestId = ++remindersRequestId
+		isLoadingReminders = true
+		remindersError = null
+		reminders = []
+		try {
+			const items = unwrap(
+				await api.GET('/v1/reminder-lists/{list_id}/reminders', {
+					params: {
+						path: { list_id: sourceListId },
+						query: {
+							include_subtasks: true,
+							skip: remindersPageOffset(pageIndex),
+							limit: REMINDERS_PAGE_LIMIT,
+							sort_by: 'position',
+							sort_dir: 'asc',
+						},
+					},
+				})
+			)
+			if (requestId !== remindersRequestId) return
+			reminders = items
+		} catch (e: unknown) {
+			if (requestId !== remindersRequestId) return
+			remindersError = e instanceof Error ? e.message : 'failed to load reminders'
+		} finally {
+			if (requestId === remindersRequestId) isLoadingReminders = false
+		}
+	}
+
 	$effect(() => {
 		if (!browser) return
 		if (!open) return
@@ -140,8 +190,9 @@
 		list = null
 		isEditing = false
 		reminders = []
+		remindersPageIndex = 0
 		remindersError = null
-		api.GET('/v1/reminders/lists/{list_id}', { params: { path: { list_id: listId } } })
+		api.GET('/v1/reminder-lists/{list_id}', { params: { path: { list_id: listId } } })
 			.then((r) => unwrap(r))
 			.then((l) => {
 				list = l
@@ -152,29 +203,13 @@
 			.finally(() => {
 				isLoading = false
 			})
-		// load reminders for this list
-		isLoadingReminders = true
-		api.GET('/v1/reminders', {
-			params: {
-				query: {
-					list_id: listId,
-					include_subtasks: true,
-					limit: 100,
-					sort_by: 'position',
-					sort_dir: 'asc',
-				},
-			},
-		})
-			.then((r) => unwrap(r))
-			.then((items) => {
-				reminders = items
-			})
-			.catch((e: unknown) => {
-				remindersError = e instanceof Error ? e.message : 'failed to load reminders'
-			})
-			.finally(() => {
-				isLoadingReminders = false
-			})
+	})
+
+	$effect(() => {
+		if (!browser) return
+		if (!open) return
+		if (!listId) return
+		void loadReminders(listId, remindersPageIndex)
 	})
 </script>
 
@@ -187,6 +222,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] min-w-80 -translate-x-1/2 -translate-y-1/2 flex-col overflow-auto rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-xl"
 		>
 			<div
@@ -459,12 +495,42 @@
 
 					<!-- reminders -->
 					<div class="space-y-1.5">
-						<p
-							class="flex items-center gap-2 text-xs font-medium tracking-wider text-zinc-500 uppercase"
-						>
-							<ListChecks class="h-3.5 w-3.5" />
-							reminders
-						</p>
+						<div class="flex items-center justify-between gap-3">
+							<p
+								class="flex items-center gap-2 text-xs font-medium tracking-wider text-zinc-500 uppercase"
+							>
+								<ListChecks class="h-3.5 w-3.5" />
+								reminders
+							</p>
+							<div class="flex items-center gap-2">
+								<Button
+									variant="outline"
+									size="sm"
+									class="h-7 rounded-lg px-2 text-xs"
+									onclick={previousRemindersPage}
+									disabled={remindersPageIndex === 0 || isLoadingReminders}
+								>
+									<ChevronLeft class="mr-1 h-3 w-3" />
+									prev
+								</Button>
+								<span class="text-xs text-zinc-500 tabular-nums">
+									page {remindersPageIndex + 1}{reminders.length > 0
+										? ` · ${reminders.length} items`
+										: ''}
+								</span>
+								<Button
+									variant="outline"
+									size="sm"
+									class="h-7 rounded-lg px-2 text-xs"
+									onclick={nextRemindersPage}
+									disabled={reminders.length < REMINDERS_PAGE_LIMIT ||
+										isLoadingReminders}
+								>
+									next
+									<ChevronRight class="ml-1 h-3 w-3" />
+								</Button>
+							</div>
+						</div>
 						{#if isLoadingReminders}
 							<div class="flex items-center justify-center py-6">
 								<NokodoLoader />

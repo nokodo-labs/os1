@@ -8,12 +8,14 @@ import sys
 from unittest.mock import patch
 
 from api.logging import (
+	NOISY_THIRD_PARTY_LOGGERS,
 	Colors,
 	ConsoleFormatter,
 	JSONFormatter,
 	configure_logging,
 	get_log_level,
 	get_logger,
+	get_noisy_third_party_log_level,
 	request_id_ctx,
 )
 
@@ -355,6 +357,16 @@ class TestGetLogLevel:
 			assert get_log_level() == logging.INFO
 
 
+class TestGetNoisyThirdPartyLogLevel:
+	"""tests for noisy third-party logger level selection."""
+
+	def test_debug_keeps_noisy_loggers_quiet(self) -> None:
+		assert get_noisy_third_party_log_level(logging.DEBUG) == logging.WARNING
+
+	def test_lower_than_debug_enables_noisy_loggers(self) -> None:
+		assert get_noisy_third_party_log_level(logging.NOTSET) == logging.NOTSET
+
+
 class TestConfigureLogging:
 	"""tests for configure_logging function."""
 
@@ -428,9 +440,19 @@ class TestConfigureLogging:
 			mock_settings.ENV = "dev"
 			configure_logging(json_logs=False)
 
-		for name in ("httpcore", "httpx", "watchfiles"):
+		for name in NOISY_THIRD_PARTY_LOGGERS:
 			logger = logging.getLogger(name)
 			assert logger.level == logging.WARNING
+
+	def test_configure_allows_noisy_loggers_for_absolute_lowest_level(self) -> None:
+		with patch("api.logging.boot_settings") as mock_settings:
+			mock_settings.DEBUG = False
+			mock_settings.ENV = "dev"
+			configure_logging(level=logging.NOTSET, json_logs=False)
+
+		for name in NOISY_THIRD_PARTY_LOGGERS:
+			logger = logging.getLogger(name)
+			assert logger.level == logging.NOTSET
 
 	def test_configure_uvicorn_propagates(self) -> None:
 		with patch("api.logging.boot_settings") as mock_settings:

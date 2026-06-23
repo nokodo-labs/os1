@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { api, unwrap, type Schemas } from '$lib/api'
 
-	type DefaultPermissions_Input = Schemas['DefaultPermissions-Input']
-	type DefaultPermissions_Output = Schemas['DefaultPermissions-Output']
+	type DefaultPermissions = Schemas['DefaultPermissions']
 	type Role = Schemas['Role']
 	type RoleCreate = Schemas['RoleCreate']
 
@@ -10,7 +9,7 @@
 	import { Button } from '$lib/components/ui/button'
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
-	import { X, Save } from '@lucide/svelte'
+	import { Save, X } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 
 	type Props = {
@@ -26,19 +25,18 @@
 
 	let name = $state('')
 	let description = $state('')
-	let defaultPermissions = $state<DefaultPermissions_Input>({
+	let defaultPermissions = $state<DefaultPermissions>({
 		resource_access: {},
 		action_permissions: [],
 	})
 
-	function normalizePermissions(
-		input: DefaultPermissions_Input | DefaultPermissions_Output
-	): DefaultPermissions_Input {
+	function normalizePermissions(input: DefaultPermissions): DefaultPermissions {
 		return {
 			resource_access: {
 				thread: input.resource_access?.thread ?? null,
 				project: input.resource_access?.project ?? null,
 				file: input.resource_access?.file ?? null,
+				calendar: input.resource_access?.calendar ?? null,
 				note: input.resource_access?.note ?? null,
 				group: input.resource_access?.group ?? null,
 				reminder_list: input.resource_access?.reminder_list ?? null,
@@ -98,6 +96,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] min-w-80 -translate-x-1/2 -translate-y-1/2 flex-col overflow-auto rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
 		>
 			<div
@@ -142,16 +141,6 @@
 			</div>
 
 			<div class="flex shrink-0 justify-end gap-2 border-t border-zinc-800 px-6 py-4">
-				<Button
-					type="button"
-					variant="outline"
-					class="rounded-xl"
-					onclick={close}
-					disabled={isCreating}
-				>
-					<X class="mr-1.5 h-4 w-4" />
-					cancel
-				</Button>
 				<Button type="button" class="rounded-xl" onclick={submit} disabled={isCreating}>
 					<Save class="mr-1.5 h-4 w-4" />
 					{isCreating ? 'creating...' : 'create'}

@@ -1,13 +1,16 @@
 <script lang="ts">
 	import { CollaborationProvider, type DocParticipant } from '$lib/collaboration'
+	import {
+		createMarkdownTurndown,
+		editorHtmlToMarkdown,
+		markdownToEditorHtml,
+	} from '$lib/editor/markdownSerialization'
 	import { Editor, Extension } from '@tiptap/core'
 	import Placeholder from '@tiptap/extension-placeholder'
 	import Typography from '@tiptap/extension-typography'
 	import { StarterKit } from '@tiptap/starter-kit'
-	import { marked } from 'marked'
 	import { keymap } from 'prosemirror-keymap'
 	import { onDestroy, onMount } from 'svelte'
-	import TurndownService from 'turndown'
 	import {
 		yCursorPlugin,
 		redo as yRedo,
@@ -63,27 +66,12 @@
 	}: Props = $props()
 
 	// turndown config (html -> markdown)
-	const turndown = new TurndownService({
-		headingStyle: 'atx',
-		codeBlockStyle: 'fenced',
-	})
-	turndown.addRule('underline', {
-		filter: ['u'],
-		replacement: (inner: string) => (inner ? `<u>${inner}</u>` : ''),
-	})
+	const turndown = createMarkdownTurndown()
 
 	let editorElement: HTMLDivElement | null = $state(null)
 	let editorState = $state<{ editor: Editor | null }>({ editor: null })
 	let provider: CollaborationProvider | null = null
 	let lastEmittedMarkdown = ''
-
-	function markdownToHtml(md: string): string {
-		return String(marked.parse(md, { gfm: true, breaks: true }))
-	}
-
-	function htmlToMarkdown(html: string): string {
-		return turndown.turndown(html)
-	}
 
 	// sync editable state
 	$effect(() => {
@@ -101,7 +89,7 @@
 				// if Yjs doc is empty AND we have initial content, migrate it
 				const fragment = provider?.doc.getXmlFragment('content')
 				if (fragment && fragment.length === 0 && initialContent) {
-					const html = markdownToHtml(initialContent)
+					const html = markdownToEditorHtml(initialContent)
 					editorState.editor?.commands.setContent(html)
 				}
 				onsynced?.()
@@ -188,7 +176,7 @@
 			},
 			onUpdate: ({ editor }) => {
 				const html = editor.getHTML()
-				const md = htmlToMarkdown(html)
+				const md = editorHtmlToMarkdown(turndown, html)
 				if (md !== lastEmittedMarkdown) {
 					lastEmittedMarkdown = md
 					onchange?.(md)
@@ -279,7 +267,7 @@
 	/** get the current content as markdown */
 	export function getMarkdown(): string {
 		const html = editorState.editor?.getHTML() ?? ''
-		return htmlToMarkdown(html)
+		return editorHtmlToMarkdown(turndown, html)
 	}
 </script>
 

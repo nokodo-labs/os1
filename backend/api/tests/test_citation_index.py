@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from api.schemas.citations import Citation, CitationSource
+from api.schemas.message import Citation, CitationSource
 from api.v1.service.chat.filters.citation_index import (
 	CitationIndexFilter,
 	_find_nci_in_window,
@@ -17,7 +18,10 @@ from api.v1.service.chat.filters.citation_index import (
 	_resolve_nci,
 	resolve_assistant_citations,
 )
-from api.v1.service.prompt_runtime import SENTINEL_CITATION_SOURCES
+from api.v1.service.prompts import SENTINEL_CITATION_SOURCES
+from nokodo_ai.agents import AgentIterationState
+from nokodo_ai.chat_models import ChatModel
+from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
 	AssistantMessage,
 	SystemMessage,
@@ -47,13 +51,12 @@ def _citation(
 
 def _tool_msg(
 	output: str = "some output",
-	*,
 	citable_sources: list[JSONValue] | None = None,
 	assigned: bool = False,
 ) -> ToolMessage:
 	meta: JSONObject = {}
 	if citable_sources is not None:
-		meta["citable_sources"] = citable_sources
+		meta["_citable_sources"] = citable_sources
 	if assigned:
 		meta["_citations_assigned"] = True
 	return ToolMessage(tool_call_id="tc_1", tool_output=output, metadata=meta or None)
@@ -61,18 +64,17 @@ def _tool_msg(
 
 def _assistant_msg(
 	text: str = "hello",
-	*,
 	nci: int | None = None,
 	citations: list[JSONValue] | None = None,
 	message_id: str | None = None,
 ) -> AssistantMessage:
 	meta: JSONObject = {}
 	if nci is not None:
-		meta["next_citation_index"] = nci
+		meta["_next_citation_index"] = nci
 	if citations is not None:
-		meta["citations"] = citations
+		meta["_citations"] = citations
 	if message_id is not None:
-		meta["message_id"] = message_id
+		meta["_message_id"] = message_id
 	return AssistantMessage.from_text(text).model_copy(
 		update={"metadata": meta or None},
 	)
@@ -86,6 +88,13 @@ def _mock_app_ctx(entries: list[Citation] | None = None) -> MagicMock:
 	ctx.thread_id = None
 	ctx.user_id = "user_test"
 	return ctx
+
+
+def _agent_context(thread: Thread) -> AgentContext:
+	_ = thread
+	return AgentContext(
+		model=ChatModel.model_construct(model_name="test"),
+	)
 
 
 # _next_index
@@ -142,7 +151,7 @@ class TestFindNciInWindow:
 
 	def test_skips_non_int_nci(self) -> None:
 		msg = _assistant_msg()
-		msg.metadata = {"next_citation_index": "not_an_int"}
+		msg.metadata = {"_next_citation_index": "not_an_int"}
 		thread = Thread(messages=[msg])
 		assert _find_nci_in_window(thread) is None
 
@@ -198,7 +207,7 @@ class TestOldestMessageId:
 class TestRebuildFromExisting:
 	def test_rebuilds_citations_from_assistant_metadata(self) -> None:
 		entries: list[Citation] = []
-		citation_data = {
+		citation_data: JSONObject = {
 			"index": 1,
 			"source_type": "url",
 			"source_id": "https://example.com",
@@ -228,7 +237,7 @@ class TestRebuildFromExisting:
 	def test_does_not_overwrite_existing_entries(self) -> None:
 		existing = _citation(1, source_id="https://original.com")
 		entries: list[Citation] = [existing]
-		citation_data = {
+		citation_data: JSONObject = {
 			"index": 1,
 			"source_type": "url",
 			"source_id": "https://overwrite-attempt.com",
@@ -381,7 +390,7 @@ class TestAssignNewCitations:
 		f._assign_new_citations(thread, entries, 0)
 		assert entries == []
 
-	def test_skips_invalid_source_entries(self) -> None:
+	def test_malformed_source_entry_raises(self) -> None:
 		f = self._make_filter()
 		entries: list[Citation] = []
 		thread = Thread(
@@ -390,16 +399,26 @@ class TestAssignNewCitations:
 					output="content",
 					citable_sources=[
 						"not a dict",
-						{"no_source_type": True},
-						{"source_type": "url", "source_id": "valid"},
 					],
 				),
 			]
 		)
-		f._assign_new_citations(thread, entries, 0)
-		# only the valid one should be assigned
-		assert len(entries) == 1
-		assert entries[0].source_id == "valid"
+		with pytest.raises(TypeError, match="_citable_sources items"):
+			f._assign_new_citations(thread, entries, 0)
+
+	def test_source_without_source_type_raises(self) -> None:
+		f = self._make_filter()
+		entries: list[Citation] = []
+		thread = Thread(
+			messages=[
+				_tool_msg(
+					output="content",
+					citable_sources=[{"no_source_type": True}],
+				),
+			]
+		)
+		with pytest.raises(KeyError):
+			f._assign_new_citations(thread, entries, 0)
 
 	def test_multiple_sources_in_one_tool(self) -> None:
 		f = self._make_filter()
@@ -480,7 +499,7 @@ class TestAssignNewCitations:
 				_tool_msg(
 					output="content",
 					citable_sources=[
-						{"source_type": "tool_result"},
+						{"source_type": "calendar_event"},
 					],
 				),
 			]
@@ -488,7 +507,7 @@ class TestAssignNewCitations:
 		f._assign_new_citations(thread, entries, 0)
 		msg = thread.messages[0]
 		assert isinstance(msg, ToolMessage)
-		assert "[1] tool_result" in msg.tool_output
+		assert "[1] calendar_event" in msg.tool_output
 
 	def test_marks_tool_message_as_assigned(self) -> None:
 		f = self._make_filter()
@@ -520,27 +539,28 @@ class TestAssignNewCitations:
 		f._assign_new_citations(thread, entries, 0)
 		assert entries == []
 
-	def test_all_sources_invalid_skips_tool(self) -> None:
+	def test_invalid_citable_sources_raise(self) -> None:
 		f = self._make_filter()
 		entries: list[Citation] = []
+		output = json.dumps({"content": "content"})
 		tool = ToolMessage(
 			tool_call_id="tc_1",
-			tool_output="content",
+			tool_output=output,
 			metadata={
-				"citable_sources": [
+				"_citable_sources": [
 					"not a dict",
 					42,
 					{"no_source_type": True},
-				],
+				]
 			},
 		)
 		thread = Thread(messages=[tool])
-		f._assign_new_citations(thread, entries, 0)
+		with pytest.raises(TypeError, match="_citable_sources items"):
+			f._assign_new_citations(thread, entries, 0)
 		assert entries == []
-		# tool output should be unchanged (no markers appended)
 		msg = thread.messages[0]
 		assert isinstance(msg, ToolMessage)
-		assert msg.tool_output == "content"
+		assert msg.tool_output == output
 
 	def test_nci_floor_prevents_index_collision(self) -> None:
 		"""when nci is higher than entries count, new indices start at nci."""
@@ -668,13 +688,13 @@ class TestAssignNewCitations:
 				_tool_msg(
 					output="result 1",
 					citable_sources=[
-						{"source_type": "tool_result"},
+						{"source_type": "calendar_event"},
 					],
 				),
 				_tool_msg(
 					output="result 2",
 					citable_sources=[
-						{"source_type": "tool_result"},
+						{"source_type": "calendar_event"},
 					],
 				),
 			]
@@ -718,30 +738,30 @@ class TestAssignNewCitations:
 			messages=[
 				ToolMessage(
 					tool_call_id="tc_1",
-					tool_output="first",
+					tool_output=json.dumps({"content": "first"}),
 					metadata={
-						"citable_sources": [
+						"_message_id": "msg_tool_1",
+						"_citable_sources": [
 							{
 								"source_type": "note",
 								"source_id": "note_1",
 								"title": "N",
-							},
+							}
 						],
-						"message_id": "msg_tool_1",
 					},
 				),
 				ToolMessage(
 					tool_call_id="tc_2",
-					tool_output="second",
+					tool_output=json.dumps({"content": "second"}),
 					metadata={
-						"citable_sources": [
+						"_message_id": "msg_tool_2",
+						"_citable_sources": [
 							{
 								"source_type": "note",
 								"source_id": "note_1",
 								"title": "N",
-							},
+							}
 						],
-						"message_id": "msg_tool_2",
 					},
 				),
 			]
@@ -977,8 +997,9 @@ class TestCitationIndexFilterProcess:
 	async def test_returns_thread_when_no_app_context(self) -> None:
 		f = CitationIndexFilter()
 		thread = Thread(messages=[])
-		result = await f.process(thread, None)
-		assert result is thread
+		state = AgentIterationState(thread=thread, tools=[])
+		result = await f.process(state, _agent_context(thread), None)
+		assert result.thread is thread
 
 	async def test_full_flow_assigns_and_resolves(self) -> None:
 		f = CitationIndexFilter()
@@ -998,28 +1019,34 @@ class TestCitationIndexFilterProcess:
 				),
 			]
 		)
-		result = await f.process(thread, ctx)
+		state = AgentIterationState(thread=thread, tools=[])
+		result = await f.process(state, _agent_context(thread), ctx)
 		# citation should be assigned
 		assert len(ctx.citations) == 1
 		assert ctx.citations[0].index == 1
 		assert ctx.citations[0].source_id == "https://x.com"
 		# sentinel should be replaced
-		sys_msg = result.messages[0]
+		sys_msg = result.thread.messages[0]
 		assert isinstance(sys_msg, SystemMessage)
 		assert "[1] X" in sys_msg.text
 		# tool output should have marker
-		tool_msg = result.messages[1]
+		tool_msg = result.thread.messages[1]
 		assert isinstance(tool_msg, ToolMessage)
 		assert "[1] X" in tool_msg.tool_output
 
 	async def test_rebuilds_then_assigns_new(self) -> None:
 		f = CitationIndexFilter()
 		ctx = _mock_app_ctx()
-		existing_citation = {
+		existing_citation: JSONObject = {
 			"index": 1,
 			"source_type": "url",
 			"source_id": "https://old.com",
 			"title": "Old",
+		}
+		new_source: JSONObject = {
+			"source_type": "note",
+			"source_id": "note_1",
+			"title": "New Note",
 		}
 		thread = Thread(
 			messages=[
@@ -1027,17 +1054,12 @@ class TestCitationIndexFilterProcess:
 				_assistant_msg(nci=2, citations=[existing_citation]),
 				_tool_msg(
 					output="new fetched page",
-					citable_sources=[
-						{
-							"source_type": "note",
-							"source_id": "note_1",
-							"title": "New Note",
-						},
-					],
+					citable_sources=[new_source],
 				),
 			]
 		)
-		result = await f.process(thread, ctx)
+		state = AgentIterationState(thread=thread, tools=[])
+		result = await f.process(state, _agent_context(thread), ctx)
 		# entries should contain both rebuilt and new
 		assert len(ctx.citations) == 2
 		assert ctx.citations[0].index == 1
@@ -1045,7 +1067,7 @@ class TestCitationIndexFilterProcess:
 		assert ctx.citations[1].index == 2
 		assert ctx.citations[1].source_id == "note_1"
 		# manifest should contain both
-		sys_msg = result.messages[0]
+		sys_msg = result.thread.messages[0]
 		assert isinstance(sys_msg, SystemMessage)
 		assert "[1] Old" in sys_msg.text
 		assert "[2] New Note" in sys_msg.text
@@ -1069,7 +1091,8 @@ class TestCitationIndexFilterProcess:
 				),
 			]
 		)
-		await f.process(thread, ctx)
+		state = AgentIterationState(thread=thread, tools=[])
+		await f.process(state, _agent_context(thread), ctx)
 		assert len(ctx.citations) == 1
 		assert ctx.citations[0].index == 1
 		assert ctx.citations[0].source_id == "https://x.com"
@@ -1096,7 +1119,8 @@ class TestCitationIndexFilterProcess:
 				),
 			]
 		)
-		await f.process(thread, ctx)
+		state = AgentIterationState(thread=thread, tools=[])
+		await f.process(state, _agent_context(thread), ctx)
 		result = resolve_assistant_citations("check [1] out", ctx.citations)
 		assert len(result) == 1
 		assert result[0].index == 1

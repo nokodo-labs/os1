@@ -7,7 +7,7 @@
 	import { Input } from '$lib/components/ui/input'
 	import { Label } from '$lib/components/ui/label'
 	import { Switch } from '$lib/components/ui/switch'
-	import { X, Save } from '@lucide/svelte'
+	import { Save, X } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 
 	type Props = {
@@ -89,6 +89,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] min-w-80 -translate-x-1/2 -translate-y-1/2 flex-col overflow-auto rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
 		>
 			<div
@@ -165,16 +166,6 @@
 			</div>
 
 			<div class="flex shrink-0 justify-end gap-2 border-t border-zinc-800 px-6 py-4">
-				<Button
-					type="button"
-					variant="outline"
-					class="rounded-xl"
-					onclick={close}
-					disabled={isCreating}
-				>
-					<X class="mr-1.5 h-4 w-4" />
-					cancel
-				</Button>
 				<Button type="button" class="rounded-xl" onclick={submit} disabled={isCreating}>
 					<Save class="mr-1.5 h-4 w-4" />
 					{isCreating ? 'creating...' : 'create'}

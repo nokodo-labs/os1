@@ -16,7 +16,7 @@ import httpx
 
 from api.settings import settings
 from api.tavily import TavilyClient
-from api.v1.service.web_search.models import WebSearchError
+from api.v1.service.web_search.errors import WebSearchError
 
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ async def fetch_url(url: str) -> str:
 	)
 
 
-async def _fetch_native(url: str, *, timeout: int, user_agent: str) -> str:
+async def _fetch_native(url: str, timeout: int, user_agent: str) -> str:
 	"""fetch page content directly via httpx."""
 	headers = {"User-Agent": user_agent, "Accept": "text/html,*/*"}
 	async with httpx.AsyncClient(timeout=float(timeout), follow_redirects=True) as http:

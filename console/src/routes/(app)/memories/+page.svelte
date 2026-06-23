@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
+	import { goto } from '$app/navigation'
+	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { api, unwrap, type Schemas } from '$lib/api'
 
 	type Memory = Schemas['Memory']
-	type SearchResultItem = Schemas['SearchResultItem']
 
 	import MemoryDetailsModal from '$lib/components/MemoryDetailsModal.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
@@ -15,22 +16,22 @@
 	import {
 		ArrowDown,
 		ArrowUp,
+		Brain,
+		ChevronLeft,
+		ChevronRight,
 		Clock,
 		Hash,
 		MessageSquare,
 		Percent,
+		RefreshCw,
 		Search,
 		Tag,
 		User,
-		RefreshCw,
 		X,
-		Brain,
-		ChevronLeft,
-		ChevronRight,
 	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
-	type SortKey = 'updated_at' | 'created_at' | 'last_accessed_at' | 'confidence' | 'category'
+	type SortKey = 'updated_at' | 'created_at' | 'last_accessed_at' | 'confidence' | 'tags'
 	type SortDir = 'asc' | 'desc'
 
 	const sortOptions: Array<{ value: SortKey; label: string }> = [
@@ -38,11 +39,11 @@
 		{ value: 'created_at', label: 'created at' },
 		{ value: 'last_accessed_at', label: 'last accessed at' },
 		{ value: 'confidence', label: 'confidence' },
-		{ value: 'category', label: 'category' },
+		{ value: 'tags', label: 'tags' },
 	]
 
 	function defaultSortDir(sort: SortKey): SortDir {
-		if (sort === 'category') return 'asc'
+		if (sort === 'tags') return 'asc'
 		return 'desc'
 	}
 
@@ -62,9 +63,10 @@
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
 	let hasNext = $state(false)
+	let total = $state(0)
 
 	let searchQuery = $state('')
-	let searchResults = $state<SearchResultItem[]>([])
+	let searchResults = $state<Memory[]>([])
 	let isSearching = $state(false)
 	let searchError = $state<string | null>(null)
 	let _searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -102,7 +104,12 @@
 
 	function replaceUrl(target: string) {
 		if (!browser) return
-		history.replaceState(history.state, '', target)
+		const qs = target.includes('?') ? target.slice(target.indexOf('?')) : ''
+		void goto(resolve(('/memories' + qs) as '/memories'), {
+			replaceState: true,
+			noScroll: true,
+			keepFocus: true,
+		})
 	}
 
 	function openUser(userId: string) {
@@ -184,26 +191,34 @@
 	$effect(() => {
 		if (!browser) return
 
-		// Memories API requires user_id, so only fetch when we have one
-		if (!userIdFilter) {
-			memories = []
-			hasNext = false
-			return
-		}
-
 		const skip = pageIndex * limit + refreshToken * 0
 
 		isLoading = true
 		error = null
-		api.GET('/v1/memories', {
-			params: {
-				query: { user_id: userIdFilter!, skip, limit, sort_by: sortKey, sort_dir: sortDir },
-			},
-		})
-			.then((r) => unwrap(r))
-			.then((result) => {
+		Promise.all([
+			api
+				.GET('/v1/memories', {
+					params: {
+						query: {
+							owner_id: userIdFilter ?? undefined,
+							skip,
+							limit,
+							sort_by: sortKey,
+							sort_dir: sortDir,
+						},
+					},
+				})
+				.then((r) => unwrap(r)),
+			api
+				.GET('/v1/memories/count', {
+					params: { query: { owner_id: userIdFilter ?? undefined } },
+				})
+				.then((r) => unwrap(r)),
+		])
+			.then(([result, count]) => {
 				memories = result
-				hasNext = result.length === limit
+				total = count
+				hasNext = (pageIndex + 1) * limit < count
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load memories'
@@ -220,7 +235,7 @@
 	<div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight">memories</h2>
-			<p class="text-zinc-400">user-scoped memories (use filters; start from a user).</p>
+			<p class="text-zinc-400">all user memories across the platform.</p>
 		</div>
 		<div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
 			<div class="relative w-full sm:w-auto sm:flex-1">
@@ -229,7 +244,7 @@
 				/>
 				<Input
 					type="search"
-					placeholder="search memories..."
+					placeholder="search memories"
 					bind:value={searchQuery}
 					class="w-full pl-8 sm:w-50 lg:w-75"
 				/>
@@ -251,7 +266,7 @@
 					variant="outline"
 					class="shrink-0 rounded-xl px-3"
 					onclick={() => toggleSortDir()}
-					disabled={isLoading || !userIdFilter}
+					disabled={isLoading}
 					title="toggle sort direction"
 					aria-label="toggle sort direction"
 				>
@@ -267,7 +282,7 @@
 					variant="outline"
 					class="flex-1 rounded-xl sm:flex-none"
 					onclick={() => refresh()}
-					disabled={isLoading || !userIdFilter}
+					disabled={isLoading}
 				>
 					<RefreshCw class="mr-2 h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
 					{isLoading ? 'loading...' : 'refresh'}
@@ -296,12 +311,8 @@
 
 	<div class="flex flex-col gap-4">
 		<div class="flex items-center justify-between">
-			<div class="text-sm text-zinc-400">
-				{#if !searchQuery.trim() && !userIdFilter}
-					open a user and click “memories” to filter.
-				{/if}
-			</div>
-			{#if !searchQuery.trim() && userIdFilter}
+			<div class="text-sm text-zinc-400"></div>
+			{#if !searchQuery.trim()}
 				<div class="flex items-center gap-2">
 					<Button
 						variant="outline"
@@ -315,7 +326,9 @@
 						prev
 					</Button>
 					<span class="text-xs text-zinc-400 tabular-nums">
-						page {pageIndex + 1}{memories.length > 0 ? ` \u00b7 ${memories.length} items` : ''}
+						{total > 0
+							? `items ${pageIndex * limit + 1}–${pageIndex * limit + memories.length} of ${total}`
+							: ''}
 					</span>
 					<Button
 						variant="outline"
@@ -361,14 +374,8 @@
 								class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"
 							>
 								<div class="min-w-0 flex-1 space-y-1">
-									<span class="truncate font-mono text-sm font-medium"
-										>{r.title}</span
+									<span class="line-clamp-2 text-sm font-medium">{r.content}</span
 									>
-									{#if r.preview}
-										<div class="line-clamp-1 text-sm text-zinc-400">
-											{r.preview}
-										</div>
-									{/if}
 									<span
 										class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5 text-xs text-zinc-400"
 									>
@@ -376,21 +383,10 @@
 										{r.id}
 									</span>
 								</div>
-								{#if r.score != null}
-									<span class="shrink-0 text-xs text-zinc-500"
-										>{(r.score * 100).toFixed(1)}%</span
-									>
-								{/if}
 							</div>
 						</div>
 					{/each}
 				{/if}
-			{:else if !userIdFilter}
-				<div
-					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
-				>
-					open a user and use the “memories” button to filter.
-				</div>
 			{:else if isLoading && memories.length === 0}
 				<div
 					class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 p-10"
@@ -401,7 +397,7 @@
 				<div
 					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
 				>
-					no memories found for this user
+					no memories found
 				</div>
 			{:else}
 				{#each memories as m (m.id)}
@@ -418,18 +414,22 @@
 						}}
 					>
 						<div class="flex min-w-0 flex-1 items-center gap-4">
-							<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+							<div
+								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-500/15 text-purple-400"
+							>
 								<Brain class="h-5 w-5" />
 							</div>
 							<div class="min-w-0 flex-1 space-y-2">
 								<div class="flex flex-wrap items-center gap-2">
-									{#if m.category}
-										<span
-											class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
-										>
-											<Tag class="h-3.5 w-3.5" />
-											{m.category}
-										</span>
+									{#if m.tags?.length}
+										{#each m.tags as tag (tag)}
+											<span
+												class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5 text-xs text-zinc-300"
+											>
+												<Tag class="h-3.5 w-3.5" />
+												{tag}
+											</span>
+										{/each}
 									{/if}
 									{#if m.confidence !== null && m.confidence !== undefined}
 										<span
@@ -443,8 +443,12 @@
 								<div class="font-mono text-sm text-zinc-100">
 									{preview(m.content)}
 								</div>
-								<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-									<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+								<div
+									class="flex flex-wrap items-center gap-3 text-xs text-zinc-500"
+								>
+									<span
+										class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50"
+									>
 										<Hash class="h-3 w-3" />
 										{m.id}
 									</span>

@@ -5,9 +5,9 @@ from datetime import timedelta
 from typing import Annotated
 from urllib.parse import urlparse
 
-from authlib.jose import JoseError
 from fastapi import Depends, Header, HTTPException, WebSocket, status
 from fastapi.security import OAuth2PasswordBearer
+from joserfc.errors import JoseError
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -87,7 +87,7 @@ async def authenticate_websocket_refresh_cookie(websocket: WebSocket) -> User | 
 		if not user_id_str:
 			return None
 		user_id = TypeID(assert_typeid(str(user_id_str), prefix="user"))
-	except (JoseError, ValueError):
+	except JoseError, ValueError:
 		return None
 
 	async with async_session_local() as session:
@@ -271,6 +271,25 @@ async def get_current_principal(
 	)
 
 
+async def load_principal_for_user(user_id: TypeID, session: AsyncSession) -> Principal:
+	"""load a principal outside FastAPI dependency injection."""
+	result = await session.execute(
+		select(User).options(selectinload(User.roles)).where(User.id == user_id)
+	)
+	user = result.scalar_one_or_none()
+	if user is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="User not found",
+		)
+	if not user.is_active:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="inactive user",
+		)
+	return await get_current_principal(user=user, session=session)
+
+
 async def get_optional_principal(
 	user: Annotated[User | None, Depends(get_optional_user)],
 	session: Annotated[AsyncSession, Depends(get_db)],
@@ -391,7 +410,6 @@ async def refresh_token_for_user(refresh_token: str, session: AsyncSession) -> T
 async def change_password(
 	session: AsyncSession,
 	principal: Principal,
-	*,
 	current_password: str,
 	new_password: str,
 ) -> None:

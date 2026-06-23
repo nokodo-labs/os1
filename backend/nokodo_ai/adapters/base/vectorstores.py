@@ -43,8 +43,27 @@ class FieldMatchAny(Base):
 
 	key: str
 	"""payload field name to match."""
-	values: list[str]
+	values: list[str] | list[int]
 	"""at least one of these values must appear in the field."""
+
+
+class FieldRange(Base):
+	"""match a payload field against a numeric or datetime range.
+
+	bounds are inclusive (gte/lte) or exclusive (gt/lt). string bounds are
+	interpreted as ISO-8601 datetimes by adapters that support them.
+	"""
+
+	key: str
+	"""payload field name to match."""
+	gte: float | int | str | None = None
+	lte: float | int | str | None = None
+	gt: float | int | str | None = None
+	lt: float | int | str | None = None
+
+
+FieldCondition = FieldMatch | FieldMatchAny | FieldRange
+"""any single payload condition usable in a ChunkFilter."""
 
 
 class ChunkFilter(Base):
@@ -55,9 +74,9 @@ class ChunkFilter(Base):
 		any_of are non-empty, both constraints apply simultaneously.
 	"""
 
-	all_of: list[FieldMatch | FieldMatchAny] = Field(default_factory=list)
+	all_of: list[FieldCondition] = Field(default_factory=list)
 	"""conditions that must all match (AND logic)."""
-	any_of: list[FieldMatch | FieldMatchAny] = Field(default_factory=list)
+	any_of: list[FieldCondition] = Field(default_factory=list)
 	"""conditions where at least one must match (OR logic)."""
 
 
@@ -114,9 +133,8 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 	@abstractmethod
 	async def add(
 		self,
-		collection: str,
+		collection_name: str,
 		chunks: list[Chunk],
-		*,
 		sparse: bool = False,
 	) -> None:
 		"""store chunks in the vectorstore.
@@ -126,7 +144,7 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		from chunk.content alongside the dense vectors.
 
 		args:
-			collection: target collection/namespace
+			collection_name: target collection/namespace
 			chunks: data chunks with id, content, embedding, and metadata
 			sparse: also index chunk.content for BM25 sparse retrieval
 		"""
@@ -135,8 +153,7 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 	@abstractmethod
 	async def search(
 		self,
-		collection: str,
-		*,
+		collection_name: str,
 		query: list[float] | None = None,
 		text_query: str | None = None,
 		limit: int = 10,
@@ -144,6 +161,8 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		query_filter: ChunkFilter | None = None,
 		fusion: str = "rrf",
 		normalize: bool = True,
+		group_by: str | None = None,
+		group_size: int = 1,
 	) -> list[ChunkSearchResult]:
 		"""search the vectorstore with flexible mode selection.
 
@@ -156,7 +175,7 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		set normalize=False to return raw scores from the backend.
 
 		args:
-			collection: target collection/namespace
+			collection_name: target collection/namespace
 			query: dense embedding vector for similarity search
 			text_query: text query for BM25 sparse matching
 			limit: maximum number of results to return
@@ -164,6 +183,12 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 			query_filter: adapter-agnostic filter conditions
 			fusion: fusion algorithm for hybrid search ("rrf" or "dbsf")
 			normalize: normalize scores to 0-1 range (default True)
+			group_by: payload field to group results by. when set, limit
+				bounds distinct groups rather than raw chunks, and offset is
+				ignored. ignored when None.
+			group_size: max chunks to return per group when group_by is set.
+				defaults to 1 (the single best chunk per group). flattened in
+				group then score order.
 
 		returns:
 			list of results ordered by relevance score (descending)
@@ -173,27 +198,27 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 	@overload
 	async def delete(
 		self,
-		collection: str,
+		collection_name: str,
 		target: list[str],
 	) -> None: ...
 
 	@overload
 	async def delete(
 		self,
-		collection: str,
+		collection_name: str,
 		target: ChunkFilter,
 	) -> None: ...
 
 	@abstractmethod
 	async def delete(
 		self,
-		collection: str,
+		collection_name: str,
 		target: list[str] | ChunkFilter,
 	) -> None:
 		"""remove chunks by their string ids or by filter.
 
 		args:
-			collection: target collection/namespace
+			collection_name: target collection/namespace
 			target: identifiers of chunks to remove, or a filter to match
 		"""
 		...
@@ -201,27 +226,24 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 	@overload
 	async def update(
 		self,
-		collection: str,
+		collection_name: str,
 		target: list[str],
-		*,
 		payload: dict[str, object] | None = None,
 	) -> None: ...
 
 	@overload
 	async def update(
 		self,
-		collection: str,
+		collection_name: str,
 		target: ChunkFilter,
-		*,
 		payload: dict[str, object] | None = None,
 	) -> None: ...
 
 	@abstractmethod
 	async def update(
 		self,
-		collection: str,
+		collection_name: str,
 		target: list[str] | ChunkFilter,
-		*,
 		payload: dict[str, object] | None = None,
 	) -> None:
 		"""update matching chunks in place.
@@ -235,10 +257,30 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		...
 
 	@abstractmethod
+	async def scroll(
+		self,
+		collection_name: str,
+		query_filter: ChunkFilter | None = None,
+		page_size: int = 256,
+	) -> list[Chunk]:
+		"""enumerate all chunks matching a filter, without scoring.
+
+		returns chunks with their metadata and content but no vectors, used
+		for existence checks and enumeration rather than relevance ranking.
+		drains every matching chunk by paging internally. returns an empty
+		list when the collection does not exist.
+
+		args:
+			collection_name: target collection/namespace
+			query_filter: adapter-agnostic filter conditions
+			page_size: number of chunks fetched per internal page
+		"""
+		...
+
+	@abstractmethod
 	async def ensure_collection(
 		self,
-		collection: str,
-		*,
+		collection_name: str,
 		vector_size: int,
 		sparse: bool = False,
 		indexes: Index | None = None,
@@ -246,7 +288,7 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		"""ensure a collection exists with the desired vector configuration.
 
 		args:
-			collection: target collection/namespace
+			collection_name: target collection/namespace
 			vector_size: dimensionality of dense vectors
 			sparse: also configure BM25 sparse vector support
 			indexes: field_name -> field_type mapping for scalar field

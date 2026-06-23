@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from math import ceil
 
 from .messages import (
 	AssistantMessage,
@@ -23,11 +24,32 @@ from .messages import (
 	UserMessage,
 )
 from .threads import Thread
-from .utils.tokens import estimate_tokens
+from .tool import ToolDefinition
+from .utils.tokens import CHARS_PER_TOKEN, estimate_tokens
 
 
 # type alias matching messages.py Message union members
 type Message = UserMessage | AssistantMessage | ToolMessage | SystemMessage
+
+
+# interim native-media token heuristics. these intentionally avoid counting
+# base64 length (a 780 KB image is ~1.06M base64 chars, which the text
+# heuristic turns into ~266K bogus tokens). a follow-up measurement module
+# will replace these rough constants with empirically derived numbers.
+#
+# images: vision models cost roughly a fixed band of tokens per image,
+# largely independent of file size, so use a flat estimate.
+_IMAGE_TOKENS = 1024
+# time-based and document media scale with payload size; these divisors map
+# raw decoded bytes to an approximate token cost per category.
+_AUDIO_BYTES_PER_TOKEN = 320
+_VIDEO_BYTES_PER_TOKEN = 1000
+_PDF_BYTES_PER_TOKEN = 40
+_DOC_BYTES_PER_TOKEN = 40
+# fallbacks used when only a url is present (no bytes to size from).
+_AUDIO_URL_TOKENS = 1500
+_VIDEO_URL_TOKENS = 5000
+_DOC_URL_TOKENS = 2000
 
 
 def estimate_message_tokens(message: Message) -> int:
@@ -77,6 +99,16 @@ def estimate_thread_tokens(thread: Thread) -> int:
 	return sum(estimate_message_tokens(m) for m in thread.messages)
 
 
+def estimate_tool_definitions_tokens(tools: Sequence[ToolDefinition]) -> int:
+	"""estimate prompt tokens consumed by tool definition schemas."""
+	total = 0
+	for tool in tools:
+		payload = tool.model_dump(mode="json")
+		text = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+		total += estimate_tokens(text)
+	return total
+
+
 # -- internals --
 
 
@@ -99,20 +131,40 @@ def _estimate_attachment_tokens(
 ) -> int:
 	"""estimate tokens for an image or file attachment.
 
-	both images and files are treated equally: estimate from the
-	actual data payload when available. URLs are NOT cheap -- the
-	provider loads the full content server-side, so we estimate
-	from the URL length as a minimum (the true cost is the loaded
-	content, but we cannot know that without fetching it).
+	uses category-based heuristics rather than the base64/url string length,
+	which massively overestimates native media. images use a flat per-image
+	estimate; audio, video, and documents scale with the decoded payload
+	size. url-only media (no bytes available) falls back to a category
+	default. these are rough interim numbers pending real measurement.
 	"""
-	# prefer base64 data when available (most accurate)
+	# images cost a roughly fixed band regardless of file size.
+	if isinstance(att, ImageContent):
+		return _IMAGE_TOKENS
+
+	media = (att.media_type or "").lower()
+	size = _attachment_byte_size(att)
+	if media.startswith("audio/"):
+		return _scaled(size, _AUDIO_BYTES_PER_TOKEN, _AUDIO_URL_TOKENS)
+	if media.startswith("video/"):
+		return _scaled(size, _VIDEO_BYTES_PER_TOKEN, _VIDEO_URL_TOKENS)
+	if media == "application/pdf":
+		return _scaled(size, _PDF_BYTES_PER_TOKEN, _DOC_URL_TOKENS)
+	if media.startswith("text/"):
+		# text documents map bytes ~ characters.
+		return _scaled(size, CHARS_PER_TOKEN, _DOC_URL_TOKENS)
+	return _scaled(size, _DOC_BYTES_PER_TOKEN, _DOC_URL_TOKENS)
+
+
+def _attachment_byte_size(att: ImageContent | FileContent) -> int:
+	"""decoded byte size of an attachment payload, 0 when only a url exists."""
 	if att.base64:
-		return estimate_tokens(att.base64)
-	# URL references are loaded by the provider as full content.
-	# we can't know the actual size without fetching, so estimate
-	# from the URL length as a floor. callers that need accuracy
-	# should run estimation on the final SDK thread after
-	# attachment injection.
-	if att.url:
-		return estimate_tokens(att.url)
-	return 10  # minimal placeholder for empty attachments
+		# base64 encodes 3 bytes per 4 chars.
+		return (len(att.base64) * 3) // 4
+	return 0
+
+
+def _scaled(size: int, bytes_per_token: float, url_default: int) -> int:
+	"""scale a byte size to tokens, or use a default when no bytes exist."""
+	if size <= 0:
+		return url_default
+	return max(1, ceil(size / bytes_per_token))

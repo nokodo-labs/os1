@@ -8,14 +8,31 @@ from enum import StrEnum
 from pydantic import Field
 
 from api.schemas.common import ORMModel
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
 class SearchResultType(StrEnum):
 	THREAD = "thread"
 	REMINDER = "reminder"
+	CALENDAR_EVENT = "calendar_event"
 	NOTE = "note"
 	MEMORY = "memory"
+	PROJECT = "project"
+	FILE = "file"
+
+
+class SearchResourceReferenceType(StrEnum):
+	"""known resource types that can be referenced by search result context."""
+
+	THREAD = "thread"
+	NOTE = "note"
+	REMINDER = "reminder"
+	REMINDER_LIST = "reminder_list"
+	PROJECT = "project"
+	FILE = "file"
+	CALENDAR_EVENT = "calendar_event"
+	CALENDAR = "calendar"
 
 
 class SearchMode(StrEnum):
@@ -69,6 +86,13 @@ class SearchParams(ORMModel):
 	)
 
 
+class SearchResultParent(ORMModel):
+	"""immediate parent resource needed to display or route a nested result."""
+
+	type: SearchResourceReferenceType
+	id: TypeID
+
+
 class SearchResultItem(ORMModel):
 	"""a single search result across any searchable entity."""
 
@@ -77,6 +101,8 @@ class SearchResultItem(ORMModel):
 	title: str
 	preview: str | None = None
 	score: float | None = None
+	parent: SearchResultParent | None = None
+	metadata: JSONObject = Field(default_factory=dict)
 	created_at: datetime
 	updated_at: datetime
 
@@ -86,6 +112,18 @@ class CursorPage[T](ORMModel):
 
 	items: list[T]
 	next_cursor: str | None = None
+	has_more: bool = False
+
+
+class Page[T](ORMModel):
+	"""offset-paginated response wrapper for relevance-ordered search.
+
+	items are returned in descending relevance order. has_more is true when
+	at least one further result exists beyond this page (detected by
+	over-fetching one item).
+	"""
+
+	items: list[T]
 	has_more: bool = False
 
 

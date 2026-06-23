@@ -4,6 +4,7 @@ from math import ceil
 
 from nokodo_ai.messages import (
 	AssistantMessage,
+	FileContent,
 	ImageContent,
 	SystemMessage,
 	TextContent,
@@ -71,9 +72,83 @@ class TestEstimateMessageTokens:
 			]
 		)
 		result = estimate_message_tokens(msg)
-		# text tokens + URL-based image estimate
-		image_tokens = estimate_tokens("https://example.com/img.png")
+		# image urls are provider-loaded native media, not cheap URL text.
+		image_tokens = 1024
 		assert result == estimate_tokens("check this") + image_tokens
+
+	def test_user_message_with_image_base64_uses_media_estimate(self) -> None:
+		msg = UserMessage(
+			content=[ImageContent(base64="x" * 40_000, media_type="image/png")]
+		)
+		result = estimate_message_tokens(msg)
+		assert result == 1024
+		assert result < estimate_tokens("x" * 40_000)
+
+	def test_audio_attachment_scales_with_bytes(self) -> None:
+		# base64 of 32_000 chars -> 24_000 decoded bytes -> bytes / 320.
+		msg = ToolMessage(
+			tool_call_id="tc_1",
+			tool_output="",
+			attachments=[FileContent(base64="x" * 32_000, media_type="audio/mpeg")],
+		)
+		result = estimate_message_tokens(msg)
+		assert result == ceil((32_000 * 3 // 4) / 320)
+		assert result < estimate_tokens("x" * 32_000)
+
+	def test_video_attachment_scales_with_bytes(self) -> None:
+		msg = ToolMessage(
+			tool_call_id="tc_1",
+			tool_output="",
+			attachments=[FileContent(base64="x" * 40_000, media_type="video/mp4")],
+		)
+		result = estimate_message_tokens(msg)
+		assert result == ceil((40_000 * 3 // 4) / 1000)
+
+	def test_pdf_attachment_scales_with_bytes(self) -> None:
+		msg = ToolMessage(
+			tool_call_id="tc_1",
+			tool_output="",
+			attachments=[FileContent(base64="x" * 4_000, media_type="application/pdf")],
+		)
+		result = estimate_message_tokens(msg)
+		assert result == ceil((4_000 * 3 // 4) / 40)
+
+	def test_text_document_maps_bytes_to_chars(self) -> None:
+		msg = ToolMessage(
+			tool_call_id="tc_1",
+			tool_output="",
+			attachments=[FileContent(base64="x" * 4_000, media_type="text/plain")],
+		)
+		result = estimate_message_tokens(msg)
+		assert result == ceil((4_000 * 3 // 4) / CHARS_PER_TOKEN)
+
+	def test_unknown_document_uses_doc_divisor(self) -> None:
+		msg = ToolMessage(
+			tool_call_id="tc_1",
+			tool_output="",
+			attachments=[
+				FileContent(
+					base64="x" * 4_000,
+					media_type="application/octet-stream",
+				)
+			],
+		)
+		result = estimate_message_tokens(msg)
+		assert result == ceil((4_000 * 3 // 4) / 40)
+
+	def test_url_only_file_uses_category_default(self) -> None:
+		msg = ToolMessage(
+			tool_call_id="tc_1",
+			tool_output="",
+			attachments=[
+				FileContent(
+					url="https://example.com/clip.mp4",
+					media_type="video/mp4",
+				)
+			],
+		)
+		result = estimate_message_tokens(msg)
+		assert result == 5000
 
 	def test_assistant_message_with_usage(self) -> None:
 		"""assistant messages with real output_tokens should use it."""
@@ -124,8 +199,8 @@ class TestEstimateMessageTokens:
 			attachments=[ImageContent(url="https://example.com/img.png")],
 		)
 		result = estimate_message_tokens(msg)
-		# URL-based image estimate (provider loads the full content)
-		image_tokens = estimate_tokens("https://example.com/img.png")
+		# provider loads image URL as native media.
+		image_tokens = 1024
 		assert result == estimate_tokens("done") + image_tokens
 
 	def test_system_message(self) -> None:

@@ -1,34 +1,7 @@
 <script lang="ts">
-	import { goto } from '$app/navigation'
-	import { resolve } from '$app/paths'
-	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
-	import RemindersPanel from '$lib/components/reminders/RemindersPanel.svelte'
-	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
-	import { device } from '$lib/stores/device.svelte'
-
-	const chrome = useSystemChrome()
-
-	const handleOpenLists = async () => {
-		await goto(resolve('/reminders/lists'), { keepFocus: true, noScroll: true })
-	}
-
-	$effect(() => {
-		if (device.isMobile) {
-			chrome.setContextActions(mobileBackAction)
-			return () => chrome.setContextActions(null)
-		}
-	})
+	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 </script>
 
-{#snippet mobileBackAction()}
-	<button
-		type="button"
-		class="rounded-pill hover:text-foreground flex cursor-pointer items-center justify-center border-none bg-transparent transition-transform duration-150 hover:scale-[1.05] active:scale-[0.97]"
-		onclick={handleOpenLists}
-		aria-label="back to lists"
-	>
-		<ChevronLeft strokeWidth="2" />
-	</button>
-{/snippet}
-
-<RemindersPanel listId={null} showListTitle={device.isMobile} />
+<div class="flex min-h-72 flex-1 items-center justify-center">
+	<NokodoLoader className="opacity-70" expanded={false} />
+</div>

@@ -13,8 +13,10 @@
 	import CreateGroupModal from '$lib/components/modals/CreateGroupModal.svelte'
 	import FileDetailsModal from '$lib/components/modals/FileDetailsModal.svelte'
 	import MemoriesModal from '$lib/components/modals/MemoriesModal.svelte'
-	import ResourceAccessModal from '$lib/components/modals/ResourceAccessModal.svelte'
+	import NotePropertiesModal from '$lib/components/modals/NotePropertiesModal.svelte'
 	import ShareResourceModal from '$lib/components/modals/ShareResourceModal.svelte'
+	import NokodoBrandLogo from '$lib/components/NokodoBrandLogo.svelte'
+	import ResourceAccessModal from '$lib/components/resource-access/ResourceAccessModal.svelte'
 	import SplashController from '$lib/components/SplashController.svelte'
 	import BackendReconnect from '$lib/components/system/BackendReconnect.svelte'
 	import Dock from '$lib/components/system/Dock.svelte'
@@ -35,7 +37,6 @@
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { permissions } from '$lib/stores/permissions.svelte'
 	import { settingsState } from '$lib/stores/settings.svelte'
-	import '$lib/styles/liquid-glass.css'
 	import { onDestroy, onMount, tick } from 'svelte'
 	import '../app.css'
 
@@ -51,13 +52,20 @@
 		) => { finished?: Promise<unknown> } | void
 	}
 
-	// global View Transitions hook.
-	// this ensures transitions run for ALL navigations (links, goto(), back/forward popstate).
+	// global view transitions hook.
+	// this ensures transitions run for all navigations (links, goto(), back/forward popstate).
 	// we intentionally skip same-path navigations (e.g. / <-> /?chat=new) so in-page
-	// animations keep controls interactive without the ViewTransition overlay.
-	/** home or chat page - transitions between these keep the sidebar filter */
-	function isChatOrHome(pathname: string): boolean {
+	// animations keep controls interactive without the view transition overlay.
+	function routeHasChatSidebar(pathname: string): boolean {
 		return pathname === '/' || pathname.startsWith('/c/')
+	}
+
+	function chatSidebarTransitionInset(): string {
+		if (device.isMobile) return '0px'
+		const sidebarElement = document.querySelector<HTMLElement>('.chat-sidebar')
+		const width = sidebarElement?.getBoundingClientRect().width ?? 0
+		if (!Number.isFinite(width) || width <= 0) return '0px'
+		return `${Math.round(width)}px`
 	}
 
 	onNavigate((navigation) => {
@@ -71,13 +79,14 @@
 
 		return new Promise<void>((resolve) => {
 			const root = document.documentElement
+			const hasPersistentChatSidebar =
+				routeHasChatSidebar(from.pathname) && routeHasChatSidebar(to.pathname)
 			root.dataset.vtActive = '1'
-
-			// keep sidebar backdrop-filter when both sides are home/chat pages
-			const bothChatOrHome = isChatOrHome(from.pathname) && isChatOrHome(to.pathname)
-			if (bothChatOrHome) {
-				root.dataset.vtKeepFilter = '1'
+			if (hasPersistentChatSidebar) {
+				root.dataset.vtChatSidebar = '1'
+				root.style.setProperty('--vt-chat-sidebar-width', chatSidebarTransitionInset())
 			}
+			void root.offsetWidth
 
 			const transition = start.call(document, async () => {
 				resolve()
@@ -86,7 +95,8 @@
 
 			const done = () => {
 				delete root.dataset.vtActive
-				delete root.dataset.vtKeepFilter
+				delete root.dataset.vtChatSidebar
+				root.style.removeProperty('--vt-chat-sidebar-width')
 			}
 
 			// prefer the ViewTransition lifecycle when available.
@@ -126,25 +136,41 @@
 
 	let mainContentShell = $state<HTMLElement | null>(null)
 	let islandShell = $state<HTMLElement | null>(null)
+	let islandSurfaceShell = $state<HTMLElement | null>(null)
 
 	$effect(() => {
 		const mainEl = mainContentShell
 		const islandEl = islandShell
-		if (!mainEl || !islandEl) return
+		const islandSurfaceEl = islandSurfaceShell
+		if (!mainEl || !islandEl || !islandSurfaceEl) return
 		const update = () => {
 			const mainRect = mainEl.getBoundingClientRect()
-			const islandRect = islandEl.getBoundingClientRect()
-			const offset = Math.max(0, Math.round(islandRect.bottom - mainRect.top))
+			const islandSurfaceRect = islandSurfaceEl.getBoundingClientRect()
+			const offset = Math.max(0, Math.round(islandSurfaceRect.bottom - mainRect.top))
+			const islandTop = Math.max(0, Math.round(islandSurfaceRect.top - mainRect.top))
+			const islandCenter = Math.max(
+				0,
+				Math.round(islandSurfaceRect.top + islandSurfaceRect.height / 2 - mainRect.top)
+			)
+			const mainLeft = mainEl.offsetLeft
 			mainEl.style.setProperty('--chrome-island-offset', `${offset}px`)
+			mainEl.style.setProperty('--chrome-island-top', `${islandTop}px`)
+			mainEl.style.setProperty('--chrome-island-center', `${islandCenter}px`)
 			// align the island shell left edge with the main content area
-			islandEl.style.setProperty('--island-left', `${mainRect.left}px`)
+			islandEl.style.setProperty('--island-left', `${mainLeft}px`)
 			// also expose on :root so portal'd elements (AddContext) can read it
-			document.documentElement.style.setProperty('--island-left', `${mainRect.left}px`)
+			document.documentElement.style.setProperty('--island-left', `${mainLeft}px`)
+			document.documentElement.style.setProperty('--chrome-island-top', `${islandTop}px`)
+			document.documentElement.style.setProperty(
+				'--chrome-island-center',
+				`${islandCenter}px`
+			)
 		}
 		update()
 		const ro = new ResizeObserver(update)
 		ro.observe(mainEl)
 		ro.observe(islandEl)
+		ro.observe(islandSurfaceEl)
 		window.addEventListener('resize', update)
 		return () => {
 			ro.disconnect()
@@ -211,11 +237,13 @@
 		return path === '/login' || path === '/signup'
 	})
 
-	// auth pages (and backend-unreachable screen) use the admin-configured auth background
+	// page-level wallpaper overrides use one resolver to avoid stale cleanup races.
 	$effect(() => {
 		if (isAuthRoute || backendUnreachable) {
+			background.clearPageConfig()
 			background.setPage(background.auth)
 		} else {
+			background.clearPageConfig()
 			background.clearPage()
 		}
 	})
@@ -375,6 +403,9 @@
 		/>
 	{:else if isAuthRoute}
 		<div class="h-app relative z-1 flex">
+			<div class="pointer-events-none fixed top-0 left-0 z-20 p-6 sm:p-8">
+				<NokodoBrandLogo class="h-7 w-28 max-w-[40vw] opacity-95 sm:h-8 sm:w-32" />
+			</div>
 			<div
 				class="relative flex min-w-0 flex-1 flex-col overflow-y-auto"
 				style="touch-action: pan-y; overscroll-behavior-y: contain;"
@@ -399,7 +430,7 @@
 
 			<!-- main content -->
 			<div
-				class="main-content-shell no-scrollbar relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pt-[calc(var(--chrome-island-offset,0px)+16px)]"
+				class="main-content-shell no-scrollbar relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pt-[calc(var(--chrome-island-offset,0)+16px)]"
 				role="main"
 				style="touch-action: pan-y; overscroll-behavior-y: contain;"
 				bind:this={mainContentShell}
@@ -417,7 +448,7 @@
 				style="left: var(--island-left, 0); right: 0; max-width: min(1280px, calc(100% - var(--island-left, 0px))); padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 				bind:this={islandShell}
 			>
-				<div class="pointer-events-auto mx-auto max-w-7xl">
+				<div class="pointer-events-auto mx-auto max-w-7xl" bind:this={islandSurfaceShell}>
 					<Island />
 				</div>
 			</div>
@@ -425,14 +456,14 @@
 			<!-- system chrome: Dock (right sidebar overlay) -->
 			{#if chrome.isDockOpen && !device.isMobile}
 				<div
-					class="fixed inset-0 z-20"
+					class="fixed inset-0 z-70"
 					role="presentation"
 					aria-hidden="true"
 					onclick={() => chrome.closeDock()}
 				></div>
 			{/if}
 			<div
-				class="dock-shell fixed top-0 right-0 bottom-0 z-30 w-[min(31rem,calc(100vw-3rem))] {chrome.isDockOpen
+				class="dock-shell fixed top-0 right-0 bottom-0 z-80 w-[min(31rem,calc(100vw-3rem))] {chrome.isDockOpen
 					? 'pointer-events-auto'
 					: 'pointer-events-none'}"
 				role="presentation"
@@ -444,10 +475,9 @@
 				onpointercancel={onDockPointerCancel}
 			>
 				<div
-					class="dock-content h-full w-full px-6 pt-8 pb-8 backdrop-blur-[14px] transition-transform duration-300 ease-in-out {chrome.isDockOpen
+					class="dock-content liquid-glass h-full w-full px-0 pt-4 pb-4 {chrome.isDockOpen
 						? 'translate-x-0'
 						: 'translate-x-full'}"
-					style="background-color: var(--accent-bg);"
 				>
 					<Dock />
 				</div>
@@ -467,6 +497,11 @@
 				onClose={modals.close}
 			/>
 			<MemoriesModal open={modals.isOpen('memories')} onClose={modals.close} />
+			<NotePropertiesModal
+				open={modals.isOpen('note-properties')}
+				payload={modals.notePropertiesPayload}
+				onClose={modals.close}
+			/>
 			<ResourceAccessModal
 				open={modals.isOpen('resource-access')}
 				payload={modals.resourceAccessPayload}
@@ -505,6 +540,28 @@
 </BackgroundManager>
 
 <style>
+	.dock-content {
+		--lg-blur: 8px;
+		--lg-bg: color-mix(
+			in oklch,
+			var(--accent-primary) 10%,
+			color-mix(in oklch, var(--background) 12%, transparent)
+		);
+		transition:
+			translate 300ms ease-in-out,
+			transform 300ms ease-in-out,
+			background var(--lg-transition),
+			box-shadow var(--lg-transition);
+	}
+
+	:global(.dark) .dock-content {
+		--lg-bg: color-mix(
+			in oklch,
+			var(--accent-primary) 12%,
+			color-mix(in oklch, var(--background) 35%, transparent)
+		);
+	}
+
 	@media (max-width: 888px) {
 		.dock-shell {
 			left: 0;
@@ -512,8 +569,12 @@
 		}
 
 		.dock-content {
-			padding-left: 1rem;
-			padding-right: 1rem;
+			box-shadow: none;
+		}
+
+		.dock-content::before,
+		.dock-content::after {
+			display: none;
 		}
 	}
 </style>

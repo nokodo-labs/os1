@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import { logout } from '$lib/api/client'
+	import { logoutAndRedirect } from '$lib/auth/logout'
 	import { ChevronRight, Cog6, InfoCircle, SignOut, Sparkles } from '$lib/components/icons'
 	import { appNavigation } from '$lib/stores/appNavigation.svelte'
 	import { session } from '$lib/stores/session.svelte'
@@ -17,6 +17,7 @@
 	}
 
 	let { user, onClose }: UserProfilePanelProps = $props()
+	let isLoggingOut = $state(false)
 
 	function handleUserProfileClick() {
 		onClose?.()
@@ -42,11 +43,15 @@
 		void goto(resolve('/settings/about'), { keepFocus: true, noScroll: true })
 	}
 
-	function handleLogout() {
+	async function handleLogout() {
+		if (isLoggingOut) return
+		isLoggingOut = true
 		onClose?.()
-		void logout()
-		session.clear()
-		window.location.href = '/login'
+		try {
+			await logoutAndRedirect()
+		} finally {
+			isLoggingOut = false
+		}
 	}
 
 	function handleLogin() {
@@ -88,10 +93,10 @@
 	]
 </script>
 
-<div class="w-60 p-3">
-	<!-- User Info Section (clickable to profile) -->
+<div class="w-58 p-0">
+	<!-- user info section (clickable to profile) -->
 	<button
-		class="hover:bg-foreground/5 flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-all active:scale-[0.98]"
+		class="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-2 py-1.5 text-left transition-transform active:scale-[0.98] disabled:cursor-default"
 		onclick={handleUserProfileClick}
 		disabled={!session.isLoggedIn}
 	>
@@ -100,11 +105,11 @@
 				<img
 					src={user.avatar}
 					alt={user.name}
-					class="h-10 w-10 shrink-0 rounded-full object-cover"
+					class="h-9 w-9 shrink-0 rounded-full object-cover"
 				/>
 			{:else}
 				<div
-					class="text-foreground flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold uppercase"
+					class="text-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold uppercase"
 					style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
 				>
 					{getUserInitials(user.name)}
@@ -112,12 +117,12 @@
 			{/if}
 			<div class="flex min-w-0 flex-1 flex-col">
 				<p
-					class="text-foreground overflow-hidden text-[0.9375rem] font-semibold text-ellipsis whitespace-nowrap"
+					class="text-foreground overflow-hidden text-sm font-semibold text-ellipsis whitespace-nowrap"
 				>
 					{user.name}
 				</p>
 				<p
-					class="text-foreground/60 overflow-hidden text-[0.8125rem] text-ellipsis whitespace-nowrap"
+					class="text-foreground/60 overflow-hidden text-xs text-ellipsis whitespace-nowrap"
 				>
 					{user.email}
 				</p>
@@ -125,19 +130,19 @@
 			<ChevronRight class="text-foreground/30 h-4 w-4 shrink-0" />
 		{:else}
 			<div
-				class="text-foreground flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold uppercase"
+				class="text-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold uppercase"
 				style="background: linear-gradient(to bottom right, var(--accent-primary), var(--accent-primary));"
 			>
 				??
 			</div>
 			<div class="flex min-w-0 flex-1 flex-col">
 				<p
-					class="text-foreground overflow-hidden text-[0.9375rem] font-semibold text-ellipsis whitespace-nowrap"
+					class="text-foreground overflow-hidden text-sm font-semibold text-ellipsis whitespace-nowrap"
 				>
 					not signed in
 				</p>
 				<p
-					class="text-foreground/60 overflow-hidden text-[0.8125rem] text-ellipsis whitespace-nowrap"
+					class="text-foreground/60 overflow-hidden text-xs text-ellipsis whitespace-nowrap"
 				>
 					log in to access your account
 				</p>
@@ -145,26 +150,26 @@
 		{/if}
 	</button>
 
-	<hr class="border-foreground/10 my-2" />
+	<hr class="border-foreground/10 my-1.5" />
 
 	{#if session.isLoggedIn}
-		<!-- menu Items -->
-		<div class="flex flex-col gap-1">
+		<!-- menu items -->
+		<div class="flex flex-col gap-0.5">
 			{#each menuItems as item (item.id)}
 				{@const Icon = item.icon}
 				<button
-					class="rounded-pill text-foreground hover:border-foreground/20 hover:bg-foreground/10 flex w-full cursor-pointer items-center gap-2 border border-transparent bg-transparent px-3 py-2 text-left text-sm font-medium transition-all duration-150 active:scale-[0.98]"
+					class="rounded-pill text-foreground hover:border-foreground/20 hover:bg-foreground/10 flex w-full cursor-pointer items-center gap-2.5 border border-transparent bg-transparent px-3 py-2 text-left text-sm font-semibold transition-all duration-150 active:scale-[0.98]"
 					onclick={item.action}
 				>
-					<Icon class="h-4.5 w-4.5 shrink-0" variant={item.variant} />
+					<Icon class="h-4 w-4 shrink-0" variant={item.variant} />
 					<span>{item.label}</span>
 				</button>
 			{/each}
 		</div>
 	{:else}
-		<div class="flex flex-col gap-1">
+		<div class="flex flex-col gap-0.5">
 			<button
-				class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground hover:bg-foreground/10 flex w-full cursor-pointer items-center justify-center border px-4 py-3 text-sm font-semibold transition-all duration-150 active:scale-[0.98]"
+				class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground hover:bg-foreground/10 flex w-full cursor-pointer items-center justify-center border px-4 py-2.5 text-sm font-semibold transition-all duration-150 active:scale-[0.98]"
 				onclick={handleLogin}
 			>
 				log in
@@ -172,15 +177,16 @@
 		</div>
 	{/if}
 
-	<hr class="border-foreground/10 my-2" />
+	<hr class="border-foreground/10 my-1.5" />
 
 	{#if session.isLoggedIn}
-		<!-- logout Button -->
+		<!-- logout button -->
 		<button
-			class="rounded-pill flex w-full cursor-pointer items-center gap-2 border border-transparent bg-transparent px-3 py-2 text-left text-sm font-medium text-[rgb(239,68,68)] transition-all duration-150 hover:border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.15)] active:scale-[0.98]"
+			class="rounded-pill flex w-full cursor-pointer items-center gap-2.5 border border-transparent bg-transparent px-3 py-2 text-left text-sm font-semibold text-[rgb(239,68,68)] transition-all duration-150 hover:border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.15)] active:scale-[0.98]"
 			onclick={handleLogout}
+			disabled={isLoggingOut}
 		>
-			<SignOut class="h-4.5 w-4.5 shrink-0" />
+			<SignOut class="h-4 w-4 shrink-0" />
 			<span>log out</span>
 		</button>
 	{/if}

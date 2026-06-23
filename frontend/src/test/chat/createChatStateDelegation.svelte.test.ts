@@ -14,6 +14,7 @@ import { makeThread, resetIdCounter } from './fixtures'
 vi.mock('$lib/api/streaming', () => ({
 	eventStreamClient: {
 		subscribe: vi.fn(() => () => {}),
+		subscribeTypes: vi.fn(() => () => {}),
 	},
 }))
 

@@ -14,7 +14,7 @@
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'
-	import { ArrowDown, ArrowUp, Pencil, Plus, Search, Trash2, X, RefreshCw, Cpu } from '@lucide/svelte'
+	import { ArrowDown, ArrowUp, Cpu, Plus, RefreshCw, Search, Trash2, X } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 	import { onMount } from 'svelte'
 
@@ -33,11 +33,11 @@
 	let modelSortKey = $state<ModelSortKey>('name')
 	let modelSortDir = $state<SortDir>('asc')
 
-	const ALL_MODALITIES = ['text', 'images', 'audio', 'video'] as const
+	const ALL_MODALITIES = ['text', 'documents', 'images', 'audio', 'video'] as const
 	type InputModality = (typeof ALL_MODALITIES)[number]
 
 	const DEFAULT_MODALITIES: Record<string, InputModality[]> = {
-		chat_model: ['text', 'images'],
+		chat_model: ['text', 'documents', 'images'],
 		embedding: ['text'],
 		image: ['text', 'images'],
 		audio: ['text', 'audio'],
@@ -116,10 +116,10 @@
 		is_autofetched: false,
 	})
 
-	// Optional numeric fields are modeled as strings so they can be blank.
-	let contextWindowInput = $state<string>('')
-	let inputCostInput = $state<string>('')
-	let outputCostInput = $state<string>('')
+	// Optional numeric fields. type=number bindings yield number|null, matching the API schema.
+	let contextWindowInput = $state<number | null>(null)
+	let inputCostInput = $state<number | null>(null)
+	let outputCostInput = $state<number | null>(null)
 
 	let providerKey = $derived(formState.provider_id ? getProviderKey(formState.provider_id) : null)
 	let adapterOptions = $derived(getAdapterOptions(providerKey, formState.model_type))
@@ -130,6 +130,7 @@
 		anthropic: ['chat_model'],
 		google: ['chat_model', 'image'],
 		ollama: ['chat_model', 'embedding'],
+		voyageai: ['embedding'],
 	}
 	const ALL_MODEL_TYPES: Model['model_type'][] = [
 		'chat_model',
@@ -209,9 +210,9 @@
 			enabled: true,
 			is_autofetched: false,
 		}
-		contextWindowInput = ''
-		inputCostInput = ''
-		outputCostInput = ''
+		contextWindowInput = null
+		inputCostInput = null
+		outputCostInput = null
 		inputModalities = [...(DEFAULT_MODALITIES['chat_model'] ?? ['text'])]
 		showModal = true
 		submitError = null
@@ -220,7 +221,7 @@
 	function openEditModal(model: Model) {
 		modalMode = 'edit'
 		editingId = model.id
-		const adapter = (model as unknown as { adapter?: string | null }).adapter ?? null
+		const adapter = model.adapter ?? null
 		formState = {
 			name: model.name,
 			display_name: model.display_name || '',
@@ -230,29 +231,14 @@
 			enabled: model.enabled,
 			is_autofetched: model.is_autofetched,
 		}
-		contextWindowInput =
-			model.context_window === null || model.context_window === undefined
-				? ''
-				: String(model.context_window)
-		inputCostInput =
-			model.input_cost === null || model.input_cost === undefined
-				? ''
-				: String(model.input_cost)
-		outputCostInput =
-			model.output_cost === null || model.output_cost === undefined
-				? ''
-				: String(model.output_cost)
-		inputModalities = ((model as unknown as { input_modalities?: string[] }).input_modalities ??
-			DEFAULT_MODALITIES[model.model_type] ?? ['text']) as InputModality[]
+		contextWindowInput = model.context_window ?? null
+		inputCostInput = model.input_cost ?? null
+		outputCostInput = model.output_cost ?? null
+		inputModalities = [
+			...(model.input_modalities ?? DEFAULT_MODALITIES[model.model_type] ?? ['text']),
+		]
 		showModal = true
 		submitError = null
-	}
-
-	function parseOptionalNumber(value: string): number | null {
-		const trimmed = value.trim()
-		if (!trimmed) return null
-		const parsed = Number(trimmed)
-		return Number.isFinite(parsed) ? parsed : null
 	}
 
 	async function handleSubmit(e: Event) {
@@ -268,33 +254,37 @@
 
 		try {
 			if (modalMode === 'create') {
-				const createPayload = {
-					...formState,
+				const createPayload: ModelCreate = {
+					name: formState.name.trim(),
+					display_name: formState.display_name?.trim() || null,
+					model_type: formState.model_type,
+					adapter: formState.adapter ?? null,
+					provider_id: formState.provider_id,
+					enabled: formState.enabled,
+					is_autofetched: formState.is_autofetched,
 					input_modalities: inputModalities,
-				} as unknown as ModelCreate
-				const contextWindow = parseOptionalNumber(contextWindowInput)
-				const inputCost = parseOptionalNumber(inputCostInput)
-				const outputCost = parseOptionalNumber(outputCostInput)
-				if (contextWindow !== null) createPayload.context_window = contextWindow
-				if (inputCost !== null) createPayload.input_cost = inputCost
-				if (outputCost !== null) createPayload.output_cost = outputCost
+				}
+				if (contextWindowInput !== null) createPayload.context_window = contextWindowInput
+				if (inputCostInput !== null) createPayload.input_cost = inputCostInput
+				if (outputCostInput !== null) createPayload.output_cost = outputCostInput
 				unwrap(await api.POST('/v1/models', { body: createPayload }))
 			} else if (editingId) {
-				// Exclude provider_id from update
-				const rest = Object.fromEntries(
-					Object.entries(formState).filter(([k]) => k !== 'provider_id')
-				)
-				const updatePayload = {
-					...(rest as unknown as Record<string, unknown>),
+				const updatePayload: ModelUpdate = {
+					name: formState.name.trim(),
+					display_name: formState.display_name?.trim() || null,
+					model_type: formState.model_type,
+					adapter: formState.adapter ?? null,
+					enabled: formState.enabled,
+					is_autofetched: formState.is_autofetched,
 					input_modalities: inputModalities,
-					context_window: parseOptionalNumber(contextWindowInput),
-					input_cost: parseOptionalNumber(inputCostInput),
-					output_cost: parseOptionalNumber(outputCostInput),
-				} as unknown as ModelUpdate
+					context_window: contextWindowInput,
+					input_cost: inputCostInput,
+					output_cost: outputCostInput,
+				}
 				unwrap(
 					await api.PATCH('/v1/models/{model_id}', {
 						params: { path: { model_id: editingId } },
-						body: updatePayload as unknown as ModelUpdate,
+						body: updatePayload,
 					})
 				)
 			}
@@ -391,7 +381,11 @@
 			}
 		}
 		if (modelType === 'embedding') {
-			if (providerKey === 'openai' || providerKey === 'ollama') {
+			if (
+				providerKey === 'openai' ||
+				providerKey === 'ollama' ||
+				providerKey === 'voyageai'
+			) {
 				return [{ value: 'embedding', label: 'embedding' }]
 			}
 		}
@@ -498,85 +492,107 @@
 		</div>
 	</div>
 
-		<div class="flex flex-col gap-6">
-			{#if isFetching}
-				<div class="flex flex-col items-center justify-center py-16">
-					<NokodoLoader />
-				</div>
-			{:else if error}
-				<div class="rounded-md bg-red-500/10 p-4 text-red-500">
-					{error}
-				</div>
-			{:else}
-				<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-					{#each filteredModels as model (model.id)}
-						<Card class="flex shrink-0 flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50">
-							<CardHeader class="border-b border-zinc-800/50 px-4 py-4">
-								<div class="flex items-start justify-between gap-4">
-									<div class="flex min-w-0 flex-1 items-start gap-3">
-										<div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-pink-500/10 text-pink-400">
-											<Cpu class="h-4 w-4" />
-										</div>
-										<div class="min-w-0 flex-1">
-											<CardTitle class="truncate text-base">{model.display_name || model.name}</CardTitle>
-											<div class="mt-1 flex items-center gap-1.5 text-xs text-zinc-400">
-												<span class="truncate">{getProviderName(model.provider_id)}</span>
-												<span>•</span>
-												<span class="truncate">{getModelTypeLabel(model.model_type)}</span>
-											</div>
-										</div>
+	<div class="flex flex-col gap-6">
+		{#if isFetching}
+			<div class="flex flex-col items-center justify-center py-16">
+				<NokodoLoader />
+			</div>
+		{:else if error}
+			<div class="rounded-md bg-red-500/10 p-4 text-red-500">
+				{error}
+			</div>
+		{:else}
+			<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+				{#each filteredModels as model (model.id)}
+					<Card
+						class="flex shrink-0 cursor-pointer flex-col overflow-hidden rounded-2xl border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-700 hover:bg-zinc-800/50"
+						onclick={() => openEditModal(model)}
+						onkeydown={(event) => {
+							if (event.key === 'Enter' || event.key === ' ') {
+								event.preventDefault()
+								openEditModal(model)
+							}
+						}}
+						role="button"
+						tabindex={0}
+					>
+						<CardHeader class="border-b border-zinc-800/50 px-4 py-4">
+							<div class="flex items-start justify-between gap-4">
+								<div class="flex min-w-0 flex-1 items-start gap-3">
+									<div
+										class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-pink-500/10 text-pink-400"
+									>
+										<Cpu class="h-4 w-4" />
 									</div>
-									<div class="flex shrink-0 gap-1">
-										<Button
-											variant="ghost"
-											size="icon"
-											class="h-7 w-7 text-zinc-500 hover:text-zinc-300"
-											onclick={() => openEditModal(model)}
+									<div class="min-w-0 flex-1">
+										<CardTitle class="truncate text-base"
+											>{model.display_name || model.name}</CardTitle
 										>
-											<Pencil class="h-3.5 w-3.5" />
-										</Button>
-										<Button
-											variant="ghost"
-											size="icon"
-											class="h-7 w-7 text-zinc-500 hover:text-red-400"
-											onclick={() => handleDelete(model.id)}
+										<div
+											class="mt-1 flex items-center gap-1.5 text-xs text-zinc-400"
 										>
-											<Trash2 class="h-3.5 w-3.5" />
-										</Button>
+											<span class="truncate"
+												>{getProviderName(model.provider_id)}</span
+											>
+											<span>•</span>
+											<span class="truncate"
+												>{getModelTypeLabel(model.model_type)}</span
+											>
+										</div>
 									</div>
 								</div>
-							</CardHeader>
-							<CardContent class="flex flex-1 flex-col justify-end px-4 py-4">
-								<div class="flex items-center justify-between gap-2">
-									<div class="flex items-center gap-2">
-										<div class={`h-2 w-2 rounded-full ${model.enabled ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'}`}></div>
-										<span class="text-xs font-medium tracking-wider text-zinc-400 uppercase">
-											{model.enabled ? 'enabled' : 'disabled'}
-										</span>
-									</div>
-									{#if model.is_autofetched}
-										<span class="inline-flex items-center rounded-md bg-zinc-800/50 px-2 py-0.5 text-[10px] uppercase font-medium tracking-wider text-zinc-300">
-											autofetched
-										</span>
-									{/if}
+								<div class="flex shrink-0 gap-1">
+									<Button
+										variant="ghost"
+										size="icon"
+										class="h-7 w-7 text-zinc-500 hover:text-red-400"
+										onclick={(event) => {
+											event.stopPropagation()
+											handleDelete(model.id)
+										}}
+									>
+										<Trash2 class="h-3.5 w-3.5" />
+									</Button>
 								</div>
-							</CardContent>
-						</Card>
-					{/each}
+							</div>
+						</CardHeader>
+						<CardContent class="flex flex-1 flex-col justify-end px-4 py-4">
+							<div class="flex items-center justify-between gap-2">
+								<div class="flex items-center gap-2">
+									<div
+										class={`h-2 w-2 rounded-full ${model.enabled ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'}`}
+									></div>
+									<span
+										class="text-xs font-medium tracking-wider text-zinc-400 uppercase"
+									>
+										{model.enabled ? 'enabled' : 'disabled'}
+									</span>
+								</div>
+								{#if model.is_autofetched}
+									<span
+										class="inline-flex items-center rounded-md bg-zinc-800/50 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase"
+									>
+										autofetched
+									</span>
+								{/if}
+							</div>
+						</CardContent>
+					</Card>
+				{/each}
 
-					{#if models.length === 0}
-						{#if !hasProviders}
-							<EmptyState
-								message={emptyStateNoProvidersMessage}
-								hint={emptyStateNoProvidersHint}
-							/>
-						{:else}
-							<EmptyState message={emptyStateNoModelsMessage} />
-						{/if}
+				{#if models.length === 0}
+					{#if !hasProviders}
+						<EmptyState
+							message={emptyStateNoProvidersMessage}
+							hint={emptyStateNoProvidersHint}
+						/>
+					{:else}
+						<EmptyState message={emptyStateNoModelsMessage} />
 					{/if}
-				</div>
-			{/if}
-		</div>
+				{/if}
+			</div>
+		{/if}
+	</div>
 </div>
 
 <Dialog.Root
@@ -588,6 +604,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/60" />
 		<Dialog.Content
+			data-dialog-content
 			class="fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[min(512px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-lg"
 		>
 			<div

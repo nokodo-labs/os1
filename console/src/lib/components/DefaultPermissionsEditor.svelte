@@ -3,17 +3,24 @@
 
 	type AccessLevel = Schemas['AccessLevel']
 	type ActionPermission = Schemas['ActionPermission']
-	type DefaultPermissions_Input = Schemas['DefaultPermissions-Input']
+	type DefaultPermissions = Schemas['DefaultPermissions']
 
 	import { Label } from '$lib/components/ui/label'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
 	import { Switch } from '$lib/components/ui/switch'
 
-	type PermissionsValue = DefaultPermissions_Input
+	type PermissionsValue = DefaultPermissions
 
 	let { value = $bindable<PermissionsValue>(), allowInherit = true } = $props()
 
-	type ResourceField = 'thread' | 'project' | 'file' | 'note' | 'group' | 'reminder_list'
+	type ResourceField =
+		| 'thread'
+		| 'project'
+		| 'file'
+		| 'calendar'
+		| 'note'
+		| 'group'
+		| 'reminder_list'
 
 	const accessLevelOptions: Array<{ value: AccessLevel; label: string }> = [
 		{ value: 'reader', label: 'reader' },
@@ -25,6 +32,7 @@
 		{ key: 'thread', label: 'threads' },
 		{ key: 'project', label: 'projects' },
 		{ key: 'file', label: 'files' },
+		{ key: 'calendar', label: 'calendars' },
 		{ key: 'note', label: 'notes' },
 		{ key: 'group', label: 'groups' },
 		{ key: 'reminder_list', label: 'reminder lists' },
@@ -51,6 +59,7 @@
 				{ value: 'groups:create', label: 'groups' },
 				{ value: 'memories:create', label: 'memories' },
 				{ value: 'reminders:create', label: 'reminders' },
+				{ value: 'calendar:create', label: 'calendars' },
 				{ value: 'tasks:create', label: 'tasks' },
 			],
 		},
@@ -66,6 +75,13 @@
 			items: [
 				{ value: 'plugins:read', label: 'read' },
 				{ value: 'plugins:manage', label: 'manage' },
+			],
+		},
+		{
+			title: 'MCP',
+			items: [
+				{ value: 'mcp:manage', label: 'manage all servers' },
+				{ value: 'user.mcp:manage', label: 'manage own user servers' },
 			],
 		},
 		{
@@ -89,6 +105,15 @@
 			items: [
 				{ value: 'users:read', label: 'read' },
 				{ value: 'users:manage', label: 'manage' },
+			],
+		},
+		{
+			title: 'user social',
+			items: [
+				{ value: 'user.friendships:create', label: 'create friendships' },
+				{ value: 'user.friendships:manage', label: 'manage friendships' },
+				{ value: 'user.blocks:create', label: 'create blocks' },
+				{ value: 'user.blocks:manage', label: 'manage blocks' },
 			],
 		},
 		{

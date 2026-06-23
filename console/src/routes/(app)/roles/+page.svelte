@@ -9,8 +9,21 @@
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import RoleDetailsModal from '$lib/components/RoleDetailsModal.svelte'
 	import { Button } from '$lib/components/ui/button'
+	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp, Clock, Hash, ListOrdered, Plus, Shield, RefreshCw, ChevronLeft, ChevronRight } from '@lucide/svelte'
+	import {
+		ArrowDown,
+		ArrowUp,
+		ChevronLeft,
+		ChevronRight,
+		Clock,
+		Hash,
+		ListOrdered,
+		Plus,
+		RefreshCw,
+		Search,
+		Shield,
+	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'priority' | 'name' | 'created_at' | 'updated_at'
@@ -41,10 +54,14 @@
 	let refreshToken = $state(0)
 
 	let roles = $state<Role[]>([])
+	let searchQuery = $state('')
+	let serverSearchQuery = $state('')
+	let searchTimer: ReturnType<typeof setTimeout> | null = null
 	let isLoading = $state(false)
 	let isReordering = $state(false)
 	let error = $state<string | null>(null)
 	let hasNext = $state(false)
+	let total = $state(0)
 
 	let isCreateOpen = $state(false)
 	let isDetailsOpen = $state(false)
@@ -89,6 +106,14 @@
 
 	function refresh() {
 		refreshToken += 1
+	}
+
+	function scheduleSearch() {
+		pageIndex = 0
+		if (searchTimer) clearTimeout(searchTimer)
+		searchTimer = setTimeout(() => {
+			serverSearchQuery = searchQuery.trim()
+		}, 250)
 	}
 
 	function openRole(roleId: string) {
@@ -169,25 +194,36 @@
 		if (!browser) return
 
 		const skip = pageIndex * limit + refreshToken * 0
+		const q = serverSearchQuery || undefined
 
 		isLoading = true
 		error = null
 
-		api.GET('/v1/roles', {
-			params: {
-				query: {
-					skip,
-					limit,
-					sort_by: sortKey,
-					sort_dir: sortDir,
-					user_id: userIdFilter ?? undefined,
-				},
-			},
-		})
-			.then((r) => unwrap(r))
-			.then((result) => {
+		Promise.all([
+			api
+				.GET('/v1/roles', {
+					params: {
+						query: {
+							skip,
+							limit,
+							sort_by: sortKey,
+							sort_dir: sortDir,
+							user_id: userIdFilter ?? undefined,
+							q,
+						},
+					},
+				})
+				.then((r) => unwrap(r)),
+			api
+				.GET('/v1/roles/count', {
+					params: { query: { user_id: userIdFilter ?? undefined, q } },
+				})
+				.then((r) => unwrap(r)),
+		])
+			.then(([result, count]) => {
 				roles = result
-				hasNext = result.length === limit
+				total = count
+				hasNext = (pageIndex + 1) * limit < count
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load roles'
@@ -207,6 +243,15 @@
 			<p class="text-zinc-400">manage roles and default permissions.</p>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
+			<div class="relative">
+				<Search class="absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+				<Input
+					placeholder="search roles..."
+					bind:value={searchQuery}
+					oninput={scheduleSearch}
+					class="w-full pl-8 sm:w-50 lg:w-75"
+				/>
+			</div>
 			<Button class="gap-2 rounded-xl" onclick={() => (isCreateOpen = true)}>
 				<Plus class="h-4 w-4" />
 				new role
@@ -282,7 +327,9 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{roles.length > 0 ? ` \u00b7 ${roles.length} items` : ''}
+					{total > 0
+						? `items ${pageIndex * limit + 1}–${pageIndex * limit + roles.length} of ${total}`
+						: ''}
 				</span>
 				<Button
 					variant="outline"
@@ -328,12 +375,16 @@
 					}}
 				>
 					<div class="flex min-w-0 flex-1 items-center gap-4">
-						<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+						<div
+							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-400"
+						>
 							<Shield class="h-5 w-5" />
 						</div>
 						<div class="min-w-0 flex-1 space-y-1">
 							<div class="flex flex-wrap items-center gap-2">
-								<span class="truncate text-base font-medium text-zinc-100">{role.name}</span>
+								<span class="truncate text-base font-medium text-zinc-100"
+									>{role.name}</span
+								>
 							</div>
 							{#if role.description}
 								<div class="line-clamp-1 text-sm text-zinc-400">
@@ -341,11 +392,15 @@
 								</div>
 							{/if}
 							<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-								<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+								<span
+									class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50"
+								>
 									<Hash class="h-3 w-3" />
 									{role.id}
 								</span>
-								<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+								<span
+									class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase"
+								>
 									<ListOrdered class="h-3 w-3" />
 									priority {role.priority ?? 0}
 								</span>
@@ -383,7 +438,7 @@
 								</Button>
 							</div>
 						{/if}
-						<div class="flex flex-col items-end shrink-0 text-xs text-zinc-500">
+						<div class="flex shrink-0 flex-col items-end text-xs text-zinc-500">
 							<div class="flex items-center gap-1.5 whitespace-nowrap">
 								<Clock class="h-3.5 w-3.5" />
 								{new Date(role.updated_at).toLocaleString()}

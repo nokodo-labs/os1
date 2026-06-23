@@ -4,22 +4,30 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import AsyncGenerator
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.v1.service.chat.summarization import (
+from api.models.thread_summary import SummaryPurpose
+from api.v1.service.chat.context_compaction.summarization import (
+	SUMMARY_COVERED_RAW_IDS_METADATA_KEY,
+	SUMMARY_MESSAGE_METADATA_KEY,
+	SUMMARY_PREDECESSOR_IDS_METADATA_KEY,
+	SummaryRangeStaleError,
 	_format_transcript,
 	_placeholder_summary,
 	condense_summaries,
 	summarize_messages,
+	summarize_thread_message_range,
 )
 from nokodo_ai.messages import (
 	AssistantMessage,
 	Message,
 	SystemMessage,
 	TextContent,
+	ToolCall,
 	ToolMessage,
 	UserMessage,
 )
@@ -29,13 +37,21 @@ from nokodo_ai.utils.typeid import TypeID
 _TID = TypeID("th_123")
 _M1 = TypeID("m1")
 _M2 = TypeID("m2")
+_TSUM_1 = TypeID("tsum_01h5fskfsk4fpeqwnsyz5hj55t")
+_TSUM_2 = TypeID("tsum_01h5fskfsk4fpeqwnsyz5hj55v")
+_TSUM_OLD = TypeID("tsum_01h5fskfsk4fpeqwnsyz5hj55w")
+_TSUM_NEW = TypeID("tsum_01h5fskfsk4fpeqwnsyz5hj55x")
+_TSUM_FALLBACK = TypeID("tsum_01h5fskfsk4fpeqwnsyz5hj55y")
+_TSUM_EMPTY = TypeID("tsum_01h5fskfsk4fpeqwnsyz5hj55z")
+_TSUM_AUTO = TypeID("tsum_01h5fskfsk4fpeqwnsyz5hj560")
+_TSUM_CONDENSED = TypeID("tsum_01h5fskfsk4fpeqwnsyz5hj561")
 
 
 # -- helpers --
 
 
-def _user(text: str) -> UserMessage:
-	return UserMessage.from_text(text)
+def _user(text: str, metadata: dict[str, object] | None = None) -> UserMessage:
+	return UserMessage.from_text(text).model_copy(update={"metadata": metadata})
 
 
 def _assistant(text: str) -> AssistantMessage:
@@ -50,8 +66,16 @@ def _tool(output: str, call_id: str = "call_1") -> ToolMessage:
 	return ToolMessage(tool_call_id=call_id, tool_output=output)
 
 
+def _long_text(label: str) -> str:
+	return f"{label}: " + ("specific chat detail " * 140)
+
+
+def _compactable_messages() -> list[Message]:
+	return [_user(_long_text("user")), _assistant(_long_text("assistant"))]
+
+
 def _mock_summary(
-	id_: str = "tsum_1",
+	id_: TypeID = _TSUM_1,
 	content: str = "summary content",
 	message_count: int = 5,
 	start_message_id: str | None = None,
@@ -83,6 +107,23 @@ class TestFormatTranscript:
 		# each message is capped at 2000 chars
 		assert len(result) < 5000
 
+	def test_unlimited_message_length_when_limit_is_none(self) -> None:
+		long_text = "x" * 5000
+		mock_settings = SimpleNamespace(
+			ai=SimpleNamespace(
+				context_compaction=SimpleNamespace(
+					summarization_max_chars_per_message=None,
+				),
+			),
+		)
+		with patch(
+			"api.v1.service.chat.context_compaction.summarization.settings",
+			mock_settings,
+		):
+			result = _format_transcript([_user(long_text)])
+
+		assert long_text in result
+
 	def test_empty_messages(self) -> None:
 		result = _format_transcript([])
 		assert result == ""
@@ -91,6 +132,21 @@ class TestFormatTranscript:
 		msgs: list[Message] = [_sys("instructions"), _user("hello")]
 		result = _format_transcript(msgs)
 		assert "[system]: instructions" in result
+
+	def test_assistant_tool_calls_include_name_and_arguments(self) -> None:
+		message = AssistantMessage(
+			content=[],
+			tool_calls=[
+				ToolCall(
+					id="call_1",
+					name="web_search",
+					arguments={"query": "release plan"},
+				)
+			],
+		)
+		result = _format_transcript([message])
+		assert "tool_call id=call_1 name=web_search" in result
+		assert '"query":"release plan"' in result
 
 	def test_tool_messages_included(self) -> None:
 		msgs = [_tool("search result data", "tc_1")]
@@ -145,85 +201,205 @@ class TestPlaceholderSummary:
 class TestSummarizeMessages:
 	@pytest.mark.asyncio()
 	async def test_successful_summarization(self) -> None:
+		messages = _compactable_messages()
 		mock_model = AsyncMock()
 		mock_response = MagicMock()
-		mock_response.text = "the user asked about login flow and setup"
+		mock_response.json_content = {
+			"summary": "the user asked about login flow and setup"
+		}
 		mock_model.generate = AsyncMock(return_value=mock_response)
 
 		mock_summary = MagicMock()
-		mock_summary.id = "tsum_new"
+		mock_summary.id = _TSUM_NEW
 
 		with (
 			patch(
-				"api.v1.service.chat.summarization.resolve_task_chat_model",
+				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(return_value=mock_model),
 			),
-			patch("api.v1.service.chat.summarization.summary_service") as mock_svc,
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.summary_service"
+			) as mock_svc,
 		):
 			mock_svc.create_summary = AsyncMock(return_value=mock_summary)
 			session = AsyncMock()
 
 			result = await summarize_messages(
 				thread_id=_TID,
-				messages=[_user("hello"), _assistant("hi")],
+				messages=messages,
 				start_message_id=_M1,
 				end_message_id=_M2,
 				session=session,
 			)
 
-		assert str(result) == "tsum_new"
+		assert result == _TSUM_NEW
 		mock_svc.create_summary.assert_called_once()
 		call_kwargs = mock_svc.create_summary.call_args.kwargs
+		assert call_kwargs["purpose"] == SummaryPurpose.AGENT_CONTEXT
 		assert call_kwargs["content"] == "the user asked about login flow and setup"
+		schema = mock_model.generate.call_args.kwargs["params"]["response_model"]
+		assert schema["properties"]["summary"]["maxLength"] < len(
+			_format_transcript(messages)
+		)
 
 	@pytest.mark.asyncio()
 	async def test_fallback_on_llm_failure(self) -> None:
 		mock_summary = MagicMock()
-		mock_summary.id = "tsum_fallback"
+		mock_summary.id = _TSUM_FALLBACK
 
 		with (
 			patch(
-				"api.v1.service.chat.summarization.resolve_task_chat_model",
+				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(side_effect=RuntimeError("model unavailable")),
 			),
-			patch("api.v1.service.chat.summarization.summary_service") as mock_svc,
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.summary_service"
+			) as mock_svc,
 		):
 			mock_svc.create_summary = AsyncMock(return_value=mock_summary)
 			session = AsyncMock()
 
 			result = await summarize_messages(
 				thread_id=_TID,
-				messages=[_user("hello"), _assistant("hi")],
+				messages=_compactable_messages(),
 				session=session,
 			)
 
-		assert str(result) == "tsum_fallback"
+		assert result == _TSUM_FALLBACK
 		call_kwargs = mock_svc.create_summary.call_args.kwargs
 		assert "summary unavailable" in call_kwargs["content"]
+
+	@pytest.mark.asyncio()
+	async def test_rejects_batch_too_small_to_save_tokens(self) -> None:
+		with pytest.raises(ValueError, match="too small"):
+			await summarize_messages(
+				thread_id=_TID,
+				messages=[_user("tiny")],
+				session=AsyncMock(),
+			)
+
+	@pytest.mark.asyncio()
+	async def test_overlong_structured_output_uses_bounded_placeholder(self) -> None:
+		mock_model = AsyncMock()
+		mock_response = MagicMock()
+		mock_response.json_content = {"summary": "x" * 20_000}
+		mock_model.generate = AsyncMock(return_value=mock_response)
+
+		mock_summary = MagicMock()
+		mock_summary.id = _TSUM_FALLBACK
+
+		with (
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
+				AsyncMock(return_value=mock_model),
+			),
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.summary_service"
+			) as mock_svc,
+		):
+			mock_svc.create_summary = AsyncMock(return_value=mock_summary)
+			await summarize_messages(
+				thread_id=_TID,
+				messages=_compactable_messages(),
+				session=AsyncMock(),
+			)
+
+		call_kwargs = mock_svc.create_summary.call_args.kwargs
+		assert call_kwargs["content"].startswith("[2 messages")
+		assert len(call_kwargs["content"]) < 20_000
+
+	@pytest.mark.asyncio()
+	async def test_stores_coverage_and_lineage_metadata(self) -> None:
+		mock_model = AsyncMock()
+		mock_response = MagicMock()
+		mock_response.json_content = {"summary": "summary over mixed bundle"}
+		mock_model.generate = AsyncMock(return_value=mock_response)
+
+		mock_summary = MagicMock()
+		mock_summary.id = _TSUM_NEW
+		mock_summary.metadata_ = {
+			SUMMARY_PREDECESSOR_IDS_METADATA_KEY: [str(_TSUM_OLD)],
+		}
+
+		with (
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
+				AsyncMock(return_value=mock_model),
+			),
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.summary_service"
+			) as mock_svc,
+		):
+			mock_svc.create_summary = AsyncMock(return_value=mock_summary)
+			mock_svc.supersede_summaries = AsyncMock()
+			session = AsyncMock()
+
+			result = await summarize_messages(
+				thread_id=_TID,
+				messages=[
+					_user(
+						_long_text("prior summary"),
+						{SUMMARY_MESSAGE_METADATA_KEY: str(_TSUM_OLD)},
+					),
+					_user(_long_text("new raw"), {"_message_id": "m2"}),
+				],
+				start_message_id=_M1,
+				end_message_id=_M2,
+				session=session,
+			)
+
+		assert result == _TSUM_NEW
+		call_kwargs = mock_svc.create_summary.call_args.kwargs
+		metadata = call_kwargs["metadata"]
+		assert metadata[SUMMARY_COVERED_RAW_IDS_METADATA_KEY] == ["m2"]
+		assert metadata[SUMMARY_PREDECESSOR_IDS_METADATA_KEY] == [str(_TSUM_OLD)]
+		mock_svc.supersede_summaries.assert_awaited_once_with(
+			[_TSUM_OLD],
+			_TSUM_NEW,
+			session,
+		)
+
+	@pytest.mark.asyncio()
+	async def test_thread_range_rejects_stale_branch_head(self) -> None:
+		session = AsyncMock()
+		session.get = AsyncMock(
+			return_value=SimpleNamespace(current_message_id="m_other")
+		)
+
+		with pytest.raises(SummaryRangeStaleError):
+			await summarize_thread_message_range(
+				thread_id=_TID,
+				start_message_id=_M1,
+				end_message_id=_M2,
+				branch_head_message_id=_M2,
+				session=session,
+			)
 
 	@pytest.mark.asyncio()
 	async def test_empty_llm_response_uses_placeholder(self) -> None:
 		mock_model = AsyncMock()
 		mock_response = MagicMock()
-		mock_response.text = ""
+		mock_response.json_content = {"summary": ""}
 		mock_model.generate = AsyncMock(return_value=mock_response)
 
 		mock_summary = MagicMock()
-		mock_summary.id = "tsum_empty"
+		mock_summary.id = _TSUM_EMPTY
 
 		with (
 			patch(
-				"api.v1.service.chat.summarization.resolve_task_chat_model",
+				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(return_value=mock_model),
 			),
-			patch("api.v1.service.chat.summarization.summary_service") as mock_svc,
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.summary_service"
+			) as mock_svc,
 		):
 			mock_svc.create_summary = AsyncMock(return_value=mock_summary)
 			session = AsyncMock()
 
 			await summarize_messages(
 				thread_id=_TID,
-				messages=[_user("hello")],
+				messages=_compactable_messages(),
 				session=session,
 			)
 
@@ -235,11 +411,11 @@ class TestSummarizeMessages:
 		"""when session is None, creates one via async_session_local."""
 		mock_model = AsyncMock()
 		mock_response = MagicMock()
-		mock_response.text = "summary text"
+		mock_response.json_content = {"summary": "summary text"}
 		mock_model.generate = AsyncMock(return_value=mock_response)
 
 		mock_summary = MagicMock()
-		mock_summary.id = "tsum_auto"
+		mock_summary.id = _TSUM_AUTO
 
 		mock_session = AsyncMock()
 
@@ -251,26 +427,33 @@ class TestSummarizeMessages:
 
 		with (
 			patch(
-				"api.v1.service.chat.summarization.resolve_task_chat_model",
+				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(return_value=mock_model),
 			),
-			patch("api.v1.service.chat.summarization.summary_service") as mock_svc,
-			patch("api.v1.service.chat.summarization.session_scope", _fake_scope),
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.summary_service"
+			) as mock_svc,
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.session_scope",
+				_fake_scope,
+			),
 		):
 			mock_svc.create_summary = AsyncMock(return_value=mock_summary)
 
 			result = await summarize_messages(
 				thread_id=_TID,
-				messages=[_user("hello")],
+				messages=_compactable_messages(),
 			)
 
-		assert str(result) == "tsum_auto"
+		assert result == _TSUM_AUTO
 
 
 class TestCondenseSummaries:
 	@pytest.mark.asyncio()
 	async def test_skips_when_fewer_than_two(self) -> None:
-		with patch("api.v1.service.chat.summarization.summary_service") as mock_svc:
+		with patch(
+			"api.v1.service.chat.context_compaction.summarization.summary_service"
+		) as mock_svc:
 			mock_svc.list_active_summaries = AsyncMock(
 				return_value=[_mock_summary()],
 			)
@@ -286,23 +469,25 @@ class TestCondenseSummaries:
 	@pytest.mark.asyncio()
 	async def test_successful_condensation(self) -> None:
 		existing = [
-			_mock_summary(id_="tsum_1", content="first part"),
-			_mock_summary(id_="tsum_2", content="second part"),
+			_mock_summary(id_=_TSUM_1, content="first part"),
+			_mock_summary(id_=_TSUM_2, content="second part"),
 		]
 		condensed_mock = MagicMock()
-		condensed_mock.id = "tsum_condensed"
+		condensed_mock.id = _TSUM_CONDENSED
 
 		mock_model = AsyncMock()
 		mock_response = MagicMock()
-		mock_response.text = "merged summary of both parts"
+		mock_response.json_content = {"summary": "merged summary of both parts"}
 		mock_model.generate = AsyncMock(return_value=mock_response)
 
 		with (
 			patch(
-				"api.v1.service.chat.summarization.resolve_task_chat_model",
+				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(return_value=mock_model),
 			),
-			patch("api.v1.service.chat.summarization.summary_service") as mock_svc,
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.summary_service"
+			) as mock_svc,
 		):
 			mock_svc.list_active_summaries = AsyncMock(return_value=existing)
 			mock_svc.create_summary = AsyncMock(return_value=condensed_mock)
@@ -314,24 +499,33 @@ class TestCondenseSummaries:
 				session=session,
 			)
 
-		assert str(result) == "tsum_condensed"
+		assert result == _TSUM_CONDENSED
+		mock_svc.list_active_summaries.assert_called_once_with(
+			_TID,
+			session,
+			purpose=SummaryPurpose.AGENT_CONTEXT,
+		)
+		call_kwargs = mock_svc.create_summary.call_args.kwargs
+		assert call_kwargs["purpose"] == SummaryPurpose.AGENT_CONTEXT
 		mock_svc.supersede_summaries.assert_called_once()
 
 	@pytest.mark.asyncio()
 	async def test_fallback_on_llm_failure(self) -> None:
 		existing = [
-			_mock_summary(id_="tsum_1", content="part one"),
-			_mock_summary(id_="tsum_2", content="part two"),
+			_mock_summary(id_=_TSUM_1, content="part one"),
+			_mock_summary(id_=_TSUM_2, content="part two extra"),
 		]
 		condensed_mock = MagicMock()
-		condensed_mock.id = "tsum_fallback"
+		condensed_mock.id = _TSUM_FALLBACK
 
 		with (
 			patch(
-				"api.v1.service.chat.summarization.resolve_task_chat_model",
+				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(side_effect=RuntimeError("no model")),
 			),
-			patch("api.v1.service.chat.summarization.summary_service") as mock_svc,
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.summary_service"
+			) as mock_svc,
 		):
 			mock_svc.list_active_summaries = AsyncMock(return_value=existing)
 			mock_svc.create_summary = AsyncMock(return_value=condensed_mock)
@@ -352,23 +546,25 @@ class TestCondenseSummaries:
 	async def test_empty_llm_response_uses_concatenation(self) -> None:
 		"""when LLM returns empty text during condensation, fall back to raw concat."""
 		existing = [
-			_mock_summary(id_="tsum_1", content="alpha summary"),
-			_mock_summary(id_="tsum_2", content="beta summary"),
+			_mock_summary(id_=_TSUM_1, content="alpha summary"),
+			_mock_summary(id_=_TSUM_2, content="beta summary extra"),
 		]
 		condensed_mock = MagicMock()
-		condensed_mock.id = "tsum_empty"
+		condensed_mock.id = _TSUM_EMPTY
 
 		mock_model = AsyncMock()
 		mock_response = MagicMock()
-		mock_response.text = ""
+		mock_response.json_content = {"summary": ""}
 		mock_model.generate = AsyncMock(return_value=mock_response)
 
 		with (
 			patch(
-				"api.v1.service.chat.summarization.resolve_task_chat_model",
+				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(return_value=mock_model),
 			),
-			patch("api.v1.service.chat.summarization.summary_service") as mock_svc,
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.summary_service"
+			) as mock_svc,
 		):
 			mock_svc.list_active_summaries = AsyncMock(return_value=existing)
 			mock_svc.create_summary = AsyncMock(return_value=condensed_mock)
@@ -380,7 +576,7 @@ class TestCondenseSummaries:
 				session=session,
 			)
 
-		assert str(result) == "tsum_empty"
+		assert result == _TSUM_EMPTY
 		call_kwargs = mock_svc.create_summary.call_args.kwargs
 		# fallback content should have the raw concatenation
 		assert "alpha summary" in call_kwargs["content"]
@@ -390,15 +586,15 @@ class TestCondenseSummaries:
 	async def test_creates_session_when_none(self) -> None:
 		"""when session is None, creates one via async_session_local."""
 		existing = [
-			_mock_summary(id_="tsum_1", content="part a"),
-			_mock_summary(id_="tsum_2", content="part b"),
+			_mock_summary(id_=_TSUM_1, content="part a"),
+			_mock_summary(id_=_TSUM_2, content="part b"),
 		]
 		condensed_mock = MagicMock()
-		condensed_mock.id = "tsum_auto_session"
+		condensed_mock.id = _TSUM_AUTO
 
 		mock_model = AsyncMock()
 		mock_response = MagicMock()
-		mock_response.text = "condensed from auto session"
+		mock_response.json_content = {"summary": "condensed from auto session"}
 		mock_model.generate = AsyncMock(return_value=mock_response)
 
 		mock_session = AsyncMock()
@@ -411,11 +607,16 @@ class TestCondenseSummaries:
 
 		with (
 			patch(
-				"api.v1.service.chat.summarization.resolve_task_chat_model",
+				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(return_value=mock_model),
 			),
-			patch("api.v1.service.chat.summarization.summary_service") as mock_svc,
-			patch("api.v1.service.chat.summarization.session_scope", _fake_scope),
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.summary_service"
+			) as mock_svc,
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.session_scope",
+				_fake_scope,
+			),
 		):
 			mock_svc.list_active_summaries = AsyncMock(return_value=existing)
 			mock_svc.create_summary = AsyncMock(return_value=condensed_mock)
@@ -423,4 +624,4 @@ class TestCondenseSummaries:
 
 			result = await condense_summaries(thread_id=_TID)
 
-		assert str(result) == "tsum_auto_session"
+		assert result == _TSUM_AUTO

@@ -6,6 +6,7 @@ export type ModalId =
 	| 'share-resource'
 	| 'confirm-delete'
 	| 'file-details'
+	| 'note-properties'
 	| 'resource-access'
 
 export type ShareResourcePayload = {
@@ -24,8 +25,20 @@ export type FileDetailsPayload = {
 	fileId: string
 }
 
+export type NotePropertiesPayload = {
+	noteId: string
+}
+
 export type ResourceAccessPayload = {
-	resourceType: 'thread' | 'file' | 'project' | 'group' | 'agent' | 'note' | 'reminder_list'
+	resourceType:
+		| 'thread'
+		| 'file'
+		| 'project'
+		| 'group'
+		| 'agent'
+		| 'note'
+		| 'reminder_list'
+		| 'calendar'
 	resourceId: string
 	title: string
 }
@@ -35,6 +48,7 @@ class ModalStore {
 	shareResourcePayload = $state<ShareResourcePayload | null>(null)
 	confirmDeletePayload = $state<ConfirmDeletePayload | null>(null)
 	fileDetailsPayload = $state<FileDetailsPayload | null>(null)
+	notePropertiesPayload = $state<NotePropertiesPayload | null>(null)
 	resourceAccessPayload = $state<ResourceAccessPayload | null>(null)
 	isOpen = (id: ModalId) => this.active === id
 	open(id: 'add-friends'): void
@@ -44,6 +58,7 @@ class ModalStore {
 	open(id: 'share-resource', payload: ShareResourcePayload): void
 	open(id: 'confirm-delete', payload: ConfirmDeletePayload): void
 	open(id: 'file-details', payload: FileDetailsPayload): void
+	open(id: 'note-properties', payload: NotePropertiesPayload): void
 	open(id: 'resource-access', payload: ResourceAccessPayload): void
 	open(
 		id: ModalId,
@@ -51,6 +66,7 @@ class ModalStore {
 			| ShareResourcePayload
 			| ConfirmDeletePayload
 			| FileDetailsPayload
+			| NotePropertiesPayload
 			| ResourceAccessPayload
 	): void {
 		this.active = id
@@ -69,6 +85,11 @@ class ModalStore {
 			this.fileDetailsPayload = payload as FileDetailsPayload
 			return
 		}
+		if (id === 'note-properties') {
+			if (!payload) throw new Error('note-properties modal requires a payload')
+			this.notePropertiesPayload = payload as NotePropertiesPayload
+			return
+		}
 		if (id === 'resource-access') {
 			if (!payload) throw new Error('resource-access modal requires a payload')
 			this.resourceAccessPayload = payload as ResourceAccessPayload
@@ -81,6 +102,7 @@ class ModalStore {
 		this.shareResourcePayload = null
 		this.confirmDeletePayload = null
 		this.fileDetailsPayload = null
+		this.notePropertiesPayload = null
 		this.resourceAccessPayload = null
 	}
 }

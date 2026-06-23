@@ -16,13 +16,36 @@
 import { browser } from '$app/environment'
 import { api } from '$lib/api/client'
 import { getApiOrigin } from '$lib/api/origin'
-import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
+import type { StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 import type { AttachmentMediaCategory } from '$lib/chat/types'
+import {
+	STORE_EVENT_TYPES,
+	storeEventData,
+	storeEventString,
+	subscribeToStoreEvents,
+} from '$lib/stores/storeEvents'
+import { describeFileType } from '$lib/utils/fileTypes'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 
 export type ApiFile = components['schemas']['File']
+export type FileCategoryFilter = components['schemas']['FileCategoryFilter']
+export type FileCounts = components['schemas']['FileCounts']
+export type FileSourceFilter = components['schemas']['FileSource']
+
+export interface FileLoadOptions {
+	force?: boolean
+	projectId?: string | null
+	source?: FileSourceFilter | null
+	category?: FileCategoryFilter | null
+	resolveOrigin?: boolean
+}
+
+export interface FileEnsureOptions {
+	force?: boolean
+	resolveOrigin?: boolean
+}
 
 export interface FileResource {
 	id: string
@@ -37,6 +60,8 @@ export interface FileResource {
 		mime_type: string
 		category: AttachmentMediaCategory
 		source: string
+		owner_id: string
+		project_ids: string[]
 	}
 }
 
@@ -54,7 +79,7 @@ export function categorizeMediaType(mediaType: string): AttachmentMediaCategory 
  * fetch a URL with authentication and return a blob object URL.
  * used for rendering media from authenticated API endpoints in <img>/<video>/<audio> tags.
  */
-export async function fetchAuthenticatedBlob(url: string): Promise<string> {
+async function fetchAuthenticatedMediaBlob(url: string, mediaType?: string): Promise<Blob> {
 	const { getAccessToken } = await import('$lib/auth/session.svelte')
 	const token = getAccessToken()
 	const response = await fetch(url, {
@@ -62,7 +87,12 @@ export async function fetchAuthenticatedBlob(url: string): Promise<string> {
 		headers: token ? { Authorization: `Bearer ${token}` } : {},
 	})
 	if (!response.ok) throw new Error(`failed to fetch media: ${response.status}`)
-	const blob = await response.blob()
+	const responseBlob = await response.blob()
+	return mediaType ? new Blob([responseBlob], { type: mediaType }) : responseBlob
+}
+
+export async function fetchAuthenticatedBlob(url: string, mediaType?: string): Promise<string> {
+	const blob = await fetchAuthenticatedMediaBlob(url, mediaType)
 	return URL.createObjectURL(blob)
 }
 
@@ -71,7 +101,7 @@ export async function fetchAuthenticatedBlob(url: string): Promise<string> {
  * creates a temporary link and triggers a browser download.
  */
 export async function downloadFile(fileId: string, filename?: string): Promise<void> {
-	const url = `${getApiOrigin()}/v1/files/${fileId}/content?force_download=true`
+	const url = `${getApiOrigin()}/v1/files/${fileId}/content?download=true`
 	const blobUrl = await fetchAuthenticatedBlob(url)
 	const a = document.createElement('a')
 	a.href = blobUrl
@@ -86,21 +116,115 @@ export async function downloadFile(fileId: string, filename?: string): Promise<v
 
 const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
 const PAGE_SIZE = 50
+const EMPTY_FILE_COUNTS: Required<FileCounts> = {
+	total: 0,
+	owned_total: 0,
+	shared_total: 0,
+	by_category: {},
+	by_source: {},
+}
+const MAX_THUMBNAIL_REQUESTS = 4
 
 const filesMap = new SvelteMap<string, ApiFile>()
+const fileCountCache = new SvelteMap<string, { data: FileCounts; fetchedAt: number }>()
 let fetchedAt = $state<number | null>(null)
+let fetchedKey = $state('')
+let fileListHydrated = false
+let fileCountsHydrated = false
 let isLoading = $state(false)
 let isLoadingMore = $state(false)
+let isLoadingCounts = $state(false)
 let hasMore = $state(true)
 let inFlight: Promise<ApiFile[]> | null = null
+let inFlightKey = ''
+let countInFlight: Promise<FileCounts> | null = null
+let countInFlightKey = ''
+let lastLoadOptions: FileLoadOptions | undefined
+let lastCountOptions: FileLoadOptions | undefined
 
 /** blob URLs for file thumbnails - revoked on clear */
 const thumbnailUrls = new SvelteMap<string, string>()
 /** tracks in-flight thumbnail loads to avoid duplicates (non-reactive by design) */
 const thumbnailLoading = new SvelteSet<string>()
+let activeThumbnailRequests = 0
+const thumbnailQueue: Array<() => void> = []
 
-function isFresh(): boolean {
-	return fetchedAt !== null && Date.now() - fetchedAt < CACHE_TTL_MS
+async function acquireThumbnailSlot(): Promise<void> {
+	if (activeThumbnailRequests < MAX_THUMBNAIL_REQUESTS) {
+		activeThumbnailRequests += 1
+		return
+	}
+	await new Promise<void>((resolve) => {
+		thumbnailQueue.push(() => {
+			activeThumbnailRequests += 1
+			resolve()
+		})
+	})
+}
+
+function releaseThumbnailSlot(): void {
+	activeThumbnailRequests = Math.max(0, activeThumbnailRequests - 1)
+	thumbnailQueue.shift()?.()
+}
+
+function isFresh(key: string): boolean {
+	return fetchedAt !== null && fetchedKey === key && Date.now() - fetchedAt < CACHE_TTL_MS
+}
+
+function areCountsFresh(key: string): boolean {
+	const entry = fileCountCache.get(key)
+	return Boolean(entry && Date.now() - entry.fetchedAt < CACHE_TTL_MS)
+}
+
+function filterKey(options?: FileLoadOptions): string {
+	return [
+		options?.projectId ?? '',
+		options?.source ?? '',
+		options?.category ?? '',
+		options?.resolveOrigin ? 'origin' : '',
+	].join(':')
+}
+
+function listQuery(options: FileLoadOptions | undefined, skip: number) {
+	return {
+		limit: PAGE_SIZE,
+		skip,
+		sort_by: 'created_at' as const,
+		sort_dir: 'desc' as const,
+		project_id: options?.projectId ?? undefined,
+		source: options?.source ?? undefined,
+		category: options?.category ?? undefined,
+		resolve_origin: options?.resolveOrigin || undefined,
+	}
+}
+
+function countQuery(options?: FileLoadOptions) {
+	return {
+		project_id: options?.projectId ?? undefined,
+		source: options?.source ?? undefined,
+		category: options?.category ?? undefined,
+	}
+}
+
+function rememberOptions(options?: FileLoadOptions): FileLoadOptions | undefined {
+	if (!options) return undefined
+	return {
+		projectId: options.projectId,
+		source: options.source,
+		category: options.category,
+		resolveOrigin: options.resolveOrigin,
+	}
+}
+
+function optionsFromKey(key: string): FileLoadOptions | undefined {
+	const [projectId = '', source = '', category = ''] = key.split(':')
+	if (!projectId && !source && !category) return undefined
+	return {
+		projectId: projectId || null,
+		source: (source || null) as FileSourceFilter | null,
+		category: (category || null) as FileCategoryFilter | null,
+		resolveOrigin: false,
+	}
 }
 
 export function apiFileToResource(file: ApiFile): FileResource {
@@ -114,11 +238,13 @@ export function apiFileToResource(file: ApiFile): FileResource {
 		updatedAt: Date.parse(file.updated_at),
 		createdAt: Date.parse(file.created_at),
 		meta: {
-			file_type: mime.split('/')[0] ?? 'file',
+			file_type: describeFileType(mime, file.filename),
 			file_size: file.size_bytes ?? 0,
 			mime_type: mime,
 			category,
 			source: file.source,
+			owner_id: file.owner_id,
+			project_ids: file.project_ids ?? [],
 		},
 	}
 }
@@ -127,14 +253,27 @@ export const files = {
 	get hydrated() {
 		return fetchedAt !== null
 	},
+	get hasLoaded() {
+		return fileListHydrated || fileCountsHydrated
+	},
 	get loading() {
 		return isLoading
 	},
 	get loadingMore() {
 		return isLoadingMore
 	},
+	get loadingCounts() {
+		return isLoadingCounts
+	},
 	get hasMore() {
 		return hasMore
+	},
+	get counts(): FileCounts {
+		return this.getCounts()
+	},
+
+	getCounts(options?: FileLoadOptions): FileCounts {
+		return fileCountCache.get(filterKey(options))?.data ?? EMPTY_FILE_COUNTS
 	},
 
 	/** all cached files */
@@ -161,10 +300,14 @@ export const files = {
 	 * ensure a single file is in the cache. fetches from API if missing.
 	 * returns the cached record, or null if the file doesn't exist.
 	 */
-	async ensure(fileId: string): Promise<ApiFile | null> {
+	async ensure(fileId: string, options?: FileEnsureOptions): Promise<ApiFile | null> {
 		const cached = filesMap.get(fileId)
-		if (cached) return cached
-		const file = await fetchSingleFile(fileId)
+		const force = options?.force ?? false
+		const resolveOrigin = options?.resolveOrigin ?? false
+		if (cached && !force && (!resolveOrigin || cached.origin_thread_id || !cached.message_id)) {
+			return cached
+		}
+		const file = await fetchSingleFile(fileId, resolveOrigin)
 		if (file) {
 			filesMap.set(file.id, file)
 			if (fetchedAt === null) fetchedAt = Date.now()
@@ -184,13 +327,15 @@ export const files = {
 		if (categorizeMediaType(mime) !== 'image') return
 
 		thumbnailLoading.add(fileId)
+		await acquireThumbnailSlot()
 		try {
-			const url = `${getApiOrigin()}/v1/files/${fileId}/content`
+			const url = `${getApiOrigin()}/v1/files/${fileId}/preview`
 			const blobUrl = await fetchAuthenticatedBlob(url)
 			thumbnailUrls.set(fileId, blobUrl)
 		} catch {
 			// thumbnail load failed, skip
 		} finally {
+			releaseThumbnailSlot()
 			thumbnailLoading.delete(fileId)
 		}
 	},
@@ -208,21 +353,22 @@ export const files = {
 		thumbnailUrls.clear()
 	},
 
-	async load(options?: { force?: boolean }): Promise<ApiFile[]> {
+	async load(options?: FileLoadOptions): Promise<ApiFile[]> {
 		const force = options?.force ?? false
-		if (!force && isFresh()) {
+		const key = filterKey(options)
+		lastLoadOptions = rememberOptions(options)
+		if (!force && isFresh(key)) {
 			isLoading = false
 			return this.all
 		}
 
-		if (inFlight) return inFlight
+		if (inFlight && inFlightKey === key) return inFlight
 
 		isLoading = true
+		inFlightKey = key
 		inFlight = (async () => {
 			const { data, error } = await api.GET('/v1/files', {
-				params: {
-					query: { limit: PAGE_SIZE, skip: 0, sort_by: 'created_at', sort_dir: 'desc' },
-				},
+				params: { query: listQuery(options, 0) },
 			})
 			if (error || !data) return this.all
 
@@ -233,6 +379,8 @@ export const files = {
 			}
 			hasMore = items.length >= PAGE_SIZE
 			fetchedAt = Date.now()
+			fetchedKey = key
+			fileListHydrated = true
 			return this.all
 		})()
 
@@ -240,26 +388,52 @@ export const files = {
 			return await inFlight
 		} finally {
 			inFlight = null
+			inFlightKey = ''
 			isLoading = false
 		}
 	},
 
+	async loadCounts(options?: FileLoadOptions): Promise<FileCounts> {
+		const key = filterKey(options)
+		lastCountOptions = rememberOptions(options)
+		if (areCountsFresh(key)) return fileCountCache.get(key)?.data ?? EMPTY_FILE_COUNTS
+		if (countInFlight && countInFlightKey === key) return countInFlight
+
+		isLoadingCounts = true
+		countInFlightKey = key
+		countInFlight = (async () => {
+			const { data, error } = await api.GET('/v1/files/count', {
+				params: { query: countQuery(options) },
+			})
+			if (error || !data) return fileCountCache.get(key)?.data ?? EMPTY_FILE_COUNTS
+			fileCountCache.set(key, { data, fetchedAt: Date.now() })
+			fileCountsHydrated = true
+			return data
+		})()
+
+		try {
+			return await countInFlight
+		} finally {
+			countInFlight = null
+			countInFlightKey = ''
+			isLoadingCounts = false
+		}
+	},
+
 	/** load the next page of files (for infinite scroll) */
-	async loadMore(): Promise<void> {
+	async loadMore(options?: FileLoadOptions): Promise<void> {
 		if (isLoadingMore || !hasMore) return
+		const key = filterKey(options)
+		if (fetchedKey !== key) {
+			await this.load(options)
+			return
+		}
 
 		isLoadingMore = true
 		try {
 			const skip = filesMap.size
 			const { data, error } = await api.GET('/v1/files', {
-				params: {
-					query: {
-						limit: PAGE_SIZE,
-						skip,
-						sort_by: 'created_at',
-						sort_dir: 'desc',
-					},
-				},
+				params: { query: listQuery(options, skip) },
 			})
 			if (error || !data) return
 
@@ -300,6 +474,7 @@ export const files = {
 			filesMap.set(fileId, existing)
 			return false
 		}
+		fileCountCache.clear()
 		return true
 	},
 
@@ -318,6 +493,7 @@ export const files = {
 		if (!response.ok) throw new Error(`upload failed: ${response.status}`)
 		const created = (await response.json()) as ApiFile
 		filesMap.set(created.id, created)
+		fileCountCache.clear()
 		return created
 	},
 
@@ -326,63 +502,107 @@ export const files = {
 		this.revokeThumbnails()
 		filesMap.clear()
 		fetchedAt = null
+		fetchedKey = ''
+		fileCountCache.clear()
+		fileListHydrated = false
+		fileCountsHydrated = false
 	},
 
 	/** mark cache stale so next access triggers a refetch (keeps thumbnails). */
 	invalidate(): void {
 		fetchedAt = null
+		fileCountCache.clear()
+	},
+
+	async refreshCached(): Promise<void> {
+		const tasks: Promise<unknown>[] = []
+		if (fileListHydrated) {
+			tasks.push(this.load({ ...lastLoadOptions, force: true }))
+		}
+		if (fileCountsHydrated) {
+			for (const key of fileCountCache.keys()) {
+				tasks.push(this.loadCounts(optionsFromKey(key)))
+			}
+			if (fileCountCache.size === 0) tasks.push(this.loadCounts(lastCountOptions))
+		}
+		await Promise.allSettled(tasks)
+	},
+
+	async refresh(): Promise<void> {
+		await this.refreshCached()
 	},
 }
 
 // --- event stream integration ---
 
 let filesUnsub: (() => void) | null = null
+const FILE_STREAM_EVENTS = [
+	...STORE_EVENT_TYPES.files,
+	...STORE_EVENT_TYPES.resourceAccessResource,
+] as const
 
-async function fetchSingleFile(fileId: string): Promise<ApiFile | null> {
+async function fetchSingleFile(fileId: string, resolveOrigin = false): Promise<ApiFile | null> {
 	const { data, error } = await api.GET('/v1/files/{file_id}', {
-		params: { path: { file_id: fileId } },
+		params: {
+			path: { file_id: fileId },
+			query: { resolve_origin: resolveOrigin || undefined },
+		},
 	})
 	if (error || !data) return null
 	return data as ApiFile
 }
 
+function revokeThumbnail(fileId: string): void {
+	const thumbUrl = thumbnailUrls.get(fileId)
+	if (!thumbUrl) return
+	URL.revokeObjectURL(thumbUrl)
+	thumbnailUrls.delete(fileId)
+}
+
+function refetchSingleFile(fileId: string): void {
+	fetchSingleFile(fileId).then((file) => {
+		if (file) {
+			filesMap.set(file.id, file)
+			fileCountCache.clear()
+			revokeThumbnail(file.id)
+		} else {
+			filesMap.delete(fileId)
+			fileCountCache.clear()
+			revokeThumbnail(fileId)
+		}
+	})
+}
+
 function handleFileEvent(message: StreamMessage): void {
-	const data = message.data as Record<string, unknown> | undefined
-	if (!data) return
+	const data = storeEventData(message)
+	if (message.type === 'access.updated' || message.type === 'resource.access.updated') {
+		if (data?.resource_type !== 'file' || typeof data.resource_id !== 'string') return
+		refetchSingleFile(data.resource_id)
+		return
+	}
+
+	const fileId = storeEventString(message, ['file_id', 'id'])
+	if (!fileId) return
 
 	if (message.type === 'file.created') {
-		const fileId = data.file_id as string
-		if (!fileId) return
 		// fetch full file record from API and add to cache
 		fetchSingleFile(fileId).then((file) => {
 			if (file) filesMap.set(file.id, file)
 			if (fetchedAt === null) fetchedAt = Date.now()
+			fileCountCache.clear()
 		})
-	} else if (message.type === 'file.updated') {
-		const fileId = data.file_id as string
-		if (!fileId) return
+	} else if (
+		message.type === 'file.updated' ||
+		message.type === 'file.processing' ||
+		message.type === 'file.ready'
+	) {
 		// refetch the full file record to get the latest state
-		fetchSingleFile(fileId).then((file) => {
-			if (file) {
-				filesMap.set(file.id, file)
-				// invalidate cached thumbnail so it can be reloaded
-				const thumbUrl = thumbnailUrls.get(file.id)
-				if (thumbUrl) {
-					URL.revokeObjectURL(thumbUrl)
-					thumbnailUrls.delete(file.id)
-				}
-			}
-		})
+		refetchSingleFile(fileId)
 	} else if (message.type === 'file.deleted') {
-		const fileId = data.file_id as string
-		if (!fileId) return
 		filesMap.delete(fileId)
+		fileCountCache.clear()
 		// revoke thumbnail if exists
-		const thumbUrl = thumbnailUrls.get(fileId)
-		if (thumbUrl) {
-			URL.revokeObjectURL(thumbUrl)
-			thumbnailUrls.delete(fileId)
-		}
+		revokeThumbnail(fileId)
 	}
 }
 
@@ -390,7 +610,7 @@ if (browser) {
 	onAccessTokenChanged((token) => {
 		if (token) {
 			if (!filesUnsub) {
-				filesUnsub = eventStreamClient.subscribe(handleFileEvent)
+				filesUnsub = subscribeToStoreEvents(FILE_STREAM_EVENTS, handleFileEvent)
 			}
 		} else {
 			filesUnsub?.()
@@ -401,6 +621,6 @@ if (browser) {
 
 	// subscribe immediately if already authenticated
 	if (getAccessToken() && !filesUnsub) {
-		filesUnsub = eventStreamClient.subscribe(handleFileEvent)
+		filesUnsub = subscribeToStoreEvents(FILE_STREAM_EVENTS, handleFileEvent)
 	}
 }

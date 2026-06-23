@@ -2,6 +2,10 @@ import { onDestroy, untrack } from 'svelte'
 import { SvelteSet } from 'svelte/reactivity'
 
 /**
+ * @typedef {'modifier' | 'hover' | 'both'} WheelActivation
+ */
+
+/**
  * @typedef {Object} PanzoomOptions
  * @property {number} [initialX=0]
  * @property {number} [initialY=0]
@@ -10,8 +14,10 @@ import { SvelteSet } from 'svelte/reactivity'
  * @property {number} [maxZoom=Infinity]
  * @property {number} [zoomSpeed=1]
  * @property {number} [doubleClickScale=1.75]
- * @property {string|null} [modifierKey=null] Key required to hold for zooming (e.g. 'Control', 'Alt', 'Shift', 'Meta')
+ * @property {string|null} [modifierKey=null] key to hold for zooming (e.g. 'Control', 'Alt', 'Shift', 'Meta')
  * @property {boolean} [activateMouseWheel=true]
+ * @property {WheelActivation} [wheelActivation='modifier'] how wheel zoom is gated: hold the modifier key, hover the chart briefly, or either
+ * @property {number} [hoverActivationDelay=800] ms to hover before wheel zoom activates in 'hover'/'both' modes
  */
 
 /**
@@ -28,6 +34,8 @@ export const usePanzoom = (opts = {}) => {
 	const zoomSpeed = opts.zoomSpeed ?? 1
 	const doubleClickScale = opts.doubleClickScale ?? 1.75
 	const modifierKey = opts.modifierKey ?? null
+	const wheelActivation = opts.wheelActivation ?? 'modifier'
+	const hoverActivationDelay = opts.hoverActivationDelay ?? 800
 
 	/** @type {HTMLElement | SVGSVGElement | null} */
 	let node = null // element we transform
@@ -56,17 +64,26 @@ export const usePanzoom = (opts = {}) => {
 	let touchMode = 'none'
 	let pinchDistance = 0
 
+	// hover-gate state for wheel zoom ('hover'/'both' modes)
+	let isHovering = false
+	/** @type {ReturnType<typeof setTimeout> | null} */
+	let hoverTimer = null
+
 	// expand/collapse state
 	let isExpanded = $state(false)
 	let animating = false
 
 	const destroy = () => {
+		if (hoverTimer) {
+			clearTimeout(hoverTimer)
+			hoverTimer = null
+		}
 		listeners.forEach((off) => {
 			if (typeof off === 'function') off()
 		})
 		listeners.clear()
 
-		// Ensure restored if destroyed while expanded
+		// ensure restored if destroyed while expanded
 		if (isExpanded && eventTarget && restoreParent) {
 			if (restoreNextSibling) {
 				restoreParent.insertBefore(eventTarget, restoreNextSibling)
@@ -76,7 +93,7 @@ export const usePanzoom = (opts = {}) => {
 		}
 
 		if (createdWrapper) {
-			// Move node back out of wrapper before removing wrapper
+			// move node back out of wrapper before removing wrapper
 			if (node && createdWrapper.parentElement) {
 				createdWrapper.parentElement.insertBefore(node, createdWrapper)
 			}
@@ -99,7 +116,7 @@ export const usePanzoom = (opts = {}) => {
 	function apply() {
 		if (!node) return
 		normalize()
-		// Use CSS transform regardless of DOM/SVG root; modern browsers support this.
+		// use CSS transform regardless of DOM/SVG root; modern browsers support this.
 		const el = node
 		el.style.transformOrigin = '0 0'
 		el.style.willChange = 'transform'
@@ -128,7 +145,7 @@ export const usePanzoom = (opts = {}) => {
 		const ownerRect = owner.getBoundingClientRect()
 		const ox = clientX - ownerRect.left
 		const oy = clientY - ownerRect.top
-		// Keep (ox, oy) stationary in owner's coordinate space
+		// keep (ox, oy) stationary in owner's coordinate space
 		x = ratio * x + (1 - ratio) * ox
 		y = ratio * y + (1 - ratio) * oy
 		scale = nextScale
@@ -141,15 +158,27 @@ export const usePanzoom = (opts = {}) => {
 		const step = Math.min(0.25, Math.abs((zoomSpeed * deltaY) / 128))
 		return 1 - sign * step
 	}
+	/**
+	 * decide whether a wheel event should zoom, based on the activation mode.
+	 * @param {WheelEvent} e
+	 */
+	function wheelZoomAllowed(e) {
+		if (!opts.activateMouseWheel) return false
+		const modifierHeld = modifierKey ? e.getModifierState(modifierKey) : false
+		switch (wheelActivation) {
+			case 'hover':
+				return isHovering
+			case 'both':
+				return isHovering || modifierHeld
+			case 'modifier':
+			default:
+				// no modifier configured -> wheel always zooms (legacy behavior)
+				return modifierKey ? modifierHeld : true
+		}
+	}
 	/** @param {WheelEvent} e */
 	function onWheel(e) {
-		if (!opts.activateMouseWheel) return
-
-		// CUSTOMIZATION: Modifier Key Check
-		if (modifierKey && !e.getModifierState(modifierKey)) {
-			// When modifier is required but not pressed, ignore the event
-			return
-		}
+		if (!wheelZoomAllowed(e)) return
 
 		if (!node) return
 		if (animating) {
@@ -157,7 +186,7 @@ export const usePanzoom = (opts = {}) => {
 			e.stopPropagation()
 			return
 		}
-		// Always prevent default to stop page scroll
+		// always prevent default to stop page scroll
 		e.preventDefault()
 		e.stopPropagation()
 		const factor = kineticWheel(e.deltaY * (e.deltaMode ? 100 : 1))
@@ -168,12 +197,12 @@ export const usePanzoom = (opts = {}) => {
 	/** @param {MouseEvent} e */
 	function onDblClick(e) {
 		if (!node) return
-		// Ignore dblclicks that originate outside of the pan/zoom content (the node)
+		// ignore dblclicks that originate outside of the pan/zoom content (the node)
 		const t = e.target
 		if (t instanceof Node && !(t === node || node.contains(t))) {
 			return // likely UI control inside container; don't zoom
 		}
-		// Ignore dblclicks on interactive elements or those explicitly marked to ignore
+		// ignore dblclicks on interactive elements or those explicitly marked to ignore
 		/** @param {HTMLElement} el */
 		const isInteractive = (el) => {
 			const tag = el.tagName.toLowerCase()
@@ -194,7 +223,7 @@ export const usePanzoom = (opts = {}) => {
 		}
 		if (t instanceof HTMLElement && isInteractive(t)) return
 		e.preventDefault()
-		// Anchor double-click zoom at parent center to avoid shifts on rapid clicks
+		// anchor double-click zoom at parent center to avoid shifts on rapid clicks
 		const baseEl = eventTarget ?? node?.parentElement ?? node
 		if (!baseEl) return
 		const base = baseEl.getBoundingClientRect()
@@ -215,7 +244,7 @@ export const usePanzoom = (opts = {}) => {
 		e.preventDefault()
 		if (node) node.style.cursor = 'grabbing'
 
-		// Use window listeners for dragging outside
+		// use window listeners for dragging outside
 		const offMove = () => window.removeEventListener('mousemove', onDragMove)
 		const offUp = () => window.removeEventListener('mouseup', endDrag)
 
@@ -341,18 +370,18 @@ export const usePanzoom = (opts = {}) => {
 	function internalAttach(target) {
 		return untrack(() => {
 			node = target
-			// Ensure eventTarget and node are different elements to avoid FLIP conflicts
+			// ensure eventTarget and node are different elements to avoid FLIP conflicts
 			const isSVG = typeof SVGSVGElement !== 'undefined' && target instanceof SVGSVGElement
 			if (isSVG) {
-				// For SVG, prefer parent element
+				// for SVG, prefer parent element
 				eventTarget = target.parentElement
 			} else {
-				// For non-SVG, try to use parent element when available
+				// for non-SVG, try to use parent element when available
 				const parent = target.parentElement
 				if (parent && parent instanceof HTMLElement) {
 					eventTarget = parent
 				} else {
-					// No suitable parent - create wrapper to ensure separation
+					// no suitable parent - create wrapper to ensure separation
 					const wrapper = document.createElement('div')
 					wrapper.style.cssText = `
 						display: contents;
@@ -360,7 +389,7 @@ export const usePanzoom = (opts = {}) => {
 					`
 						.replace(/\s+/g, ' ')
 						.trim()
-					// Insert wrapper and move target into it
+					// insert wrapper and move target into it
 					if (target.parentElement) {
 						target.parentElement.insertBefore(wrapper, target)
 					}
@@ -369,7 +398,7 @@ export const usePanzoom = (opts = {}) => {
 					createdWrapper = wrapper
 				}
 			}
-			// Final fallback if no eventTarget was established
+			// final fallback if no eventTarget was established
 			if (!eventTarget) {
 				eventTarget = target
 			}
@@ -415,6 +444,29 @@ export const usePanzoom = (opts = {}) => {
 				(/** @type {Event} */ e) => onTouchStart(/** @type {TouchEvent} */ (e)),
 				{ passive: false }
 			)
+			// hover-gate for wheel zoom: arm after dwelling on the chart a moment,
+			// so a quick scroll-by passes through to the page.
+			if (wheelActivation !== 'modifier') {
+				add(
+					'mouseenter',
+					() => {
+						if (hoverTimer) clearTimeout(hoverTimer)
+						hoverTimer = setTimeout(() => {
+							isHovering = true
+						}, hoverActivationDelay)
+					},
+					{ passive: true }
+				)
+				add(
+					'mouseleave',
+					() => {
+						if (hoverTimer) clearTimeout(hoverTimer)
+						hoverTimer = null
+						isHovering = false
+					},
+					{ passive: true }
+				)
+			}
 			addWindow(
 				'keydown',
 				(/** @type {Event} */ e) => onKeyDown(/** @type {KeyboardEvent} */ (e)),
@@ -422,7 +474,7 @@ export const usePanzoom = (opts = {}) => {
 					passive: true,
 				}
 			)
-			// prevent text selection/scrolling while interacting
+			// prevent text selection while interacting
 			const t = eventTarget ?? node
 			if (!t) return () => destroy()
 			t.style.userSelect = 'none'
@@ -431,8 +483,8 @@ export const usePanzoom = (opts = {}) => {
 			const isTouchDevice = 'ontouchstart' in window
 			t.style.touchAction = isTouchDevice ? 'pan-y' : 'none'
 			t.style.cursor = 'grab'
-			t.style.overscrollBehavior = isTouchDevice ? 'auto' : 'contain'
-			// For SVG root, use fill-box so translation math stays in CSS px space
+			t.style.overscrollBehavior = 'auto'
+			// for SVG root, use fill-box so translation math stays in CSS px space
 			const n = node
 			if (typeof SVGSVGElement !== 'undefined' && target instanceof SVGSVGElement) {
 				n.style.transformBox = 'fill-box'
@@ -449,16 +501,16 @@ export const usePanzoom = (opts = {}) => {
 		const target = eventTarget
 
 		if (expandStatus) {
-			// First: capture state
+			// first: capture state
 			const first = target.getBoundingClientRect()
 
-			// Prepare placeholder in current parent
+			// prepare placeholder in current parent
 			if (target.parentElement) {
-				// Save context
+				// save context
 				restoreParent = target.parentElement
 				restoreNextSibling = target.nextSibling
 
-				// Lock parent height to prevent collapse
+				// lock parent height to prevent collapse
 				const styleAttributes = ['margin-block', 'height']
 				styleAttributes.forEach((attribute) => {
 					if (restoreParent) {
@@ -470,16 +522,17 @@ export const usePanzoom = (opts = {}) => {
 				})
 			}
 
-			// Move to body to escape Z-Index traps
+			// move to body to escape z-index traps
 			document.body.appendChild(target)
 
 			target.dataset.expanded = 'true'
 			isExpanded = true
 			// enable touch interaction now that we're fullscreen
 			target.style.touchAction = 'none'
+			target.style.overscrollBehavior = 'contain'
 			zoomToFit()
 
-			// Last: capture new state (now fixed on body)
+			// last: capture new state (now fixed on body)
 			const last = target.getBoundingClientRect()
 
 			const deltaX = first.left - last.left
@@ -508,36 +561,20 @@ export const usePanzoom = (opts = {}) => {
 				animation.cancel()
 			})
 		} else {
-			// Collapse
+			// collapse
 			const first = eventTarget.getBoundingClientRect()
 
-			// We want to calculate where it *will* be.
-			// But we can't move it back yet, or the animation will happen inside the small box (clipping).
-
-			// Strategy:
-			// 1. Calculate target rect by measuring the placeholder?
-			//    Currently restoreParent has fixed height matching the element.
-			//    So we can calculate where the placeholder is.
+			// measure the placeholder (restoreParent has a locked height matching
+			// the element) to know where the collapsed element will land, then
+			// animate to it while still fixed on body to avoid parent clipping.
 			let targetRect
 			if (restoreParent) {
-				const rect = restoreParent.getBoundingClientRect()
-				// The element takes up full space of parent usually in this context?
-				// Or we can just trust that putting it back yields the correct position.
-				// But we want to animate TO that position while still attached to body (to avoid clipping/overflow:hidden of parent during transition).
-				targetRect = rect
+				targetRect = restoreParent.getBoundingClientRect()
 			} else {
 				targetRect = { left: 0, top: 0, width: 0, height: 0 }
 			}
 
-			eventTarget.dataset.expanded = 'false' // To remove fixed styles if needed for measurement, but we are animating manually?
-			// actually dataset.expanded=false removes position:fixed from CSS.
-			// If we remove it now, it jumps to body flow.
-			// We want to keep it fixed during animation.
-
-			// Wait, the CSS uses [data-expanded='true'] { position: fixed ... }
-			// So if we set it to false, it loses fixed positioning.
-
-			// Let's manually animate from current fixed rect to target rect.
+			eventTarget.dataset.expanded = 'false'
 
 			const deltaX = targetRect.left - first.left
 			const deltaY = targetRect.top - first.top
@@ -566,32 +603,32 @@ export const usePanzoom = (opts = {}) => {
 				animation.cancel()
 				if (!eventTarget) return // destroyed
 
-				// Move back to original context
+				// move back to original context
 				eventTarget.dataset.expanded = 'false'
 				isExpanded = false
 				// restore touch-action for mobile scrolling
 				const isTouchDevice = 'ontouchstart' in window
-				eventTarget.style.touchAction = isTouchDevice ? 'auto' : 'none'
+				eventTarget.style.touchAction = isTouchDevice ? 'pan-y' : 'none'
+				eventTarget.style.overscrollBehavior = 'auto'
 
 				if (restoreParent) {
 					if (restoreNextSibling) {
 						try {
 							restoreParent.insertBefore(eventTarget, restoreNextSibling)
 						} catch {
-							// Fallback if sibling is gone
+							// fallback if sibling is gone
 							restoreParent.appendChild(eventTarget)
 						}
 					} else {
 						restoreParent.appendChild(eventTarget)
 					}
-					// Reset parent style
+					// reset parent style
 					restoreParent.style.height = 'fit-content'
-					// restoreParent.style.marginBlock = ''; // If we want
 				}
 
 				zoomToFit()
 
-				// Cleanup refs
+				// cleanup refs
 				restoreParent = null
 				restoreNextSibling = null
 			})

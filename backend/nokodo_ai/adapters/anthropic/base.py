@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from anthropic import AsyncAnthropic
+from pydantic import Field
 
+from ...base import Base
 from ..base import BaseClientAdapter
+
+
+class CacheControlConfig(Base):
+	"""cache control configuration for Anthropic prompt caching."""
+
+	type: Literal["ephemeral"] = "ephemeral"
+	ttl: Literal["5m", "1h"] = "5m"
 
 
 def _normalize_anthropic_base_url(base_url: str) -> str:
@@ -24,6 +33,11 @@ class BaseAnthropicAdapter(BaseClientAdapter[AsyncAnthropic]):
 	- api_key management
 	- timeout and retry settings
 	"""
+
+	cache_control: CacheControlConfig = Field(
+		default_factory=CacheControlConfig,
+		description="Cache control for Anthropic prompt caching.",
+	)
 
 	def _get_client(self) -> AsyncAnthropic:
 		"""get (or create) an AsyncAnthropic client."""

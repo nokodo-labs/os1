@@ -1,14 +1,15 @@
-"""Project model."""
+"""project model."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base
 from api.models.many_to_many import (
+	calendar_project_association,
 	file_project_association,
 	note_project_association,
 	reminder_list_project_association,
@@ -24,6 +25,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 if TYPE_CHECKING:
 	from api.models.access_rule import AccessRule
+	from api.models.calendar import Calendar
 	from api.models.event import Event
 	from api.models.file import File
 	from api.models.note import Note
@@ -33,10 +35,24 @@ if TYPE_CHECKING:
 
 
 class Project(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
-	"""Project model for organizing resources."""
+	"""project model for organizing resources."""
 
 	__tablename__ = "projects"
 	__typeid_prefix__ = "proj"
+	__table_args__ = (
+		Index(
+			"idx_projects_name_trgm",
+			"name",
+			postgresql_using="gin",
+			postgresql_ops={"name": "gin_trgm_ops"},
+		),
+		Index(
+			"idx_projects_description_trgm",
+			"description",
+			postgresql_using="gin",
+			postgresql_ops={"description": "gin_trgm_ops"},
+		),
+	)
 
 	name: Mapped[str] = mapped_column(String(100))
 	description: Mapped[str | None] = mapped_column(String(500))
@@ -76,3 +92,14 @@ class Project(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		secondary=reminder_list_project_association,
 		back_populates="projects",
 	)
+	calendars: Mapped[list[Calendar]] = relationship(
+		"Calendar",
+		secondary=calendar_project_association,
+		back_populates="projects",
+	)
+
+	@property
+	def thread_ids(self) -> list[TypeID]:
+		if "threads" not in self.__dict__:
+			return []
+		return [thread.id for thread in self.threads if thread.id]

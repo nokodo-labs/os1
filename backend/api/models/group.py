@@ -16,6 +16,10 @@ from api.models.mixins import (
 )
 
 
+GROUP_TYPEID_PREFIX = "group"
+GROUP_MEMBERSHIP_TYPEID_PREFIX = "gmem"
+
+
 if TYPE_CHECKING:
 	from api.models.access_rule import AccessRule
 	from api.models.user import User
@@ -33,7 +37,7 @@ class GroupMembership(TypeIDPrimaryKeyMixin, MetadataJSONMixin, Base):
 	"""Association model for users participating in groups."""
 
 	__tablename__ = "group_memberships"
-	__typeid_prefix__ = "gmem"
+	__typeid_prefix__ = GROUP_MEMBERSHIP_TYPEID_PREFIX
 
 	group_id: Mapped[str] = mapped_column(
 		String(TYPEID_LENGTH),
@@ -56,7 +60,7 @@ class Group(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	"""Group model for user collaboration."""
 
 	__tablename__ = "groups"
-	__typeid_prefix__ = "group"
+	__typeid_prefix__ = GROUP_TYPEID_PREFIX
 
 	name: Mapped[str] = mapped_column(String(100))
 	description: Mapped[str | None] = mapped_column(String(500))
@@ -75,12 +79,12 @@ class Group(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	access_rules: Mapped[list[AccessRule]] = relationship(
 		"AccessRule",
 		foreign_keys="AccessRule.subject_group_id",
+		back_populates="subject_group",
 		cascade="all, delete-orphan",
-		overlaps="subject_group",
 	)
 	resource_access_rules: Mapped[list[AccessRule]] = relationship(
 		"AccessRule",
 		foreign_keys="AccessRule.group_id",
+		back_populates="group",
 		cascade="all, delete-orphan",
-		overlaps="group",
 	)

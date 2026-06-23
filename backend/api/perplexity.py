@@ -1,109 +1,231 @@
 """perplexity API client.
 
-pure HTTP client for the perplexity chat completions API.
-does not depend on any application-level code.
+thin wrapper around the official perplexityai SDK.
+supports both agentic chat-completion search and web search.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal
 
-import httpx
+from perplexity import AsyncPerplexity, omit
+from perplexity.types import SearchCreateResponse, StreamChunk
+
+
+if TYPE_CHECKING:
+	from api.settings import (
+		PerplexityModel,
+		SearchContextUsage,
+		SearchRecencyFilter,
+	)
 
 
 logger = logging.getLogger(__name__)
 
-_BASE_URL = "https://api.perplexity.ai/chat/completions"
+type PerplexitySearchMode = Literal["agentic", "web"]
 
 _DEFAULT_SYSTEM_PROMPT = (
-	"you are a web search assistant. "
-	"provide accurate, up-to-date answers based on the search results. "
-	"be concise and factual."
+	"you are a web search assistant. provide accurate, up-to-date answers "
+	"based on the search results. be concise and factual."
 )
 
 
 @dataclass(frozen=True, slots=True)
+class PerplexitySearchResult:
+	"""a single search result from perplexity's web search API."""
+
+	title: str
+	url: str
+	snippet: str
+	date: str | None = None
+	last_updated: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PerplexityImageResult:
+	"""a single image result returned by perplexity chat completions."""
+
+	url: str
+	title: str | None = None
+	source_url: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class PerplexitySearchResponse:
-	"""raw response from a perplexity search completion."""
+	"""response from a perplexity search operation.
+
+	contains ALL results returned by the search, not just cited ones.
+	"""
 
 	content: str
-	citations: list[str]
-	images: list[str]
+	results: list[PerplexitySearchResult]
+	images: list[PerplexityImageResult]
+	mode: PerplexitySearchMode
 
 
 class PerplexityClient:
-	"""async client for the perplexity chat completions API."""
+	"""async client for the perplexity web search API."""
 
-	def __init__(self, *, api_key: str) -> None:
+	def __init__(self, api_key: str) -> None:
 		self._api_key = api_key
 
 	async def search(
 		self,
 		query: str,
-		*,
-		model: str = "sonar",
-		system_prompt: str = _DEFAULT_SYSTEM_PROMPT,
-		temperature: float = 0.2,
-		search_context_usage: str = "medium",
-		search_recency_filter: str | None = None,
-		return_images: bool = False,
+		max_results: int | None = None,
+		search_recency_filter: SearchRecencyFilter | None = None,
+		search_domain_filter: list[str] | None = None,
 	) -> PerplexitySearchResponse:
-		"""run a search query through perplexity's chat endpoint.
+		"""run a web search using perplexity's native search endpoint.
+
+		returns search results (snippets, titles, URLs) - no AI summary.
+		all results are returned, giving full visibility into what was searched.
 
 		args:
 			query: natural-language search query.
-			model: perplexity model (sonar, sonar-pro, etc.).
-			system_prompt: system-level instruction for the model.
-			temperature: sampling temperature (lower = more factual).
-			search_context_usage: how much search context to use.
-			search_recency_filter: restrict results to time window.
-			return_images: include image URLs in the response.
+			max_results: max number of results to return.
+			search_recency_filter: restrict to time window.
+			search_domain_filter: restrict to specific domains (allowlist).
 
 		returns:
-			PerplexitySearchResponse with content, citations, and images.
+			PerplexitySearchResponse with all search results.
 
 		raises:
-			httpx.HTTPStatusError: on non-2xx response.
-			httpx.RequestError: on connection / timeout errors.
+			perplexity.APIStatusError: on non-2xx response.
+			perplexity.APIConnectionError: on connection/timeout errors.
 		"""
-		web_search_options: dict[str, object] = {
-			"search_context_usage": search_context_usage,
-		}
-		if search_recency_filter is not None:
-			web_search_options["search_recency_filter"] = search_recency_filter
+		async with AsyncPerplexity(api_key=self._api_key) as client:
+			response: SearchCreateResponse = await client.search.create(
+				query=query,
+				max_results=max_results if max_results is not None else omit,
+				search_recency_filter=search_recency_filter,
+				search_domain_filter=search_domain_filter,
+			)
 
-		payload: dict[str, object] = {
-			"model": model,
-			"messages": [
-				{"role": "system", "content": system_prompt},
-				{"role": "user", "content": query},
-			],
-			"temperature": temperature,
-			"stream": False,
-			"web_search_options": web_search_options,
-			"return_images": return_images,
-		}
-		headers = {
-			"Authorization": f"Bearer {self._api_key}",
-			"Content-Type": "application/json",
-		}
-		async with httpx.AsyncClient(timeout=30.0) as http:
-			resp = await http.post(_BASE_URL, json=payload, headers=headers)
-			resp.raise_for_status()
-			data = resp.json()
-
-		content = ""
-		choices: list[dict[str, object]] = data.get("choices") or []
-		if choices:
-			msg = choices[0].get("message")
-			if isinstance(msg, dict):
-				content = str(msg.get("content", ""))
-		else:
-			logger.warning("perplexity response has no choices")
-
-		citations: list[str] = data.get("citations") or []
-		images: list[str] = data.get("images") or []
+		results = [
+			PerplexitySearchResult(
+				title=r.title,
+				url=r.url,
+				snippet=r.snippet,
+				date=r.date,
+				last_updated=r.last_updated,
+			)
+			for r in response.results
+		]
 		return PerplexitySearchResponse(
-			content=content, citations=citations, images=images
+			content=_format_search_results(results),
+			results=results,
+			images=[],
+			mode="web",
 		)
+
+	async def agentic_search(
+		self,
+		query: str,
+		model: PerplexityModel,
+		system_prompt: str = _DEFAULT_SYSTEM_PROMPT,
+		temperature: float = 0.2,
+		search_context_usage: SearchContextUsage = "medium",
+		search_recency_filter: SearchRecencyFilter | None = None,
+		return_images: bool = False,
+		max_results: int | None = None,
+		search_domain_filter: list[str] | None = None,
+	) -> PerplexitySearchResponse:
+		"""run agentic search through perplexity chat completions.
+
+		returns perplexity's synthesized answer plus the full ``search_results``
+		field, which is broader than the active citation URLs.
+		"""
+		async with AsyncPerplexity(api_key=self._api_key) as client:
+			response: StreamChunk = await client.chat.completions.create(
+				messages=[
+					{"role": "system", "content": system_prompt},
+					{"role": "user", "content": query},
+				],
+				model=model,
+				temperature=temperature,
+				stream=False,
+				web_search_options={"search_context_size": search_context_usage},
+				search_recency_filter=search_recency_filter,
+				search_domain_filter=search_domain_filter,
+				num_search_results=max_results if max_results is not None else omit,
+				return_images=return_images,
+			)
+
+		results = [
+			PerplexitySearchResult(
+				title=r.title,
+				url=r.url,
+				snippet=r.snippet or "",
+				date=r.date,
+				last_updated=r.last_updated,
+			)
+			for r in response.search_results or []
+		]
+		return PerplexitySearchResponse(
+			content=_completion_content(response),
+			results=results,
+			images=_extract_images(response),
+			mode="agentic",
+		)
+
+
+def _completion_content(response: StreamChunk) -> str:
+	if not response.choices:
+		logger.warning("perplexity response has no choices")
+		return ""
+	content = response.choices[0].message.content
+	if isinstance(content, str):
+		return content
+	if content is None:
+		return ""
+	return str(content)
+
+
+def _format_search_results(results: list[PerplexitySearchResult]) -> str:
+	parts: list[str] = []
+	for i, result in enumerate(results, 1):
+		parts.append(f"[{i}] {result.title}\n{result.snippet}")
+	return "\n\n".join(parts)
+
+
+def _extract_images(response: StreamChunk) -> list[PerplexityImageResult]:
+	extra = response.model_extra or {}
+	for key in ("images", "image_results"):
+		images = _parse_images(extra.get(key))
+		if images:
+			return images
+	return []
+
+
+def _parse_images(value: object) -> list[PerplexityImageResult]:
+	if not isinstance(value, list):
+		return []
+	parsed: list[PerplexityImageResult] = []
+	for item in value:
+		if isinstance(item, str) and item:
+			parsed.append(PerplexityImageResult(url=item))
+		elif isinstance(item, Mapping):
+			item_mapping = dict(item)
+			url = _first_str(item_mapping, "url", "image_url")
+			if url is None:
+				continue
+			parsed.append(
+				PerplexityImageResult(
+					url=url,
+					title=_first_str(item_mapping, "title", "alt"),
+					source_url=_first_str(item_mapping, "source_url", "source"),
+				)
+			)
+	return parsed
+
+
+def _first_str(source: Mapping[object, object], *keys: str) -> str | None:
+	for key in keys:
+		value = source.get(key)
+		if isinstance(value, str) and value:
+			return value
+	return None

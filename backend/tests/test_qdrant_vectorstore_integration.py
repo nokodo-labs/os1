@@ -8,11 +8,16 @@ import pytest
 from qdrant_client import AsyncQdrantClient
 
 from nokodo_ai import Vectorstore
-from nokodo_ai.adapters.base.vectorstores import Chunk
+from nokodo_ai.adapters.base.vectorstores import (
+	Chunk,
+	ChunkFilter,
+	FieldMatch,
+	FieldMatchAny,
+)
 from nokodo_ai.adapters.qdrant.vectorstores import QdrantVectorstoreAdapter
 
 
-def _toy_embed(text: str, *, dim: int = 64) -> list[float]:
+def _toy_embed(text: str, dim: int = 64) -> list[float]:
 	"""small deterministic embedding for local integration tests.
 
 	keeps tests self-contained (no external embedding API keys).
@@ -111,3 +116,88 @@ async def test_qdrant_create_upsert_search_and_cleanup() -> None:
 			assert admin is not None
 			await admin.delete_collection(collection_name=collection)
 			await admin.close()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_qdrant_scroll_enumerates_matching_chunks() -> None:
+	qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
+	if not await _qdrant_reachable(qdrant_url):
+		pytest.skip(f"qdrant not reachable at {qdrant_url}")
+
+	collection = f"test-qdrant-scroll-{uuid.uuid4().hex}"
+	local_mode = qdrant_url == ":memory:" or "://" not in qdrant_url
+	adapter = (
+		QdrantVectorstoreAdapter(location=qdrant_url)
+		if local_mode
+		else QdrantVectorstoreAdapter(base_url=qdrant_url)
+	)
+	store = Vectorstore(collection=collection, adapter=adapter)
+
+	chunks = [
+		Chunk(
+			id=f"mem-{i}",
+			content=f"memory chunk {i}",
+			embedding=_toy_embed(f"memory chunk {i}"),
+			metadata={"resource_type": "memory", "resource_id": f"mem_{i}"},
+		)
+		for i in range(5)
+	]
+	chunks.append(
+		Chunk(
+			id="note-1",
+			content="note chunk",
+			embedding=_toy_embed("note chunk"),
+			metadata={"resource_type": "note", "resource_id": "note_1"},
+		)
+	)
+
+	try:
+		await store.ensure_collection(vector_size=64)
+		await store.add(chunks)
+
+		# scroll with a small page size to exercise internal paging.
+		all_chunks = await store.scroll(page_size=2)
+		assert len(all_chunks) == 6
+
+		memory_only = await store.scroll(
+			query_filter=ChunkFilter(
+				all_of=[FieldMatch(key="resource_type", value="memory")]
+			),
+			page_size=2,
+		)
+		present = {c.metadata.get("resource_id") for c in memory_only}
+		assert present == {f"mem_{i}" for i in range(5)}
+
+		subset = await store.scroll(
+			query_filter=ChunkFilter(
+				all_of=[
+					FieldMatch(key="resource_type", value="memory"),
+					FieldMatchAny(key="resource_id", values=["mem_1", "mem_3", "nope"]),
+				]
+			)
+		)
+		assert {c.metadata.get("resource_id") for c in subset} == {"mem_1", "mem_3"}
+	finally:
+		await adapter._client.delete_collection(collection_name=collection)
+		await store.close()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_qdrant_scroll_missing_collection_returns_empty() -> None:
+	qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
+	if not await _qdrant_reachable(qdrant_url):
+		pytest.skip(f"qdrant not reachable at {qdrant_url}")
+
+	local_mode = qdrant_url == ":memory:" or "://" not in qdrant_url
+	adapter = (
+		QdrantVectorstoreAdapter(location=qdrant_url)
+		if local_mode
+		else QdrantVectorstoreAdapter(base_url=qdrant_url)
+	)
+	store = Vectorstore(collection=f"missing-{uuid.uuid4().hex}", adapter=adapter)
+	try:
+		assert await store.scroll() == []
+	finally:
+		await store.close()

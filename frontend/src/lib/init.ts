@@ -22,29 +22,110 @@ import { BackendUnreachableError, refreshAccessToken } from '$lib/api/client'
 import { apiOriginReady } from '$lib/api/origin'
 import { eventStreamClient } from '$lib/api/streaming'
 import { getAccessToken, markAuthReady } from '$lib/auth/session.svelte'
-import { agents } from '$lib/stores/agents.svelte'
+import { apiCacheStores } from '$lib/stores/apiCacheRegistry'
 import { appReadiness } from '$lib/stores/appReadiness.svelte'
-import { chat } from '$lib/stores/chat.svelte'
+import { invalidateApiCacheStores } from '$lib/stores/cacheLifecycle'
 import { initDevice, requestGeolocation } from '$lib/stores/device.svelte'
-import { files } from '$lib/stores/files.svelte'
-import { friends } from '$lib/stores/friends.svelte'
-import { groups } from '$lib/stores/groups.svelte'
 import { initInstallPrompt } from '$lib/stores/installPrompt.svelte'
 import { initNetwork } from '$lib/stores/network.svelte'
-import { notes } from '$lib/stores/notes.svelte'
-import { notifications } from '$lib/stores/notifications.svelte'
-import { permissions } from '$lib/stores/permissions.svelte'
 import { preferences } from '$lib/stores/preferences.svelte'
-import { projects } from '$lib/stores/projects.svelte'
-import { reminders } from '$lib/stores/reminders.svelte'
+import { initPushNotifications } from '$lib/stores/pushNotifications.svelte'
 import { initServiceWorker } from '$lib/stores/serviceWorker.svelte'
 import { session } from '$lib/stores/session.svelte'
-import { invalidateSettings, loadSettings } from '$lib/stores/settings.svelte'
+import { loadSettings } from '$lib/stores/settings.svelte'
+import { initUserClient } from '$lib/stores/userClient.svelte'
 
 export interface InitResult {
 	authenticated: boolean
 	token: string | null
 	backendUnreachable?: boolean
+}
+
+const EXECUTION_GAP_STALE_MS = 15_000
+let cacheLifecycleStarted = false
+let authSessionStarted = false
+let lastExecutionTick = Date.now()
+
+function hasSession(): boolean {
+	return Boolean(getAccessToken())
+}
+
+function invalidateCachedData(): void {
+	if (!hasSession()) return
+	invalidateApiCacheStores(apiCacheStores)
+}
+
+function startCacheLifecycle(): void {
+	if (cacheLifecycleStarted || !browser) return
+	cacheLifecycleStarted = true
+
+	eventStreamClient.onStatusChange((newStatus, prevStatus) => {
+		if (prevStatus === 'connected' && newStatus !== 'connected') {
+			invalidateCachedData()
+		}
+	})
+
+	window.addEventListener('online', invalidateCachedData)
+	window.addEventListener('pageshow', (event) => {
+		if (event.persisted) invalidateCachedData()
+	})
+	document.addEventListener('visibilitychange', () => {
+		invalidateCachedData()
+	})
+
+	setInterval(() => {
+		const now = Date.now()
+		if (now - lastExecutionTick > EXECUTION_GAP_STALE_MS) invalidateCachedData()
+		lastExecutionTick = now
+	}, 5_000)
+}
+
+/**
+ * starts every authenticated-session service: critical data load, event
+ * stream, preference sync, user client, push notifications, cache lifecycle,
+ * and geolocation. safe to call once after startup token-restore (initApp) or
+ * after an interactive login. re-entrant: a second call is a no-op so the
+ * stream/sync are not started twice.
+ *
+ * throws BackendUnreachableError if the initial data load fails on a network
+ * error so callers can show the reconnect screen.
+ */
+export async function initAuthenticatedSession(): Promise<void> {
+	if (!browser || authSessionStarted) return
+	authSessionStarted = true
+
+	try {
+		// concurrently load critical data (user + settings)
+		await Promise.all([session.refreshUser(), loadSettings()])
+	} catch (err) {
+		// allow a later retry to start the session if the load failed
+		authSessionStarted = false
+		throw err
+	}
+
+	// event stream + preferences (needs user data from the load above)
+	eventStreamClient.connect()
+	preferences.startSync()
+	initUserClient()
+	initPushNotifications()
+
+	// invalidate all caches when WS drops (missed events = stale data)
+	startCacheLifecycle()
+
+	// request geolocation if user has useLocation enabled
+	if (preferences.data.privacy.useLocation) {
+		requestGeolocation()
+	}
+}
+
+/**
+ * resets the authenticated-session guard so a subsequent interactive login
+ * re-runs initAuthenticatedSession in full. call on logout: the SPA stays
+ * mounted across logout -> login, so without this the guard stays latched and
+ * the next login never refetches the user or settings.
+ */
+export function resetAuthenticatedSession(): void {
+	authSessionStarted = false
 }
 
 /**
@@ -97,38 +178,12 @@ export async function initApp(options?: { skipAuthRestore?: boolean }): Promise<
 		//    user data + event stream only when authenticated.
 		if (token) {
 			try {
-				await Promise.all([session.refreshUser(), loadSettings()])
+				await initAuthenticatedSession()
 			} catch (err) {
 				if (err instanceof BackendUnreachableError) {
 					return { authenticated: false, token: null, backendUnreachable: true }
 				}
 				throw err
-			}
-
-			// 6. event stream + preferences (needs user data from step 5)
-			eventStreamClient.connect()
-			preferences.startSync()
-
-			// 7. invalidate all caches when WS drops (missed events = stale data)
-			eventStreamClient.onStatusChange((newStatus, prevStatus) => {
-				if (prevStatus === 'connected' && newStatus !== 'connected') {
-					chat.threadCache.clear()
-					notes.invalidate()
-					projects.invalidate()
-					reminders.invalidateAll()
-					invalidateSettings()
-					agents.invalidate()
-					files.invalidate()
-					friends.invalidate()
-					groups.invalidate()
-					permissions.invalidate()
-					void notifications.refresh()
-				}
-			})
-
-			// 8. request geolocation if user has useLocation enabled
-			if (preferences.data.privacy.useLocation) {
-				requestGeolocation()
 			}
 		} else {
 			await loadSettings()

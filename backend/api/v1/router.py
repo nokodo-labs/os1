@@ -5,9 +5,11 @@ from fastapi import APIRouter
 from api.v1.routers import (
 	agents,
 	auth,
+	calendar,
 	events,
 	files,
 	groups,
+	integrations,
 	memories,
 	models,
 	notes,
@@ -17,9 +19,10 @@ from api.v1.routers import (
 	projects,
 	prompts,
 	providers,
-	reminders,
+	reminder_lists,
 	roles,
 	runs,
+	scheduled_items,
 	search,
 	settings,
 	tasks,
@@ -37,13 +40,16 @@ api_router.include_router(threads.router)
 api_router.include_router(runs.router)
 api_router.include_router(tasks.router)
 api_router.include_router(events.router)
+api_router.include_router(calendar.router)
 api_router.include_router(notifications.router)
 api_router.include_router(memories.router)
 api_router.include_router(notes.router)
 api_router.include_router(groups.router)
 api_router.include_router(projects.router)
 api_router.include_router(files.router)
-api_router.include_router(reminders.router)
+api_router.include_router(reminder_lists.reminders_router)
+api_router.include_router(reminder_lists.router)
+api_router.include_router(scheduled_items.router)
 api_router.include_router(search.router)
 api_router.include_router(providers.router)
 api_router.include_router(models.router)
@@ -54,3 +60,4 @@ api_router.include_router(openai.router)
 api_router.include_router(plugins.router)
 api_router.include_router(settings.router)
 api_router.include_router(vectorstores.router)
+api_router.include_router(integrations.router)

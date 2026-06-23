@@ -80,7 +80,6 @@ class BaseAudioAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		stream: Literal[False] = False,
 		params: AudioGenerationParams | None = None,
 	) -> Awaitable[AudioGenerationResult]: ...
@@ -90,7 +89,6 @@ class BaseAudioAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		stream: Literal[True],
 		params: AudioGenerationParams | None = None,
 	) -> AsyncIterator[AudioProgressEvent]: ...
@@ -99,7 +97,6 @@ class BaseAudioAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		stream: bool = False,
 		params: AudioGenerationParams | None = None,
 	) -> Awaitable[AudioGenerationResult] | AsyncIterator[AudioProgressEvent]:
@@ -121,7 +118,6 @@ class BaseAudioAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		params: AudioGenerationParams,
 	) -> AudioGenerationResult:
 		"""create audio from a text prompt."""
@@ -131,7 +127,6 @@ class BaseAudioAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		params: AudioGenerationParams,
 	) -> AsyncIterator[AudioProgressEvent]:
 		"""streaming generation with progress events.

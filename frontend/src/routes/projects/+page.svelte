@@ -1,19 +1,21 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import PageTitle from '$lib/components/PageTitle.svelte'
-	import ArrowsUpDown from '$lib/components/icons/ArrowsUpDown.svelte'
 	import FinderFolder from '$lib/components/icons/FinderFolder.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
+	import SortIcon from '$lib/components/icons/SortIcon.svelte'
 	import CreateProjectModal from '$lib/components/modals/CreateProjectModal.svelte'
-	import EditProjectModal from '$lib/components/modals/EditProjectModal.svelte'
-	import { PopupMenu } from '$lib/components/primitives'
+	import ProjectPropertiesModal from '$lib/components/modals/ProjectPropertiesModal.svelte'
+	import PageTitle from '$lib/components/PageTitle.svelte'
+	import { MenuItem, PopupMenu } from '$lib/components/primitives'
 	import ResourcesView from '$lib/components/ResourcesView.svelte'
 	import type { ResourceItem, ResourceLayoutMode } from '$lib/components/widgets'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { accentStore } from '$lib/stores/accent.svelte'
+	import { modals } from '$lib/stores/modals.svelte'
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { projects, type Project } from '$lib/stores/projects.svelte'
+	import { session } from '$lib/stores/session.svelte'
 
 	type SortMode = 'newest' | 'oldest' | 'name'
 
@@ -29,6 +31,7 @@
 	let isEditModalOpen = $state(false)
 	let editingProject = $state<Project | null>(null)
 	let isCreateModalOpen = $state(false)
+	const currentUserId = $derived(session.currentUserId)
 
 	function closeSortMenu() {
 		isSortMenuOpen = false
@@ -38,7 +41,14 @@
 		isSortMenuOpen = !isSortMenuOpen
 	}
 
+	const sortOptions: { value: SortMode; label: string }[] = [
+		{ value: 'newest', label: 'newest first' },
+		{ value: 'oldest', label: 'oldest first' },
+		{ value: 'name', label: 'by name' },
+	]
+
 	function projectToResource(project: Project): ResourceItem {
+		const counts = projects.resourceCounts(project.id)
 		return {
 			id: project.id,
 			type: 'project',
@@ -48,7 +58,14 @@
 			updatedAt: new Date(project.updated_at).getTime(),
 			createdAt: new Date(project.created_at).getTime(),
 			meta: {
-				thread_count: project.thread_ids?.length ?? 0,
+				thread_count: counts?.thread_count,
+				note_count: counts?.note_count,
+				file_count: counts?.file_count,
+				reminder_list_count: counts?.reminder_list_count,
+				calendar_count: counts?.calendar_count,
+				resource_count: counts?.resource_count,
+				counts_loaded: counts !== null,
+				owner_id: project.owner_id,
 			},
 		}
 	}
@@ -77,10 +94,25 @@
 		return await projects.remove(item.id)
 	}
 
+	function handleItemShare(item: ResourceItem): void {
+		const project = projects.getById(item.id)
+		modals.open('resource-access', {
+			resourceType: 'project',
+			resourceId: item.id,
+			title: project?.name ?? item.title,
+		})
+	}
+
 	$effect(() => {
 		void projects.load().then(() => {
 			loading = false
 		})
+	})
+
+	$effect(() => {
+		for (const project of projects.list) {
+			if (!project.id.startsWith('temp-')) void projects.loadResourceCounts(project.id)
+		}
 	})
 
 	$effect(() => {
@@ -107,21 +139,31 @@
 		aria-haspopup="menu"
 		aria-expanded={isSortMenuOpen}
 	>
-		<ArrowsUpDown variant="solid" />
+		<SortIcon />
 	</button>
-	<PopupMenu open={isSortMenuOpen} anchorEl={sortButtonEl} onClose={closeSortMenu}>
-		{#each [{ value: 'newest', label: 'newest first' }, { value: 'oldest', label: 'oldest first' }, { value: 'name', label: 'by name' }] as option (option.value)}
-			<button
-				type="button"
-				role="menuitem"
-				class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
+	<PopupMenu
+		open={isSortMenuOpen}
+		anchorEl={sortButtonEl}
+		onClose={closeSortMenu}
+		class="min-w-52"
+	>
+		<div
+			class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
+		>
+			<SortIcon class="h-3.5 w-3.5" />
+			sort projects
+		</div>
+		{#each sortOptions as option (option.value)}
+			<MenuItem
+				selected={sort === option.value}
 				onclick={() => {
-					sort = option.value as SortMode
+					sort = option.value
 					closeSortMenu()
 				}}
 			>
-				{option.label}{sort === option.value ? ' \u2713' : ''}
-			</button>
+				{#snippet icon()}<SortIcon value={option.value} class="h-4 w-4" />{/snippet}
+				{option.label}
+			</MenuItem>
 		{/each}
 	</PopupMenu>
 
@@ -150,24 +192,27 @@
 		resources={resourceItems}
 		{loading}
 		bind:layout
+		{currentUserId}
+		ownedSectionLabel="your projects"
+		ownedEmptyMessage="no projects yet. create one to get started"
+		sharedEmptyMessage="no shared projects"
 		sort="updated_at:desc"
-		emptyMessage="no projects yet - create one to get started"
+		emptyMessage="no projects yet. create one to get started"
 		pageSize={24}
 		onItemEdit={handleItemEdit}
+		onItemShare={handleItemShare}
 		onItemDelete={handleItemDelete}
 	/>
 </div>
 
-{#if editingProject}
-	<EditProjectModal
-		open={isEditModalOpen}
-		project={editingProject}
-		onClose={() => {
-			isEditModalOpen = false
-			editingProject = null
-		}}
-	/>
-{/if}
+<ProjectPropertiesModal
+	open={isEditModalOpen && editingProject !== null}
+	project={editingProject}
+	onClose={() => {
+		isEditModalOpen = false
+		editingProject = null
+	}}
+/>
 
 <CreateProjectModal
 	open={isCreateModalOpen}

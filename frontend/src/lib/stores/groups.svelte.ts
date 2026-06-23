@@ -10,9 +10,9 @@
 
 import { browser } from '$app/environment'
 import { api } from '$lib/api/client'
-import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
+import { STORE_EVENT_TYPES, subscribeToStoreEvents } from '$lib/stores/storeEvents'
 import { SvelteMap } from 'svelte/reactivity'
 
 export type Group = components['schemas']['Group']
@@ -23,14 +23,6 @@ export type GroupMembershipResponse = components['schemas']['GroupMembershipResp
 export type GroupMemberRole = components['schemas']['GroupMemberRole']
 
 const CACHE_TTL_MS = 30 * 60 * 1000
-
-const GROUP_EVENT_TYPES = [
-	'group.created',
-	'group.updated',
-	'group.deleted',
-	'group.member_added',
-	'group.member_removed',
-]
 
 interface GroupsCacheEntry {
 	data: SvelteMap<string, Group>
@@ -56,7 +48,10 @@ class GroupsCache {
 
 	init(): void {
 		if (!this.#unsubscribe) {
-			this.#unsubscribe = eventStreamClient.subscribe(this.#handleStreamEvent)
+			this.#unsubscribe = subscribeToStoreEvents(
+				STORE_EVENT_TYPES.groups,
+				this.#handleStreamEvent
+			)
 		}
 	}
 
@@ -69,10 +64,8 @@ class GroupsCache {
 	 * handle incoming stream events for groups.
 	 * WS is the canonical source of truth - refetch on any group mutation.
 	 */
-	#handleStreamEvent = (message: StreamMessage): void => {
-		if (GROUP_EVENT_TYPES.includes(message.type)) {
-			void this.load({ force: true })
-		}
+	#handleStreamEvent = (): void => {
+		void this.load({ force: true })
 	}
 
 	#isFresh(fetchedAt: number): boolean {
@@ -91,6 +84,10 @@ class GroupsCache {
 
 	get isFresh(): boolean {
 		return this.#cache !== null && this.#isFresh(this.#cache.fetchedAt)
+	}
+
+	get hasLoaded(): boolean {
+		return this.#cache !== null
 	}
 
 	// load
@@ -163,7 +160,15 @@ class GroupsCache {
 	// lifecycle
 
 	invalidate(): void {
-		this.#cache = null
+		if (this.#cache) this.#cache.fetchedAt = 0
+	}
+
+	async refresh(): Promise<void> {
+		await this.load({ force: true })
+	}
+
+	async refreshCached(): Promise<void> {
+		if (this.#cache) await this.refresh()
 	}
 
 	clear(): void {

@@ -1,14 +1,27 @@
 <script lang="ts">
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
+	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
+	import Bell from '$lib/components/icons/Bell.svelte'
 	import Calendar from '$lib/components/icons/Calendar.svelte'
 	import Check from '$lib/components/icons/Check.svelte'
 	import Circle from '$lib/components/icons/Circle.svelte'
+	import ClockRotateRight from '$lib/components/icons/ClockRotateRight.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
+	import GripVertical from '$lib/components/icons/GripVertical.svelte'
+	import ListBullet from '$lib/components/icons/ListBullet.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
-	import { PopupMenu } from '$lib/components/primitives'
+	import XMark from '$lib/components/icons/XMark.svelte'
+	import { MenuItem, PopupMenu } from '$lib/components/primitives'
+	import RecurrenceEditor from '$lib/components/scheduling/RecurrenceEditor.svelte'
+	import { maxLengthError, REMINDER_TITLE_MAX_LENGTH } from '$lib/reminders/validation'
 	import { device } from '$lib/stores/device.svelte'
-	import type { ReminderListWithCounts, ReminderWithSubtasks } from '$lib/stores/reminders.svelte'
+	import type {
+		ReminderListWithCounts,
+		ReminderUpdate,
+		ReminderWithSubtasks,
+	} from '$lib/stores/reminders.svelte'
+	import { describeRecurrence, type Recurrence } from '$lib/utils/recurrence'
 	import { tick } from 'svelte'
 	import { SvelteDate } from 'svelte/reactivity'
 
@@ -24,17 +37,29 @@
 		onToggleComplete: () => void | Promise<void>
 		onMove: (targetListId: string | null) => void | Promise<void>
 		onDelete: () => void | boolean | Promise<void | boolean>
-		onUpdate: (updates: { title?: string; description?: string | null }) => void | Promise<void>
+		onUpdate: (updates: ReminderUpdate) => boolean | void | Promise<boolean | void>
 		availableLists: ReminderListWithCounts[]
 		motion?: Motion
 		motionDelayMs?: number
+		editable?: boolean
+		depth?: number
+		isDragging?: boolean
+		dropTarget?: 'before' | 'after' | 'child' | null
+		onDragStart?: (event: DragEvent) => void
+		onDragOver?: (event: DragEvent) => void
+		onDrop?: (event: DragEvent) => void
+		onDragEnd?: (event: DragEvent) => void
+		onPointerDragStart?: (event: PointerEvent) => void
 	}
 
 	type CreateProps = {
 		kind: 'create'
 		listId: string | null
 		expanded: boolean
-		onCreate: (draft: { title: string; description: string | null }) => void | Promise<void>
+		onCreate: (draft: {
+			title: string
+			description: string | null
+		}) => boolean | Promise<boolean>
 		onCancel: () => void
 		autoFocus?: boolean
 		motion?: Motion
@@ -48,43 +73,165 @@
 	let rootEl: HTMLDivElement | null = $state(null)
 	let menuButtonEl: HTMLButtonElement | null = $state(null)
 	let titleInputEl: HTMLInputElement | null = $state(null)
+	let descriptionTextareaEl: HTMLTextAreaElement | null = $state(null)
+	let dateButtonEl: HTMLButtonElement | null = $state(null)
+	let repeatButtonEl: HTMLButtonElement | null = $state(null)
 
 	let isMenuOpen = $state(false)
+	let isDatePickerOpen = $state(false)
+	let isRepeatMenuOpen = $state(false)
+	let isSaving = $state(false)
+	let draftError = $state<string | null>(null)
 
 	let editedTitle = $state('')
 	let editedDescription = $state('')
 
 	const isCompleted = $derived(props.kind === 'edit' && props.reminder.status === 'completed')
+	const isEditable = $derived(props.kind === 'create' || (props.editable ?? true))
 	const isMotionIn = $derived(props.motion === 'in')
 	const isMotionOutComplete = $derived(props.motion === 'out-complete')
 	const isMotionOutUncomplete = $derived(props.motion === 'out-uncomplete')
 	const isMorphPlus = $derived(props.kind === 'edit' && props.iconMorph === 'plus-to-circle')
 	const hasDueDate = $derived(props.kind === 'edit' && props.reminder.due_at != null)
+	const hasRemindAt = $derived(props.kind === 'edit' && props.reminder.remind_at != null)
 	const formattedDueDate = $derived.by(() => {
 		if (props.kind !== 'edit') return null
 		if (!props.reminder.due_at) return null
+		return formatScheduleDateTime(props.reminder.due_at)
+	})
+	const formattedRemindAt = $derived.by(() => {
+		if (props.kind !== 'edit') return null
+		if (!props.reminder.remind_at) return null
+		return formatScheduleDateTime(props.reminder.remind_at)
+	})
+	const descriptionPreview = $derived.by(() => {
+		if (props.kind !== 'edit') return null
+		return props.reminder.description?.trim() || null
+	})
+	const depth = $derived(props.kind === 'edit' ? Math.min(props.depth ?? 0, 5) : 0)
+	const rowStyle = $derived.by(() => {
+		const styles: string[] = []
+		if (props.motionDelayMs) styles.push(`--reminder-motion-delay-ms: ${props.motionDelayMs}ms`)
+		if (depth > 0) styles.push(`margin-left: min(${depth * 1.25}rem, 5rem)`)
+		return styles.length > 0 ? `${styles.join('; ')};` : undefined
+	})
 
-		const date = new SvelteDate(props.reminder.due_at)
+	function formatScheduleDateTime(iso: string): string {
+		const date = new SvelteDate(iso)
 		const now = new SvelteDate()
 		const isToday = date.toDateString() === now.toDateString()
 		const tomorrow = new SvelteDate(now)
 		tomorrow.setDate(tomorrow.getDate() + 1)
 		const isTomorrow = date.toDateString() === tomorrow.toDateString()
 
-		if (isToday) return 'today'
-		if (isTomorrow) return 'tomorrow'
+		const time = date
+			.toLocaleTimeString(undefined, {
+				hour: 'numeric',
+				minute: '2-digit',
+			})
+			.toLowerCase()
 
-		return date.toLocaleDateString(undefined, {
-			month: 'short',
-			day: 'numeric',
-		})
-	})
+		if (isToday) return `today ${time}`
+		if (isTomorrow) return `tomorrow ${time}`
+
+		const dateLabel = date
+			.toLocaleDateString(undefined, {
+				month: 'short',
+				day: 'numeric',
+			})
+			.toLowerCase()
+		return `${dateLabel} ${time}`
+	}
 
 	const isOverdue = $derived.by(() => {
 		if (props.kind !== 'edit') return false
 		if (!props.reminder.due_at || props.reminder.status === 'completed') return false
 		return new SvelteDate(props.reminder.due_at) < new SvelteDate()
 	})
+
+	const recurrenceLabel = $derived.by(() => {
+		if (props.kind !== 'edit') return null
+		if (!props.reminder.recurrence) return null
+		return describeRecurrence(
+			props.reminder.recurrence,
+			props.reminder.due_at ?? props.reminder.remind_at ?? null
+		)
+	})
+	const recurrenceAnchor = $derived.by(() => {
+		if (props.kind !== 'edit') return null
+		return props.reminder.due_at ?? props.reminder.remind_at ?? defaultDueAtIso()
+	})
+
+	/** convert an ISO datetime to the local-tz format used by datetime-local inputs. */
+	function isoToLocalInput(iso: string | null | undefined): string {
+		if (!iso) return ''
+		const d = new SvelteDate(iso)
+		if (Number.isNaN(d.getTime())) return ''
+		// build YYYY-MM-DDTHH:mm in local time without converting to UTC.
+		const pad = (n: number) => String(n).padStart(2, '0')
+		return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+	}
+
+	/** convert a datetime-local string back to a UTC ISO string for the API. */
+	function localInputToIso(value: string): string | null {
+		if (!value) return null
+		const d = new SvelteDate(value)
+		if (Number.isNaN(d.getTime())) return null
+		return d.toISOString()
+	}
+
+	let dueDraft = $state('')
+
+	$effect(() => {
+		if (props.kind !== 'edit') return
+		if (isDatePickerOpen) return // don't clobber while user is editing
+		dueDraft = isoToLocalInput(props.reminder.due_at)
+	})
+
+	function handleDueChange(value: string) {
+		if (props.kind !== 'edit' || !isEditable) return
+		dueDraft = value
+		const iso = localInputToIso(value)
+		void props.onUpdate({ due_at: iso })
+	}
+
+	function setDuePreset(daysFromToday: number) {
+		if (props.kind !== 'edit' || !isEditable) return
+		const date = new SvelteDate()
+		date.setDate(date.getDate() + daysFromToday)
+		if (daysFromToday === 0) {
+			date.setHours(date.getHours() + 1, 0, 0, 0)
+		} else {
+			date.setHours(9, 0, 0, 0)
+		}
+		dueDraft = isoToLocalInput(date.toISOString())
+		void props.onUpdate({ due_at: date.toISOString() })
+		isDatePickerOpen = false
+	}
+
+	function clearDue() {
+		if (props.kind !== 'edit' || !isEditable) return
+		dueDraft = ''
+		void props.onUpdate({ due_at: null })
+		isDatePickerOpen = false
+	}
+
+	function defaultDueAtIso(): string {
+		const date = new SvelteDate()
+		date.setHours(date.getHours() + 1, 0, 0, 0)
+		return date.toISOString()
+	}
+
+	function handleRecurrenceChange(value: Recurrence | null) {
+		if (props.kind !== 'edit' || !isEditable) return
+		const updates: ReminderUpdate = { recurrence: value }
+		if (value && !props.reminder.due_at && !props.reminder.remind_at) {
+			const dueAt = defaultDueAtIso()
+			updates.due_at = dueAt
+			dueDraft = isoToLocalInput(dueAt)
+		}
+		void props.onUpdate(updates)
+	}
 
 	async function focusTitle() {
 		await tick()
@@ -101,17 +248,52 @@
 
 		if (!props.expanded) {
 			if (props.kind === 'create') return
+			if (!isEditable) return
 			props.onSelect()
 			await focusTitle()
 		}
 	}
 
-	function handleTitleBlur() {
+	function clearDraftError() {
+		draftError = null
+	}
+
+	function resizeDescriptionTextarea(): void {
+		if (!descriptionTextareaEl) return
+		descriptionTextareaEl.style.height = '0px'
+		const nextHeight = Math.min(descriptionTextareaEl.scrollHeight, 240)
+		descriptionTextareaEl.style.height = `${nextHeight}px`
+		descriptionTextareaEl.style.overflowY =
+			descriptionTextareaEl.scrollHeight > 240 ? 'auto' : 'hidden'
+	}
+
+	function handleDescriptionInput(): void {
+		clearDraftError()
+		resizeDescriptionTextarea()
+	}
+
+	async function handleTitleBlur() {
 		const trimmed = editedTitle.trim()
 
 		if (props.kind === 'edit') {
+			if (!isEditable) return
+			const error = maxLengthError('title', trimmed, REMINDER_TITLE_MAX_LENGTH)
+			if (error) {
+				draftError = error
+				return
+			}
 			if (trimmed !== props.reminder.title && trimmed !== '') {
-				props.onUpdate({ title: trimmed })
+				isSaving = true
+				try {
+					const saved = await props.onUpdate({ title: trimmed })
+					if (saved === false) {
+						draftError = 'could not save reminder'
+						return
+					}
+					draftError = null
+				} finally {
+					isSaving = false
+				}
 			} else {
 				editedTitle = props.reminder.title
 			}
@@ -121,13 +303,24 @@
 		editedTitle = trimmed
 	}
 
-	function handleDescriptionBlur() {
+	async function handleDescriptionBlur() {
 		const trimmed = editedDescription.trim()
 
 		if (props.kind === 'edit') {
+			if (!isEditable) return
 			const original = props.reminder.description ?? ''
 			if (trimmed !== original) {
-				props.onUpdate({ description: trimmed || null })
+				isSaving = true
+				try {
+					const saved = await props.onUpdate({ description: trimmed || null })
+					if (saved === false) {
+						draftError = 'could not save reminder'
+						return
+					}
+					draftError = null
+				} finally {
+					isSaving = false
+				}
 			}
 			return
 		}
@@ -175,13 +368,6 @@
 		// escape handled by base handler
 		if (event.key === 'Escape') {
 			handleKeyDown(event)
-			return
-		}
-		// shift+enter: allow newline (default textarea behavior)
-		// enter without shift: blur to save
-		if (event.key === 'Enter' && !event.shiftKey) {
-			event.preventDefault()
-			;(event.target as HTMLTextAreaElement | null)?.blur()
 		}
 	}
 
@@ -194,6 +380,7 @@
 		event.preventDefault()
 
 		if (props.kind === 'create') return
+		if (!isEditable) return
 		if (props.expanded) return
 		props.onSelect()
 		void focusTitle()
@@ -206,15 +393,27 @@
 			props.onCancel()
 			return
 		}
+		const error = maxLengthError('title', title, REMINDER_TITLE_MAX_LENGTH)
+		if (error) {
+			draftError = error
+			return
+		}
 
-		await props.onCreate({
-			title,
-			description: editedDescription.trim() || null,
-		})
+		isSaving = true
+		draftError = null
+		try {
+			const created = await props.onCreate({
+				title,
+				description: editedDescription.trim() || null,
+			})
+			if (!created) draftError = 'could not save reminder'
+		} finally {
+			isSaving = false
+		}
 	}
 
 	async function handleToggleComplete() {
-		if (props.kind !== 'edit') return
+		if (props.kind !== 'edit' || !isEditable) return
 		await props.onToggleComplete()
 	}
 
@@ -222,6 +421,7 @@
 		if (props.kind !== 'edit') return
 		editedTitle = props.reminder.title
 		editedDescription = props.reminder.description ?? ''
+		draftError = null
 	})
 
 	$effect(() => {
@@ -229,6 +429,12 @@
 		if (!props.autoFocus) return
 		if (!props.expanded) return
 		void focusTitle()
+	})
+
+	$effect(() => {
+		void editedDescription
+		if (!props.expanded) return
+		void tick().then(resizeDescriptionTextarea)
 	})
 </script>
 
@@ -239,9 +445,7 @@
 	data-reminder-draft={props.kind === 'create' ? 'true' : undefined}
 	role="button"
 	tabindex="0"
-	style={props.motionDelayMs
-		? `--reminder-motion-delay-ms: ${props.motionDelayMs}ms;`
-		: undefined}
+	style={rowStyle}
 	class="reminder-row group relative cursor-pointer overflow-visible rounded-4xl transition-colors duration-150 {props.expanded
 		? 'border-foreground/14 bg-foreground/6 border'
 		: 'hover:bg-foreground/6 border border-transparent'} {isCompleted
@@ -250,18 +454,43 @@
 		? 'is-out is-out-complete'
 		: ''} {isMotionOutUncomplete ? 'is-out is-out-uncomplete' : ''} {isMorphPlus
 		? 'morph-plus'
-		: ''}"
+		: ''} {props.kind === 'edit' && props.isDragging ? 'opacity-45' : ''}"
 	onclick={handleRowClick}
 	onkeydown={handleRowKeyDown}
+	ondragover={props.kind === 'edit' ? props.onDragOver : undefined}
+	ondrop={props.kind === 'edit' ? props.onDrop : undefined}
 >
 	<div class="flex items-center gap-3 px-3 py-2.5">
+		{#if props.kind === 'edit' && isEditable && props.onDragStart}
+			<button
+				type="button"
+				draggable="true"
+				class="rounded-pill text-foreground/45 hover:text-foreground/75 flex h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center opacity-75 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97] active:cursor-grabbing"
+				onclick={(event) => event.stopPropagation()}
+				onpointerdown={(event) => {
+					if (event.pointerType === 'mouse') return
+					event.stopPropagation()
+					props.onPointerDragStart?.(event)
+				}}
+				ondragstart={props.onDragStart}
+				ondragend={props.onDragEnd}
+				aria-label="reorder reminder"
+				title="drag to reorder or nest"
+			>
+				<GripVertical class="h-4.5 w-4.5" />
+			</button>
+		{/if}
 		<button
 			data-circle-button
 			type="button"
-			class="circle-btn text-foreground/55 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center transition-colors duration-150 {props.kind ===
-			'edit'
-				? 'hover:text-foreground/80'
+			class="circle-btn text-foreground/55 flex h-6 w-6 shrink-0 items-center justify-center transition-colors duration-150 {isEditable
+				? 'cursor-pointer'
+				: 'cursor-default'} {props.kind === 'edit'
+				? isEditable
+					? 'hover:text-foreground/80'
+					: ''
 				: ''} {isCompleted ? 'text-emerald-400' : ''}"
+			disabled={props.kind === 'edit' && !isEditable}
 			onclick={(event) => {
 				event.stopPropagation()
 				void handleToggleComplete()
@@ -295,27 +524,30 @@
 					<input
 						bind:this={titleInputEl}
 						type="text"
+						maxlength={REMINDER_TITLE_MAX_LENGTH}
 						class="title-input text-foreground/90 placeholder:text-foreground/40 m-0 w-full appearance-none border-0 bg-transparent p-0 text-[0.95rem] leading-6 outline-none {isCompleted
 							? 'line-through'
 							: ''}"
 						placeholder={props.kind === 'create' ? 'new reminder' : 'reminder title'}
 						autocomplete="off"
 						bind:value={editedTitle}
+						disabled={!isEditable || isSaving}
+						oninput={clearDraftError}
 						onblur={handleTitleBlur}
 						onkeydown={handleTitleKeyDown}
 					/>
 					<span class="title-text title-overlay" aria-hidden="true">{editedTitle}</span>
 				</div>
 			{:else}
-				<div class="text-foreground/90 min-w-0 truncate text-[0.95rem] leading-6">
+				<div class="text-foreground/90 min-w-0 text-[0.95rem] leading-6">
 					<span class="title-text">
-						{props.kind === 'edit' ? props.reminder.title : editedTitle}
+						{props.kind === 'edit' ? props.reminder.title : 'new reminder'}
 					</span>
 				</div>
 			{/if}
 		</div>
 
-		{#if props.kind === 'edit'}
+		{#if props.kind === 'edit' && isEditable}
 			<div data-menu-area class="flex items-center">
 				<button
 					bind:this={menuButtonEl}
@@ -340,46 +572,87 @@
 		<div class="details-inner">
 			<div class="space-y-3 px-3 pt-1 pb-3">
 				<textarea
-					class="text-foreground/70 placeholder:text-foreground/35 w-full resize-none bg-transparent pl-9 text-sm leading-5 outline-none"
+					bind:this={descriptionTextareaEl}
+					class="text-foreground/70 placeholder:text-foreground/35 max-h-60 w-full resize-none overflow-hidden bg-transparent pl-9 text-sm leading-5 outline-none"
 					placeholder="add details"
-					rows="2"
+					rows="1"
 					bind:value={editedDescription}
+					disabled={!isEditable || isSaving}
+					oninput={handleDescriptionInput}
 					onblur={handleDescriptionBlur}
 					onkeydown={handleDescriptionKeyDown}
 				></textarea>
 
-				<div class="flex flex-wrap items-center gap-2 pl-9">
-					<button
-						type="button"
-						class="rounded-pill border-foreground/14 bg-foreground/4 hover:bg-foreground/8 flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors {hasDueDate
-							? isOverdue
-								? 'text-red-400'
-								: 'text-foreground/70'
-							: 'text-foreground/55'}"
-					>
-						<Calendar variant="solid" class="h-3.5 w-3.5" />
-						<span>{hasDueDate ? formattedDueDate : 'add date/time'}</span>
-					</button>
+				{#if draftError}
+					<p class="text-destructive pl-9 text-xs font-medium">{draftError}</p>
+				{/if}
 
-					<button
-						type="button"
-						class="rounded-pill border-foreground/14 bg-foreground/4 text-foreground/55 hover:bg-foreground/8 flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors"
-					>
-						<ArrowPath class="h-3.5 w-3.5" />
-						<span>repeat</span>
-					</button>
+				<div class="flex flex-wrap items-center gap-2 pl-9">
+					{#if props.kind === 'edit'}
+						<button
+							bind:this={dateButtonEl}
+							type="button"
+							class="rounded-pill border-foreground/14 bg-foreground/4 hover:bg-foreground/8 flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors {hasDueDate
+								? isOverdue
+									? 'text-red-400'
+									: 'text-foreground/70'
+								: 'text-foreground/55'}"
+							onclick={(event) => {
+								event.stopPropagation()
+								isDatePickerOpen = !isDatePickerOpen
+							}}
+						>
+							<Calendar variant="solid" class="h-3.5 w-3.5" />
+							<span>{hasDueDate ? formattedDueDate : 'add date/time'}</span>
+						</button>
+
+						<button
+							bind:this={repeatButtonEl}
+							type="button"
+							class="rounded-pill border-foreground/14 bg-foreground/4 hover:bg-foreground/8 flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors {recurrenceLabel
+								? 'text-foreground/70'
+								: 'text-foreground/55'}"
+							onclick={(event) => {
+								event.stopPropagation()
+								isRepeatMenuOpen = !isRepeatMenuOpen
+							}}
+						>
+							<ArrowPath class="h-3.5 w-3.5" />
+							<span>{recurrenceLabel ?? 'repeat'}</span>
+						</button>
+					{:else}
+						<button
+							type="button"
+							class="rounded-pill border-foreground/14 bg-foreground/4 text-foreground/55 hover:bg-foreground/8 flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors"
+							disabled
+						>
+							<Calendar variant="solid" class="h-3.5 w-3.5" />
+							<span>add date/time</span>
+						</button>
+
+						<button
+							type="button"
+							class="rounded-pill border-foreground/14 bg-foreground/4 text-foreground/55 hover:bg-foreground/8 flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors"
+							disabled
+						>
+							<ArrowPath class="h-3.5 w-3.5" />
+							<span>repeat</span>
+						</button>
+					{/if}
 
 					{#if props.kind === 'create'}
 						<button
 							type="button"
-							class="rounded-pill border-foreground/14 bg-foreground/8 text-foreground/85 hover:bg-foreground/12 ml-auto cursor-pointer border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+							class="rounded-pill ml-auto inline-flex cursor-pointer items-center gap-1.5 border border-transparent bg-(--accent-primary) px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:brightness-[1.06] disabled:cursor-not-allowed disabled:opacity-45"
 							onclick={(event) => {
 								event.stopPropagation()
 								void submitCreate()
 							}}
-							disabled={editedTitle.trim() === ''}
+							disabled={editedTitle.trim() === '' || isSaving}
 						>
-							save
+							<Check class="h-3.5 w-3.5" />
+							{#if isSaving}<ShimmerText className="inline-block">saving</ShimmerText
+								>{:else}<span>save</span>{/if}
 						</button>
 					{/if}
 				</div>
@@ -387,44 +660,77 @@
 		</div>
 	</div>
 
-	{#if props.kind === 'edit' && (hasDueDate || props.reminder.description) && !props.expanded}
-		<div class="flex items-center gap-2 px-3 pb-2 pl-11">
-			{#if hasDueDate}
-				<span class="text-xs {isOverdue ? 'text-red-400' : 'text-foreground/55'}">
-					{formattedDueDate}
-				</span>
+	{#if props.kind === 'edit' && (descriptionPreview || hasDueDate || hasRemindAt || recurrenceLabel) && !props.expanded}
+		<div class="min-w-0 px-3 pb-2 pl-12">
+			{#if descriptionPreview}
+				<p
+					class="text-foreground/60 line-clamp-1 min-w-0 text-xs leading-5 wrap-break-word"
+				>
+					{descriptionPreview}
+				</p>
+			{/if}
+
+			{#if hasDueDate || hasRemindAt || recurrenceLabel}
+				<div class="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
+					{#if hasDueDate}
+						<span
+							class="rounded-pill border-foreground/10 bg-foreground/5 inline-flex min-w-0 items-center gap-1.5 border px-2 py-1 text-xs {isOverdue
+								? 'text-red-400'
+								: 'text-foreground/60'}"
+						>
+							<Calendar variant="solid" class="h-3.5 w-3.5 shrink-0" />
+							{formattedDueDate}
+						</span>
+					{/if}
+					{#if hasRemindAt}
+						<span
+							class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/60 inline-flex min-w-0 items-center gap-1.5 border px-2 py-1 text-xs"
+						>
+							<Bell class="h-3.5 w-3.5 shrink-0" />
+							{formattedRemindAt}
+						</span>
+					{/if}
+					{#if recurrenceLabel}
+						<span
+							class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/60 inline-flex min-w-0 items-center gap-1.5 border px-2 py-1 text-xs"
+						>
+							<ArrowPath class="h-3.5 w-3.5 shrink-0" />
+							{recurrenceLabel}
+						</span>
+					{/if}
+				</div>
 			{/if}
 		</div>
 	{/if}
 
 	{#if props.kind === 'edit'}
 		<PopupMenu open={isMenuOpen} anchorEl={menuButtonEl} onClose={() => (isMenuOpen = false)}>
-			<div class="text-foreground/55 px-3 pt-2 pb-1 text-xs font-medium">move</div>
+			<div
+				class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
+			>
+				<ListBullet class="h-3.5 w-3.5" />
+				move to
+			</div>
 			<div class="max-h-44 overflow-auto">
-				<button
-					type="button"
-					class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
-					onclick={(event) => {
-						event.stopPropagation()
-						isMenuOpen = false
-						void props.onMove(null)
-					}}
-				>
-					reminders
-				</button>
-
 				{#each props.availableLists as list (list.id)}
-					<button
-						type="button"
-						class="rounded-pill text-foreground/80 hover:bg-foreground/10 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150"
+					<MenuItem
+						selected={props.reminder.list_id === list.id}
 						onclick={(event) => {
 							event.stopPropagation()
 							isMenuOpen = false
 							void props.onMove(list.id)
 						}}
 					>
+						{#snippet icon()}
+							<span
+								class="rounded-pill flex h-4 w-4 items-center justify-center"
+								style:background-color={list.color ?? 'rgba(255,255,255,0.1)'}
+							>
+								<span class="text-[0.55rem]">{list.icon ?? ''}</span>
+							</span>
+						{/snippet}
 						{list.name}
-					</button>
+					</MenuItem>
 				{/each}
 			</div>
 
@@ -443,6 +749,97 @@
 						return props.onDelete()
 					}}
 				/>
+			</div>
+		</PopupMenu>
+
+		<PopupMenu
+			open={isDatePickerOpen}
+			anchorEl={dateButtonEl}
+			onClose={() => (isDatePickerOpen = false)}
+		>
+			<div class="flex w-72 max-w-[calc(100vw-1rem)] flex-col gap-3 p-2">
+				<div
+					class="text-foreground/50 flex items-center gap-2 px-1 text-xs font-semibold tracking-[0.08em] uppercase"
+				>
+					<Calendar variant="solid" class="h-3.5 w-3.5" />
+					schedule
+				</div>
+				<div class="grid grid-cols-3 gap-1">
+					<button
+						type="button"
+						class="rounded-pill bg-foreground/6 text-foreground/75 hover:bg-foreground/10 flex cursor-pointer items-center justify-center gap-1.5 border-none px-2 py-1.5 text-xs transition-colors"
+						onclick={(event) => {
+							event.stopPropagation()
+							setDuePreset(0)
+						}}
+					>
+						<ClockRotateRight class="h-3.5 w-3.5" />
+						today
+					</button>
+					<button
+						type="button"
+						class="rounded-pill bg-foreground/6 text-foreground/75 hover:bg-foreground/10 flex cursor-pointer items-center justify-center gap-1.5 border-none px-2 py-1.5 text-xs transition-colors"
+						onclick={(event) => {
+							event.stopPropagation()
+							setDuePreset(1)
+						}}
+					>
+						<Calendar class="h-3.5 w-3.5" />
+						tomorrow
+					</button>
+					<button
+						type="button"
+						class="rounded-pill bg-foreground/6 text-foreground/75 hover:bg-foreground/10 flex cursor-pointer items-center justify-center gap-1.5 border-none px-2 py-1.5 text-xs transition-colors"
+						onclick={(event) => {
+							event.stopPropagation()
+							setDuePreset(7)
+						}}
+					>
+						<ArrowPath class="h-3.5 w-3.5" />
+						next week
+					</button>
+				</div>
+				<label class="text-foreground/55 px-1 text-xs font-medium" for="due-input">
+					custom date and time
+				</label>
+				<input
+					id="due-input"
+					type="datetime-local"
+					class="rounded-pill border-foreground/14 bg-foreground/5 text-foreground/85 focus:border-foreground/30 border px-3 py-2 text-sm transition-colors outline-none"
+					value={dueDraft}
+					onclick={(e) => e.stopPropagation()}
+					oninput={(e) => handleDueChange((e.target as HTMLInputElement).value)}
+				/>
+				{#if hasDueDate}
+					<MenuItem
+						onclick={(event) => {
+							event.stopPropagation()
+							clearDue()
+						}}
+					>
+						{#snippet icon()}<XMark class="h-4 w-4" />{/snippet}
+						clear
+					</MenuItem>
+				{/if}
+			</div>
+		</PopupMenu>
+
+		<PopupMenu
+			open={isRepeatMenuOpen}
+			anchorEl={repeatButtonEl}
+			onClose={() => (isRepeatMenuOpen = false)}
+			estimatedHeight={320}
+			class="overflow-hidden"
+		>
+			<div class="w-[min(calc(100vw-3rem),20rem)] max-w-full">
+				<div class="max-h-[min(70vh,26rem)] overflow-y-auto overscroll-contain p-1">
+					<RecurrenceEditor
+						value={props.reminder.recurrence ?? null}
+						anchorDate={recurrenceAnchor}
+						timezone={props.reminder.recurrence?.timezone ?? null}
+						onChange={handleRecurrenceChange}
+					/>
+				</div>
 			</div>
 		</PopupMenu>
 	{/if}
@@ -570,14 +967,18 @@
 
 	.title-text {
 		position: relative;
-		display: inline-block;
+		display: inline;
 		max-width: 100%;
+		overflow-wrap: anywhere;
+		word-break: break-word;
 	}
 
 	.title-overlay {
 		position: absolute;
+		display: inline-block;
 		left: 0;
 		top: 0;
+		max-width: 100%;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -586,6 +987,7 @@
 	}
 
 	.title-text::after {
+		display: none;
 		content: '';
 		position: absolute;
 		left: 0;
@@ -600,6 +1002,12 @@
 
 	.is-completed .title-text::after {
 		transform: scaleX(1);
+	}
+
+	.is-completed .title-text {
+		text-decoration-line: line-through;
+		text-decoration-thickness: 2px;
+		text-decoration-color: rgba(255, 255, 255, 0.68);
 	}
 
 	.is-incoming {

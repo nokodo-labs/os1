@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.event import Event
-from api.schemas.citations import Citation
+from api.schemas.message import Citation
 from api.v1.service.auth import Principal
 from nokodo_ai.utils.typeid import TypeID
 
@@ -41,6 +41,7 @@ class AppContext:
 	- session: database access
 	- principal: authenticated user
 	- event_emitter: function to broadcast events in real-time
+	- run_id: active API run id, when the SDK is running inside a persisted run
 	- context_window: model context window in tokens (from Model ORM)
 	- retrieval: shared embedding cache for the current run
 
@@ -56,8 +57,10 @@ class AppContext:
 	session: AsyncSession
 	principal: Principal
 	event_emitter: EventEmitter
+	run_id: TypeID | None = None
 	agent_id: TypeID | None = None
 	thread_id: TypeID | None = None
+	final_assistant_message_ref: str | None = None
 	context_window: int | None = None
 	retrieval: RetrievalContext = field(default_factory=RetrievalContext)
 	citations: list[Citation] = field(
@@ -73,8 +76,10 @@ class AppContext:
 		return AppContext(
 			session=self.session,
 			principal=self.principal,
+			run_id=self.run_id,
 			agent_id=self.agent_id,
 			thread_id=self.thread_id,
+			final_assistant_message_ref=self.final_assistant_message_ref,
 			event_emitter=emitter,
 			context_window=self.context_window,
 			retrieval=self.retrieval,

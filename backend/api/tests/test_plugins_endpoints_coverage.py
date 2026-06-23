@@ -11,23 +11,24 @@ async def test_plugins_available_and_native_detail(
 	client: AsyncClient,
 	admin_auth: dict[str, object],
 ) -> None:
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	raw_headers = admin_auth["headers"]
+	assert isinstance(raw_headers, dict)
+	headers = {str(key): str(value) for key, value in raw_headers.items()}
 
-	resp = await client.get("/v1/plugins/available", headers=headers)
+	resp = await client.get("/v1/plugins", headers=headers)
 	assert resp.status_code == 200
 	available = resp.json()
 	assert isinstance(available, list)
 
-	native_ids = [p["id"] for p in available if p.get("is_native") is True]
+	native_ids = [p["id"] for p in available if p.get("source") == "native"]
 	assert native_ids
 
 	detail = await client.get(
-		f"/v1/plugins/available/{native_ids[0]}",
+		f"/v1/plugins/{native_ids[0]}",
 		headers=headers,
 	)
 	assert detail.status_code == 200
-	assert detail.json()["is_native"] is True
+	assert detail.json()["source"] == "native"
 
 
 @pytest.mark.asyncio
@@ -35,8 +36,9 @@ async def test_plugins_crud_and_name_conflict(
 	client: AsyncClient,
 	admin_auth: dict[str, object],
 ) -> None:
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	raw_headers = admin_auth["headers"]
+	assert isinstance(raw_headers, dict)
+	headers = {str(key): str(value) for key, value in raw_headers.items()}
 
 	create_a = await client.post(
 		"/v1/plugins",
@@ -53,12 +55,9 @@ async def test_plugins_crud_and_name_conflict(
 	assert create_a.status_code == 201
 	plugin_a = create_a.json()
 
-	available_db = await client.get(
-		f"/v1/plugins/available/{plugin_a['id']}",
-		headers=headers,
-	)
+	available_db = await client.get(f"/v1/plugins/{plugin_a['id']}", headers=headers)
 	assert available_db.status_code == 200
-	assert available_db.json()["is_native"] is False
+	assert available_db.json()["source"] == "custom"
 
 	create_b = await client.post(
 		"/v1/plugins",
@@ -75,8 +74,18 @@ async def test_plugins_crud_and_name_conflict(
 	assert create_b.status_code == 201
 	plugin_b = create_b.json()
 
-	listed = await client.get("/v1/plugins", headers=headers)
+	listed = await client.get("/v1/plugins?source=custom", headers=headers)
 	assert listed.status_code == 200
+
+	page = await client.get(
+		"/v1/plugins",
+		headers=headers,
+		params={"source": "custom", "skip": 1, "limit": 1},
+	)
+	assert page.status_code == 200
+	page_items = page.json()
+	assert len(page_items) == 1
+	assert page_items[0]["name"] == "plug-b"
 
 	got = await client.get(f"/v1/plugins/{plugin_a['id']}", headers=headers)
 	assert got.status_code == 200
@@ -100,7 +109,7 @@ async def test_plugins_crud_and_name_conflict(
 	)
 	assert conflict.status_code == 409
 
-	missing = await client.get("/v1/plugins/available/does-not-exist", headers=headers)
+	missing = await client.get("/v1/plugins/does-not-exist", headers=headers)
 	assert missing.status_code == 404
 
 	deleted = await client.delete(f"/v1/plugins/{plugin_a['id']}", headers=headers)

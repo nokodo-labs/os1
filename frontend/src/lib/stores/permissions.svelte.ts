@@ -1,11 +1,9 @@
 import { browser } from '$app/environment'
 import { api } from '$lib/api/client'
-import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import { getJwtUserId } from '$lib/auth/jwt'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 import { session } from '$lib/stores/session.svelte'
-
-const ROLE_EVENT_TYPES = ['role.updated', 'role.deleted']
+import { STORE_EVENT_TYPES, subscribeToStoreEvents } from '$lib/stores/storeEvents'
 
 class PermissionsStore {
 	list = $state<string[] | null>(null)
@@ -15,6 +13,8 @@ class PermissionsStore {
 	readonly isSuperuser = $derived(Boolean(session.currentUser?.is_superuser))
 
 	#unsubscribe: (() => void) | null = null
+	#stale = $state(true)
+	readonly stale = $derived(this.#stale)
 
 	hasPermission = (permission: string): boolean => {
 		if (this.isSuperuser) return true
@@ -30,6 +30,7 @@ class PermissionsStore {
 			this.list = null
 			this.error = null
 			this.isLoading = false
+			this.#stale = true
 			return
 		}
 
@@ -41,10 +42,11 @@ class PermissionsStore {
 			})
 			if (error || !data) {
 				this.error = 'failed to load permissions'
-				this.list = null
+				this.#stale = true
 				return
 			}
 			this.list = data.permissions ?? []
+			this.#stale = false
 		} finally {
 			this.isLoading = false
 		}
@@ -54,14 +56,18 @@ class PermissionsStore {
 		this.list = null
 		this.error = null
 		this.isLoading = false
+		this.#stale = true
 	}
 
 	invalidate = (): void => {
-		this.list = null
+		this.#stale = true
 	}
 
-	#handleEvent = (message: StreamMessage): void => {
-		if (!ROLE_EVENT_TYPES.includes(message.type)) return
+	refresh = async (): Promise<void> => {
+		await this.load()
+	}
+
+	#handleEvent = (): void => {
 		// role changed - refresh permissions (and user data for role changes)
 		void this.load()
 		void session.refreshUser()
@@ -69,7 +75,10 @@ class PermissionsStore {
 
 	init = (): void => {
 		if (!this.#unsubscribe) {
-			this.#unsubscribe = eventStreamClient.subscribe(this.#handleEvent)
+			this.#unsubscribe = subscribeToStoreEvents(
+				STORE_EVENT_TYPES.permissions,
+				this.#handleEvent
+			)
 		}
 	}
 

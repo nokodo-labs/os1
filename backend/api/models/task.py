@@ -42,6 +42,7 @@ class TaskType(StrEnum):
 	CODE_SESSION = "code_session"
 	RESEARCH = "research"
 	IMAGE = "image_generation"
+	IMPORT = "import"
 	CUSTOM = "custom"
 
 
@@ -62,7 +63,7 @@ class Task(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	)
 	status: Mapped[TaskStatus] = mapped_column(
 		StringEnum(TaskStatus),
-		default=TaskStatus.PENDING,
+		default=TaskStatus.RUNNING,
 	)
 	progress: Mapped[int | None] = mapped_column(Integer())
 	stage: Mapped[str | None] = mapped_column(String(100))

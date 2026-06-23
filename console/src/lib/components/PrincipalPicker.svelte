@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api, unwrap, type Schemas } from '$lib/api'
+	import { onMount } from 'svelte'
 
 	type Group = Schemas['Group']
 	type Role = Schemas['Role']
@@ -27,112 +28,176 @@
 	let activeTab = $state<PrincipalType>('user')
 	let query = $state('')
 
+	const PAGE_LIMIT = 20
+
 	let users = $state<User[]>([])
 	let groups = $state<Group[]>([])
 	let roles = $state<Role[]>([])
 
 	let isLoading = $state(false)
-	let hasFetched = $state({ user: false, group: false, role: false })
+	let userSkip = $state(0)
+	let groupSkip = $state(0)
+	let roleSkip = $state(0)
+	let hasMoreUsers = $state(true)
+	let hasMoreGroups = $state(true)
+	let hasMoreRoles = $state(true)
+	let userRequestId = 0
+	let groupRequestId = 0
+	let roleRequestId = 0
+	let searchTimer: ReturnType<typeof setTimeout> | null = null
 
-	async function fetchUsers() {
-		if (hasFetched.user) return
+	const visibleUsers = $derived(users.filter((u) => !exclude.includes(u.id)))
+	const visibleGroups = $derived(groups.filter((g) => !exclude.includes(g.id)))
+	const visibleRoles = $derived(roles.filter((r) => !exclude.includes(r.id)))
+
+	const activeHasMore = $derived.by(() => {
+		if (activeTab === 'user') return hasMoreUsers
+		if (activeTab === 'group') return hasMoreGroups
+		return hasMoreRoles
+	})
+
+	async function fetchUsers(reset = false) {
+		if (isLoading && !reset) return
 		isLoading = true
+		const requestId = ++userRequestId
+		const skip = reset ? 0 : userSkip
 		try {
-			users = unwrap(await api.GET('/v1/users', { params: { query: { limit: 200 } } }))
-			hasFetched = { ...hasFetched, user: true }
+			const result = unwrap(
+				await api.GET('/v1/users', {
+					params: {
+						query: {
+							limit: PAGE_LIMIT,
+							skip,
+							sort_by: 'display_name',
+							sort_dir: 'asc',
+							q: query.trim() || undefined,
+						},
+					},
+				})
+			)
+			if (requestId !== userRequestId) return
+			users = reset ? result : [...users, ...result]
+			userSkip = skip + result.length
+			hasMoreUsers = result.length === PAGE_LIMIT
 		} catch {
-			users = []
+			if (requestId === userRequestId) {
+				users = reset ? [] : users
+				hasMoreUsers = false
+			}
 		} finally {
-			isLoading = false
+			if (requestId === userRequestId) isLoading = false
 		}
 	}
 
-	async function fetchGroups() {
-		if (hasFetched.group) return
+	async function fetchGroups(reset = false) {
+		if (isLoading && !reset) return
 		isLoading = true
+		const requestId = ++groupRequestId
+		const skip = reset ? 0 : groupSkip
 		try {
-			groups = unwrap(await api.GET('/v1/groups', { params: { query: { limit: 200 } } }))
-			hasFetched = { ...hasFetched, group: true }
+			const result = unwrap(
+				await api.GET('/v1/groups', {
+					params: {
+						query: {
+							limit: PAGE_LIMIT,
+							skip,
+							sort_by: 'name',
+							sort_dir: 'asc',
+							q: query.trim() || undefined,
+						},
+					},
+				})
+			)
+			if (requestId !== groupRequestId) return
+			groups = reset ? result : [...groups, ...result]
+			groupSkip = skip + result.length
+			hasMoreGroups = result.length === PAGE_LIMIT
 		} catch {
-			groups = []
+			if (requestId === groupRequestId) {
+				groups = reset ? [] : groups
+				hasMoreGroups = false
+			}
 		} finally {
-			isLoading = false
+			if (requestId === groupRequestId) isLoading = false
 		}
 	}
 
-	async function fetchRoles() {
-		if (hasFetched.role) return
+	async function fetchRoles(reset = false) {
+		if (isLoading && !reset) return
 		isLoading = true
+		const requestId = ++roleRequestId
+		const skip = reset ? 0 : roleSkip
 		try {
-			roles = unwrap(await api.GET('/v1/roles', { params: { query: { limit: 200 } } }))
-			hasFetched = { ...hasFetched, role: true }
+			const result = unwrap(
+				await api.GET('/v1/roles', {
+					params: {
+						query: {
+							limit: PAGE_LIMIT,
+							skip,
+							sort_by: 'name',
+							sort_dir: 'asc',
+							q: query.trim() || undefined,
+						},
+					},
+				})
+			)
+			if (requestId !== roleRequestId) return
+			roles = reset ? result : [...roles, ...result]
+			roleSkip = skip + result.length
+			hasMoreRoles = result.length === PAGE_LIMIT
 		} catch {
-			roles = []
+			if (requestId === roleRequestId) {
+				roles = reset ? [] : roles
+				hasMoreRoles = false
+			}
 		} finally {
-			isLoading = false
+			if (requestId === roleRequestId) isLoading = false
 		}
+	}
+
+	function loadActive(reset = false) {
+		if (activeTab === 'user') return fetchUsers(reset)
+		if (activeTab === 'group') return fetchGroups(reset)
+		return fetchRoles(reset)
 	}
 
 	function switchTab(tab: PrincipalType) {
 		activeTab = tab
 		query = ''
-		if (tab === 'user') fetchUsers()
-		else if (tab === 'group') fetchGroups()
-		else fetchRoles()
+		void loadActive(true)
 	}
 
-	$effect(() => {
-		fetchUsers()
-	})
+	function scheduleSearch() {
+		if (searchTimer) clearTimeout(searchTimer)
+		searchTimer = setTimeout(() => {
+			void loadActive(true)
+		}, 250)
+	}
 
-	const lowerQuery = $derived(query.toLowerCase().trim())
-
-	const filteredUsers = $derived(
-		users
-			.filter((u) => !exclude.includes(u.id))
-			.filter(
-				(u) =>
-					!lowerQuery ||
-					u.email.toLowerCase().includes(lowerQuery) ||
-					(u.display_name ?? '').toLowerCase().includes(lowerQuery)
-			)
-	)
-
-	const filteredGroups = $derived(
-		groups
-			.filter((g) => !exclude.includes(g.id))
-			.filter(
-				(g) =>
-					!lowerQuery ||
-					g.name.toLowerCase().includes(lowerQuery) ||
-					(g.description ?? '').toLowerCase().includes(lowerQuery)
-			)
-	)
-
-	const filteredRoles = $derived(
-		roles
-			.filter((r) => !exclude.includes(r.id))
-			.filter(
-				(r) =>
-					!lowerQuery ||
-					r.name.toLowerCase().includes(lowerQuery) ||
-					(r.description ?? '').toLowerCase().includes(lowerQuery)
-			)
-	)
+	function handleScroll(event: Event) {
+		if (!(event.currentTarget instanceof HTMLElement)) return
+		const target = event.currentTarget
+		if (target.scrollTop + target.clientHeight < target.scrollHeight - 24) return
+		if (!activeHasMore || isLoading) return
+		void loadActive(false)
+	}
 
 	function pickUser(user: User) {
 		onPick({ type: 'user', id: user.id, label: user.display_name || user.email })
 		query = ''
+		void loadActive(true)
 	}
 
 	function pickGroup(group: Group) {
 		onPick({ type: 'group', id: group.id, label: group.name })
 		query = ''
+		void loadActive(true)
 	}
 
 	function pickRole(role: Role) {
 		onPick({ type: 'role', id: role.id, label: role.name })
 		query = ''
+		void loadActive(true)
 	}
 
 	const tabs: { value: PrincipalType; label: string; icon: typeof Users }[] = [
@@ -140,6 +205,10 @@
 		{ value: 'group', label: 'groups', icon: UsersRound },
 		{ value: 'role', label: 'roles', icon: Shield },
 	]
+
+	onMount(() => {
+		void fetchUsers(true)
+	})
 </script>
 
 <div class="space-y-3">
@@ -161,6 +230,7 @@
 
 	<Input
 		bind:value={query}
+		oninput={scheduleSearch}
 		placeholder="search {activeTab === 'user'
 			? 'by email or name'
 			: activeTab === 'group'
@@ -169,14 +239,21 @@
 		class="rounded-xl"
 	/>
 
-	<div class="max-h-48 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950">
-		{#if isLoading}
+	<div
+		class="max-h-48 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950"
+		onscroll={handleScroll}
+	>
+		{#if isLoading && users.length === 0 && activeTab === 'user'}
+			<div class="px-4 py-6 text-center text-sm text-zinc-500">loading...</div>
+		{:else if isLoading && groups.length === 0 && activeTab === 'group'}
+			<div class="px-4 py-6 text-center text-sm text-zinc-500">loading...</div>
+		{:else if isLoading && roles.length === 0 && activeTab === 'role'}
 			<div class="px-4 py-6 text-center text-sm text-zinc-500">loading...</div>
 		{:else if activeTab === 'user'}
-			{#if filteredUsers.length === 0}
+			{#if visibleUsers.length === 0}
 				<div class="px-4 py-6 text-center text-sm text-zinc-500">no users found</div>
 			{:else}
-				{#each filteredUsers.slice(0, 20) as user (user.id)}
+				{#each visibleUsers as user (user.id)}
 					<button
 						type="button"
 						class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-zinc-200 transition-colors hover:bg-zinc-800/60"
@@ -195,10 +272,10 @@
 				{/each}
 			{/if}
 		{:else if activeTab === 'group'}
-			{#if filteredGroups.length === 0}
+			{#if visibleGroups.length === 0}
 				<div class="px-4 py-6 text-center text-sm text-zinc-500">no groups found</div>
 			{:else}
-				{#each filteredGroups.slice(0, 20) as group (group.id)}
+				{#each visibleGroups as group (group.id)}
 					<button
 						type="button"
 						class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-zinc-200 transition-colors hover:bg-zinc-800/60"
@@ -216,10 +293,10 @@
 					</button>
 				{/each}
 			{/if}
-		{:else if filteredRoles.length === 0}
+		{:else if visibleRoles.length === 0}
 			<div class="px-4 py-6 text-center text-sm text-zinc-500">no roles found</div>
 		{:else}
-			{#each filteredRoles.slice(0, 20) as role (role.id)}
+			{#each visibleRoles as role (role.id)}
 				<button
 					type="button"
 					class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-zinc-200 transition-colors hover:bg-zinc-800/60"
@@ -236,6 +313,17 @@
 					</div>
 				</button>
 			{/each}
+		{/if}
+		{#if isLoading && activeHasMore}
+			<div class="px-4 py-3 text-center text-xs text-zinc-500">loading more...</div>
+		{:else if activeHasMore}
+			<button
+				type="button"
+				class="w-full border-t border-zinc-800 px-4 py-2.5 text-center text-xs text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-200"
+				onclick={() => loadActive(false)}
+			>
+				load more
+			</button>
 		{/if}
 	</div>
 </div>

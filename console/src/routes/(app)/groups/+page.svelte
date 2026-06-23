@@ -11,7 +11,19 @@
 	import { Button } from '$lib/components/ui/button'
 	import { Input } from '$lib/components/ui/input'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp, Clock, Hash, Search, User, Users, RefreshCw, X, ChevronLeft, ChevronRight } from '@lucide/svelte'
+	import {
+		ArrowDown,
+		ArrowUp,
+		ChevronLeft,
+		ChevronRight,
+		Clock,
+		Hash,
+		RefreshCw,
+		Search,
+		User,
+		Users,
+		X,
+	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
 	type SortKey = 'updated_at' | 'created_at' | 'name'
@@ -35,15 +47,18 @@
 
 	let sortKey = $state<SortKey>(DEFAULT_SORT)
 	let sortDir = $state<SortDir>(defaultSortDir(DEFAULT_SORT))
-	let memberFilter = $state<string | null>(null)
+	let ownerIdFilter = $state<string | null>(null)
 	let pageIndex = $state(0)
 	let limit = $state(50)
 	let refreshToken = $state(0)
 
 	let groups = $state<Group[]>([])
 	let searchQuery = $state('')
+	let serverSearchQuery = $state('')
+	let searchTimer: ReturnType<typeof setTimeout> | null = null
 	let isLoading = $state(false)
 	let hasNext = $state(false)
+	let total = $state(0)
 	let error = $state<string | null>(null)
 
 	let isUserDetailsOpen = $state(false)
@@ -51,17 +66,6 @@
 
 	let isGroupDetailsOpen = $state(false)
 	let selectedGroupId = $state<string | null>(null)
-
-	const filteredGroups = $derived(
-		groups.filter((g) => {
-			const q = searchQuery.toLowerCase()
-			return (
-				g.name.toLowerCase().includes(q) ||
-				(g.description ?? '').toLowerCase().includes(q) ||
-				g.id.toLowerCase().includes(q)
-			)
-		})
-	)
 
 	function openGroup(groupId: string) {
 		selectedGroupId = groupId
@@ -75,6 +79,14 @@
 
 	function refresh() {
 		refreshToken += 1
+	}
+
+	function scheduleSearch() {
+		pageIndex = 0
+		if (searchTimer) clearTimeout(searchTimer)
+		searchTimer = setTimeout(() => {
+			serverSearchQuery = searchQuery.trim()
+		}, 250)
 	}
 
 	function replaceUrl(target: string) {
@@ -108,8 +120,8 @@
 		updateQueryParams({ [SORT_DIR_PARAM]: next })
 	}
 
-	function clearMemberFilter() {
-		memberFilter = null
+	function clearOwnerFilter() {
+		ownerIdFilter = null
 		pageIndex = 0
 		updateQueryParams({ [USER_PARAM]: null })
 	}
@@ -126,40 +138,51 @@
 		const dir = sp.get(SORT_DIR_PARAM)
 		const nextDir = dir === 'asc' || dir === 'desc' ? dir : defaultSortDir(nextSort)
 		const user = sp.get(USER_PARAM)
-		const nextMember = user?.trim() || null
+		const nextOwner = user?.trim() || null
 
-		if (sortKey !== nextSort || sortDir !== nextDir || memberFilter !== nextMember) {
+		if (sortKey !== nextSort || sortDir !== nextDir || ownerIdFilter !== nextOwner) {
 			pageIndex = 0
 		}
 
 		sortKey = nextSort
 		sortDir = nextDir
-		memberFilter = nextMember
+		ownerIdFilter = nextOwner
 	})
 
 	$effect(() => {
 		if (!browser) return
 
+		const q = serverSearchQuery || undefined
 		const skip = pageIndex * limit + refreshToken * 0
 
 		isLoading = true
 		error = null
 
-		api.GET('/v1/groups', {
-			params: {
-				query: {
-					user_id: memberFilter ?? undefined,
-					skip,
-					limit,
-					sort_by: sortKey,
-					sort_dir: sortDir,
-				},
-			},
-		})
-			.then((r) => unwrap(r))
-			.then((result) => {
+		Promise.all([
+			api
+				.GET('/v1/groups', {
+					params: {
+						query: {
+							owner_id: ownerIdFilter ?? undefined,
+							skip,
+							limit,
+							sort_by: sortKey,
+							sort_dir: sortDir,
+							q,
+						},
+					},
+				})
+				.then((r) => unwrap(r)),
+			api
+				.GET('/v1/groups/count', {
+					params: { query: { owner_id: ownerIdFilter ?? undefined, q } },
+				})
+				.then((r) => unwrap(r)),
+		])
+			.then(([result, count]) => {
 				groups = result
-				hasNext = result.length === limit
+				total = count
+				hasNext = (pageIndex + 1) * limit < count
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load groups'
@@ -187,6 +210,7 @@
 					type="search"
 					placeholder="search groups..."
 					bind:value={searchQuery}
+					oninput={scheduleSearch}
 					class="w-full pl-8 sm:w-50 lg:w-75"
 				/>
 			</div>
@@ -219,15 +243,15 @@
 				</Button>
 			</div>
 			<div class="flex w-full items-center gap-2 sm:w-auto">
-				{#if memberFilter}
+				{#if ownerIdFilter}
 					<Button
 						variant="outline"
 						class="flex-1 rounded-xl sm:flex-none"
-						onclick={() => clearMemberFilter()}
+						onclick={() => clearOwnerFilter()}
 						disabled={isLoading}
 					>
 						<X class="mr-2 h-4 w-4" />
-						member: {memberFilter}
+						owner: {ownerIdFilter}
 					</Button>
 				{/if}
 				<Button
@@ -266,7 +290,9 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{groups.length > 0 ? ` \u00b7 ${groups.length} items` : ''}
+					{total > 0
+						? `items ${pageIndex * limit + 1}–${pageIndex * limit + groups.length} of ${total}`
+						: ''}
 				</span>
 				<Button
 					variant="outline"
@@ -290,7 +316,7 @@
 				</div>
 			{/if}
 
-			{#if filteredGroups.length === 0 && !isLoading}
+			{#if groups.length === 0 && !isLoading}
 				<div
 					class="rounded-xl border border-dashed border-zinc-800 p-10 text-center text-sm text-zinc-500"
 				>
@@ -298,7 +324,7 @@
 				</div>
 			{/if}
 
-			{#each filteredGroups as g (g.id)}
+			{#each groups as g (g.id)}
 				<div
 					role="button"
 					tabindex="0"
@@ -318,12 +344,16 @@
 					}}
 				>
 					<div class="flex min-w-0 flex-1 items-center gap-4">
-						<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+						<div
+							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-amber-300"
+						>
 							<Users class="h-5 w-5" />
 						</div>
 						<div class="min-w-0 flex-1 space-y-1">
 							<div class="flex flex-wrap items-center gap-2">
-								<span class="truncate text-base font-medium text-zinc-100">{g.name}</span>
+								<span class="truncate text-base font-medium text-zinc-100"
+									>{g.name}</span
+								>
 							</div>
 							{#if g.description}
 								<div class="line-clamp-1 text-sm text-zinc-400">
@@ -331,7 +361,9 @@
 								</div>
 							{/if}
 							<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-								<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+								<span
+									class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50"
+								>
 									<Hash class="h-3 w-3" />
 									{g.id}
 								</span>
@@ -348,7 +380,9 @@
 										{g.owner_id}
 									</button>
 								</span>
-								<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+								<span
+									class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase"
+								>
 									<Users class="h-3 w-3" />
 									{g.memberships.length}
 									{g.memberships.length === 1 ? 'member' : 'members'}

@@ -3,7 +3,6 @@
 	import { page } from '$app/state'
 	import { api, unwrap, type Schemas } from '$lib/api'
 
-	type SearchResultItem = Schemas['SearchResultItem']
 	type Thread = Schemas['Thread']
 
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
@@ -18,16 +17,16 @@
 		Archive,
 		ArrowDown,
 		ArrowUp,
+		ChevronLeft,
+		ChevronRight,
 		Hash,
 		MessageSquare,
+		RefreshCw,
 		Search,
 		Timer,
 		Trash2,
 		User,
-		RefreshCw,
 		X,
-		ChevronLeft,
-		ChevronRight,
 	} from '@lucide/svelte'
 	import { SvelteURLSearchParams } from 'svelte/reactivity'
 
@@ -76,9 +75,10 @@
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
 	let hasNext = $state(false)
+	let total = $state(0)
 
 	let searchQuery = $state('')
-	let searchResults = $state<SearchResultItem[]>([])
+	let searchResults = $state<Thread[]>([])
 	let isSearching = $state(false)
 	let searchError = $state<string | null>(null)
 	let _searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -122,6 +122,15 @@
 	function openThread(threadId: string) {
 		selectedThreadId = threadId
 		isThreadDetailsOpen = true
+	}
+
+	function handleThreadUpdated(thread: Thread) {
+		threads = threads.map((current) => (current.id === thread.id ? thread : current))
+	}
+
+	function handleThreadDeleted(threadId: string) {
+		threads = threads.filter((thread) => thread.id !== threadId)
+		if (selectedThreadId === threadId) selectedThreadId = null
 	}
 
 	function refresh() {
@@ -201,22 +210,33 @@
 		isLoading = true
 		error = null
 
-		api.GET('/v1/threads', {
-			params: {
-				query: {
-					owner_id: ownerIdFilter ?? undefined,
-					skip,
-					limit,
-					sort_by: sortKey,
-					sort_dir: sortDir,
-					include_hidden: true,
-				},
-			},
-		})
-			.then((r) => unwrap(r))
-			.then((result) => {
+		Promise.all([
+			api
+				.GET('/v1/threads', {
+					params: {
+						query: {
+							owner_id: ownerIdFilter ?? undefined,
+							skip,
+							limit,
+							sort_by: sortKey,
+							sort_dir: sortDir,
+							include_hidden: true,
+						},
+					},
+				})
+				.then((r) => unwrap(r)),
+			api
+				.GET('/v1/threads/count', {
+					params: {
+						query: { owner_id: ownerIdFilter ?? undefined, include_hidden: true },
+					},
+				})
+				.then((r) => unwrap(r)),
+		])
+			.then(([result, count]) => {
 				threads = result
-				hasNext = result.length === limit
+				total = count
+				hasNext = (pageIndex + 1) * limit < count
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load threads'
@@ -321,7 +341,9 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{threads.length > 0 ? ` \u00b7 ${threads.length} items` : ''}
+					{total > 0
+						? `items ${pageIndex * limit + 1}–${pageIndex * limit + threads.length} of ${total}`
+						: ''}
 				</span>
 				<Button
 					variant="outline"
@@ -368,13 +390,10 @@
 								<div class="min-w-0 flex-1 space-y-1">
 									<div class="flex items-center gap-2">
 										<MessageSquare class="h-4 w-4 text-zinc-500" />
-										<span class="truncate font-medium">{r.title}</span>
+										<span class="truncate font-medium"
+											>{r.title ?? '(untitled)'}</span
+										>
 									</div>
-									{#if r.preview}
-										<div class="line-clamp-1 text-sm text-zinc-400">
-											{r.preview}
-										</div>
-									{/if}
 									<div class="flex items-center gap-2 text-xs text-zinc-400">
 										<span
 											class="inline-flex items-center gap-1 rounded-md bg-zinc-900 px-2 py-0.5"
@@ -384,11 +403,6 @@
 										</span>
 									</div>
 								</div>
-								{#if r.score != null}
-									<span class="shrink-0 text-xs text-zinc-500"
-										>{(r.score * 100).toFixed(1)}%</span
-									>
-								{/if}
 							</div>
 						</div>
 					{/each}
@@ -425,7 +439,9 @@
 						}}
 					>
 						<div class="flex min-w-0 flex-1 items-center gap-4">
-							<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+							<div
+								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400"
+							>
 								<MessageSquare class="h-5 w-5" />
 							</div>
 							<div class="min-w-0 flex-1 space-y-1">
@@ -458,8 +474,12 @@
 										</span>
 									{/if}
 								</div>
-								<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-									<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+								<div
+									class="flex flex-wrap items-center gap-3 text-xs text-zinc-500"
+								>
+									<span
+										class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50"
+									>
 										<Hash class="h-3 w-3" />
 										{t.id}
 									</span>
@@ -498,4 +518,9 @@
 
 <UserDetailsModal bind:open={isUserDetailsOpen} userId={selectedUserId} />
 
-<ThreadDetailsModal bind:open={isThreadDetailsOpen} threadId={selectedThreadId} />
+<ThreadDetailsModal
+	bind:open={isThreadDetailsOpen}
+	threadId={selectedThreadId}
+	onUpdated={handleThreadUpdated}
+	onDeleted={handleThreadDeleted}
+/>

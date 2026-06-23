@@ -2,6 +2,7 @@
 	import { cubicOut } from 'svelte/easing'
 	import { fly } from 'svelte/transition'
 
+	import { portal } from '$lib/actions/portal'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import CheckCircle from '$lib/components/icons/CheckCircle.svelte'
@@ -208,7 +209,7 @@
 {#if toasts.length > 0}
 	{#if device.isMobile}
 		<!-- mobile: full-width banners at top -->
-		<div class="fixed inset-x-0 top-0 z-60 flex flex-col gap-2 px-3 pt-3">
+		<div use:portal class="fixed inset-x-0 top-0 z-100 flex flex-col gap-2 px-3 pt-3">
 			{#each toasts as toast (toast.id)}
 				{#if toast.type === 'notification'}
 					<LiquidGlass
@@ -308,7 +309,7 @@
 		</div>
 	{:else}
 		<!-- desktop: top-right stack like macOS -->
-		<div class="fixed top-6 right-6 z-60 flex w-80 flex-col gap-2">
+		<div use:portal class="fixed top-6 right-6 z-100 flex w-80 flex-col gap-2">
 			{#each toasts as toast (toast.id)}
 				<div in:fly={{ x: 200, duration: 300, easing: cubicOut }}>
 					{#if toast.type === 'notification'}

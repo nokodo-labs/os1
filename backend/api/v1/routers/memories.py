@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.models.memory import Memory
+from api.permissions import ResourceType
 from api.schemas.memory import Memory as MemorySchema
-from api.schemas.memory import MemoryCreate, MemoryUpdate
-from api.schemas.search import CursorPage, SearchMode, SearchParams, SearchResultItem
-from api.schemas.sorting import CommonSortBy, SortDir
+from api.schemas.memory import (
+	MemoryCreate,
+	MemoryListFilters,
+	MemorySearchFilters,
+	MemorySortBy,
+	MemoryUpdate,
+)
+from api.schemas.search import Page, SearchMode, SearchParams
+from api.schemas.sorting import SortDir
+from api.v1.routers.resource_access import create_resource_access_router
 from api.v1.service import memories as memory_service
 from api.v1.service.auth import Principal, get_current_principal
 from api.v1.service.authorization import require_admin
@@ -21,37 +29,36 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 router = APIRouter(prefix="/memories", tags=["memories"])
+router.include_router(create_resource_access_router(ResourceType.MEMORY, "memory_id"))
 
 
-MemorySortBy = Literal[
-	"category",
-	"content_length",
-	"last_accessed_at",
-	"confidence",
-]
-
-
-@router.get("/search", response_model=CursorPage[SearchResultItem])
+@router.get("/search", response_model=Page[MemorySchema])
 async def search_memories(
+	filters: Annotated[MemorySearchFilters, Depends()],
 	q: str = Query(min_length=1, max_length=500),
 	limit: int = Query(default=10, ge=1, le=50),
-	cursor: str | None = Query(default=None),
+	offset: int = Query(default=0, ge=0),
 	mode: SearchMode = Query(default=SearchMode.FULL),
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> CursorPage[SearchResultItem]:
-	"""hybrid search across memories with cursor pagination.
+) -> Page[MemorySchema]:
+	"""hybrid search across memories, returning relevance-ordered memories.
 
 	memories are only searchable via this dedicated endpoint and are NOT
 	included in the global /search results.
 	"""
-	return await memory_service.search_memories(
+	scored = await memory_service.search_memories(
 		q,
 		db,
 		principal=principal,
-		limit=limit,
-		cursor=cursor,
+		limit=limit + 1,
+		offset=offset,
 		search_params=SearchParams(mode=mode),
+		filters=filters,
+	)
+	return Page(
+		items=[MemorySchema.model_validate(hit.item) for hit in scored[:limit]],
+		has_more=len(scored) > limit,
 	)
 
 
@@ -73,12 +80,11 @@ async def create_memory(
 
 @router.get("", response_model=list[MemorySchema])
 async def list_memories(
-	user_id: TypeID,
+	filters: Annotated[MemoryListFilters, Depends()],
 	skip: int = 0,
 	limit: int = 50,
-	sort_by: CommonSortBy | MemorySortBy = "updated_at",
+	sort_by: MemorySortBy = "updated_at",
 	sort_dir: SortDir = "desc",
-	search: str | None = None,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> list[MemorySchema]:
@@ -86,14 +92,27 @@ async def list_memories(
 	items = await memory_service.list_memories(
 		db,
 		principal=principal,
-		user_id=user_id,
+		filters=filters,
 		skip=skip,
 		limit=limit,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
-		search=search,
 	)
 	return [MemorySchema.model_validate(m) for m in items]
+
+
+@router.get("/count", response_model=int)
+async def count_memories(
+	filters: Annotated[MemoryListFilters, Depends()],
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> int:
+	"""count memories matching the list filters."""
+	return await memory_service.count_memories(
+		db,
+		principal=principal,
+		filters=filters,
+	)
 
 
 @router.get("/{memory_id}", response_model=MemorySchema)

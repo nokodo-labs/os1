@@ -8,16 +8,36 @@ import logging
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.database import async_session_local
+from api.local_tasks import create_background_task
+from api.models.memory import Memory
 from api.schemas.memory import MemoryCreate
+from api.schemas.preferences import AIPreferences
+from api.schemas.search import Page, SearchMode, SearchParams
 from api.v1.service import memories as memory_service
+from api.v1.service.auth import Principal
 from api.v1.service.chat.context import AppContext
-from nokodo_ai.context import AgentContext
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
-from nokodo_ai.types.json import JSONArray, JSONObject
+from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
+_HYBRID_SEARCH = SearchParams(mode=SearchMode.HYBRID)
+
+
+def _memory_search_result(memory: Memory) -> dict[str, object]:
+	"""summarize a memory for agent search results."""
+	result: dict[str, object] = {
+		"id": str(memory.id),
+		"content": memory.content,
+	}
+	if memory.tags:
+		result["tags"] = list(memory.tags)
+	return result
 
 
 class MemorySearchInput(BaseModel):
@@ -27,16 +47,20 @@ class MemorySearchInput(BaseModel):
 
 	query: str = Field(
 		...,
-		description=(
-			"natural language query describing what memories to recall. "
-			"hybrid BM25 + semantic search is used."
-		),
+		description=("natural language query describing what memories to recall"),
+		min_length=1,
+		max_length=500,
 	)
 	limit: int = Field(
 		default=5,
-		description="maximum number of memories to return",
+		description="maximum number of relevant memories to return",
 		ge=1,
-		le=20,
+		le=30,
+	)
+	offset: int = Field(
+		default=0,
+		description="number of search results to skip before this page.",
+		ge=0,
 	)
 
 
@@ -48,10 +72,15 @@ class MemoryCreateInput(BaseModel):
 	content: str = Field(
 		...,
 		description="the content of the memory to store",
+		examples=[
+			"User's dog Ruby is a golden retriever",
+			"User loves pizza but only if it has mushrooms on it",
+		],
 	)
-	category: str | None = Field(
+	tags: list[str] | None = Field(
 		default=None,
-		description="optional category or tag for the memory",
+		description="optional tags/labels for the memory",
+		examples=[["preferences", "food"], ["pets", "family"]],
 	)
 
 
@@ -61,9 +90,8 @@ class MemoryRecallTool(Tool[AppContext]):
 	name: str = Field(default="memory_recall")
 	description: str = Field(
 		default=(
-			"recall relevant memories about the user using a semantic query. "
-			"use this to retrieve context from past conversations, stated "
-			"preferences, or facts the user has shared."
+			"recall memories from your long term memory system "
+			"via hybrid vector search."
 		)
 	)
 	parameters: JSONObject = Field(
@@ -72,30 +100,38 @@ class MemoryRecallTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		ai = __app_context__.principal.user.prefs.ai
-		if ai is not None and ai.memories_enabled is False:
+		if isinstance(ai, AIPreferences) and ai.memories_enabled is False:
 			out: JSONObject = {
 				"status": "success",
 				"message": "memory features are disabled by user preferences",
 			}
-			return self.success(json.dumps(out), __agent_context__)
+			return self.success(json.dumps(out), __tool_call_context__)
 		inp = MemorySearchInput.model_validate(kwargs)
 		try:
-			page = await memory_service.search_memories(
+			scored = await memory_service.search_memories(
 				inp.query,
 				__app_context__.session,
 				principal=__app_context__.principal,
-				limit=inp.limit,
+				limit=inp.limit + 1,
+				offset=inp.offset,
+				search_params=_HYBRID_SEARCH,
 			)
 		except HTTPException as exc:
-			return self.error(str(exc.detail), __agent_context__)
+			return self.error(str(exc.detail), __tool_call_context__)
 
+		page = Page(
+			items=[hit.item for hit in scored[: inp.limit]],
+			has_more=len(scored) > inp.limit,
+		)
 		if not page.items:
 			out = {
 				"status": "success",
@@ -103,30 +139,30 @@ class MemoryRecallTool(Tool[AppContext]):
 				"count": 0,
 				"results": [],
 			}
-			return self.success(json.dumps(out), __agent_context__)
+			return self.success(json.dumps(out), __tool_call_context__)
 
-		results: JSONArray = [
-			{
-				"id": item.id,
-				"title": item.title,
-				**({"category": item.preview} if item.preview else {}),
-			}
-			for item in page.items
-		]
+		results = [_memory_search_result(m) for m in page.items]
 		n = len(results)
 		msg = f"recalled {n} {'memory' if n == 1 else 'memories'}"
-		out = {"status": "success", "message": msg, "count": n, "results": results}
-		return self.success(json.dumps(out), __agent_context__)
+		next_offset = inp.offset + inp.limit if page.has_more else None
+		out = {
+			"status": "success",
+			"message": msg,
+			"count": n,
+			"results": results,
+			"next_offset": next_offset,
+		}
+		return self.success(json.dumps(out), __tool_call_context__)
 
 
 class MemoryCreateTool(Tool[AppContext]):
-	"""store a new memory for the user."""
+	"""store a new memory."""
 
 	name: str = Field(default="memory_create")
 	description: str = Field(
 		default=(
-			"store a new memory. use this to permanently save important facts, "
-			"preferences, or context the user has shared during the conversation."
+			"store a new memory. use this to remember anything "
+			"you want, from what the user said in the chat."
 		)
 	)
 	parameters: JSONObject = Field(
@@ -135,32 +171,54 @@ class MemoryCreateTool(Tool[AppContext]):
 
 	async def call(
 		self,
+		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
+		__tool_call_context__: ToolCallContext,
 		__app_context__: AppContext | None,
 		**kwargs: object,
 	) -> ToolMessage:
 		if __app_context__ is None:
-			return self.error("app context is required", __agent_context__)
+			return self.error("app context is required", __tool_call_context__)
 		ai = __app_context__.principal.user.prefs.ai
-		if ai is not None and ai.memories_enabled is False:
-			out = {
+		if isinstance(ai, AIPreferences) and ai.memories_enabled is False:
+			disabled_out = {
 				"status": "success",
 				"message": "memory features are disabled by user preferences",
 			}
-			return self.success(json.dumps(out), __agent_context__)
+			return self.success(json.dumps(disabled_out), __tool_call_context__)
 		inp = MemoryCreateInput.model_validate(kwargs)
-		try:
-			memory = await memory_service.create_memory(
+
+		# return immediately - persist + vectorize in a background task
+		create_background_task(
+			_persist_memory(
+				inp,
+				user_id=__app_context__.user_id,
+				principal=__app_context__.principal,
+			),
+			name=f"memory_create:{__app_context__.user_id}",
+		)
+
+		out: JSONObject = {"status": "success", "message": "memory saved"}
+		return self.success(json.dumps(out), __tool_call_context__)
+
+
+async def _persist_memory(
+	inp: MemoryCreateInput,
+	user_id: TypeID,
+	principal: Principal,
+) -> None:
+	"""background task: create memory in its own session."""
+	try:
+		async with async_session_local() as session:
+			await memory_service.create_memory(
 				MemoryCreate(
 					content=inp.content,
-					category=inp.category,
-					user_id=__app_context__.user_id,
+					tags=inp.tags,
+					user_id=user_id,
 				),
-				__app_context__.session,
-				__app_context__.principal,
+				session,
+				principal,
 			)
-		except HTTPException as exc:
-			return self.error(str(exc.detail), __agent_context__)
-
-		out = {"status": "success", "message": "memory saved", "id": str(memory.id)}
-		return self.success(json.dumps(out), __agent_context__)
+			await session.commit()
+	except Exception:
+		logger.exception("background memory_create failed")

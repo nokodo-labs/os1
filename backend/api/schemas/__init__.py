@@ -1,6 +1,14 @@
 """Pydantic schemas."""
 
 from api.schemas.agent import Agent, AgentCreate
+from api.schemas.calendar import (
+	Calendar,
+	CalendarCreate,
+	CalendarEvent,
+	CalendarEventCreate,
+	CalendarEventUpdate,
+	CalendarUpdate,
+)
 from api.schemas.event import Event, EventCreate
 from api.schemas.group import Group, GroupCreate, GroupUpdate
 from api.schemas.memory import Memory, MemoryCreate
@@ -24,6 +32,7 @@ from api.schemas.sorting import CommonSortBy, SortDir
 from api.schemas.task import Task, TaskCreate, TaskUpdate
 from api.schemas.thread import Thread, ThreadCreate, ThreadUpdate
 from api.schemas.user import User, UserCreate, UserUpdate
+from api.schemas.user_client import UserClient, UserClientPatch, UserClientUpsert
 
 
 __all__ = [
@@ -33,6 +42,12 @@ __all__ = [
 	"HomepagePreferences",
 	"Agent",
 	"AgentCreate",
+	"Calendar",
+	"CalendarCreate",
+	"CalendarEvent",
+	"CalendarEventCreate",
+	"CalendarEventUpdate",
+	"CalendarUpdate",
 	"Event",
 	"EventCreate",
 	"Group",
@@ -68,6 +83,9 @@ __all__ = [
 	"NotificationPreferences",
 	"PrivacyPreferences",
 	"User",
+	"UserClient",
+	"UserClientPatch",
+	"UserClientUpsert",
 	"UserCreate",
 	"UserPreferences",
 	"UserUpdate",

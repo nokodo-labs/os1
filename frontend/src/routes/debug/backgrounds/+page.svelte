@@ -5,6 +5,7 @@
 		BackgroundConfig,
 		BackgroundType,
 	} from '$lib/components/backgrounds/BackgroundManager.svelte'
+	import { DropdownSelect } from '$lib/components/primitives'
 	import { background } from '$lib/stores/background.svelte'
 	import { onDestroy } from 'svelte'
 
@@ -27,6 +28,7 @@
 		'static',
 		'none',
 	]
+	const backgroundOptions = backgrounds.map((value) => ({ value, label: value }))
 
 	const DEFAULT_CONFIG: BackgroundConfig = {
 		color: '#171717',
@@ -462,17 +464,15 @@
 	<div class="mt-6 space-y-4">
 		<div class="border-foreground/10 bg-foreground/5 rounded-2xl border p-4">
 			<div class="text-foreground/60 mb-2 text-xs">background</div>
-			<select
-				class="border-foreground/15 w-full rounded-lg border bg-black/40 px-3 py-2 text-sm"
+			<DropdownSelect
+				options={backgroundOptions}
 				value={selected}
-				onchange={(e) => {
-					selected = e.currentTarget.value as BackgroundType
+				onchange={(value) => {
+					selected = value as BackgroundType
 				}}
-			>
-				{#each backgrounds as bg (bg)}
-					<option value={bg}>{bg}</option>
-				{/each}
-			</select>
+				ariaLabel="background"
+				buttonClass="rounded-lg px-3 py-2"
+			/>
 		</div>
 
 		{#if selected === 'static'}
@@ -783,15 +783,13 @@
 		{:else if selected === 'lightrays'}
 			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
 				<div class="text-foreground/60 text-xs">origin</div>
-				<select
-					class="border-foreground/15 w-full rounded-lg border bg-black/40 px-3 py-2 text-sm"
+				<DropdownSelect
+					options={raysOrigins.map((origin) => ({ value: origin, label: origin }))}
 					value={config.raysOrigin || 'top-center'}
-					onchange={(e) => setString('raysOrigin', e.currentTarget.value)}
-				>
-					{#each raysOrigins as origin (origin)}
-						<option value={origin}>{origin}</option>
-					{/each}
-				</select>
+					onchange={(value) => setString('raysOrigin', value)}
+					ariaLabel="rays origin"
+					buttonClass="rounded-lg px-3 py-2"
+				/>
 				<div class="text-foreground/60 text-xs">color</div>
 				<input
 					type="color"

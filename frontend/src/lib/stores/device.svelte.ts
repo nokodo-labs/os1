@@ -145,38 +145,6 @@ const IDLE_TIMEOUT_MS = 60_000
 let keyboardBaselineHeight = 0
 let keyboardBaselineWidth = 0
 
-/** input types that trigger the virtual keyboard on mobile */
-const KEYBOARD_INPUT_TYPES = new Set([
-	'text',
-	'email',
-	'number',
-	'password',
-	'search',
-	'tel',
-	'url',
-	'date',
-	'datetime-local',
-	'month',
-	'time',
-	'week',
-])
-
-/**
- * check whether the currently focused element would trigger a virtual keyboard.
- * uses a whitelist of known keyboard-triggering input types so unknown/new
- * types default to "no keyboard" (safe) instead of false positives.
- */
-function isEditableElementFocused(): boolean {
-	const el = document.activeElement
-	if (!el) return false
-	if (el instanceof HTMLTextAreaElement) return true
-	if (el instanceof HTMLElement && el.isContentEditable) return true
-	if (el instanceof HTMLInputElement) {
-		return KEYBOARD_INPUT_TYPES.has(el.type.toLowerCase())
-	}
-	return false
-}
-
 function addMqListener(mq: MediaQueryList, handler: () => void) {
 	if ('addEventListener' in mq) {
 		mq.addEventListener('change', handler)
@@ -679,24 +647,18 @@ function syncFromWindow(
 		keyboardBaselineHeight = vvHeight
 	}
 
-	const kbDiff = keyboardBaselineHeight - vvHeight
-	const kbOpen = device.isMobile && kbDiff > 150 && isEditableElementFocused()
+	const kbDiff = Math.max(0, keyboardBaselineHeight - vvHeight, window.innerHeight - vvHeight)
+	const kbOpen = device.isMobile && kbDiff > 150
 
 	device.virtualKeyboardOpen = kbOpen
 	device.virtualKeyboardHeight = kbOpen ? Math.round(kbDiff) : 0
 
-	// drive layout height via CSS custom property:
-	// when keyboard is open, shrink to the actual visible area;
-	// otherwise, remove the override and let the CSS default (100dvh) apply.
-	if (kbOpen) {
+	// keep the app shell tied to the visible viewport on mobile.
+	if (device.isMobile) {
 		document.documentElement.style.setProperty('--app-height', `${Math.round(vvHeight)}px`)
 	} else {
 		document.documentElement.style.removeProperty('--app-height')
 	}
-
-	// prevent overscrolling past the visible area when keyboard is open.
-	// the class locks html/body overflow via CSS.
-	document.documentElement.classList.toggle('virtual-keyboard-open', kbOpen)
 }
 
 function scheduleSync(syncNow: () => void) {
@@ -794,7 +756,6 @@ export function initDevice(): void {
 	window.addEventListener('mousemove', onActivity, { passive: true })
 	window.addEventListener('focus', onActivity)
 	document.addEventListener('visibilitychange', onVisibilityChange)
-
 	window.addEventListener('resize', onEvent, { passive: true })
 	window.addEventListener('orientationchange', onEvent, { passive: true })
 	window.visualViewport?.addEventListener('resize', onEvent, { passive: true })
@@ -831,7 +792,6 @@ export function initDevice(): void {
 		window.removeEventListener('mousemove', onActivity)
 		window.removeEventListener('focus', onActivity)
 		document.removeEventListener('visibilitychange', onVisibilityChange)
-
 		window.removeEventListener('resize', onEvent)
 		window.removeEventListener('orientationchange', onEvent)
 		window.visualViewport?.removeEventListener('resize', onEvent)
@@ -859,7 +819,6 @@ export function destroyDevice(): void {
 	keyboardBaselineHeight = 0
 	keyboardBaselineWidth = 0
 	document.documentElement.style.removeProperty('--app-height')
-	document.documentElement.classList.remove('virtual-keyboard-open')
 	resetDeviceState()
 }
 

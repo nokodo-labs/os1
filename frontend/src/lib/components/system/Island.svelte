@@ -30,10 +30,11 @@
 	})
 
 	const chatParam = $derived(browser ? page.url.searchParams.get('chat') : null)
+	const isSearchMode = $derived(browser ? page.url.searchParams.has('search') : false)
 
 	function handleHome() {
 		sidebar?.selectChat?.(null)
-		const isAlreadyHome = page.url.pathname === '/' && chatParam === null
+		const isAlreadyHome = page.url.pathname === '/' && chatParam === null && !isSearchMode
 		if (isAlreadyHome) {
 			window.dispatchEvent(new CustomEvent('focus:chat-input'))
 			return
@@ -41,7 +42,7 @@
 		void goto(resolve('/'), { keepFocus: true, noScroll: true })
 	}
 
-	const isHomeLayout = $derived(page.url.pathname === '/' && chatParam === null)
+	const isHomeLayout = $derived(page.url.pathname === '/' && chatParam === null && !isSearchMode)
 
 	// PWA state
 	const isOffline = $derived(!network.online)
@@ -89,18 +90,18 @@
 	component="island"
 	tag="header"
 	class="overflow-visible rounded-full px-3 py-3 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
-	style="view-transition-name: island;"
+	style="view-transition-name: island; --island-control-icon-size: 2.3rem;"
 	blurRadius={4}
 >
 	<div
-		class="relative z-10 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
+		class="relative z-10 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center"
 		style="height: var(--chrome-island-height);"
 	>
 		<!-- left: context actions (page-injected via chrome.setContextActions) -->
-		<div class="flex h-full items-center">
+		<div class="flex h-full min-w-0 items-center">
 			{#if chrome.island.contextActions}
 				<div
-					class="island-context-actions flex h-full items-center gap-1"
+					class="island-context-actions flex h-full min-w-0 items-center"
 					style="color: var(--accent-primary, white);"
 				>
 					{@render chrome.island.contextActions()}
@@ -127,18 +128,20 @@
 		</div>
 
 		<!-- right: stable controls + PWA actions + user -->
-		<div class="island-right-controls flex h-full items-center justify-end">
+		<div class="island-right-controls flex h-full items-center justify-end gap-0">
 			<!-- PWA: update button (supersedes install) -->
 			{#if showUpdate}
 				<button
-					class="island-pwa-btn flex cursor-pointer items-center justify-center gap-1.5 text-amber-400/90 transition-transform duration-300 hover:scale-[1.05] hover:text-amber-300 active:scale-[0.97]"
-					onclick={applyUpdate}
+					class="island-pwa-btn flex cursor-pointer items-center justify-center text-amber-400/90 transition-transform duration-300 hover:scale-[1.05] hover:text-amber-300 active:scale-[0.97] disabled:cursor-default disabled:opacity-70 disabled:hover:scale-100"
+					onclick={() => void applyUpdate()}
+					disabled={swUpdate.applyingUpdate}
+					aria-busy={swUpdate.applyingUpdate}
 					aria-label="update available"
 				>
-					<ArrowUpCircle strokeWidth="2" />
+					<ArrowUpCircle class="island-pwa-icon" strokeWidth="2" />
 					<span
 						class="island-pwa-label text-xs font-medium transition-all duration-300 {labelVisible
-							? 'max-w-20 opacity-100'
+							? 'max-w-20 pr-2.5 pl-1 opacity-100'
 							: 'max-w-0 opacity-0'}"
 					>
 						update
@@ -149,14 +152,14 @@
 			<!-- PWA: install button -->
 			{#if showInstall}
 				<button
-					class="island-pwa-btn text-foreground/80 hover:text-foreground flex cursor-pointer items-center justify-center gap-1.5 transition-transform duration-300 hover:scale-[1.05] active:scale-[0.97]"
+					class="island-pwa-btn text-foreground/80 hover:text-foreground flex cursor-pointer items-center justify-center transition-transform duration-300 hover:scale-[1.05] active:scale-[0.97]"
 					onclick={promptInstall}
 					aria-label="install app"
 				>
-					<Download strokeWidth="2" />
+					<Download class="island-pwa-icon" strokeWidth="2" />
 					<span
 						class="island-pwa-label text-xs font-medium transition-all duration-300 {labelVisible
-							? 'max-w-20 opacity-100'
+							? 'max-w-20 pr-2.5 pl-1 opacity-100'
 							: 'max-w-0 opacity-0'}"
 					>
 						install
@@ -189,40 +192,46 @@
 </LiquidGlass>
 
 <style>
-	/* only target direct children of context actions, not nested dropdown menus */
+	/* direct island controls only; composite controls keep their own inner layout */
+	:global(.island-context-actions) {
+		gap: 0;
+	}
 	:global(.island-context-actions > *) {
 		height: 100%;
 	}
-	:global(.island-context-actions > * > svg),
-	:global(.island-context-actions > button > svg) {
-		height: 60%;
-		width: auto;
-	}
-	/* handle trigger buttons nested inside wrapper elements (e.g. dropdown containers) */
-	:global(.island-context-actions > div > button) {
-		height: 100%;
-	}
-	:global(.island-context-actions > div > button > svg) {
-		height: 60%;
-		width: auto;
-	}
 
-	/* only target direct button children of right controls, not nested menus */
+	:global(.island-context-actions > button),
 	:global(.island-right-controls > button) {
+		display: inline-flex;
+		flex: 0 0 auto;
 		height: 100%;
-	}
-	:global(.island-right-controls > button > svg) {
-		height: 60%;
-		width: auto;
+		min-width: 0;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		line-height: 1;
 	}
 
-	/* PWA buttons: icon sizing matches other island buttons */
 	:global(.island-pwa-btn) {
+		display: inline-flex;
 		height: 100%;
+		min-width: 0;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		line-height: 1;
 	}
-	:global(.island-pwa-btn > svg) {
-		height: 60%;
-		width: auto;
+
+	:global(.island-context-actions > button > svg),
+	:global(.island-right-controls > button > svg) {
+		height: var(--island-control-icon-size, 2.3rem);
+		width: var(--island-control-icon-size, 2.3rem);
+	}
+
+	:global(.island-pwa-icon) {
+		height: var(--island-control-icon-size, 2.3rem);
+		width: var(--island-control-icon-size, 2.3rem);
+		flex: 0 0 auto;
 	}
 
 	/* label collapse: overflow hidden + whitespace nowrap for smooth max-width animation */

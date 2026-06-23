@@ -14,13 +14,13 @@ from api.models.notification import Notification
 from api.models.task import Task, TaskStatus, TaskType
 from api.models.thread import Thread
 from api.models.user import User
-from api.schemas.agent import AgentCreate
+from api.schemas.agent import AgentConfig, AgentCreate
+from api.schemas.memory import MemoryListFilters
 from api.schemas.message import MessageCreate
-from api.schemas.task import TaskUpdate
+from api.schemas.task import TaskListFilters, TaskUpdate
 from api.schemas.user import UserCreate
 from api.v1.service import (
 	agents,
-	authorization,
 	memories,
 	notifications,
 	tasks,
@@ -28,11 +28,15 @@ from api.v1.service import (
 	users,
 )
 from api.v1.service.auth import Principal, authenticate_user, get_current_active_user
+from api.v1.service.authorization import (
+	require_project_access,
+	require_thread_access,
+)
 from nokodo_ai.utils.security import hash_password
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
-def _user(is_admin: bool = False, *, active: bool = True) -> User:
+def _user(is_admin: bool = False, active: bool = True) -> User:
 	uid = new_typeid("user")
 	return User(
 		email=f"u-{uid}@example.com",
@@ -45,7 +49,6 @@ def _user(is_admin: bool = False, *, active: bool = True) -> User:
 
 async def _principal(
 	user: User,
-	*,
 	session: AsyncSession | None = None,
 ) -> Principal:
 	if session is not None and user.id is None:
@@ -93,11 +96,11 @@ async def test_authorization_require_access(db_session: AsyncSession) -> None:
 	await db_session.commit()
 	principal = await _principal(user, session=db_session)
 	with pytest.raises(HTTPException):
-		await authorization.require_thread_access(
+		await require_thread_access(
 			new_typeid("thread"), db_session, principal=principal
 		)
 	with pytest.raises(HTTPException):
-		await authorization.require_project_access(
+		await require_project_access(
 			new_typeid("proj"), db_session, principal=principal
 		)
 
@@ -113,7 +116,7 @@ async def test_agents_visibility_and_model_check(db_session: AsyncSession) -> No
 				description=None,
 				system_prompt=None,
 				plugin_ids=[],
-				config={},
+				config=AgentConfig(),
 			),
 			session=db_session,
 			principal=admin,
@@ -151,6 +154,7 @@ async def test_notifications_guards(db_session: AsyncSession) -> None:
 		id=TypeID(new_typeid("notif")),
 		user_id=user_a.id,
 		event_id=event.id,
+		title="guard notification",
 	)
 	db_session.add(note)
 	await db_session.commit()
@@ -191,7 +195,7 @@ async def test_tasks_update_no_changes(db_session: AsyncSession) -> None:
 	filtered = await tasks.list_tasks(
 		db_session,
 		principal=principal,
-		status_filter=TaskStatus.PENDING,
+		filters=TaskListFilters(status_filter=TaskStatus.PENDING),
 	)
 	assert filtered
 
@@ -211,7 +215,9 @@ async def test_memories_admin_user_filter(db_session: AsyncSession) -> None:
 	db_session.add(memory)
 	await db_session.commit()
 	listed = await memories.list_memories(
-		db_session, principal=principal, user_id=other_user.id
+		db_session,
+		principal=principal,
+		filters=MemoryListFilters(owner_id=other_user.id),
 	)
 	assert listed and listed[0].user_id == other_user.id
 

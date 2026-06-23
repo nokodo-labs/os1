@@ -86,7 +86,7 @@
 						<span class="text-foreground/90 font-medium">{summary.title}</span>
 					</div>
 					{#if summary.subtitle}
-						<p class="text-foreground/50 truncate text-sm">{summary.subtitle}</p>
+						<p class="text-foreground/50 text-sm wrap-break-word">{summary.subtitle}</p>
 					{/if}
 				</div>
 
@@ -133,7 +133,7 @@
 						<span class="text-foreground/90 font-medium">{summary.title}</span>
 					</div>
 					{#if summary.subtitle}
-						<p class="text-foreground/50 truncate text-sm">{summary.subtitle}</p>
+						<p class="text-foreground/50 text-sm wrap-break-word">{summary.subtitle}</p>
 					{/if}
 				</div>
 

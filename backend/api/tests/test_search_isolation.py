@@ -13,33 +13,43 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel, AccessRule
 from api.models.note import Note
-from api.models.reminder import Reminder
+from api.models.reminder import Reminder, ReminderList
 from api.models.thread import Thread
 from api.models.user import User
 from api.permissions import DefaultResourceAccess
+from api.schemas.note import NoteSearchFilters
 from api.schemas.search import SearchMode, SearchParams
+from api.schemas.thread import ThreadSearchFilters
 from api.v1.service import notes as notes_service
-from api.v1.service import reminders as reminders_service
-from api.v1.service import threads as threads_service
 from api.v1.service import vectorstores as vectorstores_service
 from api.v1.service.auth import Principal
+from api.v1.service.reminders.search import (
+	_autocomplete_reminders,
+	_hybrid_search_reminders,
+)
+from api.v1.service.threads.search import (
+	_autocomplete_threads,
+	_hybrid_search_threads,
+	search_threads,
+)
 from nokodo_ai.adapters.base.vectorstores import ChunkSearchResult
 from nokodo_ai.utils.security import hash_password
 from nokodo_ai.utils.typeid import TypeID
 
 
-# --- helpers ---
+# helpers
 
 
 def _uid() -> str:
 	return uuid4().hex[:8]
 
 
-def _user(suffix: str, *, superuser: bool = False) -> User:
+def _user(suffix: str, superuser: bool = False) -> User:
 	return User(
 		email=f"{suffix}@iso.test",
 		username=f"iso_{suffix}",
@@ -58,7 +68,16 @@ def _principal(user: User) -> Principal:
 	)
 
 
+def _reminder_list(owner: User, suffix: str) -> ReminderList:
+	return ReminderList(
+		owner_id=TypeID(owner.id),
+		name=f"list_{suffix}",
+		color="#22c55e",
+	)
+
+
 _AUTOCOMPLETE = SearchParams(mode=SearchMode.AUTOCOMPLETE)
+_HYBRID = SearchParams(mode=SearchMode.HYBRID)
 _SPARSE = SearchParams(mode=SearchMode.SPARSE)
 
 
@@ -80,9 +99,7 @@ def _fake_search_fn(
 	return _search
 
 
-# ================================================================
 # notes - autocomplete (pg_trgm)
-# ================================================================
 
 
 @pytest.mark.asyncio
@@ -104,7 +121,7 @@ async def test_notes_autocomplete_isolates_other_user(
 	results = await notes_service._autocomplete_notes(
 		note_b.title, db_session, principal=_principal(u_a)
 	)
-	assert not any(str(r.id) == str(note_b.id) for r in results), (
+	assert not any(str(r.item.id) == str(note_b.id) for r in results), (
 		"cross-user note appeared in pg_trgm autocomplete"
 	)
 
@@ -128,7 +145,7 @@ async def test_notes_autocomplete_returns_own_note(
 	results = await notes_service._autocomplete_notes(
 		note_a.title, db_session, principal=_principal(u_a)
 	)
-	ids = [str(r.id) for r in results]
+	ids = [str(r.item.id) for r in results]
 	assert str(note_a.id) in ids, "user's own note not returned by autocomplete"
 
 
@@ -152,7 +169,7 @@ async def test_notes_autocomplete_admin_sees_all(
 	results = await notes_service._autocomplete_notes(
 		note.title, db_session, principal=_principal(admin)
 	)
-	ids = [str(r.id) for r in results]
+	ids = [str(r.item.id) for r in results]
 	assert str(note.id) in ids, "admin could not see another user's note"
 
 
@@ -175,14 +192,12 @@ async def test_notes_autocomplete_soft_deleted_excluded(
 	results = await notes_service._autocomplete_notes(
 		note.title, db_session, principal=_principal(u)
 	)
-	assert not any(str(r.id) == str(note.id) for r in results), (
+	assert not any(str(r.item.id) == str(note.id) for r in results), (
 		"soft-deleted note appeared in autocomplete"
 	)
 
 
-# ================================================================
 # threads - autocomplete (pg_trgm)
-# ================================================================
 
 
 @pytest.mark.asyncio
@@ -201,10 +216,10 @@ async def test_threads_autocomplete_isolates_other_user(
 	db_session.add(thread_b)
 	await db_session.commit()
 
-	results = await threads_service._autocomplete_threads(
-		thread_b.title, db_session, principal=_principal(u_a)
-	)
-	assert not any(str(r.id) == str(thread_b.id) for r in results), (
+	title = thread_b.title
+	assert title is not None
+	results = await _autocomplete_threads(title, db_session, principal=_principal(u_a))
+	assert not any(str(r.item.id) == str(thread_b.id) for r in results), (
 		"cross-user thread appeared in pg_trgm autocomplete"
 	)
 
@@ -227,10 +242,10 @@ async def test_threads_autocomplete_returns_own_thread(
 	db_session.add(thread_a)
 	await db_session.commit()
 
-	results = await threads_service._autocomplete_threads(
-		thread_a.title, db_session, principal=_principal(u_a)
-	)
-	ids = [str(r.id) for r in results]
+	title = thread_a.title
+	assert title is not None
+	results = await _autocomplete_threads(title, db_session, principal=_principal(u_a))
+	ids = [str(r.item.id) for r in results]
 	assert str(thread_a.id) in ids, "user's own thread not returned by autocomplete"
 
 
@@ -260,10 +275,10 @@ async def test_threads_autocomplete_granted_user_sees_thread(
 	db_session.add(rule)
 	await db_session.commit()
 
-	results = await threads_service._autocomplete_threads(
-		thread_a.title, db_session, principal=_principal(u_b)
-	)
-	ids = [str(r.id) for r in results]
+	title = thread_a.title
+	assert title is not None
+	results = await _autocomplete_threads(title, db_session, principal=_principal(u_b))
+	ids = [str(r.item.id) for r in results]
 	assert str(thread_a.id) in ids, "grantee could not find explicitly shared thread"
 
 
@@ -285,17 +300,15 @@ async def test_threads_autocomplete_temporary_threads_excluded(
 	db_session.add(tmp_thread)
 	await db_session.commit()
 
-	results = await threads_service._autocomplete_threads(
-		tmp_thread.title, db_session, principal=_principal(u)
-	)
-	assert not any(str(r.id) == str(tmp_thread.id) for r in results), (
+	title = tmp_thread.title
+	assert title is not None
+	results = await _autocomplete_threads(title, db_session, principal=_principal(u))
+	assert not any(str(r.item.id) == str(tmp_thread.id) for r in results), (
 		"temporary thread appeared in autocomplete"
 	)
 
 
-# ================================================================
 # reminders - autocomplete (pg_trgm)
-# ================================================================
 
 
 @pytest.mark.asyncio
@@ -308,14 +321,22 @@ async def test_reminders_autocomplete_isolates_other_user(
 	db_session.add_all([u_a, u_b])
 	await db_session.flush()
 
-	rem_b = Reminder(owner_id=str(u_b.id), title=f"private_reminder_{s}")
+	list_b = _reminder_list(u_b, f"ra_{s}_b")
+	db_session.add(list_b)
+	await db_session.flush()
+
+	rem_b = Reminder(
+		owner_id=TypeID(u_b.id),
+		list_id=list_b.id,
+		title=f"private_reminder_{s}",
+	)
 	db_session.add(rem_b)
 	await db_session.commit()
 
-	results = await reminders_service._autocomplete_reminders(
+	results = await _autocomplete_reminders(
 		rem_b.title, db_session, principal=_principal(u_a)
 	)
-	assert not any(str(r.id) == str(rem_b.id) for r in results), (
+	assert not any(str(r.item.id) == str(rem_b.id) for r in results), (
 		"cross-user reminder appeared in pg_trgm autocomplete"
 	)
 
@@ -330,20 +351,26 @@ async def test_reminders_autocomplete_returns_own_reminder(
 	db_session.add(u_a)
 	await db_session.flush()
 
-	rem_a = Reminder(owner_id=str(u_a.id), title=f"my_unique_reminder_{s}")
+	list_a = _reminder_list(u_a, f"ra_own_{s}")
+	db_session.add(list_a)
+	await db_session.flush()
+
+	rem_a = Reminder(
+		owner_id=TypeID(u_a.id),
+		list_id=list_a.id,
+		title=f"my_unique_reminder_{s}",
+	)
 	db_session.add(rem_a)
 	await db_session.commit()
 
-	results = await reminders_service._autocomplete_reminders(
+	results = await _autocomplete_reminders(
 		rem_a.title, db_session, principal=_principal(u_a)
 	)
-	ids = [str(r.id) for r in results]
+	ids = [str(r.item.id) for r in results]
 	assert str(rem_a.id) in ids, "user's own reminder not returned by autocomplete"
 
 
-# ================================================================
 # hybrid search - postgres post-filter (defense-in-depth)
-# ================================================================
 
 
 @pytest.mark.asyncio
@@ -376,7 +403,7 @@ async def test_notes_hybrid_postgres_postfilter_blocks_cross_user(
 	results = await notes_service._hybrid_search_notes(
 		"leaked", db_session, principal=_principal(u_a), search_params=_SPARSE
 	)
-	assert not any(str(r.id) == str(note_b.id) for r in results), (
+	assert not any(str(r.item.id) == str(note_b.id) for r in results), (
 		"postgres post-filter failed to block cross-user note from hybrid search"
 	)
 
@@ -404,10 +431,10 @@ async def test_threads_hybrid_postgres_postfilter_blocks_cross_user(
 		_fake_search_fn(str(thread_b.id)),
 	)
 
-	results = await threads_service._hybrid_search_threads(
+	results = await _hybrid_search_threads(
 		"leaked", db_session, principal=_principal(u_a), search_params=_SPARSE
 	)
-	assert not any(str(r.id) == str(thread_b.id) for r in results), (
+	assert not any(str(r.item.id) == str(thread_b.id) for r in results), (
 		"postgres post-filter failed to block cross-user thread from hybrid search"
 	)
 
@@ -423,7 +450,15 @@ async def test_reminders_hybrid_postgres_postfilter_blocks_cross_user(
 	db_session.add_all([u_a, u_b])
 	await db_session.flush()
 
-	rem_b = Reminder(owner_id=str(u_b.id), title=f"leaked_reminder_{s}")
+	list_b = _reminder_list(u_b, f"rh_{s}_b")
+	db_session.add(list_b)
+	await db_session.flush()
+
+	rem_b = Reminder(
+		owner_id=TypeID(u_b.id),
+		list_id=list_b.id,
+		title=f"leaked_reminder_{s}",
+	)
 	db_session.add(rem_b)
 	await db_session.commit()
 
@@ -433,10 +468,10 @@ async def test_reminders_hybrid_postgres_postfilter_blocks_cross_user(
 		_fake_search_fn(str(rem_b.id)),
 	)
 
-	results = await reminders_service._hybrid_search_reminders(
+	results = await _hybrid_search_reminders(
 		"leaked", db_session, principal=_principal(u_a), search_params=_SPARSE
 	)
-	assert not any(str(r.id) == str(rem_b.id) for r in results), (
+	assert not any(str(r.item.id) == str(rem_b.id) for r in results), (
 		"postgres post-filter failed to block cross-user reminder from hybrid search"
 	)
 
@@ -465,7 +500,7 @@ async def test_hybrid_own_resource_returned_when_vectorstore_matches(
 	results = await notes_service._hybrid_search_notes(
 		"mine", db_session, principal=_principal(u), search_params=_SPARSE
 	)
-	ids = [str(r.id) for r in results]
+	ids = [str(r.item.id) for r in results]
 	assert str(note.id) in ids, (
 		"user's own note was unexpectedly blocked by post-filter"
 	)
@@ -504,10 +539,271 @@ async def test_threads_hybrid_grantee_can_see_shared_thread(
 		_fake_search_fn(str(thread_a.id)),
 	)
 
-	results = await threads_service._hybrid_search_threads(
+	results = await _hybrid_search_threads(
 		"granted", db_session, principal=_principal(u_b), search_params=_SPARSE
 	)
-	ids = [str(r.id) for r in results]
+	ids = [str(r.item.id) for r in results]
 	assert str(thread_a.id) in ids, (
 		"grantee could not see explicitly shared thread via hybrid search"
 	)
+
+
+# include_deleted / include_hidden behavioral tests
+
+
+# notes: include_deleted
+
+
+@pytest.mark.asyncio
+async def test_notes_autocomplete_include_deleted_admin_sees_deleted(
+	db_session: AsyncSession,
+) -> None:
+	"""admin with include_deleted=True finds a soft-deleted note via autocomplete."""
+	s = _uid()
+	owner = _user(f"nd_admin_owner_{s}")
+	admin = _user(f"nd_admin_{s}", superuser=True)
+	db_session.add_all([owner, admin])
+	await db_session.flush()
+
+	note = Note(user_id=str(owner.id), title=f"deleted_note_admin_{s}", content="gone")
+	db_session.add(note)
+	await db_session.flush()
+	note.soft_delete()
+	await db_session.commit()
+
+	filters = NoteSearchFilters(include_deleted=True)
+	results = await notes_service._autocomplete_notes(
+		note.title, db_session, principal=_principal(admin), filters=filters
+	)
+	ids = [str(r.item.id) for r in results]
+	assert str(note.id) in ids, (
+		"admin could not find soft-deleted note with include_deleted"
+	)
+
+
+@pytest.mark.asyncio
+async def test_notes_include_deleted_non_admin_raises_403(
+	db_session: AsyncSession,
+) -> None:
+	"""non-admin requesting include_deleted must receive a 403."""
+	s = _uid()
+	u = _user(f"nd_nonadmin_{s}")
+	db_session.add(u)
+	await db_session.commit()
+
+	filters = NoteSearchFilters(include_deleted=True)
+	with pytest.raises(HTTPException) as exc_info:
+		await notes_service.search_notes(
+			"anything",
+			db_session,
+			principal=_principal(u),
+			filters=filters,
+			search_params=_AUTOCOMPLETE,
+		)
+	assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_notes_include_deleted_hybrid_mode_raises_422(
+	db_session: AsyncSession,
+) -> None:
+	"""include_deleted with hybrid mode must raise 422 (vectors are deleted)."""
+	s = _uid()
+	admin = _user(f"nd_hybrid_{s}", superuser=True)
+	db_session.add(admin)
+	await db_session.commit()
+
+	filters = NoteSearchFilters(include_deleted=True)
+	with pytest.raises(HTTPException) as exc_info:
+		await notes_service.search_notes(
+			"anything",
+			db_session,
+			principal=_principal(admin),
+			filters=filters,
+			search_params=_HYBRID,
+		)
+	assert exc_info.value.status_code == 422
+
+
+# threads: include_hidden (temporary threads)
+
+
+@pytest.mark.asyncio
+async def test_threads_include_hidden_admin_sees_temporary(
+	db_session: AsyncSession,
+) -> None:
+	"""admin with include_hidden=True must find a temporary thread via autocomplete."""
+	s = _uid()
+	admin = _user(f"th_hidden_{s}", superuser=True)
+	db_session.add(admin)
+	await db_session.flush()
+
+	tmp = Thread(owner_id=TypeID(admin.id), title=f"tmp_thread_{s}", is_temporary=True)
+	db_session.add(tmp)
+	await db_session.commit()
+
+	filters = ThreadSearchFilters(include_hidden=True)
+	title = tmp.title
+	assert title is not None
+	results = await _autocomplete_threads(
+		title, db_session, principal=_principal(admin), filters=filters
+	)
+	ids = [str(r.item.id) for r in results]
+	assert str(tmp.id) in ids, (
+		"admin could not find temporary thread with include_hidden"
+	)
+
+
+@pytest.mark.asyncio
+async def test_threads_include_hidden_non_admin_raises_403(
+	db_session: AsyncSession,
+) -> None:
+	"""non-admin requesting include_hidden must receive a 403."""
+	s = _uid()
+	u = _user(f"th_hid_nonadmin_{s}")
+	db_session.add(u)
+	await db_session.commit()
+
+	filters = ThreadSearchFilters(include_hidden=True)
+	with pytest.raises(HTTPException) as exc_info:
+		await search_threads(
+			"anything",
+			db_session,
+			principal=_principal(u),
+			filters=filters,
+			search_params=_AUTOCOMPLETE,
+		)
+	assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_threads_include_hidden_hybrid_mode_raises_422(
+	db_session: AsyncSession,
+) -> None:
+	"""include_hidden with hybrid mode must raise 422."""
+	s = _uid()
+	admin = _user(f"th_hid_hybrid_{s}", superuser=True)
+	db_session.add(admin)
+	await db_session.commit()
+
+	filters = ThreadSearchFilters(include_hidden=True)
+	with pytest.raises(HTTPException) as exc_info:
+		await search_threads(
+			"anything",
+			db_session,
+			principal=_principal(admin),
+			filters=filters,
+			search_params=_HYBRID,
+		)
+	assert exc_info.value.status_code == 422
+
+
+# threads: include_deleted
+
+
+@pytest.mark.asyncio
+async def test_threads_autocomplete_soft_deleted_excluded(
+	db_session: AsyncSession,
+) -> None:
+	"""soft-deleted threads must not appear in autocomplete results by default."""
+	s = _uid()
+	u = _user(f"td_excl_{s}")
+	db_session.add(u)
+	await db_session.flush()
+
+	thread = Thread(
+		owner_id=TypeID(u.id), title=f"deleted_thread_{s}", is_temporary=False
+	)
+	db_session.add(thread)
+	await db_session.flush()
+	thread.soft_delete()
+	await db_session.commit()
+
+	title = thread.title
+	assert title is not None
+	results = await _autocomplete_threads(title, db_session, principal=_principal(u))
+	assert not any(str(r.item.id) == str(thread.id) for r in results), (
+		"soft-deleted thread appeared in autocomplete"
+	)
+
+
+@pytest.mark.asyncio
+async def test_threads_include_deleted_admin_sees_deleted(
+	db_session: AsyncSession,
+) -> None:
+	"""admin with include_deleted=True finds a soft-deleted thread via autocomplete."""
+	s = _uid()
+	owner = _user(f"td_admin_owner_{s}")
+	admin = _user(f"td_admin_{s}", superuser=True)
+	db_session.add_all([owner, admin])
+	await db_session.flush()
+
+	thread = Thread(
+		owner_id=TypeID(owner.id), title=f"deleted_thread_admin_{s}", is_temporary=False
+	)
+	db_session.add(thread)
+	await db_session.flush()
+	thread.soft_delete()
+	await db_session.commit()
+
+	filters = ThreadSearchFilters(include_deleted=True)
+	title = thread.title
+	assert title is not None
+	results = await _autocomplete_threads(
+		title, db_session, principal=_principal(admin), filters=filters
+	)
+	ids = [str(r.item.id) for r in results]
+	assert str(thread.id) in ids, (
+		"admin could not find soft-deleted thread with include_deleted"
+	)
+
+
+# threads: is_archived (normal filter, works in all modes via SQL post-filter)
+
+
+@pytest.mark.asyncio
+async def test_threads_autocomplete_archived_filter(
+	db_session: AsyncSession,
+) -> None:
+	"""is_archived=True must return only archived threads; False excludes them."""
+	s = _uid()
+	u = _user(f"ta_arch_{s}")
+	db_session.add(u)
+	await db_session.flush()
+
+	archived = Thread(
+		owner_id=TypeID(u.id),
+		title=f"arch_thread_{s}",
+		is_temporary=False,
+		is_archived=True,
+	)
+	active = Thread(
+		owner_id=TypeID(u.id),
+		title=f"arch_thread_{s}",
+		is_temporary=False,
+		is_archived=False,
+	)
+	db_session.add_all([archived, active])
+	await db_session.commit()
+
+	# only archived
+	results_arch = await _autocomplete_threads(
+		f"arch_thread_{s}",
+		db_session,
+		principal=_principal(u),
+		filters=ThreadSearchFilters(is_archived=True),
+	)
+	ids_arch = [str(r.item.id) for r in results_arch]
+	assert str(archived.id) in ids_arch
+	assert str(active.id) not in ids_arch
+
+	# only active
+	results_active = await _autocomplete_threads(
+		f"arch_thread_{s}",
+		db_session,
+		principal=_principal(u),
+		filters=ThreadSearchFilters(is_archived=False),
+	)
+	ids_active = [str(r.item.id) for r in results_active]
+	assert str(active.id) in ids_active
+	assert str(archived.id) not in ids_active

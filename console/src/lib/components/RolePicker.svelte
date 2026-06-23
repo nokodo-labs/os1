@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api, unwrap, type Schemas } from '$lib/api'
+	import { onMount } from 'svelte'
 
 	type Role = Schemas['Role']
 
@@ -15,24 +16,49 @@
 	let query = $state('')
 	let roles = $state<Role[]>([])
 	let isLoading = $state(false)
-	let hasFetched = $state(false)
+	let roleSkip = $state(0)
+	let hasMoreRoles = $state(true)
 	let showDropdown = $state(false)
+	let requestId = 0
+	let searchTimer: ReturnType<typeof setTimeout> | null = null
 
-	async function fetchRoles() {
-		if (hasFetched) return
+	const PAGE_LIMIT = 20
+
+	async function fetchRoles(reset = false) {
+		if (isLoading && !reset) return
 		isLoading = true
+		const currentRequestId = ++requestId
+		const skip = reset ? 0 : roleSkip
 		try {
-			roles = unwrap(await api.GET('/v1/roles', { params: { query: { limit: 200 } } }))
-			hasFetched = true
+			const result = unwrap(
+				await api.GET('/v1/roles', {
+					params: {
+						query: {
+							limit: PAGE_LIMIT,
+							skip,
+							sort_by: 'name',
+							sort_dir: 'asc',
+							q: query.trim() || undefined,
+						},
+					},
+				})
+			)
+			if (currentRequestId !== requestId) return
+			roles = reset ? result : [...roles, ...result]
+			roleSkip = skip + result.length
+			hasMoreRoles = result.length === PAGE_LIMIT
 		} catch {
-			roles = []
+			if (currentRequestId === requestId) {
+				roles = reset ? [] : roles
+				hasMoreRoles = false
+			}
 		} finally {
-			isLoading = false
+			if (currentRequestId === requestId) isLoading = false
 		}
 	}
 
-	$effect(() => {
-		fetchRoles()
+	onMount(() => {
+		void fetchRoles(true)
 	})
 
 	const selectedRoles = $derived(
@@ -42,25 +68,29 @@
 		})
 	)
 
-	const lowerQuery = $derived(query.toLowerCase().trim())
+	const filteredRoles = $derived(roles.filter((r) => !value.includes(r.id)))
 
-	const filteredRoles = $derived(
-		roles
-			.filter((r) => !value.includes(r.id))
-			.filter(
-				(r) =>
-					!lowerQuery ||
-					r.name.toLowerCase().includes(lowerQuery) ||
-					(r.description ?? '').toLowerCase().includes(lowerQuery) ||
-					r.id.toLowerCase().includes(lowerQuery)
-			)
-	)
+	function scheduleSearch() {
+		if (searchTimer) clearTimeout(searchTimer)
+		searchTimer = setTimeout(() => {
+			void fetchRoles(true)
+		}, 250)
+	}
+
+	function handleScroll(event: Event) {
+		if (!(event.currentTarget instanceof HTMLElement)) return
+		const target = event.currentTarget
+		if (target.scrollTop + target.clientHeight < target.scrollHeight - 24) return
+		if (!hasMoreRoles || isLoading) return
+		void fetchRoles(false)
+	}
 
 	function addRole(roleId: string) {
 		if (!value.includes(roleId)) {
 			value = [...value, roleId]
 		}
 		query = ''
+		void fetchRoles(true)
 		showDropdown = false
 	}
 
@@ -96,20 +126,28 @@
 			bind:value={query}
 			placeholder="search roles to add..."
 			class="rounded-xl"
-			onfocus={() => (showDropdown = true)}
+			onfocus={() => {
+				showDropdown = true
+				if (roles.length === 0) void fetchRoles(true)
+			}}
+			oninput={scheduleSearch}
 		/>
-		{#if showDropdown && (filteredRoles.length > 0 || isLoading)}
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
+		{#if showDropdown && (filteredRoles.length > 0 || isLoading || hasMoreRoles || query.trim())}
 			<div
 				class="absolute top-full right-0 left-0 z-10 mt-1 max-h-48 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 shadow-lg"
+				role="listbox"
+				tabindex="-1"
 				onmousedown={(e) => e.preventDefault()}
+				onscroll={handleScroll}
 			>
 				{#if isLoading}
 					<div class="px-3 py-4 text-center text-sm text-zinc-500">loading...</div>
 				{:else}
-					{#each filteredRoles.slice(0, 10) as role (role.id)}
+					{#each filteredRoles as role (role.id)}
 						<button
 							type="button"
+							role="option"
+							aria-selected="false"
 							class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-200 transition-colors hover:bg-zinc-800"
 							onclick={() => addRole(role.id)}
 						>
@@ -126,6 +164,15 @@
 						<div class="px-3 py-4 text-center text-sm text-zinc-500">
 							no more roles available
 						</div>
+					{/if}
+					{#if hasMoreRoles}
+						<button
+							type="button"
+							class="w-full border-t border-zinc-800 px-3 py-2 text-center text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+							onclick={() => fetchRoles(false)}
+						>
+							load more
+						</button>
 					{/if}
 				{/if}
 			</div>

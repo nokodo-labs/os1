@@ -7,16 +7,22 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { makeStreamMessage, makeThread, resetIdCounter } from './fixtures'
+import { makeApiMessage, makeStreamMessage, makeThread, resetIdCounter } from './fixtures'
 
 // --- module mocks (must be before imports that use them) ---
 
-// capture the handler registered via eventStreamClient.subscribe
+// capture the handler registered via eventStreamClient subscription helpers
 let capturedHandler: ((msg: unknown) => void) | null = null
 
 vi.mock('$lib/api/streaming', () => ({
 	eventStreamClient: {
 		subscribe: vi.fn((handler: (msg: unknown) => void) => {
+			capturedHandler = handler
+			return () => {
+				capturedHandler = null
+			}
+		}),
+		subscribeTypes: vi.fn((_types: readonly string[], handler: (msg: unknown) => void) => {
 			capturedHandler = handler
 			return () => {
 				capturedHandler = null
@@ -111,6 +117,22 @@ describe('ChatStore thread event handling', () => {
 			dispatch(makeStreamMessage('thread.created', { ...thread }))
 
 			expect(chat.threadCache.get('t1')).not.toBeNull()
+		})
+
+		it('ignores thread.created when owner_id does not match the current user', async () => {
+			const sessionMock = await import('$lib/auth/session.svelte')
+			const jwtMock = await import('$lib/auth/jwt')
+			vi.mocked(sessionMock.getAccessToken).mockReturnValue('fake.jwt.token')
+			vi.mocked(jwtMock.getJwtUserId).mockReturnValue('user_me')
+
+			const thread = makeThread({ id: 't_other', owner_id: 'user_someone_else' })
+			dispatch(makeStreamMessage('thread.created', { ...thread }))
+
+			expect(chat.recentThreads).toHaveLength(0)
+			expect(chat.threadCache.get('t_other')).toBeNull()
+
+			vi.mocked(sessionMock.getAccessToken).mockReturnValue(null)
+			vi.mocked(jwtMock.getJwtUserId).mockReturnValue('user_test')
 		})
 	})
 
@@ -295,11 +317,13 @@ describe('ChatStore thread event handling', () => {
 			const t1 = makeThread({ id: 't1', title: 'first' })
 			const t2 = makeThread({ id: 't2', title: 'second' })
 			chat.recentThreads = [t1, t2]
+			const nextActivity = new Date(Date.parse(t2.last_activity_at) + 1000).toISOString()
 
 			dispatch(
 				makeStreamMessage('thread.updated', {
 					id: 't2',
 					title: 'now first',
+					last_activity_at: nextActivity,
 				})
 			)
 
@@ -374,6 +398,115 @@ describe('ChatStore thread event handling', () => {
 			dispatch(makeStreamMessage('thread.read', { thread_id: 't2' }))
 
 			expect(chat.unreadCounts.get('t1')).toBe(5)
+		})
+	})
+
+	// -- message.created unread state --
+
+	describe('message.created unread state', () => {
+		it('marks assistant messages unread when the thread is not active', () => {
+			const message = makeApiMessage({ id: 'm1', thread_id: 't1', type: 'assistant' })
+
+			dispatch(makeStreamMessage('message.created', { ...message, thread_id: 't1' }))
+
+			expect(chat.unreadCounts.get('t1')).toBe(1)
+		})
+
+		it('marks tool messages unread', () => {
+			const message = makeApiMessage({ id: 'm1', thread_id: 't1', type: 'tool' })
+
+			dispatch(makeStreamMessage('message.created', { ...message, thread_id: 't1' }))
+
+			expect(chat.unreadCounts.get('t1')).toBe(1)
+		})
+	})
+
+	// -- post-run metadata generation state --
+
+	describe('thread metadata generation state', () => {
+		it('marks missing metadata generating when a run starts', () => {
+			const thread = makeThread({ id: 't1', title: null, tags: [] })
+			chat.recentThreads = [thread]
+
+			dispatch(makeStreamMessage('run.started', { thread_id: 't1', run_id: 'run_1' }))
+
+			expect(chat.metadataGeneratingThreadIds.has('t1')).toBe(true)
+		})
+
+		it('marks missing metadata generating from active run catch-up', () => {
+			const thread = makeThread({ id: 't1', title: null, tags: [] })
+			chat.recentThreads = [thread]
+
+			dispatch(
+				makeStreamMessage(
+					'runs.active',
+					{},
+					{ data: [{ thread_id: 't1', run_id: 'run_1' }] }
+				)
+			)
+
+			expect(chat.metadataGeneratingThreadIds.has('t1')).toBe(true)
+		})
+
+		it('marks missing metadata generating after a run completes', () => {
+			const thread = makeThread({ id: 't1', title: null, tags: [] })
+			chat.recentThreads = [thread]
+
+			dispatch(makeStreamMessage('run.completed', { thread_id: 't1', run_id: 'run_1' }))
+
+			expect(chat.metadataGeneratingThreadIds.has('t1')).toBe(true)
+
+			dispatch(
+				makeStreamMessage('thread.updated', {
+					id: 't1',
+					title: 'generated title',
+					tags: ['generated'],
+				})
+			)
+
+			expect(chat.metadataGeneratingThreadIds.has('t1')).toBe(false)
+		})
+
+		it('keeps missing metadata generating across run completion until thread update', () => {
+			const thread = makeThread({ id: 't1', title: null, tags: [] })
+			chat.recentThreads = [thread]
+
+			dispatch(makeStreamMessage('run.started', { thread_id: 't1', run_id: 'run_1' }))
+			dispatch(makeStreamMessage('run.completed', { thread_id: 't1', run_id: 'run_1' }))
+
+			expect(chat.metadataGeneratingThreadIds.has('t1')).toBe(true)
+
+			dispatch(
+				makeStreamMessage('thread.updated', {
+					id: 't1',
+					title: 'generated title',
+					tags: ['generated'],
+				})
+			)
+
+			expect(chat.metadataGeneratingThreadIds.has('t1')).toBe(false)
+		})
+
+		it('tracks active thread maintenance tasks', () => {
+			const task = {
+				id: 'task_1',
+				user_id: 'user_1',
+				task_type: 'custom',
+				status: 'running',
+				progress: 0,
+				metadata_: { task_name: 'thread.maintenance', thread_id: 't1' },
+				spawned_thread_id: 't1',
+				created_at: new Date().toISOString(),
+				updated_at: new Date().toISOString(),
+			}
+
+			dispatch(makeStreamMessage('task.created', { task }))
+
+			expect(chat.metadataGeneratingThreadIds.has('t1')).toBe(true)
+
+			dispatch(makeStreamMessage('task.failed', { task }))
+
+			expect(chat.metadataGeneratingThreadIds.has('t1')).toBe(false)
 		})
 	})
 

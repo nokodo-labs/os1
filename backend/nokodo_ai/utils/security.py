@@ -10,8 +10,10 @@ from typing import Any
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHash, VerifyMismatchError
-from authlib.jose import JoseError, jwt
 from cryptography.fernet import Fernet, InvalidToken
+from joserfc import jwt
+from joserfc.jwk import OctKey
+from joserfc.jwt import JWTClaimsRegistry
 
 
 _PASSWORD_HASHER = PasswordHasher(
@@ -32,14 +34,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 	"""Validate a plain-text password against an Argon2id hash."""
 	try:
 		_PASSWORD_HASHER.verify(hashed_password, plain_password)
-	except (VerifyMismatchError, InvalidHash):
+	except VerifyMismatchError, InvalidHash:
 		return False
 	return True
 
 
 def create_jwt_token(
 	subject: str | int,
-	*,
 	secret_key: str,
 	algorithm: str,
 	expires_delta: timedelta | None = None,
@@ -51,28 +52,24 @@ def create_jwt_token(
 	if additional_claims:
 		payload.update(additional_claims)
 	headers = {"alg": algorithm, "typ": "JWT"}
-	token = jwt.encode(headers, payload, secret_key)
-	return token.decode("utf-8") if isinstance(token, bytes) else token
+	key = OctKey.import_key(secret_key)
+	return jwt.encode(headers, payload, key, algorithms=[algorithm])
 
 
 def decode_jwt_token(
 	token: str,
-	*,
 	secret_key: str,
 	algorithms: Sequence[str],
 ) -> dict[str, Any]:
 	"""Decode a JWT token and return its payload."""
-	claims = jwt.decode(
-		token,
-		secret_key,
-		claims_options={"exp": {"essential": True}},
+	key = OctKey.import_key(secret_key)
+	token_obj = jwt.decode(token, key, algorithms=list(algorithms))
+	registry = JWTClaimsRegistry(
+		now=int(datetime.now(UTC).timestamp()),
+		exp={"essential": True},
 	)
-	claims.validate(now=int(datetime.now(UTC).timestamp()))
-	allowed_algs = {alg.upper() for alg in algorithms}
-	token_alg = (claims.header.get("alg") or "").upper()
-	if allowed_algs and token_alg not in allowed_algs:
-		raise JoseError("unexpected_alg")
-	return dict(claims)
+	registry.validate(token_obj.claims)
+	return token_obj.claims
 
 
 def get_fernet_key(secret_key: str) -> bytes:
@@ -97,7 +94,6 @@ def decrypt_string_with_fallback(
 	cipher_text: str,
 	secret_key: str,
 	previous_keys: Sequence[str] = (),
-	*,
 	strict: bool = False,
 ) -> tuple[str, bool]:
 	"""Decrypt trying the current key first, then previous keys.

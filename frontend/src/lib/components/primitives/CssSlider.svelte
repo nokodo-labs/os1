@@ -1,6 +1,4 @@
 <script lang="ts">
-	import '$lib/styles/liquid-glass.css'
-
 	interface Props {
 		size?: 'xs' | 'sm' | 'md' | 'lg'
 		min?: number

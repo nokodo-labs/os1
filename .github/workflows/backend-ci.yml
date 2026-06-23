@@ -13,6 +13,11 @@ on:
         description: "run linting"
         required: false
         default: true
+      run_type_check:
+        type: boolean
+        description: "run type checking"
+        required: false
+        default: true
   workflow_dispatch:
     inputs:
       run_tests:
@@ -25,41 +30,18 @@ on:
         type: boolean
         required: false
         default: true
+      run_type_check:
+        description: "run type checking"
+        type: boolean
+        required: false
+        default: true
 
 jobs:
-  format:
-    name: check formatting
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version-file: backend/.python-version
-
-      - name: set up uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-
-      - name: install dependencies
-        run: uv sync --frozen --extra dev
-
-      - name: check code formatting
-        run: uv run ruff format --check .
-
-      - name: check import sorting
-        run: uv run ruff check . --select I --no-fix --output-format=github
-
   quality:
+    # the `file` matrix leg is the required leg; the carryover gate in main.yml
+    # references this job name (`backend CI / lint and test on Python file`).
     name: lint and test on Python ${{ matrix.python }}
     runs-on: ubuntu-latest
-    needs: format
     services:
       postgres:
         image: postgres:17
@@ -74,12 +56,21 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      valkey:
+        image: valkey/valkey:8
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     strategy:
       fail-fast: false
       matrix:
         python:
           - file
-          - "3.14.x"
+          - "3.15"
     continue-on-error: ${{ matrix.python != 'file' }}
     defaults:
       run:
@@ -103,6 +94,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "${{ matrix.python }}"
+          allow-prereleases: true
 
       - name: set up uv
         uses: astral-sh/setup-uv@v7
@@ -114,9 +106,19 @@ jobs:
           echo "running on Python ${{ matrix.python }}"
           uv sync --frozen --all-extras
 
+      - name: check code formatting
+        run: uv run ruff format --check .
+
+      - name: check import sorting
+        run: uv run ruff check . --select I --no-fix --output-format=github
+
       - name: lint code
         if: ${{ inputs.run_lint }}
         run: uv run ruff check . --output-format=github
+
+      - name: type check code
+        if: ${{ inputs.run_type_check }}
+        run: uv run ty check . ../tools/autogen-migration.py ../tools/export-openapi.py --output-format=github
 
       - name: run tests
         if: ${{ inputs.run_tests }}

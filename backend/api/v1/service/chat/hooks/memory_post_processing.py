@@ -1,35 +1,27 @@
-"""memory post-processing hook - maintain and refine memories after agent execution.
-
-runs after each agent turn to analyze the conversation and
-perform memory maintenance: updating stale memories, deleting
-duplicates, and consolidating related memories.
-
-memory CREATION is handled by MemoryCreateTool (agent-driven).
-memory INJECTION is handled by MemoryContextFilter (pre-filter).
-this hook handles the update/delete/dedup lifecycle.
-"""
+"""memory post-processing scheduler helpers."""
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, Field
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import Field
 
 from api.database import async_session_local
-from api.models.memory import Memory
-from api.schemas.memory import MemoryUpdate
-from api.tasks import create_background_task
+from api.schemas.preferences import AIPreferences
+from api.settings import settings as app_settings
 from api.v1.service.chat.hooks.base import Hook
-from api.v1.service.chat.models import (
-	resolve_task_chat_model,
-	run_chat_model_json_schema,
+from api.v1.service.chat.run_status import run_status_store
+from api.v1.tasks.threads import start_memory_post_processing_task
+from nokodo_ai.agents import AgentIterationSnapshot
+from nokodo_ai.context import AgentContext
+from nokodo_ai.messages import (
+	AssistantMessage,
+	FileContent,
+	ImageContent,
+	TextContent,
+	UserMessage,
 )
-from api.v1.service.memories import delete_memory, update_memory
-from nokodo_ai.messages import SystemMessage, UserMessage
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
@@ -39,56 +31,176 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# system prompt for the post-processing LLM
-_POST_PROCESSING_PROMPT = """\
-you are a memory maintenance agent. you receive:
-1. the latest conversation messages
-2. existing memories that may be related
-
-your job is to determine what maintenance actions to take on the
-memory collection. you CANNOT create new memories - only update
-or delete existing ones.
-
-actions:
-- UPDATE: modify an existing memory when information has changed,
-  or consolidate closely related memories into one.
-- DELETE: remove a memory when it is an exact duplicate, directly
-  contradicted by conversation, or was consolidated into another.
-
-rules:
-- only use memory IDs from the provided related memories list.
-- keep memories granular - prefer separate facts over combined ones.
-- only consolidate when memories are inseparable or exact duplicates.
-- if no maintenance is needed, return an empty actions list.
-"""
+_ATTACHMENT_SKIP_METADATA_KEYS = frozenset({"base64", "data", "url"})
+_ATTACHMENT_PRIORITY_METADATA_KEYS = (
+	"file_id",
+	"name",
+	"filename",
+	"title",
+	"description",
+	"summary",
+	"media_type",
+	"mime_type",
+	"updated_at",
+)
 
 
-class PostProcessingAction(BaseModel):
-	"""a single memory maintenance action."""
+def _metadata_snapshot_value(value: object) -> str | None:
+	"""return a compact scalar metadata value safe for memory snapshots."""
+	if value is None:
+		return None
+	if isinstance(value, str):
+		cleaned = " ".join(value.split())
+		return cleaned or None
+	if isinstance(value, (int, float, bool)):
+		return str(value)
+	return None
 
-	action: Literal["update", "delete"]
-	id: str = Field(description="memory id to act on")
-	new_content: str | None = Field(
-		default=None,
-		description=("updated content (required for update, omit for delete)"),
+
+def _format_attachment_snapshot(part: FileContent | ImageContent) -> str | None:
+	"""format only attachment metadata, never raw file payloads."""
+	items: list[tuple[str, str]] = []
+	seen_keys: set[str] = set()
+
+	def append_value(key: str, value: object) -> None:
+		key = str(key)
+		if key.startswith("_") or key in _ATTACHMENT_SKIP_METADATA_KEYS:
+			return
+		text = _metadata_snapshot_value(value)
+		if text is None:
+			return
+		items.append((key, text))
+		seen_keys.add(key)
+
+	append_value("name", part.filename)
+	append_value("media_type", part.media_type)
+	metadata = part.metadata or {}
+	for key in _ATTACHMENT_PRIORITY_METADATA_KEYS:
+		if key not in metadata or key in seen_keys:
+			continue
+		append_value(key, metadata[key])
+	for raw_key, raw_value in metadata.items():
+		key = str(raw_key)
+		if key in seen_keys:
+			continue
+		append_value(key, raw_value)
+
+	if not items:
+		return None
+	return "attachment: " + "; ".join(f"{key}={value}" for key, value in items)
+
+
+def _message_snapshot_parts(message: UserMessage | AssistantMessage) -> list[str]:
+	"""extract text and attachment metadata from a user or assistant message."""
+	parts: list[str] = []
+	for part in message.content:
+		if isinstance(part, TextContent):
+			text = part.text.strip()
+			if text:
+				parts.append(text)
+		elif isinstance(part, (FileContent, ImageContent)):
+			attachment = _format_attachment_snapshot(part)
+			if attachment:
+				parts.append(attachment)
+	return parts
+
+
+def _recent_turn_snapshot(thread: SDKThread, k: int) -> str | None:
+	"""build a role snapshot with no tool messages or tool call dumps."""
+	turns: list[tuple[str, str]] = []
+	current_role: str | None = None
+	current_parts: list[str] = []
+
+	for msg in thread.messages:
+		if not isinstance(msg, (UserMessage, AssistantMessage)):
+			continue
+		parts = _message_snapshot_parts(msg)
+		if not parts:
+			continue
+		role = msg.role
+		if role != current_role:
+			if current_parts:
+				turns.append((current_role or "", "\n".join(current_parts)))
+			current_role = role
+			current_parts = []
+		current_parts.extend(parts)
+
+	if current_parts:
+		turns.append((current_role or "", "\n".join(current_parts)))
+
+	if not turns:
+		return None
+	recent = turns[-k:] if k < len(turns) else turns
+	total = len(recent)
+	lines = [
+		f"{offset - total}. {role}: {text}"
+		for offset, (role, text) in enumerate(recent)
+	]
+	return "\n".join(lines)
+
+
+async def schedule_memory_post_processing(
+	thread: SDKThread,
+	app_context: AppContext | None,
+	message_id: str | TypeID | None = None,
+	message_ref: str | None = None,
+	max_related_memories: int = 10,
+	emit_activity: bool = True,
+) -> None:
+	"""schedule memory maintenance anchored to the completed assistant turn."""
+	if app_context is None:
+		return
+	if not app_settings.ai.memory.enable_memory:
+		return
+	if app_context.thread_id is None:
+		return
+	if message_id is None and message_ref is None:
+		return
+	if app_context.run_id is not None:
+		if await run_status_store.has_in_flight_steering(app_context.run_id):
+			return
+
+	# gate on user preference - skip when memories disabled.
+	ai = app_context.principal.user.prefs.ai
+	if isinstance(ai, AIPreferences) and ai.memories_enabled is False:
+		logger.debug("memory post-processing skipped: disabled by user")
+		return
+
+	if not any(isinstance(message, UserMessage) for message in thread.messages):
+		return
+
+	conversation_snapshot = _recent_turn_snapshot(
+		thread,
+		app_settings.ai.memory.post_processing_turns,
 	)
+	if not conversation_snapshot:
+		return
+	query_text = app_context.retrieval.query_text
+	if query_text is None or not query_text.strip():
+		query_text = conversation_snapshot
 
-
-class PostProcessingResponse(BaseModel):
-	"""structured response from the post-processing LLM."""
-
-	actions: list[PostProcessingAction] = Field(
-		default_factory=list,
-	)
+	thread_id = str(app_context.thread_id)
+	run_id = str(app_context.run_id) if app_context.run_id is not None else None
+	try:
+		async with async_session_local() as task_session:
+			await start_memory_post_processing_task(
+				task_session,
+				app_context.principal,
+				query_text=query_text,
+				max_related_memories=max_related_memories,
+				conversation_snapshot=conversation_snapshot,
+				thread_id=thread_id,
+				message_id=str(message_id) if message_id is not None else None,
+				message_ref=message_ref,
+				run_id=run_id,
+				emit_activity=emit_activity,
+			)
+	except Exception:
+		logger.exception("failed to enqueue memory post-processing task")
 
 
 class MemoryPostProcessingHook(Hook):
-	"""post-execution hook that maintains memory quality.
-
-	analyzes the completed conversation thread and existing memories
-	to detect stale, duplicate, or conflicting entries. schedules
-	post-processing as a background task to avoid blocking the response.
-	"""
+	"""registered hook marker for memory post-processing."""
 
 	name: str = Field(default="memory_post_processing")
 	description: str = Field(
@@ -101,183 +213,20 @@ class MemoryPostProcessingHook(Hook):
 
 	async def execute(
 		self,
-		thread: SDKThread,
+		state: AgentIterationSnapshot[AppContext],
+		agent_context: AgentContext,
 		app_context: AppContext | None,
 	) -> None:
+		"""schedule memory processing only after the SDK run is semantically final."""
+		_ = agent_context
+		if not state.final:
+			return
 		if app_context is None:
 			return
-
-		# gate on user preference - skip when memories disabled.
-		ai = app_context.principal.user.prefs.ai
-		if ai is not None and ai.memories_enabled is False:
-			logger.debug("memory post-processing skipped: disabled by user")
-			return
-
-		user_id = app_context.user_id
-		if user_id is None:
-			return
-
-		# only process if there are user messages in the thread
-		user_messages = [m for m in thread.messages if m.role == "user"]
-		if not user_messages:
-			return
-
-		# schedule as background task so it doesn't block response
-		create_background_task(
-			self._post_process(thread, user_id, app_context),
-			name=f"memory_post_processing:{user_id}",
+		await schedule_memory_post_processing(
+			state.thread,
+			app_context,
+			message_ref=app_context.final_assistant_message_ref,
+			max_related_memories=self.max_related_memories,
+			emit_activity=True,
 		)
-
-	async def _post_process(
-		self,
-		thread: SDKThread,
-		user_id: str,
-		app_context: AppContext,
-	) -> None:
-		"""background task: fetch memories and run LLM."""
-		try:
-			async with async_session_local() as session:
-				memories = await self._fetch_recent_memories(user_id, session)
-				if not memories:
-					return
-
-				conversation = self._extract_recent_messages(thread)
-				existing = self._format_memories(memories)
-
-				try:
-					chat_model = await resolve_task_chat_model(
-						session, "memory_post_processing"
-					)
-				except ValueError:
-					logger.debug(
-						"memory post-processing skipped: no task model configured"
-					)
-					return
-
-				user_content = (
-					f"conversation:\n"
-					f"{json.dumps(conversation)}"
-					f"\n\nrelated memories:\n{existing}"
-				)
-				llm_thread = SDKThread(
-					messages=[
-						SystemMessage.from_text(_POST_PROCESSING_PROMPT),
-						UserMessage.from_text(user_content),
-					]
-				)
-
-				schema = PostProcessingResponse.model_json_schema()
-				raw = await run_chat_model_json_schema(
-					chat_model,
-					thread=llm_thread,
-					json_schema=schema,
-				)
-				result = PostProcessingResponse.model_validate(raw)
-
-				if not result.actions:
-					return
-
-				await self._apply_actions(
-					result.actions,
-					memories,
-					user_id,
-					session,
-					app_context,
-				)
-
-		except Exception:
-			logger.exception(
-				"memory post-processing failed for user %s",
-				user_id,
-			)
-
-	async def _apply_actions(
-		self,
-		actions: list[PostProcessingAction],
-		memories: list[Memory],
-		user_id: str,
-		session: AsyncSession,
-		app_context: AppContext,
-	) -> None:
-		"""apply maintenance actions via the memory service."""
-		mem_ids = {str(m.id) for m in memories}
-
-		for act in actions:
-			if act.id not in mem_ids:
-				logger.warning(
-					"post-processing: unknown memory id %s for user %s",
-					act.id,
-					user_id,
-				)
-				continue
-
-			memory_id = TypeID(act.id)
-
-			if act.action == "update" and act.new_content:
-				await update_memory(
-					memory_id,
-					MemoryUpdate(content=act.new_content),
-					session,
-					app_context.principal,
-				)
-				logger.debug(
-					"post-processing: updated memory %s",
-					act.id,
-				)
-			elif act.action == "delete":
-				await delete_memory(
-					memory_id,
-					session,
-					app_context.principal,
-				)
-				logger.debug(
-					"post-processing: deleted memory %s",
-					act.id,
-				)
-
-		await session.commit()
-
-	async def _fetch_recent_memories(
-		self,
-		user_id: str,
-		session: AsyncSession,
-	) -> list[Memory]:
-		"""load most recently updated memories for a user."""
-		stmt = (
-			select(Memory)
-			.where(Memory.user_id == user_id)
-			.order_by(Memory.updated_at.desc())
-			.limit(self.max_related_memories)
-		)
-		result = await session.execute(stmt)
-		return list(result.scalars().all())
-
-	def _extract_recent_messages(
-		self, thread: SDKThread, count: int = 4
-	) -> list[dict[str, str]]:
-		"""extract the last N non-tool messages."""
-		msgs: list[dict[str, str]] = []
-		for m in reversed(thread.messages):
-			if m.role == "tool":
-				continue
-			text = m.text if hasattr(m, "text") else ""
-			msgs.append({"role": m.role, "content": text})
-			if len(msgs) >= count:
-				break
-		msgs.reverse()
-		return msgs
-
-	def _format_memories(self, memories: list[Memory]) -> str:
-		"""format memories as JSON for the post-processing prompt."""
-		entries = []
-		for mem in memories:
-			entries.append(
-				{
-					"id": str(mem.id),
-					"content": mem.content,
-					"updated_at": (
-						mem.updated_at.isoformat() if mem.updated_at else ""
-					),
-				}
-			)
-		return json.dumps(entries, ensure_ascii=False)

@@ -26,13 +26,18 @@
 		if (parts.length === 1) return 'account'
 		return parts[1] ?? null
 	})
+	const mobileFullBleed = $derived(page.url.pathname === '/settings')
 
 	$effect(() => {
 		appNavigation.setLastVisited('settings', page.url.pathname)
 	})
 </script>
 
-<MasterDetailScaffold masterWidthClass="w-[clamp(280px,28vw,420px)]" ariaLabel="settings sections">
+<MasterDetailScaffold
+	masterWidthClass="w-[clamp(280px,28vw,420px)]"
+	ariaLabel="settings sections"
+	{mobileFullBleed}
+>
 	{#snippet master({ isMobile })}
 		<SettingsSidebar {selectedSection} {isMobile} />
 	{/snippet}

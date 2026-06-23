@@ -7,6 +7,7 @@ from typing import Any, ClassVar
 from pydantic import ConfigDict, Field
 
 from .adapter_enabled import AdapterEnabledBase, AdapterResolver
+from .adapters.base.embeddings import EmbeddingInputType
 from .adapters.embeddings import (
 	EmbeddingsAdapter,
 	resolve_embeddings_adapter,
@@ -34,13 +35,27 @@ class EmbeddingModel(AdapterEnabledBase[EmbeddingsAdapter]):
 	def create(
 		cls,
 		model_name: str,
-		*,
 		adapter: EmbeddingsAdapter | dict[str, Any],
 		**fields: Any,
 	) -> EmbeddingModel:
 		"""Create an embedding model with explicit adapter configuration."""
 		return super()._create(("model_name", model_name), adapter=adapter, **fields)
 
-	async def embed(self, texts: list[str]) -> list[list[float]]:
-		"""generate embeddings for the given texts."""
-		return await self.adapter.embed(texts, model=self.model_name)
+	async def embed(
+		self,
+		texts: list[str],
+		input_type: EmbeddingInputType | None = None,
+	) -> list[list[float]]:
+		"""generate embeddings for the given texts.
+
+		input_type marks whether the texts are search queries or stored
+		documents; adapters whose provider supports asymmetric embeddings
+		use it, the rest ignore it.
+		"""
+		return await self.adapter.embed(
+			texts, model=self.model_name, input_type=input_type
+		)
+
+	def count_tokens(self, texts: list[str]) -> list[int] | None:
+		"""exact token counts per text, or None when the adapter lacks a tokenizer."""
+		return self.adapter.count_tokens(texts, model=self.model_name)

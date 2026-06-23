@@ -1,4 +1,4 @@
-"""vectorstore operations for the api.
+"""vectorstore operations for the API.
 
 provides the process-wide vectorstore adapter, collection resolution,
 provisioning, CRUD operations (upsert, search, delete), and cursor-based
@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Sequence
+from enum import StrEnum
 from functools import lru_cache
 from typing import overload
 from urllib.parse import urlparse
@@ -17,16 +18,19 @@ from urllib.parse import urlparse
 from qdrant_client import AsyncQdrantClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.schemas.search import SearchResultItem
 from api.settings import settings
 from api.v1.service.embeddings import resolve_embedding_model
 from nokodo_ai.adapters.base.vectorstores import (
 	Chunk,
 	ChunkFilter,
 	ChunkSearchResult,
+	FieldCondition,
 	FieldMatch,
 	FieldMatchAny,
 	Index,
+)
+from nokodo_ai.adapters.base.vectorstores import (
+	FieldRange as FieldRange,  # re-export for vectorstore_service.FieldRange
 )
 from nokodo_ai.adapters.vectorstores import VectorstoreAdapter
 from nokodo_ai.vectorstores import Vectorstore
@@ -34,17 +38,41 @@ from nokodo_ai.vectorstores import Vectorstore
 
 logger = logging.getLogger(__name__)
 
-# fallback only; real template comes from settings.assets.vector.collection_template
-_DEFAULT_COLLECTION_TEMPLATE = "{model}_bm25"
+
+class VectorChunkResourceType(StrEnum):
+	"""resource_type values stored on vector chunks."""
+
+	THREAD = "thread"
+	NOTE = "note"
+	MEMORY = "memory"
+	FILE = "file"
+	FILE_CONTENT = "file_content"
+	CALENDAR_EVENT = "calendar_event"
+	REMINDER = "reminder"
+
 
 DEFAULT_INDEXES: Index = {
 	"resource_type": "keyword",
 	"resource_id": "keyword",
+	"parent_resource_type": "keyword",
+	"parent_resource_id": "keyword",
 	"owner_id": "keyword",
 	# acl fields - indexed for fast principal-scoped search
 	"allowed_user_ids": "keyword",
 	"allowed_group_ids": "keyword",
 	"allowed_role_ids": "keyword",
+	# per-resource search filter fields
+	"tags": "keyword",  # threads, memories
+	"labels": "keyword",  # notes
+	"status": "keyword",  # reminders, files
+	"source": "keyword",  # files
+	"list_id": "keyword",  # reminders
+	"project_ids": "keyword",  # notes, files, threads
+	"is_archived": "bool",  # threads
+	"due_at": "datetime",  # reminders
+	"remind_at": "datetime",  # reminders
+	"start_at": "datetime",  # calendar events
+	"end_at": "datetime",  # calendar events
 }
 """scalar field indexes for the default collection.
 
@@ -169,25 +197,35 @@ def _slugify_model(name: str) -> str:
 
 def collection_name(model_name: str) -> str:
 	"""build the default collection name for a given model."""
-	tmpl = settings.assets.vector.collection_template or _DEFAULT_COLLECTION_TEMPLATE
-	return tmpl.format(model=_slugify_model(model_name))
+	return settings.assets.vector.collection_template.format(
+		model=_slugify_model(model_name)
+	)
 
 
-def resource_filter(
-	resource_type: str,
-	*,
+def _resource_type_condition(
+	resource_types: list[VectorChunkResourceType],
+) -> FieldMatch | FieldMatchAny:
+	"""build a scalar or multi-value resource type payload condition."""
+	values = [resource_type.value for resource_type in resource_types]
+	if len(values) == 1:
+		return FieldMatch(key="resource_type", value=values[0])
+	return FieldMatchAny(key="resource_type", values=values)
+
+
+def resource_types_filter(
+	resource_types: list[VectorChunkResourceType],
 	resource_id: str | None = None,
 	owner_id: str | None = None,
 ) -> ChunkFilter:
-	"""build a filter for a specific resource type.
+	"""build a filter for one or more resource types.
 
 	always filters by resource_type. adds resource_id for precise chunk
 	identification (used for upsert/delete). adds owner_id for user-scoped
 	access-controlled search.
 	"""
-	all_of: list[FieldMatch | FieldMatchAny] = [
-		FieldMatch(key="resource_type", value=resource_type),
-	]
+	if not resource_types:
+		raise ValueError("resource_types cannot be empty")
+	all_of: list[FieldCondition] = [_resource_type_condition(resource_types)]
 	if resource_id is not None:
 		all_of.append(FieldMatch(key="resource_id", value=resource_id))
 	if owner_id is not None:
@@ -195,9 +233,44 @@ def resource_filter(
 	return ChunkFilter(all_of=all_of)
 
 
+def with_conditions(
+	base: ChunkFilter,
+	conditions: Sequence[FieldCondition],
+) -> ChunkFilter:
+	"""return a copy of base with extra all_of (AND) conditions appended.
+
+	used to narrow an ACL prefilter with per-resource structured search filters.
+	"""
+	if not conditions:
+		return base
+	return ChunkFilter(all_of=[*base.all_of, *conditions], any_of=base.any_of)
+
+
+def parent_resource_filter(
+	parent_resource_type: VectorChunkResourceType,
+	parent_resource_id: str,
+	resource_types: list[VectorChunkResourceType] | None = None,
+) -> ChunkFilter:
+	"""build a filter for chunks attached to a parent resource."""
+	all_of: list[FieldCondition] = []
+	if resource_types is not None:
+		if not resource_types:
+			raise ValueError("resource_types cannot be empty")
+		all_of.append(_resource_type_condition(resource_types))
+	all_of.extend(
+		(
+			FieldMatch(
+				key="parent_resource_type",
+				value=parent_resource_type.value,
+			),
+			FieldMatch(key="parent_resource_id", value=parent_resource_id),
+		)
+	)
+	return ChunkFilter(all_of=all_of)
+
+
 def acl_filter(
-	resource_type: str,
-	*,
+	chunk_resource_types: list[VectorChunkResourceType],
 	is_admin: bool,
 	user_id: str,
 	group_ids: tuple[str, ...] | list[str] = (),
@@ -206,18 +279,16 @@ def acl_filter(
 	"""build a principal-scoped filter for qdrant that enforces ACL at the vector layer.
 
 	for admins: returns a resource-type-only filter (sees everything).
-	for regular principals: adds should-conditions for owner + explicit grants:
+	for regular principals: adds should-conditions for owner + stored ACL principals:
 	- owner_id == me
-	- me in allowed_user_ids (direct user grant)
+	- me in allowed_user_ids
 	- any(group_ids) in allowed_group_ids
 	- any(role_ids) in allowed_role_ids
 	"""
-	all_of: list[FieldMatch | FieldMatchAny] = [
-		FieldMatch(key="resource_type", value=resource_type),
-	]
+	all_of: list[FieldCondition] = [_resource_type_condition(chunk_resource_types)]
 	if is_admin:
 		return ChunkFilter(all_of=all_of)
-	any_of: list[FieldMatch | FieldMatchAny] = [
+	any_of: list[FieldCondition] = [
 		FieldMatch(key="owner_id", value=user_id),
 		FieldMatch(key="allowed_user_ids", value=user_id),
 	]
@@ -268,7 +339,6 @@ async def _ensure_collection(
 async def upsert_chunks(
 	chunks: list[Chunk],
 	session: AsyncSession,
-	*,
 	collection: str | None = None,
 	store: Vectorstore | None = None,
 ) -> None:
@@ -285,7 +355,6 @@ async def upsert_chunks(
 async def delete(
 	target: list[str],
 	session: AsyncSession,
-	*,
 	collection: str | None = None,
 	store: Vectorstore | None = None,
 ) -> None: ...
@@ -295,7 +364,6 @@ async def delete(
 async def delete(
 	target: ChunkFilter,
 	session: AsyncSession,
-	*,
 	collection: str | None = None,
 	store: Vectorstore | None = None,
 ) -> None: ...
@@ -304,7 +372,6 @@ async def delete(
 async def delete(
 	target: list[str] | ChunkFilter,
 	session: AsyncSession,
-	*,
 	collection: str | None = None,
 	store: Vectorstore | None = None,
 ) -> None:
@@ -320,8 +387,65 @@ async def delete(
 	await vs.delete(target)
 
 
+async def scroll_resource_chunks(
+	resource_type: VectorChunkResourceType,
+	resource_ids: Sequence[str],
+	session: AsyncSession,
+	collection: str | None = None,
+	store: Vectorstore | None = None,
+) -> list[Chunk]:
+	"""fetch every stored chunk for the given resource ids.
+
+	used by verification to decide which resources are already correctly
+	vectorized: the caller compares the returned chunks against the expected
+	fingerprint and chunk set. empty when the collection does not exist yet.
+	"""
+	ids = list(resource_ids)
+	if not ids:
+		return []
+	query_filter = ChunkFilter(
+		all_of=[
+			_resource_type_condition([resource_type]),
+			FieldMatchAny(key="resource_id", values=ids),
+		]
+	)
+	return await scroll_chunks(query_filter, session, collection, store)
+
+
+def child_resource_filter(
+	parent_resource_type: VectorChunkResourceType,
+	parent_resource_ids: Sequence[str],
+	child_resource_type: VectorChunkResourceType,
+) -> ChunkFilter:
+	"""build a filter for child chunks of one or more parent resources."""
+	return ChunkFilter(
+		all_of=[
+			_resource_type_condition([child_resource_type]),
+			FieldMatch(
+				key="parent_resource_type",
+				value=parent_resource_type.value,
+			),
+			FieldMatchAny(
+				key="parent_resource_id",
+				values=list(parent_resource_ids),
+			),
+		]
+	)
+
+
+async def scroll_chunks(
+	query_filter: ChunkFilter,
+	session: AsyncSession,
+	collection: str | None = None,
+	store: Vectorstore | None = None,
+) -> list[Chunk]:
+	"""enumerate all chunks matching a filter from the default collection."""
+	coll = collection or await get_collection(session)
+	vs = store or get_vectorstore(collection=coll)
+	return await vs.scroll(query_filter=query_filter)
+
+
 async def search(
-	*,
 	session: AsyncSession,
 	query: list[float] | None = None,
 	text_query: str | None = None,
@@ -331,10 +455,23 @@ async def search(
 	normalize: bool | None = None,
 	collection: str | None = None,
 	store: Vectorstore | None = None,
+	group_by: str | None = None,
+	group_size: int = 1,
 ) -> list[ChunkSearchResult]:
 	"""search the given or default collection via the vectorstore facade.
 
 	fusion and normalize default to settings values when not set.
+
+	group_by collapses results per distinct value of the given payload field
+	(e.g. "resource_id"), so limit bounds distinct resources rather than raw
+	chunks. group_size sets how many chunks to keep per group (default 1).
+
+	NOTE - offset is intentionally not forwarded here: Qdrant silently ignores
+	offset when group_by is set (query_points_groups has no offset parameter),
+	and all resource searches use group_by="resource_id". SQL autocomplete
+	tiers handle their own offset via .offset() on the SELECT statement.
+	Cross-tier (FULL mode) pagination is done by fetching offset+limit rows
+	from each tier, merging, then slicing merged[offset:offset+limit].
 	"""
 	coll = collection or await get_collection(session)
 	vs = store or get_vectorstore(collection=coll)
@@ -349,36 +486,9 @@ async def search(
 			if normalize is not None
 			else settings.assets.vector.normalize_scores
 		),
+		group_by=group_by,
+		group_size=group_size,
 	)
-
-
-def merge_deduplicate(
-	results: Sequence[list[SearchResultItem] | BaseException],
-	limit: int,
-	*,
-	resource_name: str = "unknown",
-) -> list[SearchResultItem]:
-	"""merge parallel search results, deduplicating by id.
-
-	priority: first result_set in the sequence wins on duplicates.
-	callers should put higher-priority tiers first (hybrid before autocomplete).
-	"""
-	seen: set[str] = set()
-	merged: list[SearchResultItem] = []
-	for result_set in results:
-		if isinstance(result_set, BaseException):
-			logger.warning(
-				"search tier failed for %s",
-				resource_name,
-				exc_info=result_set,
-			)
-			continue
-		for item in result_set:
-			key = str(item.id)
-			if key not in seen:
-				seen.add(key)
-				merged.append(item)
-	return merged[:limit]
 
 
 # admin operations

@@ -6,12 +6,14 @@
 	import Camera from '$lib/components/icons/Camera.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import PencilSquare from '$lib/components/icons/PencilSquare.svelte'
-	import User from '$lib/components/icons/User.svelte'
 	import UserGroup from '$lib/components/icons/UserGroup.svelte'
+	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import { DropdownSelect } from '$lib/components/primitives'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { debounce, getUserInitials } from '$lib/utils'
+	import { userDisplayName } from '$lib/utils/resourceAuthors'
 	import { onMount } from 'svelte'
 
 	const chrome = useSystemChrome()
@@ -22,6 +24,7 @@
 	let editing = $state(false)
 	let profileUser = $state<Record<string, unknown> | null>(null)
 	let friendsCount = $state(0)
+	let isLoading = $state(true)
 
 	// edit fields
 	let editDisplayName = $state('')
@@ -32,7 +35,13 @@
 
 	// derived display values
 	const user = $derived(isOwnProfile ? session.currentUser : profileUser)
-	const displayName = $derived((user?.display_name as string) ?? '')
+	const displayName = $derived(
+		userDisplayName({
+			id: userId,
+			display_name: typeof user?.display_name === 'string' ? user.display_name : null,
+			username: typeof user?.username === 'string' ? user.username : null,
+		}) ?? userId
+	)
 	const displayUsername = $derived((user?.username as string) ?? '')
 	const displayAvatar = $derived(
 		isOwnProfile ? session.userDisplay?.avatar : ((user?.avatar_url as string) ?? null)
@@ -69,6 +78,7 @@
 	})
 
 	async function fetchProfile() {
+		isLoading = true
 		try {
 			if (isOwnProfile) {
 				const { data: friends } = await api.GET('/v1/users/{user_id}/friends', {
@@ -83,6 +93,8 @@
 			}
 		} catch {
 			// silently handle
+		} finally {
+			isLoading = false
 		}
 	}
 
@@ -114,7 +126,7 @@
 		if (!uid) return
 		const { data: res } = await api.PATCH('/v1/users/{user_id}', {
 			params: { path: { user_id: uid } },
-			body: { username: value || null },
+			body: { username: value || undefined },
 		})
 		if (res) session.currentUser = { ...res }
 	}, 600)
@@ -166,7 +178,15 @@
 		class="pb-10"
 		style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 	>
-		{#if editing && isOwnProfile}
+		{#if isLoading}
+			<div class="flex min-h-[45vh] items-center justify-center">
+				<NokodoLoader className="opacity-70" expanded={false} />
+			</div>
+		{:else if !isOwnProfile && !profileUser}
+			<div class="bg-foreground/5 rounded-2xl p-6 text-center">
+				<p class="text-foreground/50 text-sm">profile not found</p>
+			</div>
+		{:else if editing && isOwnProfile}
 			<!-- edit mode -->
 			<div class="flex flex-col items-center gap-4 py-6">
 				<button
@@ -275,19 +295,15 @@
 						class="text-foreground/50 mb-1.5 block text-xs font-medium"
 						for="edit-gender">gender</label
 					>
-					<select
-						id="edit-gender"
-						class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 focus:border-foreground/20 focus:bg-foreground/8 w-full cursor-pointer appearance-none border px-4 py-2.5 text-sm scheme-dark transition-colors outline-none"
+					<DropdownSelect
+						options={genderOptions}
 						value={editGender}
-						onchange={(e) => {
-							editGender = e.currentTarget.value
+						onchange={(value) => {
+							editGender = value
 							saveGender(editGender)
 						}}
-					>
-						{#each genderOptions as opt (opt.value)}
-							<option value={opt.value} class="bg-neutral-900">{opt.label}</option>
-						{/each}
-					</select>
+						ariaLabel="gender"
+					/>
 				</div>
 			</div>
 		{:else}
@@ -367,18 +383,6 @@
 			</div>
 
 			<div class="mt-4 flex flex-col gap-6">
-				<section class="flex flex-col gap-3">
-					<div class="flex items-center gap-2">
-						<User class="text-foreground/50 h-4 w-4" />
-						<h2 class="text-foreground/60 text-sm font-semibold">shared with you</h2>
-					</div>
-					<div class="bg-foreground/5 rounded-2xl py-8 text-center">
-						<p class="text-foreground/40 text-sm">
-							shared notes, threads, and reminders will appear here
-						</p>
-					</div>
-				</section>
-
 				<section class="flex flex-col gap-3">
 					<div class="flex items-center gap-2">
 						<UserGroup class="text-foreground/50 h-4 w-4" />

@@ -3,12 +3,16 @@
 	import { resolve } from '$app/paths'
 	import { api } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
+	import { deleteThread, unarchiveThread as restoreThread } from '$lib/chat/threadActions'
+	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
 	import ModalListLayout from '$lib/components/modals/ModalListLayout.svelte'
 	import { chat } from '$lib/stores/chat.svelte'
+	import { showError } from '$lib/stores/notifications.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { debounce } from '$lib/utils'
+	import { metadataLine } from '$lib/utils/resourceAuthors'
 
 	type Thread = components['schemas']['Thread']
 
@@ -49,6 +53,7 @@
 	let sortIndex = $state(0)
 	let hasMore = $state(true)
 	let unarchivingId = $state<string | null>(null)
+	let deletingId = $state<string | null>(null)
 
 	const currentSort = $derived(sortParsed[sortIndex])
 
@@ -124,6 +129,7 @@
 			search = ''
 			sortIndex = 0
 			unarchivingId = null
+			deletingId = null
 			reload()
 		}
 	})
@@ -131,19 +137,29 @@
 	async function unarchiveThread(threadId: string): Promise<void> {
 		unarchivingId = threadId
 		try {
-			const { error } = await api.PATCH('/v1/threads/{thread_id}', {
-				params: { path: { thread_id: threadId } },
-				body: { is_archived: false },
-			})
-			if (error) {
-				console.error('failed to unarchive thread', error)
-				return
-			}
-			threads = threads.filter((t) => t.id !== threadId)
-			// refresh sidebar so unarchived thread appears
-			void chat.refreshThreads()
+			const ok = await restoreThread(threadId)
+			if (ok) threads = threads.filter((t) => t.id !== threadId)
 		} finally {
 			unarchivingId = null
+		}
+	}
+
+	async function deleteArchivedThread(threadId: string): Promise<boolean> {
+		deletingId = threadId
+		try {
+			const status = await deleteThread(threadId)
+			if (status !== null && status >= 200 && status < 300) {
+				threads = threads.filter((t) => t.id !== threadId)
+				void chat.refreshThreads()
+				return true
+			}
+			showError('could not delete chat')
+			return false
+		} catch {
+			showError('could not delete chat')
+			return false
+		} finally {
+			deletingId = null
 		}
 	}
 
@@ -163,6 +179,13 @@
 		if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
 		return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 	}
+
+	function archivedThreadMeta(thread: Thread): string {
+		const tags = thread.tags ?? []
+		const visibleTags = tags.slice(0, 3)
+		const moreTags = tags.length > 3 ? `+${tags.length - 3}` : null
+		return metadataLine(`created ${formatDate(thread.created_at)}`, ...visibleTags, moreTags)
+	}
 </script>
 
 <BaseModal
@@ -174,7 +197,7 @@
 >
 	<ModalListLayout
 		{search}
-		searchPlaceholder="search archived chats..."
+		searchPlaceholder="search archived chats"
 		{sortOptions}
 		{sortIndex}
 		{loading}
@@ -210,27 +233,8 @@
 								{formatDate(thread.last_activity_at)}
 							</span>
 						</div>
-						<!-- tags row -->
-						{#if thread.tags && thread.tags.length > 0}
-							<div class="mt-1 flex items-center gap-1 overflow-hidden">
-								{#each (thread.tags ?? []).slice(0, 3) as tag (tag)}
-									<span
-										class="bg-foreground/8 text-foreground/50 inline-flex max-w-20 shrink-0 items-center truncate rounded-full px-1.5 py-px text-[10px] leading-tight"
-										title={tag}
-									>
-										{tag}
-									</span>
-								{/each}
-								{#if (thread.tags ?? []).length > 3}
-									<span class="text-foreground/30 shrink-0 text-[10px]">
-										+{(thread.tags ?? []).length - 3}
-									</span>
-								{/if}
-							</div>
-						{/if}
-						<!-- created date -->
-						<div class="text-foreground/30 mt-0.5 text-[11px]">
-							created {formatDate(thread.created_at)}
+						<div class="text-foreground/35 mt-0.5 truncate text-[11px]">
+							{archivedThreadMeta(thread)}
 						</div>
 					</button>
 					<button
@@ -249,6 +253,17 @@
 							<ArrowUpTray class="h-4 w-4" />
 						{/if}
 					</button>
+					<DeleteButton
+						variant="icon"
+						label="delete thread"
+						stopPropagation={true}
+						disabled={deletingId === thread.id}
+						modalText={{
+							title: 'delete chat?',
+							description: thread.title ?? 'this archived chat will be deleted.',
+						}}
+						onDelete={() => deleteArchivedThread(thread.id)}
+					/>
 				</div>
 			{/each}
 		{/snippet}

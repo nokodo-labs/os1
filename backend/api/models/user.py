@@ -14,8 +14,12 @@ from api.models.many_to_many import user_role_association
 from api.models.mixins import TypeIDPrimaryKeyMixin
 
 
+USER_TYPEID_PREFIX = "user"
+
+
 if TYPE_CHECKING:
 	from api.models.access_rule import AccessRule
+	from api.models.calendar import Calendar, CalendarEvent
 	from api.models.file import File
 	from api.models.friendship import Friendship
 	from api.models.group import Group, GroupMembership
@@ -28,6 +32,7 @@ if TYPE_CHECKING:
 	from api.models.task import Task
 	from api.models.thread import Thread
 	from api.models.thread_participant import ThreadParticipant
+	from api.models.user_client import UserClient
 	from api.schemas.preferences import UserPreferences
 
 
@@ -35,7 +40,7 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	"""User model."""
 
 	__tablename__ = "users"
-	__typeid_prefix__ = "user"
+	__typeid_prefix__ = USER_TYPEID_PREFIX
 
 	email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
 	username: Mapped[str] = mapped_column(String(40), unique=True, index=True)
@@ -45,7 +50,7 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	hashed_password: Mapped[str] = mapped_column(String(255))
 	is_active: Mapped[bool] = mapped_column(default=True)
 	is_superuser: Mapped[bool] = mapped_column(default=False)
-	find_by_email: Mapped[bool] = mapped_column(default=True, index=True)
+	find_by_email: Mapped[bool] = mapped_column(default=False, index=True)
 	privacy: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 	preferences: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 	integration_tokens: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
@@ -79,8 +84,8 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	access_rules: Mapped[list[AccessRule]] = relationship(
 		"AccessRule",
 		foreign_keys="AccessRule.subject_user_id",
+		back_populates="subject_user",
 		cascade="all, delete-orphan",
-		overlaps="subject_user",
 	)
 	projects: Mapped[list[Project]] = relationship("Project", back_populates="owner")
 	owned_groups: Mapped[list[Group]] = relationship("Group", back_populates="owner")
@@ -111,6 +116,11 @@ class User(TypeIDPrimaryKeyMixin, Base):
 		back_populates="user",
 		cascade="all, delete-orphan",
 	)
+	clients: Mapped[list[UserClient]] = relationship(
+		"UserClient",
+		back_populates="user",
+		cascade="all, delete-orphan",
+	)
 	memories: Mapped[list[Memory]] = relationship(
 		"Memory",
 		back_populates="owner",
@@ -118,6 +128,16 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	)
 	notes: Mapped[list[Note]] = relationship(
 		"Note",
+		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
+	calendar_events: Mapped[list[CalendarEvent]] = relationship(
+		"CalendarEvent",
+		back_populates="owner",
+		cascade="all, delete-orphan",
+	)
+	calendars: Mapped[list[Calendar]] = relationship(
+		"Calendar",
 		back_populates="owner",
 		cascade="all, delete-orphan",
 	)

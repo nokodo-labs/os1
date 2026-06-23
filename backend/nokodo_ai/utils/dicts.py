@@ -8,7 +8,6 @@ from typing import Any
 def deep_merge(
 	base: dict[str, Any],
 	overlay: dict[str, Any],
-	*,
 	overwrite: bool = True,
 ) -> dict[str, Any]:
 	"""

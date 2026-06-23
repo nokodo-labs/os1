@@ -15,10 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from api import models  # noqa: F401
 from api.boot_settings import boot_settings
 from api.models.base import Base
-from api.runtime import configure_psycopg_asyncio_event_loop_policy
+from api.runtime import selector_loop_factory
 
-
-configure_psycopg_asyncio_event_loop_policy()
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -55,6 +53,7 @@ def run_migrations_offline() -> None:
 		literal_binds=True,
 		dialect_opts={"paramstyle": "named"},
 		render_as_batch=True,
+		compare_type=True,
 	)
 
 	with context.begin_transaction():
@@ -67,6 +66,7 @@ def do_run_migrations(connection: Connection) -> None:
 		connection=connection,
 		target_metadata=target_metadata,
 		render_as_batch=True,
+		compare_type=True,
 	)
 
 	with context.begin_transaction():
@@ -89,7 +89,7 @@ async def run_async_migrations() -> None:
 
 def run_migrations_online() -> None:
 	"""Run migrations in 'online' mode."""
-	asyncio.run(run_async_migrations())
+	asyncio.run(run_async_migrations(), loop_factory=selector_loop_factory)
 
 
 if context.is_offline_mode():

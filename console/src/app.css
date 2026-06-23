@@ -133,6 +133,27 @@
 	summary {
 		cursor: pointer;
 	}
+
+	[data-dialog-content] {
+		max-width: calc(100vw - 1rem) !important;
+		max-height: calc(100dvh - 1rem) !important;
+		min-width: min(20rem, calc(100vw - 1rem)) !important;
+	}
+
+	@media (max-width: 640px) {
+		[data-dialog-content] {
+			top: max(0.5rem, env(safe-area-inset-top)) !important;
+			right: max(0.5rem, env(safe-area-inset-right)) !important;
+			bottom: max(0.5rem, env(safe-area-inset-bottom)) !important;
+			left: max(0.5rem, env(safe-area-inset-left)) !important;
+			width: auto !important;
+			max-width: none !important;
+			max-height: none !important;
+			min-width: 0 !important;
+			transform: none !important;
+			translate: none !important;
+		}
+	}
 }
 
 @font-face {

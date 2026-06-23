@@ -20,11 +20,17 @@ import type {
 	BackgroundConfig,
 	BackgroundType,
 } from '$lib/components/backgrounds/BackgroundManager.svelte'
+import {
+	BACKGROUND_LUMINANCE,
+	colorLuminance,
+	type BackgroundLuminance,
+} from '$lib/components/backgrounds/backgroundDefaults'
 import { device } from '$lib/stores/device.svelte'
 import { preferences } from '$lib/stores/preferences.svelte'
 import { settingsState } from '$lib/stores/settings.svelte'
+import { debounce } from '$lib/utils'
 
-// ── constants ──────────────────────────────────────────────
+// constants
 
 export const DEFAULT_STATIC_COLOR = '#171717'
 
@@ -37,12 +43,14 @@ const TIER_BACKGROUNDS: Record<string, BackgroundType> = {
 	low: 'static',
 }
 
-// ── internal reactive state ────────────────────────────────
+// internal reactive state
 
 let pageOverride = $state<BackgroundType | null>(null)
 let pageConfigOverride = $state<BackgroundConfig | null>(null)
+// instant local static color while the picker is dragged; API persist is debounced
+let staticColorDraft = $state<string | null>(null)
 
-// ── private derived ────────────────────────────────────────
+// private derived
 
 const _auth = $derived.by(
 	(): BackgroundType =>
@@ -59,17 +67,32 @@ const _resolved = $derived.by((): BackgroundType => {
 })
 
 const _resolvedStaticColor = $derived(
-	preferences.data.appearance.staticColor ?? DEFAULT_STATIC_COLOR
+	staticColorDraft ?? preferences.data.appearance.staticColor ?? DEFAULT_STATIC_COLOR
 )
+
+// perceived luminance of the active background; static uses its resolved color
+const _resolvedLuminance = $derived.by((): BackgroundLuminance => {
+	if (_resolved === 'static') return colorLuminance(_resolvedStaticColor)
+	return BACKGROUND_LUMINANCE[_resolved]
+})
 
 const _autoBackground = $derived(preferences.data.appearance.autoBackground ?? true)
 const _userBackground = $derived(preferences.data.appearance.background ?? DEFAULT_BACKGROUND)
-const _userStaticColor = $derived(preferences.data.appearance.staticColor ?? DEFAULT_STATIC_COLOR)
+const _userStaticColor = $derived(
+	staticColorDraft ?? preferences.data.appearance.staticColor ?? DEFAULT_STATIC_COLOR
+)
 
-// ── public API ─────────────────────────────────────────────
+// trailing-debounced API persist; clears the local draft once preferences sync
+const persistStaticColor = debounce((color: string) => {
+	void preferences.updateWallpaper({ staticColor: color }).then(() => {
+		staticColorDraft = null
+	})
+}, 250)
+
+// public API
 
 export const background = {
-	// ── resolved (read by layout / BackgroundManager) ──
+	// resolved (read by layout / BackgroundManager)
 
 	/** final resolved background after all resolution layers */
 	get resolved() {
@@ -79,6 +102,11 @@ export const background = {
 	/** final resolved static color */
 	get resolvedStaticColor() {
 		return _resolvedStaticColor
+	},
+
+	/** perceived luminance ('dark' | 'light') of the active background */
+	get resolvedLuminance() {
+		return _resolvedLuminance
 	},
 
 	/** auth background from admin settings - use with `setPage` in auth pages */
@@ -91,7 +119,7 @@ export const background = {
 		return pageConfigOverride
 	},
 
-	// ── preference reads (for settings UI) ──
+	// preference reads (for settings UI)
 
 	get autoBackground() {
 		return _autoBackground
@@ -105,21 +133,24 @@ export const background = {
 		return _userStaticColor
 	},
 
-	// ── preference writes ──
+	// preference writes
 
 	setAutoBackground(enabled: boolean) {
-		void preferences.update('appearance', { autoBackground: enabled })
+		void preferences.updateWallpaper({ autoBackground: enabled })
 	},
 
 	setBackground(bg: BackgroundType) {
-		void preferences.update('appearance', { background: bg })
+		void preferences.updateWallpaper({ background: bg })
 	},
 
 	setStaticColor(color: string) {
-		void preferences.update('appearance', { staticColor: color })
+		// update the resolved color instantly for live theme/background feedback,
+		// debounce the API write since the color picker spams updates while dragging
+		staticColorDraft = color
+		persistStaticColor(color)
 	},
 
-	// ── page override ──
+	// page override
 
 	/**
 	 * set a per-page background override.

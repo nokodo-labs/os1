@@ -10,7 +10,15 @@
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import { Button } from '$lib/components/ui/button'
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select'
-	import { ArrowDown, ArrowUp, FileIcon, Trash2, RefreshCw, ChevronLeft, ChevronRight } from '@lucide/svelte'
+	import {
+		ArrowDown,
+		ArrowUp,
+		ChevronLeft,
+		ChevronRight,
+		FileIcon,
+		RefreshCw,
+		Trash2,
+	} from '@lucide/svelte'
 
 	type SortKey = 'created_at' | 'updated_at' | 'filename' | 'size_bytes'
 
@@ -46,6 +54,7 @@
 	let isLoading = $state(false)
 	let error = $state<string | null>(null)
 	let hasNext = $state(false)
+	let total = $state(0)
 	let ownerIdFilter = $state<string | null>(null)
 
 	let deletingId = $state<string | null>(null)
@@ -64,6 +73,11 @@
 		files = files.filter((f) => f.id !== fileId)
 	}
 
+	function handleUpdateFromModal(file: File) {
+		files = files.map((current) => (current.id === file.id ? file : current))
+		selectedFile = file
+	}
+
 	$effect(() => {
 		if (!browser) return
 
@@ -80,21 +94,36 @@
 		isLoading = true
 		error = null
 
-		api.GET('/v1/files', {
-			params: {
-				query: {
-					skip,
-					limit,
-					sort_by: sortKey,
-					sort_dir: sortDir,
-					...(ownerIdFilter ? { owner_id: ownerIdFilter } : {}),
-				},
-			},
-		})
-			.then((r) => unwrap(r))
-			.then((result) => {
+		Promise.all([
+			api
+				.GET('/v1/files', {
+					params: {
+						query: {
+							skip,
+							limit,
+							include_deleted: true,
+							sort_by: sortKey,
+							sort_dir: sortDir,
+							...(ownerIdFilter ? { owner_id: ownerIdFilter } : {}),
+						},
+					},
+				})
+				.then((r) => unwrap(r)),
+			api
+				.GET('/v1/files/count', {
+					params: {
+						query: {
+							include_deleted: true,
+							...(ownerIdFilter ? { owner_id: ownerIdFilter } : {}),
+						},
+					},
+				})
+				.then((r) => unwrap(r)),
+		])
+			.then(([result, count]) => {
 				files = result
-				hasNext = result.length === limit
+				total = count.total
+				hasNext = (pageIndex + 1) * limit < count.total
 			})
 			.catch((e: unknown) => {
 				error = e instanceof Error ? e.message : 'failed to load files'
@@ -232,7 +261,9 @@
 					prev
 				</Button>
 				<span class="text-xs text-zinc-400 tabular-nums">
-					page {pageIndex + 1}{files.length > 0 ? ` \u00b7 ${files.length} items` : ''}
+					{total > 0
+						? `items ${pageIndex * limit + 1}–${pageIndex * limit + files.length} of ${total}`
+						: ''}
 				</span>
 				<Button
 					variant="outline"
@@ -272,36 +303,54 @@
 						}}
 					>
 						<div class="flex min-w-0 flex-1 items-center gap-4">
-							<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-400">
+							<div
+								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-500/15 text-rose-400"
+							>
 								<FileIcon class="h-5 w-5" />
 							</div>
 							<div class="min-w-0 flex-1 space-y-1">
 								<div class="flex flex-wrap items-center gap-2">
-									<span class="truncate text-base font-medium text-zinc-100">{file.filename ?? '(no filename)'}</span>
+									<span class="truncate text-base font-medium text-zinc-100"
+										>{file.filename ?? '(no filename)'}</span
+									>
 								</div>
-								<div class="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-									<span class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50">
+								<div
+									class="flex flex-wrap items-center gap-3 text-xs text-zinc-500"
+								>
+									<span
+										class="inline-flex items-center gap-1.5 font-mono text-[10px] opacity-50"
+									>
 										{file.id}
 									</span>
-									<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase"
+									>
 										{file.mime_type ?? 'unknown type'}
 									</span>
-									<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase"
+									>
 										{formatBytes(file.size_bytes)}
 									</span>
-									<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase"
+									>
 										{file.source}
 									</span>
-									<span class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase">
+									<span
+										class="inline-flex items-center gap-1 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium tracking-wider text-zinc-300 uppercase"
+									>
 										{file.status}
 									</span>
 								</div>
 							</div>
 						</div>
-						<div class="shrink-0 text-xs text-zinc-500 flex flex-col items-end">
+						<div class="flex shrink-0 flex-col items-end text-xs text-zinc-500">
 							<div class="flex items-center gap-1.5 whitespace-nowrap">
 								{#if file.deleted_at}
-									<span class="text-red-400">deleted {formatDate(file.deleted_at)}</span>
+									<span class="text-red-400"
+										>deleted {formatDate(file.deleted_at)}</span
+									>
 								{:else}
 									<span>{formatDate(file.created_at)}</span>
 								{/if}
@@ -354,4 +403,9 @@
 	</div>
 </div>
 
-<FileDetailsModal bind:open={detailOpen} file={selectedFile} onDeleted={handleDeleteFromModal} />
+<FileDetailsModal
+	bind:open={detailOpen}
+	file={selectedFile}
+	onUpdated={handleUpdateFromModal}
+	onDeleted={handleDeleteFromModal}
+/>

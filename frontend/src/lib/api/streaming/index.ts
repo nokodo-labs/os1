@@ -8,13 +8,16 @@ export {
 	resumeRunStream,
 	runChatStream,
 	runCreateAndRunStream,
+	StreamHttpError,
 	type ChatStreamDelta,
 	type ChatStreamOptions,
 	type ContentPart,
 	type CreateAndRunStreamDelta,
 	type CreateAndRunStreamOptions,
 	type CreateAndRunThread,
+	type ResourceAttachment,
 	type ResumeRunStreamOptions,
+	type RunAttachmentType,
 	type RunInput,
 	type StreamedMessage,
 	type StreamError,
@@ -29,4 +32,13 @@ export {
 	type StreamEvent,
 	type StreamMessage,
 } from './eventStream.svelte'
-export { searchStream, type SearchResult, type SearchStreamOptions } from './searchStream'
+export {
+	SEARCH_RESOURCE_TYPES,
+	searchStream,
+	type SearchResourceType,
+	type SearchResult,
+	type SearchResultParent,
+	type SearchResultType,
+	type SearchStreamOptions,
+} from './searchStream'
+export { streamTask, type TaskStreamDelta } from './taskStream'

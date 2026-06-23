@@ -32,7 +32,6 @@ class SearxngClient:
 
 	def __init__(
 		self,
-		*,
 		instance_url: str,
 		timeout: float = 10,
 	) -> None:
@@ -42,7 +41,6 @@ class SearxngClient:
 	async def search(
 		self,
 		query: str,
-		*,
 		max_results: int = 20,
 		categories: list[str] | None = None,
 		language: str = "all",

@@ -45,7 +45,7 @@
 - prefer default shadcn-svelte/Bits primitives for low-friction dev
 - use Tailwind tokens sparingly; readability > aesthetics
 - keep layouts responsive but focus on data density and administrative clarity
-- lowercase typography is optional here - legibility first
+- adhere to `nokodo` brand rule of **no auto-capitalization** in comments, docstrings, logging, and all user-facing text. only proper nouns, acronyms and other intentional capitalizations are allowed.
 - use rounded corners (rounded-xl or rounded-2xl) for a softer, modern feel
 
 ## security & access

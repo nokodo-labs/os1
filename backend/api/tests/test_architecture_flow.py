@@ -23,6 +23,7 @@ async def test_async_agentic_flow(
 	async def _fake_embed(
 		self: EmbeddingModel,
 		texts: list[str],
+		input_type: str | None = None,
 	) -> list[list[float]]:
 		_ = self
 		return [[0.0, 0.0, 0.0, 0.0] for _ in texts]
@@ -218,7 +219,7 @@ async def test_async_agentic_flow(
 	)
 	assert memory_resp.status_code == 201
 
-	memories = await client.get(f"/v1/memories?user_id={user['id']}", headers=headers)
+	memories = await client.get(f"/v1/memories?owner_id={user['id']}", headers=headers)
 	assert memories.status_code == 200
 	assert len(memories.json()) == 1
 

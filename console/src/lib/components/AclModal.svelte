@@ -9,7 +9,7 @@
 	import { Button } from '$lib/components/ui/button'
 	import { Label } from '$lib/components/ui/label'
 	import { generateUUID } from '$lib/utils/crypto'
-	import { Globe, Shield, Users, UsersRound, X, Save, Trash2 } from '@lucide/svelte'
+	import { Globe, Save, Shield, Trash2, Users, UsersRound, X } from '@lucide/svelte'
 	import { Dialog } from 'bits-ui'
 
 	type PrincipalType = 'user' | 'group' | 'role'
@@ -18,10 +18,19 @@
 		open = $bindable(false),
 		resourceType,
 		resourceId,
-		title = 'permissions',
+		title = 'access rules',
 	}: {
 		open?: boolean
-		resourceType: 'thread' | 'project' | 'agent'
+		resourceType:
+			| 'thread'
+			| 'project'
+			| 'agent'
+			| 'group'
+			| 'file'
+			| 'note'
+			| 'memory'
+			| 'reminder_list'
+			| 'calendar'
 		resourceId: string
 		title?: string
 	} = $props()
@@ -73,35 +82,109 @@
 		}
 	}
 
+	async function resolveEntryLabels(loaded: AccessRuleResponse[]) {
+		const updates: Record<string, string> = {}
+		await Promise.allSettled(
+			loaded.map(async (entry) => {
+				const key = principalKey(entry)
+				if (entryLabels[key]) return
+				try {
+					if (entry.subject_user_id) {
+						const u = unwrap(
+							await api.GET('/v1/users/{user_id}', {
+								params: { path: { user_id: entry.subject_user_id } },
+							})
+						)
+						updates[key] = u.display_name || u.email
+					} else if (entry.subject_group_id) {
+						const g = unwrap(
+							await api.GET('/v1/groups/{group_id}', {
+								params: { path: { group_id: entry.subject_group_id } },
+							})
+						)
+						updates[key] = g.name
+					} else if (entry.subject_role_id) {
+						const r = unwrap(
+							await api.GET('/v1/roles/{role_id}', {
+								params: { path: { role_id: entry.subject_role_id } },
+							})
+						)
+						updates[key] = r.name
+					}
+				} catch {
+					// leave key unresolved - falls back to principalKey display
+				}
+			})
+		)
+		entryLabels = { ...entryLabels, ...updates }
+	}
+
 	async function loadAcl() {
 		isLoading = true
 		error = null
 		try {
 			if (resourceType === 'thread') {
 				entries = unwrap(
-					await api.GET('/v1/threads/{thread_id}/access-rules', {
+					await api.GET('/v1/threads/{thread_id}/access/rules', {
 						params: { path: { thread_id: resourceId } },
 					})
 				)
 			} else if (resourceType === 'project') {
 				entries = unwrap(
-					await api.GET('/v1/projects/{project_id}/access-rules', {
+					await api.GET('/v1/projects/{project_id}/access/rules', {
 						params: { path: { project_id: resourceId } },
 					})
 				)
-			} else {
+			} else if (resourceType === 'agent') {
 				entries = unwrap(
-					await api.GET('/v1/agents/{agent_id}/access-rules', {
+					await api.GET('/v1/agents/{agent_id}/access/rules', {
 						params: { path: { agent_id: resourceId } },
+					})
+				)
+			} else if (resourceType === 'group') {
+				entries = unwrap(
+					await api.GET('/v1/groups/{group_id}/access/rules', {
+						params: { path: { group_id: resourceId } },
+					})
+				)
+			} else if (resourceType === 'file') {
+				entries = unwrap(
+					await api.GET('/v1/files/{file_id}/access/rules', {
+						params: { path: { file_id: resourceId } },
+					})
+				)
+			} else if (resourceType === 'note') {
+				entries = unwrap(
+					await api.GET('/v1/notes/{note_id}/access/rules', {
+						params: { path: { note_id: resourceId } },
+					})
+				)
+			} else if (resourceType === 'memory') {
+				entries = unwrap(
+					await api.GET('/v1/memories/{memory_id}/access/rules', {
+						params: { path: { memory_id: resourceId } },
+					})
+				)
+			} else if (resourceType === 'reminder_list') {
+				entries = unwrap(
+					await api.GET('/v1/reminder-lists/{list_id}/access/rules', {
+						params: { path: { list_id: resourceId } },
+					})
+				)
+			} else if (resourceType === 'calendar') {
+				entries = unwrap(
+					await api.GET('/v1/calendars/{calendar_id}/access/rules', {
+						params: { path: { calendar_id: resourceId } },
 					})
 				)
 			}
 		} catch (e: unknown) {
-			console.error('Failed to load acl', e)
+			console.error('failed to load acl', e)
 			error = e instanceof Error ? e.message : String(e)
 		} finally {
 			isLoading = false
 		}
+		void resolveEntryLabels(entries)
 	}
 
 	$effect(() => {
@@ -118,6 +201,12 @@
 			thread_id: resourceType === 'thread' ? resourceId : null,
 			project_id: resourceType === 'project' ? resourceId : null,
 			agent_id: resourceType === 'agent' ? resourceId : null,
+			group_id: resourceType === 'group' ? resourceId : null,
+			file_id: resourceType === 'file' ? resourceId : null,
+			note_id: resourceType === 'note' ? resourceId : null,
+			memory_id: resourceType === 'memory' ? resourceId : null,
+			reminder_list_id: resourceType === 'reminder_list' ? resourceId : null,
+			calendar_id: resourceType === 'calendar' ? resourceId : null,
 			subject_user_id: null,
 			subject_group_id: null,
 			subject_role_id: null,
@@ -170,29 +259,71 @@
 			const body = entries.map((entry, index) => toCreate(entry, index))
 			if (resourceType === 'thread') {
 				entries = unwrap(
-					await api.PUT('/v1/threads/{thread_id}/access-rules', {
+					await api.PUT('/v1/threads/{thread_id}/access/rules', {
 						params: { path: { thread_id: resourceId } },
 						body,
 					})
 				)
 			} else if (resourceType === 'project') {
 				entries = unwrap(
-					await api.PUT('/v1/projects/{project_id}/access-rules', {
+					await api.PUT('/v1/projects/{project_id}/access/rules', {
 						params: { path: { project_id: resourceId } },
 						body,
 					})
 				)
-			} else {
+			} else if (resourceType === 'agent') {
 				entries = unwrap(
-					await api.PUT('/v1/agents/{agent_id}/access-rules', {
+					await api.PUT('/v1/agents/{agent_id}/access/rules', {
 						params: { path: { agent_id: resourceId } },
+						body,
+					})
+				)
+			} else if (resourceType === 'group') {
+				entries = unwrap(
+					await api.PUT('/v1/groups/{group_id}/access/rules', {
+						params: { path: { group_id: resourceId } },
+						body,
+					})
+				)
+			} else if (resourceType === 'file') {
+				entries = unwrap(
+					await api.PUT('/v1/files/{file_id}/access/rules', {
+						params: { path: { file_id: resourceId } },
+						body,
+					})
+				)
+			} else if (resourceType === 'note') {
+				entries = unwrap(
+					await api.PUT('/v1/notes/{note_id}/access/rules', {
+						params: { path: { note_id: resourceId } },
+						body,
+					})
+				)
+			} else if (resourceType === 'memory') {
+				entries = unwrap(
+					await api.PUT('/v1/memories/{memory_id}/access/rules', {
+						params: { path: { memory_id: resourceId } },
+						body,
+					})
+				)
+			} else if (resourceType === 'reminder_list') {
+				entries = unwrap(
+					await api.PUT('/v1/reminder-lists/{list_id}/access/rules', {
+						params: { path: { list_id: resourceId } },
+						body,
+					})
+				)
+			} else if (resourceType === 'calendar') {
+				entries = unwrap(
+					await api.PUT('/v1/calendars/{calendar_id}/access/rules', {
+						params: { path: { calendar_id: resourceId } },
 						body,
 					})
 				)
 			}
 			open = false
 		} catch (e: unknown) {
-			console.error('Failed to save acl', e)
+			console.error('failed to save acl', e)
 			error = e instanceof Error ? e.message : String(e)
 		} finally {
 			isSaving = false
@@ -204,13 +335,24 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/50" />
 		<Dialog.Content
-			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] min-w-80 -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-6 text-zinc-100 shadow-lg"
+			data-dialog-content
+			class="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] w-[min(760px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-6 text-zinc-100 shadow-lg"
 		>
-			<div class="mb-6">
-				<Dialog.Title class="text-lg font-semibold">{title}</Dialog.Title>
-				<Dialog.Description class="text-sm text-zinc-400">
-					manage who can access this {resourceType}.
-				</Dialog.Description>
+			<div class="mb-6 flex items-start justify-between gap-4">
+				<div>
+					<Dialog.Title class="text-lg font-semibold">{title}</Dialog.Title>
+					<Dialog.Description class="text-sm text-zinc-400">
+						manage who can access this {resourceType}.
+					</Dialog.Description>
+				</div>
+				<Button
+					variant="ghost"
+					size="icon"
+					class="rounded-xl"
+					onclick={() => (open = false)}
+				>
+					<X class="h-4 w-4" />
+				</Button>
 			</div>
 
 			{#if error}
@@ -302,7 +444,7 @@
 										<div class="shrink-0">
 											<Button
 												variant="outline"
-												class="h-8 rounded-xl px-2 text-xs text-zinc-400 hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-400"
+												class="h-8 rounded-xl px-2 text-xs text-zinc-400 hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-400"
 												onclick={() => removeEntry(entry.id)}
 												disabled={isSaving}
 											>
@@ -319,15 +461,6 @@
 			{/if}
 
 			<div class="mt-6 flex justify-end gap-2">
-				<Button
-					variant="outline"
-					class="rounded-xl"
-					onclick={() => (open = false)}
-					disabled={isSaving}
-				>
-					<X class="mr-1.5 h-4 w-4" />
-					cancel
-				</Button>
 				<Button class="rounded-xl" onclick={save} disabled={isSaving || isLoading}>
 					<Save class="mr-1.5 h-4 w-4" />
 					{isSaving ? 'saving...' : 'save'}

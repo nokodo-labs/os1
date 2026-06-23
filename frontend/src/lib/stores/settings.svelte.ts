@@ -1,8 +1,8 @@
 import { browser } from '$app/environment'
 import { api } from '$lib/api/client'
-import { eventStreamClient, type StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { onAccessTokenChanged } from '$lib/auth/session.svelte'
+import { STORE_EVENT_TYPES, subscribeToStoreEvents } from '$lib/stores/storeEvents'
 import { deepMerge, isPlainObject } from '$lib/utils'
 
 type Settings = components['schemas']['Settings']
@@ -139,13 +139,17 @@ export async function refreshSettings(): Promise<Settings | null> {
 	return await loadSettings({ force: true })
 }
 
+export const settingsCache = {
+	invalidate: invalidateSettings,
+	refresh: refreshSettings,
+	clear: clearSettings,
+}
+
 // event stream integration
 
 let settingsUnsub: (() => void) | null = null
 
-function handleSettingsEvent(message: StreamMessage): void {
-	if (message.type !== 'settings.updated') return
-
+function handleSettingsEvent(): void {
 	// settings updated (any session, including this one) - refetch
 	void loadSettings({ force: true })
 }
@@ -154,7 +158,10 @@ if (browser) {
 	onAccessTokenChanged((token) => {
 		if (token) {
 			if (!settingsUnsub) {
-				settingsUnsub = eventStreamClient.subscribe(handleSettingsEvent)
+				settingsUnsub = subscribeToStoreEvents(
+					STORE_EVENT_TYPES.settings,
+					handleSettingsEvent
+				)
 			}
 		} else {
 			settingsUnsub?.()

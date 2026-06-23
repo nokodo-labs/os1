@@ -133,7 +133,7 @@
 </script>
 
 <LiquidGlass
-	class="relative flex items-start gap-3 rounded-2xl px-3 py-3 text-left {device.isTouch
+	class="rounded-popup relative flex items-start gap-3 px-3 py-3 text-left {device.isTouch
 		? 'touch-pan-y select-none'
 		: ''}"
 	style={swipeStyle()}
@@ -214,7 +214,7 @@
 	</div>
 
 	<!-- right column: dismiss + expand -->
-	<div class="flex shrink-0 flex-col items-center gap-1.5">
+	<div class="flex shrink-0 flex-col items-center gap-1.5 pt-1.5">
 		{#if !device.isTouch && onDismiss}
 			<XMark
 				class="text-foreground/50 hover:text-foreground/80 size-6 cursor-pointer transition-all duration-150 hover:scale-[1.05] active:scale-[0.97]"

@@ -35,7 +35,6 @@ class VideoModel(AdapterEnabledBase[VideoAdapter]):
 	def create(
 		cls,
 		model_name: str,
-		*,
 		adapter: VideoAdapter | dict[str, Any],
 		**fields: Any,
 	) -> VideoModel:
@@ -46,7 +45,6 @@ class VideoModel(AdapterEnabledBase[VideoAdapter]):
 	def generate(
 		self,
 		prompt: str,
-		*,
 		stream: Literal[False] = False,
 		image: bytes | None = None,
 		params: VideoGenerationParams | dict[str, object] | None = None,
@@ -56,7 +54,6 @@ class VideoModel(AdapterEnabledBase[VideoAdapter]):
 	def generate(
 		self,
 		prompt: str,
-		*,
 		stream: Literal[True],
 		image: bytes | None = None,
 		params: VideoGenerationParams | dict[str, object] | None = None,
@@ -65,7 +62,6 @@ class VideoModel(AdapterEnabledBase[VideoAdapter]):
 	def generate(
 		self,
 		prompt: str,
-		*,
 		stream: bool = False,
 		image: bytes | None = None,
 		params: VideoGenerationParams | dict[str, object] | None = None,

@@ -47,13 +47,12 @@ class TavilyExtractFailure:
 class TavilyClient:
 	"""async client for the tavily search and extract APIs."""
 
-	def __init__(self, *, api_key: str) -> None:
+	def __init__(self, api_key: str) -> None:
 		self._api_key = api_key
 
 	async def search(
 		self,
 		query: str,
-		*,
 		max_results: int = 5,
 	) -> list[TavilySearchHit]:
 		"""search the web using tavily.
@@ -93,7 +92,6 @@ class TavilyClient:
 	async def extract(
 		self,
 		urls: list[str],
-		*,
 		extract_depth: str = "basic",
 	) -> tuple[list[TavilyExtractedPage], list[TavilyExtractFailure]]:
 		"""extract content from URLs using tavily.

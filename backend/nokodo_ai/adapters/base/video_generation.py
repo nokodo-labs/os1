@@ -79,7 +79,6 @@ class BaseVideoAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		stream: Literal[False] = False,
 		image: bytes | None = None,
 		params: VideoGenerationParams | None = None,
@@ -90,7 +89,6 @@ class BaseVideoAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		stream: Literal[True],
 		image: bytes | None = None,
 		params: VideoGenerationParams | None = None,
@@ -100,7 +98,6 @@ class BaseVideoAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
 		stream: bool = False,
 		image: bytes | None = None,
 		params: VideoGenerationParams | None = None,
@@ -124,9 +121,8 @@ class BaseVideoAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
-		image: bytes | None = None,
 		params: VideoGenerationParams,
+		image: bytes | None = None,
 	) -> VideoGenerationResult:
 		"""create a video from a text prompt."""
 		raise NotImplementedError
@@ -135,9 +131,8 @@ class BaseVideoAdapter(BaseAdapter, Base, ABC):
 		self,
 		prompt: str,
 		model: str,
-		*,
-		image: bytes | None = None,
 		params: VideoGenerationParams,
+		image: bytes | None = None,
 	) -> AsyncIterator[VideoProgressEvent]:
 		"""streaming generation with progress events.
 

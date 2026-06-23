@@ -25,14 +25,17 @@ usage:
 
 from __future__ import annotations
 
-from .agents import Agent
+from .agents import Agent, AgentIterationSnapshot, AgentIterationState, AgentToolChoice
 from .chat_models import ChatModel
-from .context import AgentContext
+from .chunkers import Chunker
+from .context import AgentContext, ToolCallContext
 from .deltas import AgentDelta, ChatModelDelta
-from .embeddings import EmbeddingModel
+from .embeddings import EmbeddingInputType, EmbeddingModel
+from .exceptions import NokodoAIError
 from .filters import Filter
 from .hooks import Hook
 from .image_models import ImageModel
+from .loaders import Loader
 from .messages import (
 	AssistantMessage,
 	BaseMessage,
@@ -59,17 +62,25 @@ __all__ = [
 	# high-level interfaces
 	"ChatModel",
 	"EmbeddingModel",
+	"EmbeddingInputType",
 	"ImageModel",
 	"Vectorstore",
+	"Loader",
+	"Chunker",
 	"Agent",
+	"AgentIterationSnapshot",
+	"AgentIterationState",
+	"AgentToolChoice",
 	"ChatModelDelta",
 	"AgentDelta",
+	"NokodoAIError",
 	# tools
 	"Tool",
 	"ToolDefinition",
 	"tool",
 	# context, filters, and hooks
 	"AgentContext",
+	"ToolCallContext",
 	"Filter",
 	"Hook",
 	# domain models

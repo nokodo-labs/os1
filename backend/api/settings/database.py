@@ -70,6 +70,9 @@ def _load_db_overrides(settings_cls: type[BaseModel]) -> dict[str, dict[str, Any
 	def _selector_loop() -> asyncio.AbstractEventLoop:
 		return asyncio.SelectorEventLoop(selectors.SelectSelector())
 
+	def run_fetch() -> dict[str, dict[str, Any]]:
+		return asyncio.run(fetch(), loop_factory=_selector_loop)
+
 	try:
 		loop = asyncio.get_running_loop()
 	except RuntimeError:
@@ -77,13 +80,9 @@ def _load_db_overrides(settings_cls: type[BaseModel]) -> dict[str, dict[str, Any
 
 	if loop is not None:
 		with concurrent.futures.ThreadPoolExecutor() as pool:
-			future = pool.submit(
-				asyncio.run,
-				fetch(),
-				loop_factory=_selector_loop,
-			)
+			future = pool.submit(run_fetch)
 			return future.result()
-	return asyncio.run(fetch(), loop_factory=_selector_loop)
+	return run_fetch()
 
 
 class DbSettingsSource(PydanticBaseSettingsSource):

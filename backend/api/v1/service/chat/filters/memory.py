@@ -1,4 +1,4 @@
-"""memory context filter - injects relevant memories into the system prompt."""
+"""memory context filter. injects relevant memories into the system prompt."""
 
 from __future__ import annotations
 
@@ -9,11 +9,15 @@ from typing import TYPE_CHECKING
 from pydantic import Field
 
 from api.models.memory import Memory
+from api.schemas.memory import MemorySearchFilters
+from api.schemas.preferences import AIPreferences
+from api.schemas.search import SearchMode, SearchParams
 from api.settings import settings as app_settings
 from api.v1.service.chat.filters.base import Filter
-from api.v1.service.memories import query_relevant_memories
-from api.v1.service.prompt_runtime import SENTINEL_USER_MEMORIES
-from nokodo_ai.threads import Thread as SDKThread
+from api.v1.service.memories import search_memories
+from api.v1.service.prompts import SENTINEL_USER_MEMORIES
+from nokodo_ai.agents import AgentIterationState
+from nokodo_ai.context import AgentContext
 
 
 if TYPE_CHECKING:
@@ -42,21 +46,32 @@ class MemoryContextFilter(Filter):
 
 	async def process(
 		self,
-		thread: SDKThread,
+		state: AgentIterationState[AppContext],
+		agent_context: AgentContext,
 		app_context: AppContext | None,
-	) -> SDKThread:
+	) -> AgentIterationState[AppContext]:
+		_ = agent_context
 		if app_context is None:
 			raise ValueError("AppContext is required for MemoryContextFilter")
+		thread = state.thread
 
 		# locate system message and check for the injection sentinel.
 		# if the admin didn't include {{ user_memories }}, skip entirely.
 		system_msg = thread.system_message
 		if system_msg is None:
-			return thread
+			return state
 
 		system_text = system_msg.text
 		if not system_text or SENTINEL_USER_MEMORIES not in system_text:
-			return thread
+			return state
+
+		ai = app_context.principal.user.prefs.ai
+		if isinstance(ai, AIPreferences) and ai.memories_enabled is False:
+			logger.info(
+				"memory context: user has disabled memories; skipping context injection"
+			)
+			self._replace_sentinel(thread, SENTINEL_USER_MEMORIES, "")
+			return state
 
 		mem_cfg = app_settings.ai.memory
 		retrieval = app_context.retrieval
@@ -68,28 +83,31 @@ class MemoryContextFilter(Filter):
 			_turns = thread.recent_turns(app_settings.ai.retrieval_turns)
 			if not _turns:
 				self._replace_sentinel(thread, SENTINEL_USER_MEMORIES, "")
-				return thread
+				return state
 			query_text = "\n".join(_turns)
 
-		memories = await query_relevant_memories(
+		scored = await search_memories(
 			query_text,
 			app_context.session,
 			principal=app_context.principal,
 			limit=mem_cfg.top_k,
-			score_threshold=mem_cfg.similarity_threshold,
+			search_params=SearchParams(mode=SearchMode.HYBRID),
 			query_embedding=retrieval.query_embedding,
+			filters=MemorySearchFilters(owner_id=app_context.principal.user.id),
+			score_threshold=mem_cfg.similarity_threshold,
 		)
+		memories = [s.item for s in scored]
 		content = self._format_memories(memories) if memories else ""
 
 		self._replace_sentinel(thread, SENTINEL_USER_MEMORIES, content)
-		return thread
+		return state
 
 	def _format_memories(self, memories: list[Memory]) -> str:
 		entries = []
 		for mem in memories:
 			entry: dict = {"content": mem.content}
-			if mem.category:
-				entry["category"] = mem.category
+			if mem.tags:
+				entry["tags"] = mem.tags
 			if mem.created_at:
 				entry["created_at"] = mem.created_at.isoformat()
 			if mem.updated_at:

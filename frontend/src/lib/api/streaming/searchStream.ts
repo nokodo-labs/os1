@@ -8,19 +8,25 @@
 import { getAccessToken } from '$lib/auth/session.svelte'
 import { getApiBaseUrl, refreshAccessToken } from '../client'
 import { getSessionId } from '../sessionId'
+import type { components } from '../types'
 
-export interface SearchResult {
-	type: 'thread' | 'reminder' | 'note' | 'memory'
-	id: string
-	title: string
-	preview?: string | null
-	created_at: string
-	updated_at: string
-}
+export type SearchResultType = components['schemas']['SearchResultType']
+export type SearchResultParent = components['schemas']['SearchResultParent']
+export type SearchResult = components['schemas']['SearchResultItem']
+
+export type SearchResourceType = Exclude<SearchResultType, 'memory'>
+
+export const SEARCH_RESOURCE_TYPES: SearchResourceType[] = [
+	'thread',
+	'note',
+	'reminder',
+	'calendar_event',
+	'file',
+]
 
 export interface SearchStreamOptions {
 	query: string
-	types?: string[]
+	types?: SearchResultType[]
 	limit?: number
 	mode?: 'hybrid' | 'dense' | 'sparse' | 'autocomplete' | 'full'
 	signal?: AbortSignal

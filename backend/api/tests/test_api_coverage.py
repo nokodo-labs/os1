@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
@@ -30,15 +31,21 @@ from api.models.message import (
 from api.models.model import Model as ModelORM
 from api.models.provider import Provider as ProviderORM
 from api.schemas.message import MessageCreate
+from api.schemas.prompt import PromptListFilters
+from api.schemas.thread import ThreadListFilters
 from api.v1.routers import openai as openai_router
 from api.v1.routers import prompts as prompts_router
 from api.v1.routers import runs as runs_router
 from api.v1.routers import threads as threads_router
-from api.v1.service import authorization, prompt_runtime
-from api.v1.service import chat as chat_service
-from api.v1.service import prompts as prompt_service
-from api.v1.service import threads as thread_service
+from api.v1.service.authorization import require_thread_access
 from api.v1.service.chat import agents as chat_runner
+from api.v1.service.chat import models as chat_service
+from api.v1.service.chat.tools import external as external_tools
+from api.v1.service.plugins import ResolvedPlugins
+from api.v1.service.prompts import external as prompt_external
+from api.v1.service.prompts import runtime as prompt_runtime
+from api.v1.service.prompts import service as prompt_service
+from api.v1.service.threads.core import _ensure_admin_for_hidden
 from nokodo_ai.messages import (
 	AssistantMessage,
 	SystemMessage,
@@ -52,7 +59,6 @@ from nokodo_ai.utils.typeid import TypeID, new_typeid
 class _FakePrincipal:
 	def __init__(
 		self,
-		*,
 		is_admin: bool = False,
 		user_id: str = "user",
 		groups: list[str] | None = None,
@@ -153,7 +159,6 @@ async def test_openai_router_uses_chat_model(monkeypatch: pytest.MonkeyPatch) ->
 		async def generate(
 			self,
 			messages: list[object],
-			*,
 			stream: bool,
 			params: object | None = None,
 		) -> object:
@@ -197,7 +202,6 @@ async def test_openai_router_handles_all_roles(monkeypatch: pytest.MonkeyPatch) 
 		async def generate(
 			self,
 			messages: list[object],
-			*,
 			stream: bool,
 			params: object | None = None,
 		) -> object:
@@ -232,31 +236,29 @@ async def test_prompts_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 	fake_prompt = SimpleNamespace(id="1", command="/a", content="hi")
 	admin = _FakePrincipal(is_admin=True)
 
-	async def fake_create(
-		prompt_in: object, db: object, *, principal: object
-	) -> object:
+	async def fake_create(prompt_in: object, db: object, principal: object) -> object:
 		return fake_prompt
 
 	async def fake_list(
 		db: object,
-		*,
 		principal: object,
 		skip: int = 0,
 		limit: int = 50,
 		sort_by: str = "command",
 		sort_dir: str = "asc",
+		filters: PromptListFilters | None = None,
 	) -> list[object]:
 		return [fake_prompt]
 
-	async def fake_get(prompt_id: object, db: object, *, principal: object) -> object:
+	async def fake_get(prompt_id: object, db: object, principal: object) -> object:
 		return fake_prompt
 
 	async def fake_update(
-		prompt_id: object, prompt_in: object, db: object, *, principal: object
+		prompt_id: object, prompt_in: object, db: object, principal: object
 	) -> object:
 		return fake_prompt
 
-	async def fake_delete(prompt_id: object, db: object, *, principal: object) -> None:
+	async def fake_delete(prompt_id: object, db: object, principal: object) -> None:
 		fake_delete.called = prompt_id  # type: ignore[attr-defined]
 
 	monkeypatch.setattr(prompts_router.prompt_service, "create_prompt", fake_create)
@@ -270,7 +272,9 @@ async def test_prompts_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 		principal=admin,  # type: ignore[arg-type]
 		db=None,  # type: ignore[arg-type]
 	)  # type: ignore[arg-type]
-	out_list = await prompts_router.list_prompts(principal=admin, db=None)  # type: ignore[arg-type]
+	out_list = await prompts_router.list_prompts(
+		filters=PromptListFilters(), principal=admin, db=None
+	)  # type: ignore[arg-type]
 	out_get = await prompts_router.get_prompt("1", principal=admin, db=None)  # type: ignore[arg-type]
 	out_update = await prompts_router.update_prompt(
 		"1",  # type: ignore[arg-type]
@@ -325,14 +329,13 @@ async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 	async def _switch(*_args: object, **_kwargs: object) -> object:
 		return SimpleNamespace(current_message_id=new_typeid("message"))
 
-	async def _return_access_rules(*_args: object, **_kwargs: object) -> list[object]:
-		return ["rule"]
-
 	monkeypatch.setattr(threads_router.thread_service, "create_thread", _return_thread)
 	monkeypatch.setattr(
 		threads_router.thread_service, "list_threads", _return_thread_list
 	)
-	monkeypatch.setattr(threads_router.thread_service, "get_thread", _return_thread)
+	monkeypatch.setattr(
+		threads_router.thread_service, "get_thread_payload", _return_thread
+	)
 	monkeypatch.setattr(threads_router.thread_service, "update_thread", _return_thread)
 	monkeypatch.setattr(
 		threads_router.thread_service, "list_messages", _return_message_list
@@ -347,23 +350,16 @@ async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 		threads_router.thread_service, "create_message", _return_message
 	)
 	monkeypatch.setattr(threads_router.thread_service, "switch_branch", _switch)
-	monkeypatch.setattr(
-		threads_router.access_rules_service,
-		"list_access_rules",
-		_return_access_rules,
-	)
-	monkeypatch.setattr(
-		threads_router.access_rules_service,
-		"set_access_rules",
-		_return_access_rules,  # type: ignore[arg-type]
-	)  # type: ignore[arg-type]
-	# type: ignore[arg-type]
 	created = await threads_router.create_thread(
 		SimpleNamespace(owner_id="u"),  # type: ignore[arg-type]
 		principal=principal,  # type: ignore[arg-type]
 		db=None,  # type: ignore[arg-type]
 	)  # type: ignore[arg-type]
-	listed = await threads_router.list_threads(principal=principal, db=None)  # type: ignore[arg-type]
+	listed = await threads_router.list_threads(  # type: ignore[arg-type]
+		filters=ThreadListFilters(),
+		principal=principal,  # type: ignore[arg-type]
+		db=None,  # type: ignore[arg-type]
+	)
 	fetched = await threads_router.get_thread("t", principal=principal, db=None)  # type: ignore[arg-type]
 	updated = await threads_router.update_thread(  # type: ignore[arg-type]
 		"t",  # type: ignore[arg-type]
@@ -386,18 +382,6 @@ async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 		principal=principal,  # type: ignore[arg-type]
 		db=None,  # type: ignore[arg-type]
 	)  # type: ignore[arg-type]
-	rule_list = await threads_router.list_thread_access_rules(  # type: ignore[arg-type]
-		"t",  # type: ignore[arg-type]
-		principal=principal,  # type: ignore[arg-type]
-		db=None,  # type: ignore[arg-type]
-	)  # type: ignore[arg-type]
-	rule_set = await threads_router.set_thread_access_rules(
-		"t",  # type: ignore[arg-type]
-		[],
-		principal=principal,  # type: ignore[arg-type]
-		db=None,  # type: ignore[arg-type]
-	)  # type: ignore[arg-type]
-
 	assert created is fake_thread
 	assert listed == [fake_thread]
 	assert fetched is fake_thread
@@ -407,8 +391,6 @@ async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 	assert tree == [fake_message]
 	assert posted is fake_message
 	assert switched.current_message_id is not None
-	assert rule_list == ["rule"]
-	assert rule_set == ["rule"]
 
 
 @pytest.mark.asyncio
@@ -439,6 +421,7 @@ async def test_runs_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
 			stream=True,
 			persist=True,
 			tool_choice=None,
+			extra_plugins=[],
 		),
 		principal=principal,  # type: ignore[arg-type]
 		db=None,  # type: ignore[arg-type]
@@ -452,7 +435,7 @@ async def test_authorization_require_thread_access() -> None:  # type: ignore[ar
 	principal = _FakePrincipal(is_admin=True)  # type: ignore[arg-type]
 	fake_session = _FakeSession("ok")
 
-	await authorization.require_thread_access(
+	await require_thread_access(
 		"thread",  # type: ignore[arg-type]
 		fake_session,  # type: ignore[arg-type]
 		principal,  # type: ignore[arg-type]
@@ -464,8 +447,8 @@ async def test_authorization_require_thread_access() -> None:  # type: ignore[ar
 	fake_session_none = _FakeSession(None)  # type: ignore[arg-type]
 
 	with pytest.raises(HTTPException) as exc:
-		await authorization.require_thread_access(
-			"thread",
+		await require_thread_access(
+			TypeID("thread"),
 			fake_session_none,  # type: ignore[arg-type]
 			principal,  # type: ignore[arg-type]
 		)
@@ -527,6 +510,16 @@ async def test_prompts_service_validation_paths(
 ) -> None:
 	existing = SimpleNamespace(id="2", command="/dup", content="hi")
 
+	async def load_external_prompt_placeholders(_session: object) -> dict[str, str]:
+		"""return no external prompts for local validation coverage."""
+		return {}
+
+	monkeypatch.setattr(
+		prompt_service,
+		"load_external_prompt_placeholders",
+		load_external_prompt_placeholders,
+	)
+
 	# type: ignore[arg-type]
 	async def exec_conflict(stmt: object) -> _FakeResult:
 		return _FakeResult(existing)
@@ -585,7 +578,11 @@ async def test_prompts_service_get_prompt_not_found() -> None:
 
 @pytest.mark.asyncio
 async def test_prompts_service_list_and_get(monkeypatch: pytest.MonkeyPatch) -> None:
-	prompt_obj = SimpleNamespace(id="1", command="/p", content="hi")
+	monkeypatch.setattr(prompt_external, "_SOURCES_BY_NAME", {})
+	now = datetime.now(UTC)
+	prompt_obj = SimpleNamespace(
+		id="1", command="/p", content="hi", created_at=now, updated_at=now
+	)
 
 	async def exec_prompts(_stmt: object) -> _FakeResult:  # type: ignore[arg-type]
 		return _FakeResult([prompt_obj])
@@ -596,14 +593,17 @@ async def test_prompts_service_list_and_get(monkeypatch: pytest.MonkeyPatch) -> 
 
 	admin = _FakePrincipal(is_admin=True)  # type: ignore[arg-type]
 	listed = await prompt_service.list_prompts(session, principal=admin)  # type: ignore[arg-type]
-	assert listed == [prompt_obj]
+	assert len(listed) == 1
+	assert listed[0].id == prompt_obj.id
 
 	async def fake_get_prompt(pid: object, s: object) -> object:
 		return prompt_obj
 
 	monkeypatch.setattr(prompt_service, "_get_prompt", fake_get_prompt)
 	fetched = await prompt_service.get_prompt("1", session, principal=admin)  # type: ignore[arg-type]
-	assert fetched is prompt_obj
+	assert fetched.id == prompt_obj.id
+	assert fetched.command == "p"
+	assert fetched.content == prompt_obj.content
 
 
 @pytest.mark.asyncio
@@ -618,14 +618,13 @@ async def test_prompts_service_update_and_delete(
 		return prompt_obj
 
 	async def fake_unique(
-		session: object, *, command: object, exclude_prompt_id: object = None
+		session: object, command: object, exclude_prompt_id: object = None
 	) -> None:
 		calls["unique"] = (command, exclude_prompt_id)
 		# type: ignore[arg-type]
 
 	async def fake_validate(
 		session: object,
-		*,
 		prompt_id: object,
 		command: object,
 		content: object,  # type: ignore[arg-type]
@@ -682,7 +681,6 @@ async def test_chat_service_conversions() -> None:
 		def __init__(
 			self,
 			adapter_type: str,
-			*,
 			base_url: str | None = None,
 			encrypted_api_key: str | None = None,
 		):
@@ -699,6 +697,7 @@ async def test_chat_service_conversions() -> None:
 			self.provider = provider
 			self.name = "chat"
 			self.adapter = adapter
+			self.input_modalities = ["text"]
 
 		# type: ignore[arg-type]
 
@@ -741,6 +740,7 @@ def test_chat_service_build_chat_model_applies_full_param_set() -> None:
 	model = ModelORM()
 	model.name = "chat"
 	model.adapter = None
+	model.input_modalities = ["text", "images"]
 	model.provider = provider
 
 	chat_model = chat_service.build_chat_model(
@@ -788,13 +788,17 @@ async def test_build_agent_from_orm_uses_chat_model_config(
 		"max_iterations": 7,
 	}
 
-	async def _resolve_tools(*, tool_ids: list[str]) -> list[object]:
-		assert tool_ids == []
-		return []
+	async def _resolve_plugins(
+		plugin_ids: list[str],
+		app_context: object,
+		agent_config: object,
+		extra_plugins: list[str] | None = None,
+	) -> ResolvedPlugins:
+		_ = (app_context, agent_config, extra_plugins)
+		assert plugin_ids == []
+		return ResolvedPlugins(tools=[], filters=[], hooks=[])
 
-	monkeypatch.setattr(chat_runner, "resolve_tools", _resolve_tools)
-	monkeypatch.setattr(chat_runner, "resolve_filters", lambda _tool_ids: [])
-	monkeypatch.setattr(chat_runner, "resolve_hooks", lambda _tool_ids: [])
+	monkeypatch.setattr(chat_runner, "resolve_plugins", _resolve_plugins)
 
 	sdk_agent = await chat_runner.build_agent_from_orm(
 		agent_orm,
@@ -806,6 +810,9 @@ async def test_build_agent_from_orm_uses_chat_model_config(
 	assert sdk_agent.chat_model.top_p == 0.9
 	assert sdk_agent.chat_model.reasoning_effort == "none"
 	assert sdk_agent.max_iterations == 7
+	assert sdk_agent.filters == []
+	assert sdk_agent.hooks == []
+	assert sdk_agent.tools == []
 
 
 def test_chat_service_orm_to_sdk_variants() -> None:
@@ -857,7 +864,6 @@ def test_chat_service_orm_to_sdk_variants() -> None:
 	assistant_sdk = assistant_orm.to_sdk()
 	tool_sdk = tool_orm.to_sdk()
 	tool_sdk_empty = tool_orm_empty.to_sdk()
-	fallback_sdk = unknown_orm.to_sdk()
 
 	assert user_sdk.role == "user"
 	assert system_sdk.role == "system"
@@ -867,7 +873,8 @@ def test_chat_service_orm_to_sdk_variants() -> None:
 	assert tool_sdk_empty.tool_output == ""
 	assert tool_sdk_empty.tool_call_id == "tc_empty"
 	assert tool_sdk_empty.is_error is False
-	assert fallback_sdk.role == "user"
+	with pytest.raises(ValueError, match="unsupported message type"):
+		unknown_orm.to_sdk()
 
 	# test converting branch messages using to_sdk method
 	branch_msgs = [user_orm.to_sdk(), system_orm.to_sdk()]
@@ -896,7 +903,6 @@ async def test_chat_service_agent_resolution_paths() -> None:
 		def __init__(
 			self,
 			adapter_type: str,
-			*,
 			base_url: str | None = None,
 			encrypted_api_key: str | None = None,
 		):
@@ -996,7 +1002,7 @@ async def test_chat_runner_load_agent_no_model(monkeypatch: pytest.MonkeyPatch) 
 
 def test_threads_helper_admin_guard() -> None:
 	with pytest.raises(HTTPException):
-		thread_service._ensure_admin_for_hidden(True, _FakePrincipal(is_admin=False))  # type: ignore[arg-type]
+		_ensure_admin_for_hidden(True, _FakePrincipal(is_admin=False))  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
@@ -1012,3 +1018,140 @@ async def test_prompt_runtime_render_inline(monkeypatch: pytest.MonkeyPatch) -> 
 		text="{{ PROMPTS.a }}",  # type: ignore[arg-type]
 	)
 	assert rendered == "hi"
+
+
+@pytest.mark.asyncio
+async def test_external_prompt_source_registry_routes_prefix(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	monkeypatch.setattr(prompt_external, "_SOURCES_BY_NAME", {})
+	render_calls: list[set[str]] = []
+
+	async def load_placeholders(_session: object) -> dict[str, str]:
+		return {"covprompt-one": ""}
+
+	async def render_content_map(
+		_session: object,
+		commands: set[str],
+	) -> dict[str, str]:
+		render_calls.append(commands)
+		return {command: "rendered" for command in commands}
+
+	async def list_prompts(_session: object) -> list[object]:
+		return []
+
+	async def get_prompt(_prompt_id: str, _session: object) -> object | None:
+		return None
+
+	prompt_external.register_external_prompt_source(
+		prompt_external.ExternalPromptSource(
+			name="coverage-prompts",
+			prefix="covprompt-",
+			load_placeholders=load_placeholders,
+			render_content_map=render_content_map,
+			list_prompts=list_prompts,
+			get_prompt=get_prompt,
+		)
+	)
+
+	placeholders = await prompt_external.load_external_prompt_placeholders(object())
+	rendered = await prompt_external.render_external_prompt_content_map(
+		object(),
+		{"covprompt-one", "local"},
+	)
+
+	assert placeholders == {"covprompt-one": ""}
+	assert render_calls == [{"covprompt-one"}]
+	assert rendered == {"covprompt-one": "rendered"}
+
+
+def test_external_prompt_source_registry_rejects_prefix_conflict(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	monkeypatch.setattr(prompt_external, "_SOURCES_BY_NAME", {})
+
+	async def load_placeholders(_session: object) -> dict[str, str]:
+		return {}
+
+	async def render_content_map(
+		_session: object,
+		_commands: set[str],
+	) -> dict[str, str]:
+		return {}
+
+	async def list_prompts(_session: object) -> list[object]:
+		return []
+
+	async def get_prompt(_prompt_id: str, _session: object) -> object | None:
+		return None
+
+	prompt_external.register_external_prompt_source(
+		prompt_external.ExternalPromptSource(
+			name="coverage-prompts",
+			prefix="covprompt-",
+			load_placeholders=load_placeholders,
+			render_content_map=render_content_map,
+			list_prompts=list_prompts,
+			get_prompt=get_prompt,
+		)
+	)
+	with pytest.raises(ValueError, match="prefix conflicts"):
+		prompt_external.register_external_prompt_source(
+			prompt_external.ExternalPromptSource(
+				name="coverage-prompts-other",
+				prefix="covprompt-one-",
+				load_placeholders=load_placeholders,
+				render_content_map=render_content_map,
+				list_prompts=list_prompts,
+				get_prompt=get_prompt,
+			)
+		)
+
+
+@pytest.mark.asyncio
+async def test_external_tool_source_registry_routes_prefix(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	monkeypatch.setattr(external_tools, "_SOURCES_BY_NAME", {})
+	context = object()
+	resolve_calls: list[list[str]] = []
+
+	async def resolve_tools(
+		tool_ids: list[str],
+		app_context: object,
+	) -> list[object]:
+		resolve_calls.append(tool_ids)
+		assert app_context is context
+		return []
+
+	async def list_plugins(
+		_session: object,
+		_plugin_type: object = None,
+		_principal: object = None,
+	) -> list[object]:
+		return []
+
+	async def get_plugin(
+		_plugin_id: str,
+		_session: object,
+		_principal: object,
+	) -> object | None:
+		return None
+
+	external_tools.register_external_tool_source(
+		external_tools.ExternalToolSource(
+			name="coverage-tools",
+			prefix="covtool:",
+			resolve_tools=resolve_tools,
+			list_plugins=list_plugins,
+			get_plugin=get_plugin,
+		)
+	)
+
+	assert external_tools.has_external_tool_source("covtool:item")
+	assert not external_tools.has_external_tool_source("native")
+	resolved = await external_tools.resolve_external_tools(
+		["covtool:item", "native"], context
+	)
+	assert resolved == []
+	assert resolve_calls == [["covtool:item"]]

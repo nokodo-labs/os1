@@ -3,18 +3,50 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
+from api.models.thread_summary import SummaryPurpose
 from api.schemas.common import (
+	MISSING,
 	MetadataModel,
 	MetadataUpdateModel,
+	MissingType,
 	ORMModel,
 	TimestampedModel,
 )
 from api.schemas.project import Project as ProjectSchema
+from api.schemas.sorting import CommonSortBy
 from nokodo_ai.utils.typeid import TypeID
+
+
+type ThreadSortBy = (
+	CommonSortBy
+	| Literal[
+		"last_activity_at",
+		"title",
+	]
+)
+
+
+class ThreadListFilters(BaseModel):
+	"""filters for listing threads."""
+
+	owner_id: TypeID | None = None
+	include_hidden: bool = False
+	is_archived: bool | None = None
+	include_deleted: bool = False
+	q: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+class ThreadSearchFilters(BaseModel):
+	"""structured filters applied to thread search (vector + autocomplete)."""
+
+	owner_id: TypeID | None = None
+	is_archived: bool | None = None
+	include_hidden: bool = False
+	include_deleted: bool = False
 
 
 def _populate_project_ids(data: Any) -> Any:
@@ -59,13 +91,13 @@ class ThreadCreate(ThreadBase):
 class ThreadUpdate(MetadataUpdateModel):
 	"""payload for updating a thread."""
 
-	title: str | None = None
-	tags: list[str] | None = None
-	is_archived: bool | None = None
-	is_temporary: bool | None = None
-	project_ids: list[TypeID] | None = None
-	owner_id: TypeID | None = None
-	current_message_id: TypeID | None = None
+	title: str | None | MissingType = MISSING
+	tags: list[str] | MissingType = MISSING
+	is_archived: bool | MissingType = MISSING
+	is_temporary: bool | MissingType = MISSING
+	project_ids: list[TypeID] | MissingType = MISSING
+	owner_id: TypeID | MissingType = MISSING
+	current_message_id: TypeID | None | MissingType = MISSING
 
 
 class ThreadSummary(ORMModel):
@@ -99,6 +131,25 @@ class Thread(ThreadBase, TimestampedModel):
 		return _populate_project_ids(data)
 
 
+class ThreadSummaryRecord(MetadataModel, TimestampedModel):
+	"""stored summary record for a thread."""
+
+	id: TypeID
+	thread_id: TypeID
+	purpose: SummaryPurpose
+	start_message_id: TypeID | None = None
+	end_message_id: TypeID | None = None
+	message_count: int = 0
+	content: str = ""
+	superseded_by_id: TypeID | None = None
+
+
+class ThreadSummaryUpdate(MetadataUpdateModel):
+	"""payload for updating a stored summary."""
+
+	content: str | MissingType = Field(default=MISSING, min_length=1)
+
+
 class ThreadSwitchRequest(ORMModel):
 	"""payload to switch a thread's active branch."""
 
@@ -112,8 +163,7 @@ class ThreadSwitchResponse(ORMModel):
 	current_message_id: TypeID | None = None
 
 
-class ThreadMetadataGenerateRequest(ORMModel):
-	"""request body for generating thread metadata."""
+class ThreadMaintenanceRunRequest(ORMModel):
+	"""request body for running thread maintenance."""
 
-	replace: bool = False
-	model_id: TypeID | None = None
+	replace_metadata: bool = False

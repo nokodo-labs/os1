@@ -3,6 +3,7 @@
 	import type { components } from '$lib/api/types'
 	import { getSourceConfig } from '$lib/citations/config'
 	import Mermaid from '$lib/components/streamdown/Mermaid.svelte'
+	import TableBlock from '$lib/components/streamdown/TableBlock.svelte'
 	import CitationWidget from '$lib/components/widgets/CitationWidget.svelte'
 	import { tryUseDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { Streamdown, type Extension } from 'svelte-streamdown'
@@ -79,10 +80,30 @@
 
 	const defaultOrigin = browser ? window.location.origin : undefined
 
-	// Allow all http/https links, plus relative links via defaultOrigin.
-	// Streamdown's wildcard intentionally blocks non-http(s) schemes.
-	const allowedLinkPrefixes = ['*']
-	const allowedImagePrefixes = ['https://', 'http://', '/', 'data:image/']
+	// Allow links/images generated from OS1 data and app-relative URLs.
+	const allowedLinkPrefixes = [
+		'*',
+		'https://',
+		'http://',
+		'/',
+		'./',
+		'../',
+		'#',
+		'mailto:',
+		'tel:',
+		'data:',
+		'blob:',
+	]
+	const allowedImagePrefixes = [
+		'*',
+		'https://',
+		'http://',
+		'/',
+		'./',
+		'../',
+		'data:image/',
+		'blob:',
+	]
 
 	// Standard markdown-ish collapsible blocks, without enabling raw HTML.
 	// Syntax:
@@ -189,6 +210,16 @@
 				<CitationWidget citation={c} layout="grid" />
 			{/if}
 		{/each}
+	{/snippet}
+
+	{#snippet table({
+		token,
+		children,
+	}: {
+		token: { raw: string }
+		children: import('svelte').Snippet
+	})}
+		<TableBlock {token} {children} />
 	{/snippet}
 
 	{#snippet children({ token, children })}

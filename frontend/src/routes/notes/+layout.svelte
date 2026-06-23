@@ -22,9 +22,14 @@
 	})
 
 	const selectedNoteId = $derived(page.params.id ?? null)
+	const mobileFullBleed = $derived(page.url.pathname === '/notes')
 </script>
 
-<MasterDetailScaffold masterWidthClass="w-[clamp(280px,30vw,520px)] h-full" ariaLabel="notes">
+<MasterDetailScaffold
+	masterWidthClass="w-[clamp(280px,30vw,520px)] h-full"
+	ariaLabel="notes"
+	{mobileFullBleed}
+>
 	{#snippet master({ isMobile })}
 		<NotesSidebar {selectedNoteId} {isMobile} />
 	{/snippet}

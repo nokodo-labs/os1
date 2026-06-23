@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Float, ForeignKey, Index, LargeBinary, String, Text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base
@@ -45,11 +46,12 @@ class Memory(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	source_message_id: Mapped[str | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("messages.id", ondelete="SET NULL"),
+		index=True,
 	)
 	embedding: Mapped[bytes | None] = mapped_column(LargeBinary())
 	last_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 	confidence: Mapped[float | None] = mapped_column(Float())
-	category: Mapped[str | None] = mapped_column(String(50))
+	tags: Mapped[list[str] | None] = mapped_column(ARRAY(String))
 
 	owner: Mapped[User] = relationship(
 		"User",

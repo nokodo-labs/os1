@@ -1,4 +1,4 @@
-"""agent execution context - runtime state passed to tools and filters."""
+"""agent execution contexts shared by the SDK runtime."""
 
 from __future__ import annotations
 
@@ -8,33 +8,36 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
 	from .chat_models import ChatModel
-	from .threads import Thread
 	from .types import JSONObject
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class AgentContext:
-	"""runtime context provided to tools and filters during agent execution.
+	"""read-only context provided to filters, hooks, and tools during execution.
 
-	this contains execution state that's always available regardless of the
-	application-specific context. it tracks the current thread, model, and
-	iteration state.
+	mutable per-iteration data belongs in ``AgentIterationState``. tool-call
+	data belongs in ``ToolCallContext``.
 
 	attributes:
-		thread: the current conversation thread
 		model: the chat model being used for execution
-		iteration: current agent loop iteration (0-indexed)
-		tool_call_id: id of the current tool call (only set during tool execution)
-		retry_count: number of retries for the current operation
-		tool_call_start_time: monotonic timestamp from when the tool call generation
-			began (earliest streaming delta). use with time.monotonic() for elapsed
-			time calculations.
 	"""
 
-	thread: Thread = field()
 	model: ChatModel = field()
+
+
+@dataclass(frozen=True, slots=True)
+class ToolCallContext:
+	"""tool-specific context for a single tool invocation.
+
+	attributes:
+		tool_call_id: id of the current tool call
+		retry_count: number of retries for the tool call
+		tool_call_start_time: monotonic timestamp from when the tool call generation
+			began. use with time.monotonic() for elapsed time calculations.
+		metadata: tool-call metadata from the provider/runtime
+	"""
+
 	tool_call_id: str = field()
-	iteration: int = field(default=0)
+	tool_call_start_time: float = field()
 	retry_count: int = field(default=0)
-	tool_call_start_time: float = field(default=0.0)
 	metadata: JSONObject = field(default_factory=dict)

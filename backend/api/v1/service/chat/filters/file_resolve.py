@@ -1,8 +1,9 @@
 """file content resolver filter.
 
 resolves native attachments (images, files) that carry a file_id in
-metadata but have no url or base64 data. this filter runs AFTER
-attachment_decay so that only active (non-decayed) parts are resolved.
+metadata but have no url or base64 data. this filter runs LAST, after the
+attachments filter and context compaction, so it only hydrates the media
+that actually survives into the model context (active tool-message media).
 
 delegates actual file data resolution to the file service.
 """
@@ -15,10 +16,9 @@ from typing import TYPE_CHECKING
 from pydantic import Field
 
 from api.v1.service.chat.filters.base import Filter
-from api.v1.service.files import resolve_file_data
-from nokodo_ai.messages import (
-	AssistantMessage as SDKAssistantMessage,
-)
+from api.v1.service.files import read_file_base64
+from nokodo_ai.agents import AgentIterationState
+from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
 	FileContent,
 	ImageContent,
@@ -26,10 +26,7 @@ from nokodo_ai.messages import (
 from nokodo_ai.messages import (
 	ToolMessage as SDKToolMessage,
 )
-from nokodo_ai.messages import (
-	UserMessage as SDKUserMessage,
-)
-from nokodo_ai.threads import Thread as SDKThread
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -41,13 +38,13 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def _extract_file_id(part: ImageContent | FileContent) -> str | None:
+def _extract_file_id(part: ImageContent | FileContent) -> TypeID | None:
 	"""extract file_id from part metadata, if present."""
 	meta = part.metadata
 	if not meta or not isinstance(meta, dict):
 		return None
 	fid = meta.get("file_id")
-	return str(fid) if fid else None
+	return TypeID(str(fid)) if fid else None
 
 
 def _needs_resolution(part: ImageContent | FileContent) -> bool:
@@ -58,27 +55,37 @@ def _needs_resolution(part: ImageContent | FileContent) -> bool:
 
 
 class FileResolveFilter(Filter):
-	"""resolves file_id references to actual file data (url or base64).
+	"""resolves file_id references to model-ready file data.
 
-	this filter is NOT optional and should NOT be in the plugin registry.
-	it is always appended by the agent service so it runs last in the
-	filter chain. works independently of whether decay or any other
-	filter is present.
+	chat messages can carry lightweight image or file parts that reference
+	a stored file id without embedding the actual bytes. this filter scans
+	user, assistant, and tool messages for unresolved active attachments,
+	loads the file through the file service with normal access checks, and
+	populates the SDK content part with base64 data when available.
+
+	running this after the attachments filter and context compaction lets it
+	hydrate only the media that survives into the model context.
 	"""
 
 	name: str = Field(default="file_resolve")
 	description: str = Field(
-		default="resolves file_id references to url or base64 for chat model execution"
+		default=(
+			"loads referenced file data so image and file attachments can be "
+			"sent to the model"
+		)
 	)
 
 	async def process(
 		self,
-		thread: SDKThread,
+		state: AgentIterationState[AppContext],
+		agent_context: AgentContext,
 		app_context: AppContext | None,
-	) -> SDKThread:
+	) -> AgentIterationState[AppContext]:
 		"""scan messages for unresolved file parts and populate data."""
+		_ = agent_context
 		if app_context is None:
 			raise ValueError("AppContext is required for FileResolveFilter")
+		thread = state.thread
 
 		session = app_context.session
 		principal = app_context.principal
@@ -86,23 +93,10 @@ class FileResolveFilter(Filter):
 		changed = False
 
 		for msg_idx, msg in enumerate(new_messages):
-			if isinstance(msg, (SDKUserMessage, SDKAssistantMessage)):
-				new_parts = list(msg.content)
-				msg_changed = False
-
-				for part_idx, part in enumerate(new_parts):
-					resolved = await self._resolve_part(part, session, principal)
-					if resolved is not None:
-						new_parts[part_idx] = resolved
-						msg_changed = True
-
-				if msg_changed:
-					new_messages[msg_idx] = msg.model_copy(
-						update={"content": new_parts}
-					)
-					changed = True
-
-			elif isinstance(msg, SDKToolMessage):
+			# native bytes only ever live on tool messages. the attachments
+			# projection has already rewritten any user/assistant media to text
+			# references, so hydration is restricted to tool messages.
+			if isinstance(msg, SDKToolMessage):
 				new_atts = list(msg.attachments)
 				msg_changed = False
 
@@ -119,9 +113,10 @@ class FileResolveFilter(Filter):
 					changed = True
 
 		if not changed:
-			return thread
+			return state
 
-		return thread.model_copy(update={"messages": new_messages})
+		state.thread = thread.model_copy(update={"messages": new_messages})
+		return state
 
 	async def _resolve_part(
 		self,
@@ -138,7 +133,7 @@ class FileResolveFilter(Filter):
 		if not file_id:
 			return None
 		try:
-			b64 = await resolve_file_data(file_id, session, principal=principal)
+			b64 = await read_file_base64(file_id, session, principal=principal)
 			if b64:
 				return part.model_copy(update={"base64": b64})
 			log.warning("file_resolve: no data for file %s", file_id)
