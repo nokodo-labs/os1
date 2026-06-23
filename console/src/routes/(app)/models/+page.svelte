@@ -116,10 +116,10 @@
 		is_autofetched: false,
 	})
 
-	// Optional numeric fields are modeled as strings so they can be blank.
-	let contextWindowInput = $state<string>('')
-	let inputCostInput = $state<string>('')
-	let outputCostInput = $state<string>('')
+	// Optional numeric fields. type=number bindings yield number|null, matching the API schema.
+	let contextWindowInput = $state<number | null>(null)
+	let inputCostInput = $state<number | null>(null)
+	let outputCostInput = $state<number | null>(null)
 
 	let providerKey = $derived(formState.provider_id ? getProviderKey(formState.provider_id) : null)
 	let adapterOptions = $derived(getAdapterOptions(providerKey, formState.model_type))
@@ -210,9 +210,9 @@
 			enabled: true,
 			is_autofetched: false,
 		}
-		contextWindowInput = ''
-		inputCostInput = ''
-		outputCostInput = ''
+		contextWindowInput = null
+		inputCostInput = null
+		outputCostInput = null
 		inputModalities = [...(DEFAULT_MODALITIES['chat_model'] ?? ['text'])]
 		showModal = true
 		submitError = null
@@ -231,30 +231,14 @@
 			enabled: model.enabled,
 			is_autofetched: model.is_autofetched,
 		}
-		contextWindowInput =
-			model.context_window === null || model.context_window === undefined
-				? ''
-				: String(model.context_window)
-		inputCostInput =
-			model.input_cost === null || model.input_cost === undefined
-				? ''
-				: String(model.input_cost)
-		outputCostInput =
-			model.output_cost === null || model.output_cost === undefined
-				? ''
-				: String(model.output_cost)
+		contextWindowInput = model.context_window ?? null
+		inputCostInput = model.input_cost ?? null
+		outputCostInput = model.output_cost ?? null
 		inputModalities = [
 			...(model.input_modalities ?? DEFAULT_MODALITIES[model.model_type] ?? ['text']),
 		]
 		showModal = true
 		submitError = null
-	}
-
-	function parseOptionalNumber(value: string): number | null {
-		const trimmed = value.trim()
-		if (!trimmed) return null
-		const parsed = Number(trimmed)
-		return Number.isFinite(parsed) ? parsed : null
 	}
 
 	async function handleSubmit(e: Event) {
@@ -280,12 +264,9 @@
 					is_autofetched: formState.is_autofetched,
 					input_modalities: inputModalities,
 				}
-				const contextWindow = parseOptionalNumber(contextWindowInput)
-				const inputCost = parseOptionalNumber(inputCostInput)
-				const outputCost = parseOptionalNumber(outputCostInput)
-				if (contextWindow !== null) createPayload.context_window = contextWindow
-				if (inputCost !== null) createPayload.input_cost = inputCost
-				if (outputCost !== null) createPayload.output_cost = outputCost
+				if (contextWindowInput !== null) createPayload.context_window = contextWindowInput
+				if (inputCostInput !== null) createPayload.input_cost = inputCostInput
+				if (outputCostInput !== null) createPayload.output_cost = outputCostInput
 				unwrap(await api.POST('/v1/models', { body: createPayload }))
 			} else if (editingId) {
 				const updatePayload: ModelUpdate = {
@@ -296,9 +277,9 @@
 					enabled: formState.enabled,
 					is_autofetched: formState.is_autofetched,
 					input_modalities: inputModalities,
-					context_window: parseOptionalNumber(contextWindowInput),
-					input_cost: parseOptionalNumber(inputCostInput),
-					output_cost: parseOptionalNumber(outputCostInput),
+					context_window: contextWindowInput,
+					input_cost: inputCostInput,
+					output_cost: outputCostInput,
 				}
 				unwrap(
 					await api.PATCH('/v1/models/{model_id}', {
