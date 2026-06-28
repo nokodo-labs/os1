@@ -45,7 +45,7 @@ jobs:
         working-directory: console
     steps:
       - name: checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: install pnpm
         uses: pnpm/action-setup@v6
