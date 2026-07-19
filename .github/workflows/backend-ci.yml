@@ -81,7 +81,7 @@ jobs:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
       QDRANT_URL: ":memory:"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: set up Python (from file)
         if: ${{ matrix.python == 'file' }}
