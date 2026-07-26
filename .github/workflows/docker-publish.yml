@@ -39,7 +39,7 @@ jobs:
       tags-console: ${{ steps.build_tags.outputs.TAGS_CONSOLE }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: backend/.python-version
           sparse-checkout-cone-mode: false
@@ -173,7 +173,7 @@ jobs:
             platform: linux/arm64
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: set up Docker Buildx
         uses: docker/setup-buildx-action@v4
