@@ -3,8 +3,6 @@
 <img src="https://nokodo.net/static/os1/sidebar-logo.svg" alt="nokodo" width=83% />
 <div style="height: 30px;"></div>
 
-**the AI workspace you actually want to use**
-
 [![Stars](https://img.shields.io/github/stars/nokodo-labs/os1?style=social)](https://github.com/nokodo-labs/os1/stargazers)
 [![Discord](https://img.shields.io/badge/discord-join-5865F2)](https://discord.gg/VsYwyTqzDM)
 [![Issues](https://img.shields.io/github/issues/nokodo-labs/os1)](https://github.com/nokodo-labs/os1/issues)
@@ -20,6 +18,7 @@ https://github.com/user-attachments/assets/ddedb7be-1b99-4d25-b2b0-6c2dcfb28a65
 
 > [!WARNING]
 > 🚧 this project is in **alpha stage** - many features are still in development or not yet available. expect breaking changes and incomplete functionality.
+> UPCOMING: web search, deep research, full messaging app
 
 **links:** [docs](docs/setup.md) · [roadmap](ROADMAP.md) · [contributing](CONTRIBUTING.md) · [discord](https://discord.gg/VsYwyTqzDM)
 
