@@ -55,7 +55,7 @@
 		"@floating-ui/dom": "^1.7.6",
 		"@humanspeak/svelte-virtual-list": "^0.5.2",
 		"@internationalized/date": "^3.12.2",
-		"@tiptap/core": "^3.26.0",
+		"@tiptap/core": "^3.30.4",
 		"@tiptap/extension-placeholder": "^3.26.0",
 		"@tiptap/extension-typography": "^3.26.0",
 		"@tiptap/extension-underline": "^3.26.0",
