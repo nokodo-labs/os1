@@ -6,16 +6,14 @@ updates accept a patch schema where all fields are optional and only writable
 fields are included.
 """
 
-from __future__ import annotations
-
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from api.permissions import (
-	ActionPermission,
 	DefaultResourceAccess,
+	PermissionGrant,
 )
 from api.schemas.common import MISSING, MissingType
 from api.schemas.preferences import BackgroundType
@@ -29,6 +27,7 @@ from api.settings import (
 	SearchEngine,
 	Settings,
 )
+from nokodo_ai.adapters.base.chat import ReasoningEffort
 
 
 class UISettingsPatch(BaseModel):
@@ -283,6 +282,10 @@ class RerankSettingsPatch(BaseModel):
 		default=MISSING,
 		description="default reranking strategy",
 	)
+	default_model_id: str | None | MissingType = Field(
+		default=MISSING,
+		description="default reranker model id (Model.id)",
+	)
 	top_k: int | MissingType = Field(
 		default=MISSING,
 		ge=1,
@@ -291,66 +294,89 @@ class RerankSettingsPatch(BaseModel):
 	)
 
 
-class LocalStorageConfigPatch(BaseModel):
+class LocalStorageBackendConfigPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
-	root_path: str | MissingType = Field(
-		default=MISSING,
-		description="root directory for local file storage",
+	type: Literal["local"]
+	name: Literal["local"] = "local"
+	root_path: str = Field(description="root directory for local file storage")
+
+
+class S3StorageBackendConfigPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	type: Literal["s3"]
+	name: str = Field(
+		min_length=1,
+		max_length=50,
+		description="identifier of this backend, referenced by stored files",
 	)
-
-
-class S3StorageConfigPatch(BaseModel):
-	model_config = ConfigDict(extra="forbid")
-
-	endpoint_url: str | None | MissingType = Field(
-		default=MISSING,
+	endpoint_url: str | None = Field(
+		default=None,
 		description="S3-compatible endpoint url (None for AWS S3)",
 	)
-	bucket: str | MissingType = Field(default=MISSING, description="S3 bucket name")
-	region: str | MissingType = Field(default=MISSING, description="AWS region")
-	access_key_id: str | None | MissingType = Field(
-		default=MISSING, description="S3 access key id"
+	bucket: str = Field(description="S3 bucket name")
+	region: str = Field(default="us-east-1", description="AWS region")
+	access_key_id: str | None = Field(default=None, description="S3 access key id")
+	secret_access_key: str | None = Field(
+		default=None, description="S3 secret access key"
 	)
-	secret_access_key: str | None | MissingType = Field(
-		default=MISSING, description="S3 secret access key"
+	prefix: str = Field(default="", description="key prefix within the bucket")
+	presigned_url_ttl: int = Field(
+		default=3600, ge=1, description="presigned URL expiration in seconds"
 	)
-	prefix: str | MissingType = Field(
-		default=MISSING, description="key prefix within the bucket"
-	)
-	presigned_url_ttl: int | MissingType = Field(
-		default=MISSING, ge=1, description="presigned URL expiration in seconds"
-	)
-	multipart_threshold: int | MissingType = Field(
-		default=MISSING,
+	multipart_threshold: int = Field(
+		default=100 * 1024 * 1024,
 		ge=1,
 		description="bytes above which multipart upload kicks in",
 	)
-	multipart_chunk_size: int | MissingType = Field(
-		default=MISSING,
+	multipart_chunk_size: int = Field(
+		default=10 * 1024 * 1024,
 		ge=1,
 		description="multipart upload chunk size in bytes",
 	)
-	max_retries: int | MissingType = Field(
-		default=MISSING,
-		ge=0,
-		description="max retry attempts",
-	)
-	retry_mode: Literal["legacy", "standard", "adaptive"] | MissingType = Field(
-		default=MISSING,
+	max_retries: int = Field(default=3, ge=0, description="max retry attempts")
+	retry_mode: Literal["legacy", "standard", "adaptive"] = Field(
+		default="adaptive",
 		description="botocore retry mode",
 	)
+
+
+type StorageBackendConfigPatch = Annotated[
+	LocalStorageBackendConfigPatch | S3StorageBackendConfigPatch,
+	Field(discriminator="type"),
+]
 
 
 class StorageSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
-	backend: Literal["local", "s3"] | MissingType = Field(
+	active_backend: str | MissingType = Field(
 		default=MISSING,
-		description="active storage backend: 'local' or 's3'",
+		description="name of the backend new files are written to",
 	)
-	local: LocalStorageConfigPatch | MissingType = MISSING
-	s3: S3StorageConfigPatch | MissingType = MISSING
+	backends: list[StorageBackendConfigPatch] | MissingType = Field(
+		default=MISSING,
+		description="all storage backends files may be read from or written to",
+	)
+
+
+class ThreadPassageEnrichmentSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	enabled: bool | MissingType = MISSING
+	lookbehind: int | MissingType = Field(default=MISSING, ge=0)
+	lookahead: int | MissingType = Field(default=MISSING, ge=0)
+	max_per_run: int | MissingType = Field(default=MISSING, ge=1)
+
+
+class ThreadPassageSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	enabled: bool | MissingType = MISSING
+	target_tokens: int | MissingType = Field(default=MISSING, ge=100)
+	overlap_ratio: float | MissingType = Field(default=MISSING, ge=0.0, le=0.5)
+	enrichment: ThreadPassageEnrichmentSettingsPatch | MissingType = MISSING
 
 
 class AssetsSettingsPatch(BaseModel):
@@ -368,6 +394,7 @@ class AssetsSettingsPatch(BaseModel):
 	content_vectorization: AssetContentVectorizationSettingsPatch | MissingType = (
 		MISSING
 	)
+	thread_passages: ThreadPassageSettingsPatch | MissingType = MISSING
 	descriptions: AssetDescriptionSettingsPatch | MissingType = MISSING
 
 
@@ -538,6 +565,21 @@ class AIMemorySettingsPatch(BaseModel):
 		ge=1,
 		description="number of relevant memories to retrieve",
 	)
+	post_processing_turns: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="number of recent conversation turns fed to the memory "
+		"maintenance agent",
+	)
+	post_processing_prompt: str | None | MissingType = Field(
+		default=MISSING,
+		description="custom system prompt for the memory maintenance agent; "
+		"null uses the built-in default",
+	)
+	post_processing_reasoning_effort: ReasoningEffort | MissingType = Field(
+		default=MISSING,
+		description="reasoning effort for the memory maintenance agent",
+	)
 
 
 class AIChatContextSettingsPatch(BaseModel):
@@ -587,6 +629,10 @@ class AITaskSettingsPatch(BaseModel):
 		default=MISSING,
 		description="model for thread context summarization",
 	)
+	passage_enrichment_model_id: str | None | MissingType = Field(
+		default=MISSING,
+		description="model for thread passage search context enrichment",
+	)
 	memory_post_processing_model_id: str | None | MissingType = Field(
 		default=MISSING,
 		description="model for memory post-processing (dedup, update, delete)",
@@ -602,6 +648,26 @@ class AITaskSettingsPatch(BaseModel):
 	asset_text_extraction_model_id: str | None | MissingType = Field(
 		default=MISSING,
 		description="model for asset file, document, and media text extraction",
+	)
+	thread_maintenance_prompt: str | None | MissingType = Field(
+		default=MISSING,
+		description="prompt for inactive thread maintenance",
+	)
+	passage_enrichment_prompt: str | None | MissingType = Field(
+		default=MISSING,
+		description="prompt for thread passage context enrichment",
+	)
+	summarization_prompt: str | None | MissingType = Field(
+		default=MISSING,
+		description="prompt for thread context summarization",
+	)
+	summary_condensation_prompt: str | None | MissingType = Field(
+		default=MISSING,
+		description="prompt for thread summary condensation",
+	)
+	asset_description_prompt: str | None | MissingType = Field(
+		default=MISSING,
+		description="prompt for asset description",
 	)
 	maintenance_max_chars_per_message: int | None | MissingType = Field(
 		default=MISSING,
@@ -990,7 +1056,7 @@ class DefaultPermissionsSettingsPatch(BaseModel):
 		default=MISSING,
 		description="per-resource-type default access levels",
 	)
-	action_permissions: list[ActionPermission] | MissingType = Field(
+	action_permissions: list[PermissionGrant] | MissingType = Field(
 		default=MISSING,
 		description="action permissions granted by default",
 	)
@@ -1371,6 +1437,16 @@ class CacheSettingsPatch(BaseModel):
 		ge=1,
 		description="TTL for accessible user recipient cache entries",
 	)
+	principal_ttl_seconds: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="TTL for principal snapshot cache entries",
+	)
+	session_validity_ttl_seconds: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="TTL for session validity cache entries",
+	)
 
 
 class TaskiqSettingsPatch(BaseModel):
@@ -1453,6 +1529,29 @@ class FileMaintenanceSettingsPatch(BaseModel):
 	)
 
 
+class UserSessionPurgeSettingsPatch(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	enabled: bool | MissingType = Field(
+		default=MISSING,
+		description="whether periodic user session purging is enabled",
+	)
+	cron: str | MissingType = Field(
+		default=MISSING,
+		description="UTC cron expression used to schedule user session purging",
+	)
+	batch_size: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="maximum number of historical user sessions purged per run",
+	)
+	grace_period_days: int | MissingType = Field(
+		default=MISSING,
+		ge=1,
+		description="days to retain expired user sessions before purging them",
+	)
+
+
 class TasksSettingsPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -1460,6 +1559,7 @@ class TasksSettingsPatch(BaseModel):
 	thread_maintenance: ThreadMaintenanceSettingsPatch | MissingType = MISSING
 	maintenance_backfill: ThreadMaintenanceBackfillSettingsPatch | MissingType = MISSING
 	file_maintenance: FileMaintenanceSettingsPatch | MissingType = MISSING
+	user_session_purge: UserSessionPurgeSettingsPatch | MissingType = MISSING
 
 
 class SettingsPatch(BaseModel):

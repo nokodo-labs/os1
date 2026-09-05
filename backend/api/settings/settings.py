@@ -1,13 +1,12 @@
 """application settings models and singleton."""
 
-from __future__ import annotations
-
 import json
 import logging
+import re
 from collections.abc import Callable, Mapping
 from enum import StrEnum
 from functools import cache as functools_cache
-from typing import Any, Final, Literal, Self, overload
+from typing import Annotated, Any, Final, Literal, Self, overload
 
 from pydantic import (
 	BaseModel,
@@ -32,7 +31,7 @@ from pydantic_settings import (
 from api.permissions import (
 	ActionPermission,
 	DefaultResourceAccess,
-	strip_unknown_action_permissions,
+	PermissionGrant,
 )
 from api.schemas.preferences import BackgroundType
 from api.service.web_assets import (
@@ -40,6 +39,7 @@ from api.service.web_assets import (
 	cdn_asset_url,
 	resolve_asset_source,
 )
+from nokodo_ai.adapters.base.chat import ReasoningEffort
 from nokodo_ai.utils.typing import extract_literal_values
 
 
@@ -212,6 +212,15 @@ class AIMemorySettings(BaseModel):
 		"memory maintenance agent that runs after each turn. a turn is a "
 		"contiguous block of user or assistant messages.",
 	)
+	post_processing_prompt: str | None = settings_field(
+		default=None,
+		description="custom system prompt for the memory maintenance agent. "
+		"null uses the built-in default prompt.",
+	)
+	post_processing_reasoning_effort: ReasoningEffort = settings_field(
+		default="medium",
+		description="reasoning effort for the memory maintenance agent.",
+	)
 
 
 class AIChatContextSettings(BaseModel):
@@ -241,7 +250,7 @@ class AIChatContextSettings(BaseModel):
 
 
 class AITaskSettings(BaseModel):
-	"""per-task model overrides for background AI tasks.
+	"""settings for background AI tasks.
 
 	resolution order: per-task model_id -> default_model_id -> error.
 	"""
@@ -266,6 +275,10 @@ class AITaskSettings(BaseModel):
 		default=None,
 		description="model for thread context summarization",
 	)
+	passage_enrichment_model_id: str | None = settings_field(
+		default=None,
+		description="model for thread passage search context enrichment",
+	)
 	memory_post_processing_model_id: str | None = settings_field(
 		default=None,
 		description="model for memory post-processing (dedup, update, delete)",
@@ -281,6 +294,26 @@ class AITaskSettings(BaseModel):
 	asset_text_extraction_model_id: str | None = settings_field(
 		default=None,
 		description="model for asset file, document, and media text extraction",
+	)
+	thread_maintenance_prompt: str | None = settings_field(
+		default=None,
+		description="prompt for inactive thread maintenance",
+	)
+	passage_enrichment_prompt: str | None = settings_field(
+		default=None,
+		description="prompt for thread passage context enrichment",
+	)
+	summarization_prompt: str | None = settings_field(
+		default=None,
+		description="prompt for thread context summarization",
+	)
+	summary_condensation_prompt: str | None = settings_field(
+		default=None,
+		description="prompt for thread summary condensation",
+	)
+	asset_description_prompt: str | None = settings_field(
+		default=None,
+		description="prompt for asset description",
 	)
 	maintenance_max_chars_per_message: int | None = settings_field(
 		default=2000,
@@ -592,6 +625,102 @@ class AssetContentVectorizationSettings(BaseModel):
 		description=(
 			"neighbor sentence window size used when embedding for semantic splitting"
 		),
+	)
+
+
+class ThreadPassageEnrichmentSettings(BaseModel):
+	"""model-written search context generated for passages during thread
+	maintenance. the chat model is `ai.tasks.passage_enrichment_model_id`."""
+
+	enabled: bool = settings_field(
+		default=True,
+		description="generate search context for passages during maintenance",
+	)
+	lookbehind: int = settings_field(
+		default=2,
+		ge=0,
+		description="preceding passages given to the enrichment model as context",
+	)
+	lookahead: int = settings_field(
+		default=1,
+		ge=0,
+		description="following passages given to the enrichment model as context",
+	)
+	max_per_run: int = settings_field(
+		default=32,
+		ge=1,
+		description="maximum passages enriched per maintenance run",
+	)
+
+
+class RevectorizeTriggers(BaseModel):
+	"""automatic revectorization triggers for one vectorization pipeline.
+
+	content changes always revectorize; these knobs govern whether stored
+	vectors built by an older pipeline version or different configuration
+	are rebuilt automatically. explicit admin triggers bypass the knobs.
+	"""
+
+	on_pipeline_version: bool = settings_field(
+		default=False,
+		description="automatically revectorize when the pipeline version changes",
+	)
+	on_config_change: bool = settings_field(
+		default=False,
+		description=(
+			"automatically revectorize when the vectorization configuration changes"
+		),
+	)
+
+
+class RevectorizeSettings(BaseModel):
+	"""per-pipeline automatic revectorization triggers."""
+
+	resources: RevectorizeTriggers = settings_field(
+		default_factory=RevectorizeTriggers,
+		description="triggers for the generic single-tier resource pipeline",
+	)
+	thread_passages: RevectorizeTriggers = settings_field(
+		default_factory=RevectorizeTriggers,
+		description="triggers for the thread transcript passage pipeline",
+	)
+	file_contents: RevectorizeTriggers = settings_field(
+		default_factory=RevectorizeTriggers,
+		description="triggers for the file content pipeline",
+	)
+
+
+class ThreadPassageSettings(BaseModel):
+	"""thread transcript passage vectorization.
+
+	target_tokens and overlap_ratio bound the embedding input per passage;
+	enrichment governs the separate chat model context generation.
+	"""
+
+	enabled: bool = settings_field(
+		default=True,
+		description=(
+			"persist and index thread transcript passages; disabling removes "
+			"stored passages and their vectors"
+		),
+	)
+	target_tokens: int = settings_field(
+		default=2000,
+		ge=100,
+		description="embedding token budget one transcript passage is packed toward",
+	)
+	overlap_ratio: float = settings_field(
+		default=0.12,
+		ge=0.0,
+		le=0.5,
+		description=(
+			"fraction of target_tokens carried from the end of one passage "
+			"into the next as embedding context"
+		),
+	)
+	enrichment: ThreadPassageEnrichmentSettings = settings_field(
+		default_factory=ThreadPassageEnrichmentSettings,
+		description="model-written passage search context generation",
 	)
 
 
@@ -1013,11 +1142,13 @@ class EmbeddingsSettings(BaseModel):
 		ge=1,
 		description="default vector dimension for the embedding model",
 	)
-	batch_size: int = settings_field(
-		default=64,
-		ge=1,
-		le=4096,
-		description="batch size for embedding generation during vectorization",
+	batch_token_budget: int = settings_field(
+		default=100_000,
+		ge=1024,
+		description=(
+			"max estimated tokens packed into one embedding request during "
+			"vectorization"
+		),
 	)
 	max_concurrency: int | None = settings_field(
 		default=100,
@@ -1035,6 +1166,10 @@ class RerankSettings(BaseModel):
 	default_strategy: str = settings_field(
 		default="native",
 		description="default reranking strategy: none, native, or external",
+	)
+	default_model_id: str | None = settings_field(
+		default=None,
+		description="default reranker model id (Model.id)",
 	)
 	top_k: int = settings_field(
 		default=10,
@@ -1185,22 +1320,51 @@ class VectorDatabaseSettings(BaseModel):
 	)
 
 
-class LocalStorageConfig(BaseModel):
-	"""local filesystem storage configuration."""
+LOCAL_STORAGE_BACKEND_NAME: Final[str] = "local"
+"""reserved name of the single local filesystem storage backend."""
 
+STORAGE_BACKEND_NAME_PATTERN: Final[str] = r"^[a-z0-9][a-z0-9_-]*$"
+"""allowed shape of an admin-assigned storage backend name."""
+
+
+class BaseStorageBackendConfig(BaseModel):
+	"""configuration shared by every storage backend."""
+
+	name: str = settings_field(
+		description="identifier of this backend, referenced by stored files",
+		min_length=1,
+		max_length=50,
+	)
+
+
+class LocalStorageBackendConfig(BaseStorageBackendConfig):
+	"""configuration of the local filesystem storage backend."""
+
+	type: Literal["local"] = settings_field(
+		default="local",
+		description="discriminator selecting the local filesystem backend",
+	)
+	name: Literal["local"] = settings_field(
+		default=LOCAL_STORAGE_BACKEND_NAME,
+		description="identifier of this backend, referenced by stored files",
+	)
 	root_path: str = settings_field(
 		default="data/uploads",
 		description="root directory for local file storage",
 	)
 
 
-class S3StorageConfig(BaseModel):
-	"""S3-compatible storage configuration.
+class S3StorageBackendConfig(BaseStorageBackendConfig):
+	"""configuration of an S3-compatible storage backend.
 
 	defaults target the dev MinIO container from the compose stack.
 	for production, override via environment variables or DB settings.
 	"""
 
+	type: Literal["s3"] = settings_field(
+		default="s3",
+		description="discriminator selecting the S3-compatible backend",
+	)
 	endpoint_url: str | None = settings_field(
 		default="http://localhost:9000",
 		description="S3-compatible endpoint (MinIO, R2, etc.). set to None for AWS S3.",
@@ -1233,20 +1397,60 @@ class S3StorageConfig(BaseModel):
 		default="adaptive", description="botocore retry mode"
 	)
 
+	@field_validator("name")
+	@classmethod
+	def validate_backend_name(cls, value: str) -> str:
+		if not re.match(STORAGE_BACKEND_NAME_PATTERN, value):
+			raise ValueError(
+				f"storage backend name {value!r} must match "
+				f"{STORAGE_BACKEND_NAME_PATTERN}"
+			)
+		if value == LOCAL_STORAGE_BACKEND_NAME:
+			raise ValueError(
+				f"storage backend name {LOCAL_STORAGE_BACKEND_NAME!r} is reserved"
+			)
+		return value
+
+
+type StorageBackendConfig = Annotated[
+	LocalStorageBackendConfig | S3StorageBackendConfig,
+	PydanticField(discriminator="type"),
+]
+"""configuration of one storage backend, selected by its `type`."""
+
 
 class StorageSettings(BaseModel):
 	"""file storage backend configuration.
 
-	set `backend` to choose which storage system is active.
-	only the selected backend is instantiated at startup.
+	every configured backend is instantiated, so files written to a backend
+	stay readable after `active_backend` moves on to another one.
 	"""
 
-	backend: Literal["local", "s3"] = settings_field(
-		default="local",
-		description="active storage backend: 'local' or 's3'",
+	active_backend: str = settings_field(
+		default=LOCAL_STORAGE_BACKEND_NAME,
+		description="name of the backend new files are written to",
 	)
-	local: LocalStorageConfig = settings_field(default_factory=LocalStorageConfig)
-	s3: S3StorageConfig = settings_field(default_factory=S3StorageConfig)
+	backends: list[StorageBackendConfig] = settings_field(
+		default_factory=lambda: [LocalStorageBackendConfig()],
+		description="all storage backends files may be read from or written to",
+	)
+
+	@model_validator(mode="after")
+	def validate_backends(self) -> Self:
+		names = [backend.name for backend in self.backends]
+		duplicates = {name for name in names if names.count(name) > 1}
+		if duplicates:
+			raise ValueError(
+				f"duplicate storage backend names: {sorted(duplicates)}",
+			)
+		if names.count(LOCAL_STORAGE_BACKEND_NAME) > 1:
+			raise ValueError("only one local storage backend may be configured")
+		if self.active_backend not in names:
+			raise ValueError(
+				f"active_backend {self.active_backend!r} is not a configured "
+				f"backend: {sorted(names)}"
+			)
+		return self
 
 
 class AssetsSettings(BaseModel):
@@ -1277,6 +1481,14 @@ class AssetsSettings(BaseModel):
 	content_vectorization: AssetContentVectorizationSettings = settings_field(
 		default_factory=AssetContentVectorizationSettings,
 		description="asset content vectorization resource limits",
+	)
+	thread_passages: ThreadPassageSettings = settings_field(
+		default_factory=ThreadPassageSettings,
+		description="thread transcript passage vectorization and enrichment",
+	)
+	revectorize: RevectorizeSettings = settings_field(
+		default_factory=RevectorizeSettings,
+		description="per-pipeline automatic revectorization triggers",
 	)
 	descriptions: AssetDescriptionSettings = settings_field(
 		default_factory=AssetDescriptionSettings,
@@ -1916,7 +2128,7 @@ class CacheRedisSettings(BaseModel):
 		),
 	)
 	client_name: str = settings_field(
-		default="nokodo_ai",
+		default="nokodo-ai",
 		write_locked=True,
 		description="value sent to redis CLIENT SETNAME for attribution.",
 	)
@@ -1954,6 +2166,16 @@ class CacheSettings(BaseModel):
 		default=60 * 60 * 24,
 		ge=1,
 		description="TTL for MCP DB snapshot projection cache entries",
+	)
+	principal_ttl_seconds: int = settings_field(
+		default=60 * 5,
+		ge=1,
+		description="TTL for principal snapshot cache entries",
+	)
+	session_validity_ttl_seconds: int = settings_field(
+		default=60 * 5,
+		ge=1,
+		description="TTL for session validity cache entries",
 	)
 
 
@@ -2140,6 +2362,29 @@ class FileMaintenanceSettings(BaseModel):
 	)
 
 
+class UserSessionPurgeSettings(BaseModel):
+	"""scheduled retention policy for historical user sessions."""
+
+	enabled: bool = settings_field(
+		default=False,
+		description="whether periodic user session purging is enabled.",
+	)
+	cron: str = settings_field(
+		default="0 4 * * *",
+		description="UTC cron expression used to schedule user session purging.",
+	)
+	batch_size: int = settings_field(
+		default=1000,
+		ge=1,
+		description="maximum number of historical user sessions purged per run.",
+	)
+	grace_period_days: int = settings_field(
+		default=30,
+		ge=1,
+		description="days to retain expired user sessions before purging them.",
+	)
+
+
 class TasksSettings(BaseModel):
 	"""task execution settings."""
 
@@ -2169,6 +2414,10 @@ class TasksSettings(BaseModel):
 			"paced batches so bulk imports never flood the providers."
 		),
 	)
+	user_session_purge: UserSessionPurgeSettings = settings_field(
+		default_factory=UserSessionPurgeSettings,
+		description="historical user session purge settings.",
+	)
 
 
 # default permissions section
@@ -2182,7 +2431,7 @@ class DefaultPermissionsSettings(BaseModel):
 		default_factory=DefaultResourceAccess,
 		description="per-resource-type default access levels",
 	)
-	action_permissions: list[ActionPermission] = settings_field(
+	action_permissions: list[PermissionGrant] = settings_field(
 		default_factory=lambda: [
 			ActionPermission.SETTINGS_READ,
 			ActionPermission.THREADS_CREATE,
@@ -2199,11 +2448,6 @@ class DefaultPermissionsSettings(BaseModel):
 		],
 		description="action permissions granted by default",
 	)
-
-	@field_validator("action_permissions", mode="before")
-	@classmethod
-	def _strip_unknown(cls, v: object) -> object:
-		return strip_unknown_action_permissions(v)
 
 
 # root settings

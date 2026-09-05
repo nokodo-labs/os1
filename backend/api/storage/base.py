@@ -1,7 +1,5 @@
 """storage backend abstract interface."""
 
-from __future__ import annotations
-
 import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator

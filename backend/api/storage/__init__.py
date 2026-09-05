@@ -1,17 +1,21 @@
 """file storage backend registry.
 
-backends are registered at process startup and accessed by name throughout
-the process lifetime.
+every configured backend is registered at process startup and accessed by
+name throughout the process lifetime.
 
 each File record's storage_backend column references the backend name
-used at write time, so changing the default does not break old records.
+used at write time, so changing the active backend does not break old
+records: their backend stays registered and keeps serving them.
 """
 
-from __future__ import annotations
-
 import logging
+import uuid
 
-from api.settings import settings
+from api.settings import (
+	LocalStorageBackendConfig,
+	StorageBackendConfig,
+	settings,
+)
 from api.storage.base import FileInfo, MimeType, StorageBackend
 from api.storage.local import LocalStorageBackend
 from api.storage.s3 import S3StorageBackend
@@ -20,6 +24,20 @@ from api.storage.s3 import S3StorageBackend
 log = logging.getLogger(__name__)
 
 _BACKENDS: dict[str, StorageBackend] = {}
+
+
+def new_storage_key(prefix: str | None = None) -> str:
+	"""generate a fresh opaque storage key for a stored object.
+
+	uses a uuid v7 hex string (time-ordered, globally unique), independent of
+	the file's db id so ownership changes and re-keys never move bytes. an
+	optional prefix enables storage lifecycle rules (e.g. an s3 'tmp/' expiry
+	rule) without embedding ownership semantics in the path.
+	"""
+	key = uuid.uuid7().hex
+	if prefix:
+		return f"{prefix.rstrip('/')}/{key}"
+	return key
 
 
 def register(name: str, backend: StorageBackend) -> None:
@@ -32,27 +50,45 @@ def register(name: str, backend: StorageBackend) -> None:
 	log.info("registered storage backend: %s", name)
 
 
-async def configure_storage_backends() -> None:
-	"""register the configured storage backend for this process."""
-	storage_cfg = settings.assets.storage
-	if storage_cfg.backend == "s3":
-		s3 = S3StorageBackend(
-			bucket=storage_cfg.s3.bucket,
-			region=storage_cfg.s3.region,
-			endpoint_url=storage_cfg.s3.endpoint_url,
-			access_key_id=storage_cfg.s3.access_key_id,
-			secret_access_key=storage_cfg.s3.secret_access_key,
-			prefix=storage_cfg.s3.prefix,
-			presigned_url_ttl=storage_cfg.s3.presigned_url_ttl,
-			multipart_threshold=storage_cfg.s3.multipart_threshold,
-			multipart_chunk_size=storage_cfg.s3.multipart_chunk_size,
-			max_retries=storage_cfg.s3.max_retries,
-			retry_mode=storage_cfg.s3.retry_mode,
+def _build_backend(config: StorageBackendConfig) -> StorageBackend:
+	"""instantiate the backend a config describes."""
+	if isinstance(config, LocalStorageBackendConfig):
+		return LocalStorageBackend(
+			name=config.name,
+			root_path=config.root_path,
 		)
-		await s3.ensure_bucket()
-		register("s3", s3)
-		return
-	register("local", LocalStorageBackend(root_path=storage_cfg.local.root_path))
+	return S3StorageBackend(
+		name=config.name,
+		bucket=config.bucket,
+		region=config.region,
+		endpoint_url=config.endpoint_url,
+		access_key_id=config.access_key_id,
+		secret_access_key=config.secret_access_key,
+		prefix=config.prefix,
+		presigned_url_ttl=config.presigned_url_ttl,
+		multipart_threshold=config.multipart_threshold,
+		multipart_chunk_size=config.multipart_chunk_size,
+		max_retries=config.max_retries,
+		retry_mode=config.retry_mode,
+	)
+
+
+async def configure_storage_backends() -> None:
+	"""register every configured storage backend for this process.
+
+	replaces the previous registration set, so a settings change adds, drops
+	and re-points backends in one pass.
+	"""
+	previous = dict(_BACKENDS)
+	_BACKENDS.clear()
+	for config in settings.assets.storage.backends:
+		backend = _build_backend(config)
+		if isinstance(backend, S3StorageBackend):
+			await backend.ensure_bucket()
+		register(config.name, backend)
+	for name, backend in previous.items():
+		log.info("closing storage backend: %s", name)
+		await backend.close()
 
 
 def get_storage_backend(name: str) -> StorageBackend:
@@ -87,5 +123,6 @@ __all__ = [
 	"close_all",
 	"configure_storage_backends",
 	"get_storage_backend",
+	"new_storage_key",
 	"register",
 ]

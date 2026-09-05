@@ -1,7 +1,5 @@
 """local filesystem storage backend."""
 
-from __future__ import annotations
-
 import asyncio
 import contextlib
 import hashlib
@@ -29,8 +27,8 @@ class LocalStorageBackend(StorageBackend):
 	corruption under concurrent workers.
 	"""
 
-	def __init__(self, root_path: str) -> None:
-		super().__init__(name="local")
+	def __init__(self, name: str, root_path: str) -> None:
+		super().__init__(name=name)
 		self._root = Path(root_path)
 
 	def _resolve(self, key: str) -> Path:

@@ -1,7 +1,5 @@
 """S3-compatible storage backend (AWS S3, MinIO, R2, B2, etc.)."""
 
-from __future__ import annotations
-
 import logging
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager
@@ -42,6 +40,7 @@ class S3StorageBackend(StorageBackend):
 
 	def __init__(
 		self,
+		name: str,
 		bucket: str,
 		region: str = "us-east-1",
 		endpoint_url: str | None = None,
@@ -54,7 +53,7 @@ class S3StorageBackend(StorageBackend):
 		max_retries: int = 3,
 		retry_mode: Literal["legacy", "standard", "adaptive"] = "adaptive",
 	) -> None:
-		super().__init__(name="s3")
+		super().__init__(name=name)
 		self._bucket = bucket
 		self._prefix = prefix.rstrip("/") + "/" if prefix else ""
 		self._presigned_url_ttl = presigned_url_ttl
