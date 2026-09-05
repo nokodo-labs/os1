@@ -1,7 +1,5 @@
 """user model."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -12,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from api.models.base import Base
 from api.models.many_to_many import user_role_association
 from api.models.mixins import TypeIDPrimaryKeyMixin
+from api.schemas.preferences import UserPreferences
 
 
 USER_TYPEID_PREFIX = "user"
@@ -33,7 +32,7 @@ if TYPE_CHECKING:
 	from api.models.thread import Thread
 	from api.models.thread_participant import ThreadParticipant
 	from api.models.user_client import UserClient
-	from api.schemas.preferences import UserPreferences
+	from api.models.user_session import UserSession
 
 
 class User(TypeIDPrimaryKeyMixin, Base):
@@ -68,8 +67,6 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	@property
 	def prefs(self) -> UserPreferences:
 		"""parsed preferences as a typed schema."""
-		from api.schemas.preferences import UserPreferences
-
 		try:
 			return UserPreferences.model_validate(self.preferences or {})
 		except Exception:
@@ -118,6 +115,11 @@ class User(TypeIDPrimaryKeyMixin, Base):
 	)
 	clients: Mapped[list[UserClient]] = relationship(
 		"UserClient",
+		back_populates="user",
+		cascade="all, delete-orphan",
+	)
+	sessions: Mapped[list[UserSession]] = relationship(
+		"UserSession",
 		back_populates="user",
 		cascade="all, delete-orphan",
 	)

@@ -1,7 +1,5 @@
 """Agent model."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import ForeignKey, String, Text
@@ -15,6 +13,7 @@ from api.models.mixins import (
 	TypeIDPrimaryKeyMixin,
 )
 from api.schemas.agent import AgentConfig
+from nokodo_ai.utils.typeid import TypeID
 
 
 AGENT_TYPEID_PREFIX = "agent"
@@ -39,11 +38,11 @@ class Agent(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	system_prompt: Mapped[str | None] = mapped_column(Text())
 	plugin_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
 	config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-	model_id: Mapped[str | None] = mapped_column(
+	model_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("models.id", ondelete="SET NULL"),
 	)
-	profile_image_file_id: Mapped[str | None] = mapped_column(
+	profile_image_file_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("files.id", ondelete="SET NULL"),
 	)

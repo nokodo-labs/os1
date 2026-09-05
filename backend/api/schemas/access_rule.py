@@ -1,25 +1,38 @@
 """access rule schemas."""
 
-from __future__ import annotations
+from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from api.models.access_rule import AccessLevel
-from api.permissions import ResourceType
-from api.schemas.common import MetadataModel, ORMModel, TimestampedModel
-from nokodo_ai.types.json import JSONObject
+from api.permissions import AccessLevel, ResourceType
+from api.schemas.common import (
+	MISSING,
+	ForbidExtraModel,
+	MetadataModel,
+	MetadataUpdateModel,
+	MissingType,
+	ORMModel,
+	TimestampedModel,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
-class AccessRuleCreate(MetadataModel):
+class ResourceAccessListFilters(ForbidExtraModel):
+	"""common effective-access filters for ACL resource listings."""
+
+	access_relationship: Literal["owned", "shared"] | None = None
+	resolved_access_level: AccessLevel | None = None
+
+
+class AccessRuleCreate(MetadataUpdateModel, ForbidExtraModel):
 	"""payload for creating/updating access rules on a resource."""
 
 	subject_user_id: TypeID | None = None
 	subject_group_id: TypeID | None = None
 	subject_role_id: TypeID | None = None
 	level: AccessLevel = Field(default=AccessLevel.READER)
-	order_index: int = Field(default=0, ge=0)
+	order_index: int | MissingType = Field(default=MISSING, ge=0)
 
 	@model_validator(mode="after")
 	def _validate_subject(self) -> AccessRuleCreate:
@@ -34,6 +47,11 @@ class AccessRuleCreate(MetadataModel):
 				"access_rule_subject",
 				"only one subject field may be set",
 			)
+		if principal_count == 0 and self.level != AccessLevel.READER:
+			raise PydanticCustomError(
+				"access_rule_link_level",
+				"link access rules must grant reader access",
+			)
 		return self
 
 
@@ -47,45 +65,46 @@ class AccessRuleResponse(MetadataModel, TimestampedModel, ORMModel):
 	level: AccessLevel
 	order_index: int
 
-	# resource IDs (only one set)
-	thread_id: TypeID | None = None
-	project_id: TypeID | None = None
-	agent_id: TypeID | None = None
-	note_id: TypeID | None = None
-	memory_id: TypeID | None = None
-	task_id: TypeID | None = None
-	file_id: TypeID | None = None
-	plugin_id: TypeID | None = None
-	prompt_id: TypeID | None = None
-	group_id: TypeID | None = None
-	reminder_list_id: TypeID | None = None
-	calendar_id: TypeID | None = None
 
-
-class AccessRuleUpdate(ORMModel):
+class AccessRuleUpdate(MetadataUpdateModel, ForbidExtraModel):
 	"""payload for updating one access rule on a resource."""
 
-	level: AccessLevel | None = None
-	order_index: int | None = Field(default=None, ge=0)
-	metadata: JSONObject | None = Field(default=None, alias="metadata_")
+	level: AccessLevel | MissingType = MISSING
+	order_index: int | MissingType = Field(default=MISSING, ge=0)
 
 
-class AccessRulesUpdate(ORMModel):
-	"""payload for replacing all access rules on a resource."""
+class AccessRuleEventSnapshot(ORMModel):
+	"""access-rule state exposed in a canonical access event."""
 
-	rules: list[AccessRuleCreate] = Field(default_factory=list)
+	id: TypeID
+	subject_user_id: TypeID | None = None
+	subject_group_id: TypeID | None = None
+	subject_role_id: TypeID | None = None
+	level: AccessLevel
+	order_index: int
 
 
-class AccessRulesResponse(ORMModel):
-	"""response containing all access rules for a resource."""
+class AccessRuleEventChange(ORMModel):
+	"""one access-rule transition within a revisioned ACL mutation."""
 
-	rules: list[AccessRuleResponse] = Field(default_factory=list)
+	before: AccessRuleEventSnapshot | None = None
+	after: AccessRuleEventSnapshot | None = None
 
 
-class AccessLevelResolveRequest(ORMModel):
+class AccessLevelResolveRequest(ForbidExtraModel):
 	"""request explicit effective access levels for a resource."""
 
-	subject_user_ids: list[TypeID] = Field(min_length=1, max_length=100)
+	subject_user_ids: list[TypeID] = Field(default_factory=list, max_length=100)
+	link: bool = False
+
+	@model_validator(mode="after")
+	def _require_subject(self) -> AccessLevelResolveRequest:
+		if not self.subject_user_ids and not self.link:
+			raise PydanticCustomError(
+				"access_level_resolve_subject",
+				"at least one user or link must be requested",
+			)
+		return self
 
 
 class AccessLevelResolution(ORMModel):
@@ -93,5 +112,6 @@ class AccessLevelResolution(ORMModel):
 
 	resource_type: ResourceType
 	resource_id: TypeID
-	user_id: TypeID
+	subject: Literal["user", "link"] = "user"
+	user_id: TypeID | None = None
 	level: AccessLevel | None = None
