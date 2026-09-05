@@ -1,37 +1,73 @@
-"""runtime configuration.
+"""shared per-process runtime lifecycle for API and TaskIQ worker processes.
 
-keep cross-cutting runtime tweaks in one place (entrypoints call into this).
+both process types run the same service layer with process-local caches and a
+process-local settings snapshot, so both must connect the redis singleton,
+configure storage backends, and subscribe to cross-process cache invalidation
+signals. modules that own settings-derived state register a reset hook via
+``on_settings_reload``; the ``settings`` invalidation signal reloads the
+snapshot and then runs those hooks in every subscribed process.
 """
 
-from __future__ import annotations
-
 import asyncio
-import selectors
-import sys
+import logging
+from collections.abc import Awaitable, Callable
+from contextlib import suppress
+from inspect import isawaitable
+
+from api.redis import on_invalidation, redis_client, start_invalidation_subscriber
+from api.settings import settings
+from api.storage import close_all as close_storage
+from api.storage import configure_storage_backends
 
 
-def configure_psycopg_asyncio_event_loop_policy() -> None:
-	"""force a selector event loop for taskiq's CLI on windows.
+logger = logging.getLogger(__name__)
 
-	taskiq creates its own loop with no way to inject a loop factory, so the
-	event loop policy is the only mechanism to keep it on a psycopg-compatible
-	selector loop. policies are deprecated in python 3.14 and removed in 3.16;
-	drop this once taskiq supports explicit event loops. no-op off windows.
-	"""
-	if sys.platform != "win32":
-		return
+SETTINGS_INVALIDATION_SIGNAL = "settings"
 
-	policy_factory = getattr(asyncio, "WindowsSelectorEventLoopPolicy", None)
-	if policy_factory is None:
-		return
+# hook results are ignored; awaitables are awaited before the next hook runs.
+SettingsReloadHook = Callable[[], Awaitable[object] | object]
 
-	asyncio.set_event_loop_policy(policy_factory())
+_settings_reload_hooks: list[SettingsReloadHook] = []
+_invalidation_task: asyncio.Task[None] | None = None
 
 
-def selector_loop_factory() -> asyncio.AbstractEventLoop:
-	"""loop factory that returns a selector-based loop.
+def on_settings_reload(hook: SettingsReloadHook) -> None:
+	"""register a hook to run after the settings snapshot reloads."""
+	_settings_reload_hooks.append(hook)
 
-	this is required on windows because psycopg async is incompatible with
-	proactor-based event loops.
-	"""
-	return asyncio.SelectorEventLoop(selectors.SelectSelector())
+
+async def apply_settings_change() -> None:
+	"""reload the settings snapshot, then reset settings-derived runtime state."""
+	await asyncio.to_thread(settings.reload)
+	for hook in _settings_reload_hooks:
+		try:
+			result = hook()
+			if isawaitable(result):
+				await result
+		except Exception:
+			logger.exception("settings reload hook failed: %r", hook)
+
+
+on_invalidation(SETTINGS_INVALIDATION_SIGNAL, apply_settings_change)
+on_settings_reload(configure_storage_backends)
+
+
+async def start_process_runtime() -> None:
+	"""open the per-process dependencies shared by API and worker processes."""
+	global _invalidation_task
+	await redis_client.connect()
+	await configure_storage_backends()
+	if _invalidation_task is None or _invalidation_task.done():
+		_invalidation_task = await start_invalidation_subscriber()
+
+
+async def stop_process_runtime() -> None:
+	"""close the per-process dependencies shared by API and worker processes."""
+	global _invalidation_task
+	if _invalidation_task is not None:
+		_invalidation_task.cancel()
+		with suppress(asyncio.CancelledError):
+			await _invalidation_task
+		_invalidation_task = None
+	await close_storage()
+	await redis_client.aclose()

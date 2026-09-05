@@ -16,11 +16,10 @@ usage::
     await publish_invalidation("task_models")
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from inspect import isawaitable
 
 from redis.exceptions import RedisError
 
@@ -31,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 _CHANNEL = PubSubChannel("nokodo-ai:cache:invalidate")
 
-InvalidationHandler = Callable[[], None]
+InvalidationHandler = Callable[[], None | Awaitable[None]]
 
 # registered invalidation handlers: signal_name -> list of callables
 _handlers: dict[str, list[InvalidationHandler]] = {}
@@ -40,8 +39,8 @@ _handlers: dict[str, list[InvalidationHandler]] = {}
 def on_invalidation(signal: str, handler: InvalidationHandler) -> None:
 	"""register a handler to be called when a cache invalidation signal fires.
 
-	handlers should be plain callables (sync). they are called in the
-	subscriber task context.
+	handlers may be sync or async. they are called in the subscriber task
+	context, and async handlers are awaited there.
 	"""
 	_handlers.setdefault(signal, []).append(handler)
 
@@ -69,7 +68,9 @@ async def start_invalidation_subscriber() -> asyncio.Task[None]:
 					handlers = _handlers.get(signal, [])
 					for handler in handlers:
 						try:
-							handler()
+							result = handler()
+							if isawaitable(result):
+								await result
 						except Exception:
 							logger.exception(
 								"cache invalidation handler failed for %s",

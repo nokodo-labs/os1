@@ -20,8 +20,7 @@ intentionally NOT included here:
   needs durable replay.
 """
 
-from __future__ import annotations
-
+import contextlib
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -59,37 +58,55 @@ class PubSubChannel:
 		yields one ``dict`` per published message. ignores subscribe / pong
 		envelopes. unsubscribes and closes the redis pubsub connection on
 		cancellation or generator close.
+
+		SUBSCRIBE happens on first iteration. a caller that must not miss
+		messages published while it does something else first (reading a
+		catchup log, say) needs ``attached()`` instead.
 		"""
-		conn = redis_client.get_pubsub()
-		pubsub = conn.pubsub()
+		async with self.attached() as messages:
+			async for payload in messages:
+				yield payload
+
+	@contextlib.asynccontextmanager
+	async def attached(self) -> AsyncIterator[AsyncIterator[dict[str, Any]]]:
+		"""subscribe now, and yield the live payload stream.
+
+		the SUBSCRIBE round-trip completes before this returns, so anything
+		published from that moment on is buffered by the broker and delivered
+		to the returned iterator - even if the caller does other work before
+		it starts iterating. teardown is owned here either way.
+		"""
+		pubsub = redis_client.get_pubsub().pubsub()
 		try:
 			await pubsub.subscribe(self._channel)
-			async for msg in pubsub.listen():
-				if msg["type"] != "message":
-					continue
-				data = msg.get("data")
-				if not isinstance(data, (bytes, bytearray)):
-					continue
-				try:
-					payload = json.loads(data)
-				except json.JSONDecodeError:
-					logger.warning(
-						"dropping non-json pubsub frame on %s",
-						self._channel,
-					)
-					continue
-				if not isinstance(payload, dict):
-					continue
-				yield payload
+			yield self._decoded(pubsub)
 		finally:
-			try:
+			# a connection we are already discarding: there is nothing to
+			# recover and nobody to tell.
+			with contextlib.suppress(RedisError, OSError):
 				await pubsub.unsubscribe(self._channel)
-			except (RedisError, OSError) as exc:
-				logger.debug("pubsub unsubscribe error on %s: %s", self._channel, exc)
-			try:
+			with contextlib.suppress(RedisError, OSError):
 				await pubsub.aclose()
-			except (RedisError, OSError) as exc:
-				logger.debug("pubsub close error on %s: %s", self._channel, exc)
+
+	async def _decoded(self, pubsub: Any) -> AsyncIterator[dict[str, Any]]:
+		"""yield json payloads from an already-subscribed pubsub connection."""
+		async for msg in pubsub.listen():
+			if msg["type"] != "message":
+				continue
+			data = msg.get("data")
+			if not isinstance(data, (bytes, bytearray)):
+				continue
+			try:
+				payload = json.loads(data)
+			except json.JSONDecodeError:
+				logger.warning(
+					"dropping non-json pubsub frame on %s",
+					self._channel,
+				)
+				continue
+			if not isinstance(payload, dict):
+				continue
+			yield payload
 
 
 def make_run_channel(run_id: str, suffix: str) -> PubSubChannel:

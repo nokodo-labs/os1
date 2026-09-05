@@ -4,13 +4,12 @@ the API process uses ``startup_taskiq`` only as a publisher. worker and
 scheduler processes run this module with ``python -m api.taskiq ...`` so the
 Windows selector-loop policy is applied before TaskIQ creates event loops.
 
-worker startup connects the process-local Redis singleton because task runners
-use the same service layer as the API. worker/scheduler startup handlers also
-write short-lived Redis status keys. the API monitor logs a critical error when
+worker startup opens the shared process runtime (redis, storage, cache
+invalidation subscriber) because task runners use the same service layer as
+the API. worker/scheduler startup handlers also write short-lived Redis
+status keys. the API monitor logs a critical error when
 either role first goes missing, because durable tasks have no in-process fallback.
 """
-
-from __future__ import annotations
 
 import asyncio
 import json
@@ -25,7 +24,7 @@ from typing import Literal
 import redis.asyncio as redis_async
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
-from taskiq import TaskiqScheduler
+from taskiq import TaskiqScheduler, async_shared_broker
 from taskiq.events import TaskiqEvents
 from taskiq.schedule_sources import LabelScheduleSource
 from taskiq_redis import (
@@ -35,13 +34,14 @@ from taskiq_redis import (
 )
 
 from api.redis import redis_client
-from api.runtime import configure_psycopg_asyncio_event_loop_policy
+from api.runtime import start_process_runtime, stop_process_runtime
 from api.settings import settings
-from api.storage import close_all as close_storage
-from api.storage import configure_storage_backends
+from nokodo_ai.utils.event_loop import configure_windows_selector_event_loop_policy
 
 
-configure_psycopg_asyncio_event_loop_policy()
+# psycopg async cannot run on proactor loops; taskiq creates its own loops
+# with no loop_factory hook, so the policy is the only injection point.
+configure_windows_selector_event_loop_policy()
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,10 @@ broker = ListQueueBroker(
 	url=_redis_settings.url,
 	queue_name=_taskiq_settings.queue_name,
 	max_connection_pool_size=_taskiq_settings.max_connections,
+	socket_timeout=None,
 ).with_result_backend(result_backend)
+
+async_shared_broker.default_broker(broker)
 
 redis_schedule_source = ListRedisScheduleSource(
 	_redis_settings.url,
@@ -384,25 +387,21 @@ async def _monitor_taskiq_processes() -> None:
 async def _start_worker_process_dependencies() -> None:
 	"""open dependencies used by task runners in a worker process."""
 	try:
-		await redis_client.connect()
-		await configure_storage_backends()
+		await start_process_runtime()
 		await _start_process_status("worker")
 	except Exception as exc:
 		logger.critical("taskiq worker startup failed: %s", exc, exc_info=True)
 		with suppress(Exception):
 			await _stop_process_status("worker")
 		with suppress(Exception):
-			await close_storage()
-		with suppress(Exception):
-			await redis_client.aclose()
+			await stop_process_runtime()
 		raise
 
 
 async def _stop_worker_process_dependencies() -> None:
 	"""close dependencies used by task runners in a worker process."""
 	await _stop_process_status("worker")
-	await close_storage()
-	await redis_client.aclose()
+	await stop_process_runtime()
 
 
 async def _start_scheduler_process_dependencies() -> None:
@@ -500,7 +499,7 @@ async def shutdown_taskiq() -> None:
 
 def main() -> None:
 	"""run the TaskIQ CLI with the backend runtime policy applied first."""
-	configure_psycopg_asyncio_event_loop_policy()
+	configure_windows_selector_event_loop_policy()
 	_expand_auto_worker_args(sys.argv)
 	sys.modules.setdefault("api.taskiq", sys.modules[__name__])
 	from taskiq.__main__ import main as taskiq_main

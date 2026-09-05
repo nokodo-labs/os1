@@ -6,8 +6,6 @@ problem surfaces immediately rather than silently breaking cross-worker
 features (steering bus, run sse fanout) at runtime.
 """
 
-from __future__ import annotations
-
 import logging
 from collections.abc import Awaitable
 from typing import Final, cast
@@ -41,9 +39,9 @@ class RedisClient:
 
 	- ``get()`` - request-response commands, with ``socket_timeout`` for
 		fast failure on stalled ops.
-	- ``get_pubsub()`` - long-lived blocking readers (pub/sub). no
-		``socket_timeout`` because ``listen()`` blocks until a message
-		arrives; a 2s ceiling would kill it.
+	- ``get_pubsub()`` - long-lived blocking readers (pub/sub).
+		``listen()`` blocks indefinitely via redis-py's math.inf opt-in,
+		so the socket read timeout does not abort it.
 	"""
 
 	def __init__(self) -> None:
@@ -78,8 +76,9 @@ class RedisClient:
 			health_check_interval=30,
 			client_name=settings.cache.redis.client_name,
 		)
-		# separate pool for pub/sub: no socket_timeout so listen() can
-		# block indefinitely waiting for messages.
+		# separate pool for pub/sub. blocking listen() reads use redis-py's
+		# math.inf opt-in to block indefinitely regardless of socket_timeout,
+		# so the default read timeout only bounds the subscribe handshake.
 		pubsub_conn = redis_async.from_url(
 			target_url,
 			max_connections=max_connections,
@@ -99,7 +98,13 @@ class RedisClient:
 		logger.info("redis connected at %s", target_url)
 
 	async def aclose(self) -> None:
-		"""close the connection pool. idempotent."""
+		"""close the connection pool. idempotent.
+
+		best-effort per pool: pooled connections created on another event
+		loop (possible in tests where fixtures and test bodies run on
+		different loops) raise RuntimeError on cross-loop disconnect and
+		are left to garbage collection instead of failing the close.
+		"""
 		if self._conn is None:
 			return
 		conn = self._conn
@@ -107,9 +112,17 @@ class RedisClient:
 		self._conn = None
 		self._pubsub_conn = None
 		self._url = None
-		await conn.aclose()
+		try:
+			await conn.aclose()
+		except RuntimeError, OSError:
+			logger.warning("redis pool close failed; leaving to GC", exc_info=True)
 		if pubsub_conn is not None:
-			await pubsub_conn.aclose()
+			try:
+				await pubsub_conn.aclose()
+			except RuntimeError, OSError:
+				logger.warning(
+					"redis pubsub pool close failed; leaving to GC", exc_info=True
+				)
 
 	def get(self) -> Redis:
 		"""return the live redis connection.

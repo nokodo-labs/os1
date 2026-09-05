@@ -16,6 +16,7 @@ from api.exceptions import (
 	unhandled_exception_handler,
 	validation_exception_handler,
 )
+from api.local_tasks import drain_background_tasks
 from api.logging import configure_logging, get_logger
 from api.middleware import (
 	APIVersionHeaderMiddleware,
@@ -25,30 +26,46 @@ from api.middleware import (
 	SecurityHeadersMiddleware,
 )
 from api.openapi import DEFAULT_RESPONSES
-from api.redis import redis_client, start_invalidation_subscriber
 from api.routers import system as system_router
+from api.runtime import start_process_runtime, stop_process_runtime
 from api.settings import settings
 from api.storage import close_all as close_storage
 from api.storage import configure_storage_backends
 from api.taskiq import shutdown_taskiq, startup_taskiq
 from api.v1.router import api_router
-from api.v1.service.events import start_remote_fanout_relay
+from api.v1.service.calendar.notifications import (
+	reconcile_calendar_event_notification_schedules,
+)
+from api.v1.service.chat.thread_maintenance import (
+	clear_disabled_thread_maintenance_backfill_schedule,
+	fail_stale_thread_related_tasks,
+	reconcile_thread_maintenance_backfill_schedule,
+)
+from api.v1.service.event_bus import register_server_event_handler
+from api.v1.service.events import start_remote_fanout_relay, start_socket_kill_relay
 from api.v1.service.integrations.mcp import (
 	initialize_global_mcp_servers,
 	start_mcp_list_change_listeners,
 	stop_mcp_list_change_listeners,
 )
-from api.v1.tasks.calendar import reconcile_calendar_event_notification_schedules
+from api.v1.service.reminders.notifications import (
+	reconcile_reminder_notification_schedules,
+)
+from api.v1.service.runs import (
+	configure_run_failure_handlers,
+	handle_access_defaults_changed,
+	handle_access_updated,
+	handle_thread_deleted,
+	replay_local_thread_acl_updates,
+)
 from api.v1.tasks.files import (
 	clear_disabled_file_maintenance_backfill_schedule,
 	fail_stale_file_tasks,
 	reconcile_file_maintenance_backfill_schedule,
 )
-from api.v1.tasks.reminders import reconcile_reminder_notification_schedules
-from api.v1.tasks.threads import (
-	clear_disabled_thread_maintenance_backfill_schedule,
-	fail_stale_thread_related_tasks,
-	reconcile_thread_maintenance_backfill_schedule,
+from api.v1.tasks.user_sessions import (
+	clear_disabled_user_session_purge_schedule,
+	reconcile_user_session_purge_schedule,
 )
 
 
@@ -73,9 +90,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 		await init_db()
 		async with session_scope() as session:
 			await initialize_global_mcp_servers(session)
-		await redis_client.connect()
+		await start_process_runtime()
 		await clear_disabled_thread_maintenance_backfill_schedule()
 		await clear_disabled_file_maintenance_backfill_schedule()
+		await clear_disabled_user_session_purge_schedule()
 		await startup_taskiq()
 		await fail_stale_thread_related_tasks()
 		await fail_stale_file_tasks()
@@ -83,43 +101,47 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 		await reconcile_reminder_notification_schedules()
 		await reconcile_thread_maintenance_backfill_schedule()
 		await reconcile_file_maintenance_backfill_schedule()
+		await reconcile_user_session_purge_schedule()
 
-	# start the cross-worker cache invalidation subscriber. handlers are
-	# self-registered at import time by the modules that own resettable
-	# state (imported transitively through the router tree).
-	invalidation_task: asyncio.Task[None] | None = None
+	register_server_event_handler("access.updated", handle_access_updated)
+	register_server_event_handler("thread.deleted", handle_thread_deleted)
+	register_server_event_handler(
+		"access.defaults_changed",
+		handle_access_defaults_changed,
+	)
+	configure_run_failure_handlers()
 	event_task: asyncio.Task[None] | None = None
+	socket_kill_task: asyncio.Task[None] | None = None
 	mcp_list_change_tasks: list[asyncio.Task[None]] = []
 	if not boot_settings.TESTING:
 		mcp_list_change_tasks = await start_mcp_list_change_listeners()
-		invalidation_task = await start_invalidation_subscriber()
-		event_task = await start_remote_fanout_relay()
-
-	await configure_storage_backends()
+		event_task = await start_remote_fanout_relay(replay_local_thread_acl_updates)
+		socket_kill_task = await start_socket_kill_relay()
+	else:
+		await configure_storage_backends()
 
 	logger.info("startup complete")
 	yield
 
 	# shutdown
 	logger.info("shutting down")
-	if invalidation_task is not None:
-		invalidation_task.cancel()
+	await drain_background_tasks()
 	if event_task is not None:
 		event_task.cancel()
+	if socket_kill_task is not None:
+		socket_kill_task.cancel()
 	await stop_mcp_list_change_listeners(mcp_list_change_tasks)
-	await close_storage()
 	if not boot_settings.TESTING:
 		await shutdown_taskiq()
-		await redis_client.aclose()
+		await stop_process_runtime()
+	else:
+		await close_storage()
 
 
 app = FastAPI(
 	title=settings.branding.site_name,
 	version=settings.branding.app_version,
 	lifespan=lifespan,
-	docs_url="/v1/docs",
-	redoc_url="/v1/redoc",
-	openapi_url="/v1/openapi.json",
 )
 
 # middleware stack (executed in reverse order of addition)
@@ -163,8 +185,8 @@ async def root() -> dict[str, str]:
 		"name": settings.branding.site_name,
 		"version": settings.branding.app_version,
 		"api_version": "v1",
-		"docs": "/v1/docs",
-		"openapi": "/v1/openapi.json",
+		"docs": "/docs",
+		"openapi": "/openapi.json",
 		"health": "/health",
 	}
 

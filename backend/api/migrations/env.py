@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from api import models  # noqa: F401
 from api.boot_settings import boot_settings
 from api.models.base import Base
-from api.runtime import selector_loop_factory
+from nokodo_ai.utils.event_loop import selector_loop_factory
 
 
 # this is the Alembic Config object, which provides
