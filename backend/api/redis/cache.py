@@ -27,8 +27,6 @@ usage::
     await cache.invalidate_tag("thread:thread_abc")
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from collections.abc import Awaitable, Callable
@@ -52,10 +50,13 @@ class RedisCache:
 		return redis_client.get()
 
 	async def get(self, key: str) -> object | None:
-		"""fetch a cached value. returns None on miss or redis error."""
+		"""fetch a cached value. returns None on miss or redis error"""
 		try:
 			raw = await self._conn().get(f"{_PREFIX}{key}")
 		except RedisError, OSError:
+			return None
+		except RuntimeError as exc:
+			logger.warning("cache get skipped for %s: %s", key, exc)
 			return None
 		if raw is None:
 			return None
@@ -65,40 +66,118 @@ class RedisCache:
 			return None
 		return decoded
 
+	async def get_many(self, keys: list[str]) -> list[object | None]:
+		"""fetch several cached values in one Redis round trip."""
+		if not keys:
+			return []
+		try:
+			raw_values = await self._conn().mget([f"{_PREFIX}{key}" for key in keys])
+		except RedisError, OSError:
+			return [None] * len(keys)
+		except RuntimeError as exc:
+			logger.warning("cache multi-get skipped: %s", exc)
+			return [None] * len(keys)
+		values: list[object | None] = []
+		for raw in raw_values:
+			if raw is None:
+				values.append(None)
+				continue
+			try:
+				values.append(json.loads(raw))
+			except json.JSONDecodeError, TypeError:
+				values.append(None)
+		return values
+
 	async def set(
 		self,
 		key: str,
 		value: object,
 		ttl: int = 60,
 		tags: list[str] | None = None,
-	) -> None:
+		nx: bool = False,
+	) -> bool:
 		"""store a JSON-serializable value with optional tags.
 
-		``ttl`` is in seconds. tags enable group invalidation.
+		``ttl`` is in seconds. tags enable group invalidation. ``nx`` only
+		writes when the key is absent, so racing cache fills cannot clobber
+		an authoritative write-through. returns False when the write failed
+		(fail-open), so security-critical callers can escalate.
 		"""
 		full_key = f"{_PREFIX}{key}"
 		try:
 			conn = self._conn()
-			await conn.set(full_key, json.dumps(value), ex=ttl)
 			if tags:
-				pipe = conn.pipeline(transaction=False)
+				# single transaction: a fault between the value write and the
+				# tag registration would otherwise leave an entry invisible
+				# to tag invalidation until its TTL expires.
+				pipe = conn.pipeline(transaction=True)
+				pipe.set(full_key, json.dumps(value), ex=ttl, nx=nx)
 				for tag in tags:
-					tag_key = f"{_TAG_PREFIX}{tag}"
-					pipe.sadd(tag_key, full_key)
-					pipe.expire(tag_key, ttl + 60)
+					pipe.sadd(f"{_TAG_PREFIX}{tag}", full_key)
+					pipe.expire(f"{_TAG_PREFIX}{tag}", ttl + 60)
 				await pipe.execute()
+			else:
+				await conn.set(full_key, json.dumps(value), ex=ttl, nx=nx)
 		except RedisError, OSError:
 			logger.debug("cache set failed for %s", key)
+			return False
+		except RuntimeError as exc:
+			logger.warning("cache set skipped for %s: %s", key, exc)
+			return False
+		return True
 
-	async def delete(self, key: str) -> None:
-		"""remove a single cache entry."""
+	async def delete(self, key: str) -> bool:
+		"""remove a single cache entry.
+
+		returns False when the delete failed (fail-open), so
+		security-critical callers can escalate.
+		"""
 		try:
 			await self._conn().delete(f"{_PREFIX}{key}")
 		except RedisError, OSError:
-			pass
+			return False
+		except RuntimeError as exc:
+			logger.warning("cache delete skipped for %s: %s", key, exc)
+			return False
+		return True
 
-	async def invalidate_tag(self, tag: str) -> None:
-		"""delete all cache entries associated with a tag."""
+	async def increment(self, key: str) -> int | None:
+		"""atomically increment an integer cache value.
+
+		returns the new value, or None when redis is unavailable.
+		"""
+		try:
+			return int(await self._conn().incr(f"{_PREFIX}{key}"))
+		except RedisError, OSError:
+			logger.debug("cache increment failed for %s", key)
+			return None
+		except RuntimeError as exc:
+			logger.warning("cache increment skipped for %s: %s", key, exc)
+			return None
+
+	async def increment_many(self, keys: list[str]) -> bool:
+		"""atomically increment several integer cache values."""
+		if not keys:
+			return True
+		try:
+			pipe = self._conn().pipeline(transaction=True)
+			for key in dict.fromkeys(keys):
+				pipe.incr(f"{_PREFIX}{key}")
+			await pipe.execute()
+		except RedisError, OSError:
+			logger.debug("cache multi-increment failed")
+			return False
+		except RuntimeError as exc:
+			logger.warning("cache multi-increment skipped: %s", exc)
+			return False
+		return True
+
+	async def invalidate_tag(self, tag: str) -> bool:
+		"""delete all cache entries associated with a tag.
+
+		returns False when the invalidation failed (fail-open), so
+		security-critical callers can escalate.
+		"""
 		tag_key = f"{_TAG_PREFIX}{tag}"
 		try:
 			conn = self._conn()
@@ -120,6 +199,11 @@ class RedisCache:
 				await conn.delete(tag_key)
 		except RedisError, OSError:
 			logger.debug("cache invalidate_tag failed for %s", tag)
+			return False
+		except RuntimeError as exc:
+			logger.warning("cache invalidate_tag skipped for %s: %s", tag, exc)
+			return False
+		return True
 
 	async def get_or_set(
 		self,

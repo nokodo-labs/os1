@@ -18,11 +18,48 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import Session, with_loader_criteria
 
 from api.boot_settings import boot_settings
+from api.database.post_commit import (
+	discard_uncommitted_post_commit_actions,
+	register_post_commit_promotion,
+	run_post_commit_actions_safely,
+)
 from api.logging import get_logger
 from api.models.mixins import SoftDeleteMixin
 
 
 logger = get_logger(__name__)
+
+
+class AppSession(Session):
+	"""sync session backing every application session.
+
+	its own class so the post-commit promotion listens here instead of on every
+	`Session` in the process.
+	"""
+
+
+register_post_commit_promotion(AppSession)
+
+
+class AppAsyncSession(AsyncSession):
+	"""application session that always drains its own post-commit actions.
+
+	the queue is the one seam for repairable after-commit work, so it cannot
+	depend on the owner remembering to drain: every session drains on close,
+	whether it came from `get_db`, `session_scope`, or a raw
+	`async_session_local()` in a task or background job. draining twice is a
+	no-op, so the explicit drains in those wrappers stay as the fast path.
+
+	work that was never committed is dropped here rather than run - a rollback
+	already undid the rows it was meant to repair.
+	"""
+
+	sync_session_class = AppSession
+
+	async def close(self) -> None:
+		discard_uncommitted_post_commit_actions(self)
+		await run_post_commit_actions_safely(self)
+		await super().close()
 
 
 # Create async engine
@@ -42,7 +79,7 @@ engine = create_async_engine(
 # ``from api.database import async_session_local``) pick up the change.
 _async_session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
 	engine,
-	class_=AsyncSession,
+	class_=AppAsyncSession,
 	expire_on_commit=False,
 	autocommit=False,
 	autoflush=False,
@@ -62,16 +99,29 @@ async def session_scope(
 
 	avoids the need for ``contextlib.AsyncExitStack`` when a function
 	accepts an optional session and must fall back to a new one.
+
+	a scope that OWNS its session drains post-commit actions exactly as
+	``get_db`` does, so background work is not a second, silently lossy seam.
+	a borrowed session is drained by whoever owns it.
 	"""
 	if session is not None:
 		yield session
-	else:
-		async with async_session_local() as new_session:
-			yield new_session
+		return
+	async with async_session_local() as new_session:
+		try:
+			try:
+				yield new_session
+			except Exception:
+				discard_uncommitted_post_commit_actions(new_session)
+				await new_session.rollback()
+				raise
+		finally:
+			await run_post_commit_actions_safely(new_session)
 
 
 async def safe_rollback(session: AsyncSession) -> None:
 	"""rollback the session, swallowing errors if already closed."""
+	discard_uncommitted_post_commit_actions(session)
 	try:
 		await session.rollback()
 	except Exception:
@@ -80,9 +130,9 @@ async def safe_rollback(session: AsyncSession) -> None:
 
 @event.listens_for(Session, "do_orm_execute")
 def _soft_delete_default_criteria(execute_state: Any) -> None:
-	"""Exclude soft-deleted rows by default for all SELECTs.
+	"""exclude soft-deleted rows by default for all SELECTs.
 
-	To include them, use execution option include_deleted=True.
+	to include them, use execution option include_deleted=True.
 	"""
 	if not execute_state.is_select:
 		return
@@ -100,16 +150,23 @@ def _soft_delete_default_criteria(execute_state: Any) -> None:
 
 
 async def get_db() -> AsyncGenerator[AsyncSession]:
-	"""Dependency for getting database sessions."""
+	"""dependency for getting database sessions."""
 	async with async_session_local() as session:
 		try:
-			yield session
-			await session.commit()
-		except Exception:
-			await session.rollback()
-			raise
+			try:
+				yield session
+				await session.commit()
+			except Exception:
+				# work committed earlier in the request keeps its actions; only
+				# the uncommitted tail is dropped with the rollback.
+				discard_uncommitted_post_commit_actions(session)
+				await session.rollback()
+				raise
 		finally:
-			await session.close()
+			try:
+				await run_post_commit_actions_safely(session)
+			finally:
+				await session.close()
 
 
 def _build_alembic_config() -> Config:

@@ -6,12 +6,14 @@ import asyncio
 
 import pytest
 
+import api.runtime as runtime_module
 from api.redis import (
 	cache,
 	on_invalidation,
 	publish_invalidation,
 	start_invalidation_subscriber,
 )
+from api.settings import Settings
 
 
 # -- RedisCache tests --
@@ -61,6 +63,15 @@ async def test_cache_delete() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cache_increment_is_atomic() -> None:
+	await cache.delete("test:counter")
+	assert await cache.increment("test:counter") == 1
+	assert await cache.increment("test:counter") == 2
+	assert await cache.get("test:counter") == 2
+	await cache.delete("test:counter")
+
+
+@pytest.mark.asyncio
 async def test_cache_invalidate_nonexistent_tag() -> None:
 	# should not raise
 	await cache.invalidate_tag("test:no_such_tag")
@@ -107,13 +118,17 @@ async def test_cache_stores_lists_of_strings() -> None:
 
 @pytest.mark.asyncio
 async def test_invalidation_pubsub_fires_handler() -> None:
-	"""publish_invalidation should trigger registered handlers."""
+	"""publish_invalidation should trigger sync and async registered handlers."""
 	fired: list[str] = []
 
 	def handler() -> None:
-		fired.append("called")
+		fired.append("sync")
+
+	async def async_handler() -> None:
+		fired.append("async")
 
 	on_invalidation("test_signal", handler)
+	on_invalidation("test_signal", async_handler)
 	task = await start_invalidation_subscriber()
 
 	# give subscriber time to attach
@@ -130,4 +145,40 @@ async def test_invalidation_pubsub_fires_handler() -> None:
 	except asyncio.CancelledError:
 		pass
 
-	assert len(fired) >= 1
+	assert "sync" in fired
+	assert "async" in fired
+
+
+# -- settings reload propagation tests --
+
+
+@pytest.mark.asyncio
+async def test_apply_settings_change_reloads_then_runs_hooks(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""apply_settings_change must reload settings before running hooks."""
+	order: list[str] = []
+
+	def fake_reload(self: Settings) -> Settings:
+		order.append("reload")
+		return self
+
+	def sync_hook() -> None:
+		order.append("sync_hook")
+
+	async def async_hook() -> None:
+		order.append("async_hook")
+
+	def failing_hook() -> None:
+		raise RuntimeError("boom")
+
+	monkeypatch.setattr(Settings, "reload", fake_reload)
+	monkeypatch.setattr(
+		runtime_module,
+		"_settings_reload_hooks",
+		[sync_hook, failing_hook, async_hook],
+	)
+
+	await runtime_module.apply_settings_change()
+
+	assert order == ["reload", "sync_hook", "async_hook"]
