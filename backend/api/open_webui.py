@@ -4,8 +4,6 @@ Reusable async client for integration operations against a configured Open WebUI
 deployment. This module intentionally has no FastAPI or service-layer imports.
 """
 
-from __future__ import annotations
-
 import logging
 from types import TracebackType
 from typing import Any

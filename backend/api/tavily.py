@@ -4,8 +4,6 @@ pure HTTP client for tavily search and extract APIs.
 does not depend on any application-level code.
 """
 
-from __future__ import annotations
-
 import logging
 from dataclasses import dataclass
 

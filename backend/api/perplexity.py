@@ -4,8 +4,6 @@ thin wrapper around the official perplexityai SDK.
 supports both agentic chat-completion search and web search.
 """
 
-from __future__ import annotations
-
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass

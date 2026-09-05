@@ -1,7 +1,5 @@
 """web search and direct URL content fetching tools."""
 
-from __future__ import annotations
-
 import json
 import logging
 from urllib.parse import urlparse
@@ -9,9 +7,14 @@ from urllib.parse import urlparse
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.schemas.message import CitationSource
 from api.settings import SearchRecencyFilter, settings
+from api.v1.service.chat.citation_sources import (
+	CitableSource,
+	citation_source,
+	with_citable_sources,
+)
 from api.v1.service.chat.context import AppContext
-from api.v1.service.chat.message_metadata import CITABLE_SOURCES_KEY
 from api.v1.service.web_search.errors import WebSearchError
 from api.v1.service.web_search.loaders import fetch_url
 from api.v1.service.web_search.progress import source_payload
@@ -120,15 +123,11 @@ class WebSearchTool(Tool[AppContext]):
 			"results": sources,
 			"images": images,
 		}
+		citable_sources: list[CitableSource] = [
+			citation_source(CitationSource.URL, result_source.url, result_source.title)
+			for result_source in result.results
+		]
 		metadata: JSONObject = {
-			CITABLE_SOURCES_KEY: [
-				{
-					"source_type": "url",
-					"source_id": result_source.url,
-					"title": result_source.title,
-				}
-				for result_source in result.results
-			],
 			"_web_search": {
 				"engine": result.engine,
 				"result_count": len(sources),
@@ -137,10 +136,10 @@ class WebSearchTool(Tool[AppContext]):
 		}
 		max_chars = settings.web_search.max_chars
 		output = _json_output_with_result_limit(payload, max_chars)
-		return ToolMessage(
-			tool_call_id=__tool_call_context__.tool_call_id,
-			tool_output=output,
-			metadata=metadata,
+		return self.success(
+			output,
+			__tool_call_context__,
+			metadata=with_citable_sources(metadata, citable_sources),
 		)
 
 
@@ -221,22 +220,18 @@ class FetchUrlTool(Tool[AppContext]):
 
 		payload: JSONObject = {"title": domain, "content": content}
 
-		return ToolMessage(
-			tool_call_id=__tool_call_context__.tool_call_id,
-			tool_output=json.dumps(payload, ensure_ascii=True),
-			metadata={
-				CITABLE_SOURCES_KEY: [
-					{
-						"source_type": "url",
-						"source_id": inp.url,
-						"title": domain,
-					}
-				],
-				"_web_fetch": {
-					"domain": domain,
-					"content_chars": len(content),
+		return self.success(
+			json.dumps(payload, ensure_ascii=True),
+			__tool_call_context__,
+			metadata=with_citable_sources(
+				{
+					"_web_fetch": {
+						"domain": domain,
+						"content_chars": len(content),
+					},
 				},
-			},
+				[citation_source(CitationSource.URL, inp.url, domain)],
+			),
 		)
 
 

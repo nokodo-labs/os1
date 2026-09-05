@@ -1,7 +1,5 @@
 """unit coverage for agentic web search service behavior."""
 
-from __future__ import annotations
-
 from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock
 
@@ -15,7 +13,7 @@ from api.perplexity import (
 	PerplexitySearchResponse,
 	PerplexitySearchResult,
 )
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.tools.web_search import WebSearchTool
 from api.v1.service.web_search import agentic as agentic_mod
@@ -38,11 +36,12 @@ def _app_context() -> AppContext:
 		email="agentic-web-search@example.com",
 		username="agentic_web_search_user",
 		hashed_password="x",
+		is_active=True,
 		is_superuser=True,
 	)
 	return AppContext(
 		session=AsyncSession(),
-		principal=Principal(user=user, group_ids=(), permissions=frozenset()),
+		principal=Principal.for_user(user=user, group_ids=(), permissions=frozenset()),
 		event_emitter=_noop_event_emitter,
 	)
 

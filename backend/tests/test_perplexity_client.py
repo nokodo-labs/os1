@@ -1,7 +1,5 @@
 """unit coverage for the official Perplexity SDK wrapper."""
 
-from __future__ import annotations
-
 from types import SimpleNamespace
 
 import pytest

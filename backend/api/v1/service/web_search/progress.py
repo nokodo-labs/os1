@@ -1,7 +1,5 @@
 """web search progress event payload helpers."""
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 from typing import Literal
 

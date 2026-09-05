@@ -1,7 +1,5 @@
 """unit coverage for web search service adapters."""
 
-from __future__ import annotations
-
 import pytest
 
 from api.perplexity import PerplexitySearchResponse, PerplexitySearchResult

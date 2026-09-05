@@ -1,7 +1,5 @@
 """agentic web search service."""
 
-from __future__ import annotations
-
 import json
 import logging
 from collections.abc import Awaitable, Callable, Mapping
@@ -331,6 +329,7 @@ async def _load_search_agent(
 				app_context.principal,
 				ResourceType.AGENT,
 				required_level=AccessLevel.READER,
+				include_link_access=True,
 			),
 		)
 	)

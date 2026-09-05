@@ -1,7 +1,5 @@
 """unit coverage for perplexity-backed web search plumbing."""
 
-from __future__ import annotations
-
 import json
 from unittest.mock import ANY, AsyncMock, patch
 
@@ -18,7 +16,7 @@ from api.v1.schemas.web_search import (
 	WebSearchResult,
 	WebSearchSource,
 )
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.chat.context import AppContext, EventEmitter
 from api.v1.service.chat.tools import agentic_web_search as tool_mod
 from api.v1.service.chat.tools.agentic_web_search import AgenticWebSearchTool
@@ -63,11 +61,12 @@ def _app_context(
 		email="web-search@example.com",
 		username="web_search_user",
 		hashed_password="x",
+		is_active=True,
 		is_superuser=True,
 	)
 	return AppContext(
 		session=AsyncSession(),
-		principal=Principal(user=user, group_ids=(), permissions=frozenset()),
+		principal=Principal.for_user(user=user, group_ids=(), permissions=frozenset()),
 		event_emitter=event_emitter,
 		thread_id=thread_id,
 	)

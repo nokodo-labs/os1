@@ -1,7 +1,5 @@
 """agentic web search chat tool."""
 
-from __future__ import annotations
-
 import json
 import logging
 
@@ -9,10 +7,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
+from api.schemas.message import CitationSource
 from api.settings import SearchRecencyFilter, settings
 from api.v1.schemas.web_search import WebSearchSource
+from api.v1.service.chat.citation_sources import (
+	CitableSource,
+	citation_source,
+	with_citable_sources,
+)
 from api.v1.service.chat.context import AppContext
-from api.v1.service.chat.message_metadata import CITABLE_SOURCES_KEY
 from api.v1.service.web_search.agentic import search_agentic_web
 from api.v1.service.web_search.errors import WebSearchError
 from api.v1.service.web_search.progress import build_agentic_web_search_progress
@@ -30,6 +33,7 @@ class AgenticWebSearchInput(BaseModel):
 	"""input schema for agentic_web_search tool."""
 
 	model_config = ConfigDict(extra="forbid")
+	"""a model that invents an argument should be told, not silently obeyed."""
 
 	query: str = Field(
 		...,
@@ -44,17 +48,20 @@ class AgenticWebSearchInput(BaseModel):
 		min_length=1,
 		max_length=500,
 	)
+	"""the question put to the search agent."""
 	limit: int | None = Field(
 		default=None,
 		description="maximum number of search results to use. none=no limit.",
 		ge=1,
 	)
+	"""caps how many results feed the synthesis."""
 	search_recency_filter: SearchRecencyFilter | None = Field(
 		default=None,
 		description=(
 			"restrict search results to a time window. none uses provider default."
 		),
 	)
+	"""time window results must fall within."""
 	include_images: bool | None = Field(
 		default=None,
 		description=(
@@ -62,6 +69,7 @@ class AgenticWebSearchInput(BaseModel):
 			"the configured default."
 		),
 	)
+	"""whether image results are wanted, where the provider offers them."""
 
 
 class AgenticWebSearchTool(Tool[AppContext]):
@@ -75,6 +83,7 @@ class AgenticWebSearchTool(Tool[AppContext]):
 	"""
 
 	name: str = Field(default="agentic_web_search")
+	"""what the model calls to invoke this tool."""
 	description: str = Field(
 		default=(
 			"preferred web search tool. uses a search agent to gather sources, "
@@ -82,9 +91,11 @@ class AgenticWebSearchTool(Tool[AppContext]):
 			"search payloads."
 		),
 	)
+	"""how the model decides whether this tool fits the situation."""
 	parameters: JSONObject = Field(
 		default_factory=lambda: AgenticWebSearchInput.model_json_schema(),
 	)
+	"""the argument schema, derived from the input model rather than restated."""
 
 	async def call(
 		self,
@@ -106,10 +117,6 @@ class AgenticWebSearchTool(Tool[AppContext]):
 			data: JSONObject = {
 				"tool_call_id": __tool_call_context__.tool_call_id,
 				"tool_name": self.name,
-				"tool": {
-					"call_id": __tool_call_context__.tool_call_id,
-					"name": self.name,
-				},
 				"message": message,
 				"payload": payload,
 			}
@@ -150,15 +157,12 @@ class AgenticWebSearchTool(Tool[AppContext]):
 				__tool_call_context__,
 			)
 
-		sources: list[JSONValue] = [
-			{"url": c.source_id, "title": c.title} for c in result.citations
-		]
 		images: list[JSONValue] = [
 			{"url": img.url, "title": img.title, "source_url": img.source_url}
 			for img in result.images
 		]
 		if result.agent != "native":
-			final_message = f"found {len(sources)} resources"
+			final_message = f"found {len(result.citations)} resources"
 			await emit_progress(
 				final_message,
 				build_agentic_web_search_progress(
@@ -167,7 +171,7 @@ class AgenticWebSearchTool(Tool[AppContext]):
 					query=inp.query,
 					agent=result.agent,
 					engine=result.engine,
-					result_count=len(sources),
+					result_count=len(result.citations),
 					sources=[
 						WebSearchSource(
 							title=c.title or c.source_id, url=c.source_id, snippet=""
@@ -178,8 +182,8 @@ class AgenticWebSearchTool(Tool[AppContext]):
 				),
 			)
 
-		citable_sources: list[JSONValue] = [
-			{"source_type": c.source_type, "source_id": c.source_id, "title": c.title}
+		citable_sources: list[CitableSource] = [
+			citation_source(CitationSource(c.source_type), c.source_id, c.title)
 			for c in result.citations
 		]
 		max_chars = settings.web_search.max_chars
@@ -194,7 +198,6 @@ class AgenticWebSearchTool(Tool[AppContext]):
 			"images": images,
 		}
 		metadata: JSONObject = {
-			CITABLE_SOURCES_KEY: citable_sources,
 			"_web_search": {
 				"agent": result.agent,
 				"engine": result.engine,
@@ -202,10 +205,10 @@ class AgenticWebSearchTool(Tool[AppContext]):
 				"image_count": len(images),
 			},
 		}
-		output = json.dumps(payload, ensure_ascii=True)
+		output = json.dumps(payload, ensure_ascii=False)
 
-		return ToolMessage(
-			tool_call_id=__tool_call_context__.tool_call_id,
-			tool_output=output,
-			metadata=metadata,
+		return self.success(
+			output,
+			__tool_call_context__,
+			metadata=with_citable_sources(metadata, citable_sources),
 		)

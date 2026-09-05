@@ -8,8 +8,6 @@ usage:
     content = await fetch_url("https://example.com/article")
 """
 
-from __future__ import annotations
-
 import logging
 
 import httpx

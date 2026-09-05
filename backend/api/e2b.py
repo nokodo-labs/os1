@@ -4,8 +4,6 @@ async wrapper around the e2b-code-interpreter SDK.
 does not depend on any application-level code.
 """
 
-from __future__ import annotations
-
 import base64
 import logging
 import mimetypes
