@@ -1,16 +1,17 @@
 """agent schemas."""
 
-from __future__ import annotations
-
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.schemas.access_rule import ResourceAccessListFilters
 from api.schemas.common import (
 	MISSING,
+	ForbidExtraModel,
 	MetadataModel,
 	MetadataUpdateModel,
 	MissingType,
+	ORMModel,
 	TimestampedModel,
 )
 from api.schemas.sorting import CommonSortBy
@@ -21,6 +22,7 @@ type AgentSortBy = CommonSortBy | Literal["name"]
 
 DEFAULT_AGENT_PLUGIN_IDS: tuple[str, ...] = (
 	"chat_context",
+	"agent_view_translation",
 	"attachments",
 	"citation_index",
 	"context_compaction",
@@ -32,7 +34,7 @@ def default_agent_plugin_ids() -> list[str]:
 	return list(DEFAULT_AGENT_PLUGIN_IDS)
 
 
-class AgentListFilters(BaseModel):
+class AgentListFilters(ResourceAccessListFilters):
 	"""filters for listing agents."""
 
 	q: str | None = Field(default=None, min_length=1, max_length=500)
@@ -57,12 +59,28 @@ class UserMCPToolsFeature(BaseModel):
 	enabled: bool = False
 
 
+class InvokeOnMentionFeature(BaseModel):
+	"""whether addressing this agent also asks it to answer.
+
+	off by default: mentioning and invoking are separate acts, and a client that
+	can express both should say which one it means. turning this on is how a
+	client that cannot (a chat bridge) still gets an answer. overridable per
+	thread on the agent's participant row.
+	"""
+
+	model_config = ConfigDict(extra="allow")
+	enabled: bool = False
+
+
 class AgentFeatures(BaseModel):
 	"""per-agent feature toggles."""
 
 	model_config = ConfigDict(extra="allow")
 	steering: SteeringFeature = Field(default_factory=SteeringFeature)
 	user_mcp_tools: UserMCPToolsFeature = Field(default_factory=UserMCPToolsFeature)
+	invoke_on_mention: InvokeOnMentionFeature = Field(
+		default_factory=InvokeOnMentionFeature
+	)
 
 
 class AgentConfig(BaseModel):
@@ -88,7 +106,7 @@ class AgentBase(MetadataModel):
 	profile_image_url: str | None = None
 
 
-class AgentCreate(AgentBase):
+class AgentCreate(AgentBase, ForbidExtraModel):
 	"""payload for agent creation."""
 
 	pass
@@ -111,3 +129,11 @@ class Agent(AgentBase, TimestampedModel):
 	"""agent response schema - returns IDs only, no hydrated relationships."""
 
 	id: TypeID
+
+
+class AgentSummary(ORMModel):
+	"""minimal agent identity for embedding (e.g. thread participants)."""
+
+	id: TypeID
+	name: str
+	profile_image_url: str | None = None

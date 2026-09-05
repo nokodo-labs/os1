@@ -1,7 +1,5 @@
 """Agent routers."""
 
-from __future__ import annotations
-
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
@@ -14,8 +12,25 @@ from api.schemas.agent import Agent as AgentSchema
 from api.schemas.agent import AgentCreate, AgentListFilters, AgentSortBy, AgentUpdate
 from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
-from api.v1.service import agents as agent_service
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.agents import (
+	count_agents as count_agents_service,
+)
+from api.v1.service.agents import (
+	create_agent as create_agent_service,
+)
+from api.v1.service.agents import (
+	delete_agent as delete_agent_service,
+)
+from api.v1.service.agents import (
+	get_agent_payload,
+)
+from api.v1.service.agents import (
+	list_agents as list_agents_service,
+)
+from api.v1.service.agents import (
+	update_agent as update_agent_service,
+)
+from api.v1.service.authentication import Principal, get_current_principal
 from api.v1.service.events import SessionId
 from nokodo_ai.utils.typeid import TypeID
 
@@ -32,7 +47,7 @@ async def create_agent(
 	x_session_id: SessionId = None,
 ) -> Agent:
 	"""Register a new agent."""
-	return await agent_service.create_agent(
+	return await create_agent_service(
 		agent_in,
 		db,
 		principal=principal,
@@ -51,7 +66,7 @@ async def list_agents(
 	db: AsyncSession = Depends(get_db),
 ) -> list[Agent]:
 	"""List all agents visible to the caller."""
-	return await agent_service.list_agents(
+	return await list_agents_service(
 		db,
 		principal=principal,
 		skip=skip,
@@ -59,6 +74,8 @@ async def list_agents(
 		sort_by=sort_by,
 		sort_dir=sort_dir,
 		q=filters.q,
+		access_relationship=filters.access_relationship,
+		resolved_access_level=filters.resolved_access_level,
 	)
 
 
@@ -69,7 +86,13 @@ async def count_agents(
 	db: AsyncSession = Depends(get_db),
 ) -> int:
 	"""Count agents matching the list filters."""
-	return await agent_service.count_agents(db, principal=principal, q=filters.q)
+	return await count_agents_service(
+		db,
+		principal=principal,
+		q=filters.q,
+		access_relationship=filters.access_relationship,
+		resolved_access_level=filters.resolved_access_level,
+	)
 
 
 @router.get("/{agent_id}", response_model=AgentSchema)
@@ -79,7 +102,7 @@ async def get_agent(
 	db: AsyncSession = Depends(get_db),
 ) -> AgentSchema:
 	"""Fetch an agent."""
-	return await agent_service.get_agent_payload(agent_id, db, principal=principal)
+	return await get_agent_payload(agent_id, db, principal=principal)
 
 
 @router.patch("/{agent_id}", response_model=AgentSchema)
@@ -91,7 +114,7 @@ async def update_agent(
 	x_session_id: SessionId = None,
 ) -> Agent:
 	"""Update an agent."""
-	return await agent_service.update_agent(
+	return await update_agent_service(
 		agent_id,
 		agent_in,
 		db,
@@ -108,7 +131,7 @@ async def delete_agent(
 	x_session_id: SessionId = None,
 ) -> None:
 	"""Delete an agent."""
-	await agent_service.delete_agent(
+	await delete_agent_service(
 		agent_id,
 		db,
 		principal=principal,

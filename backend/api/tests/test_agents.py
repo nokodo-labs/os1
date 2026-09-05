@@ -1,7 +1,5 @@
 """Tests for agent service."""
 
-from __future__ import annotations
-
 import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
@@ -23,7 +21,7 @@ from api.schemas.provider import ProviderCreate
 from api.v1.service import agents as agent_service
 from api.v1.service import models as model_service
 from api.v1.service import providers as provider_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from nokodo_ai.utils.typeid import new_typeid
 
 
@@ -41,7 +39,7 @@ async def _principal(
 	session.add(user)
 	await session.flush()
 	await session.refresh(user)
-	return Principal(user=user, group_ids=(), permissions=frozenset())
+	return Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 
 
 @pytest.mark.asyncio
@@ -156,8 +154,7 @@ async def test_get_agent_payload_checks_access_before_cache(
 		pytest.fail("cache should not be queried before access succeeds")
 
 	monkeypatch.setattr(
-		agent_service,
-		"get_or_set_resource_payload_cache",
+		"api.v1.service.agents.core.get_or_set_resource_payload_cache",
 		fail_get_or_set,
 	)
 
@@ -356,13 +353,12 @@ async def test_list_agents_filters_by_access_rules(
 	)
 
 	non_admin_principal = await _principal(db_session, is_admin=False)
-	non_admin_user = non_admin_principal.user
 
 	# grant reader access to one agent
 	db_session.add(
 		AccessRule(
 			agent_id=accessible.id,
-			subject_user_id=non_admin_user.id,
+			subject_user_id=non_admin_principal.user.id,
 			level=AccessLevel.READER,
 			order_index=0,
 		)
