@@ -1,16 +1,22 @@
 """Open WebUI durable task runners."""
 
-from __future__ import annotations
-
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import async_session_local
 from api.models.task import Task, TaskType
-from api.v1.service import tasks as task_service
-from api.v1.service.auth import Principal, load_principal_for_user
-from api.v1.service.integrations import open_webui as open_webui_service
+from api.v1.service.authentication import Principal, load_principal_for_user
+from api.v1.service.integrations.open_webui import (
+	get_deployment,
+	import_from_open_webui,
+	normalize_origin,
+)
+from api.v1.service.tasks import (
+	TaskContext,
+	register_task_runner,
+	start_task,
+)
 from nokodo_ai.types.json import JSONObject, JSONValue
 
 
@@ -30,9 +36,9 @@ async def spawn_open_webui_import_task(
 	started_by_user_id: str | None = None,
 ) -> Task:
 	"""enqueue an Open WebUI import task without storing the credential on the row."""
-	deployment = open_webui_service.get_deployment(deployment_origin)
-	origin = open_webui_service.normalize_origin(str(deployment.origin))
-	return await task_service.start_task(
+	deployment = get_deployment(deployment_origin)
+	origin = normalize_origin(str(deployment.origin))
+	return await start_task(
 		session,
 		principal=principal,
 		task_type=TaskType.IMPORT,
@@ -45,15 +51,15 @@ async def spawn_open_webui_import_task(
 			"include_notes": include_notes,
 			"include_archived_chats": include_archived_chats,
 			"chat_import_mode": chat_import_mode,
-			"started_by_user_id": started_by_user_id or principal.user_id,
+			"started_by_user_id": started_by_user_id or principal.user.id,
 		},
 		runtime={"credential": credential},
 		stage="starting import",
 	)
 
 
-@task_service.register_task_runner(OPEN_WEBUI_IMPORT_TASK)
-async def run_open_webui_import_task(ctx: task_service.TaskContext) -> JSONObject:
+@register_task_runner(OPEN_WEBUI_IMPORT_TASK)
+async def run_open_webui_import_task(ctx: TaskContext) -> JSONObject:
 	"""import Open WebUI data for the owning user."""
 	credential = ctx.runtime.get("credential")
 	if not isinstance(credential, str) or credential.strip() == "":
@@ -77,7 +83,7 @@ async def run_open_webui_import_task(ctx: task_service.TaskContext) -> JSONObjec
 
 	async with async_session_local() as session:
 		principal = await load_principal_for_user(ctx.user_id, session)
-		summary = await open_webui_service.import_from_open_webui(
+		summary = await import_from_open_webui(
 			deployment_origin=deployment_origin,
 			credential=credential,
 			include_chats=include_chats,

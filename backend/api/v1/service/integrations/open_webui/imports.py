@@ -1,7 +1,5 @@
 """Open WebUI import service."""
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
@@ -14,13 +12,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.database.main import async_session_local, safe_rollback
+from api.database.post_commit import discard_uncommitted_post_commit_actions
 from api.models.memory import Memory
 from api.models.note import Note
 from api.models.project import Project
 from api.open_webui import OpenWebUIAuthError, OpenWebUIClient, OpenWebUIError
 from api.permissions import ActionPermission
 from api.settings import OpenWebUIDeployment, settings
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.authorization import require_permission
 from api.v1.service.integrations.open_webui.chats import (
 	ModelAgentResolver,
@@ -48,6 +47,7 @@ from api.v1.service.integrations.open_webui.notes import _import_notes
 from api.v1.service.memories import MEMORY_SPEC, vectorize_memories
 from api.v1.service.notes import NOTE_SPEC, vectorize_notes
 from api.v1.service.threads import vectorize_threads
+from api.v1.service.threads.vectorization import schedule_thread_content_vectorization
 from api.v1.service.vectorize import filter_unvectorized
 from nokodo_ai.utils.concurrency import gather_bounded
 from nokodo_ai.utils.typeid import TypeID
@@ -181,7 +181,7 @@ class _PinnedProjectCache:
 					deployment=self._deployment,
 					summary=summary,
 				)
-				project_id = TypeID(project.id)
+				project_id = project.id
 				await session.commit()
 			self._project_id = project_id
 		return self._project_id
@@ -194,13 +194,13 @@ def _require_import_permissions(
 	include_notes: bool,
 ) -> None:
 	if include_chats:
-		require_permission(principal, ActionPermission.THREADS_CREATE.value)
-		require_permission(principal, ActionPermission.PROJECTS_CREATE.value)
-		require_permission(principal, ActionPermission.FILES_CREATE.value)
+		require_permission(principal, ActionPermission.THREADS_CREATE)
+		require_permission(principal, ActionPermission.PROJECTS_CREATE)
+		require_permission(principal, ActionPermission.FILES_CREATE)
 	if include_memories:
-		require_permission(principal, ActionPermission.MEMORIES_CREATE.value)
+		require_permission(principal, ActionPermission.MEMORIES_CREATE)
 	if include_notes:
-		require_permission(principal, ActionPermission.NOTES_CREATE.value)
+		require_permission(principal, ActionPermission.NOTES_CREATE)
 
 
 async def _vectorize_imported_resources(
@@ -223,16 +223,18 @@ async def _vectorize_imported_resources(
 	"""
 	try:
 		memory_ids = await _pending_memory_ids(summary.memory_ids, session)
-		await vectorize_memories(memory_ids, session)
+		await vectorize_memories(session, memory_ids)
 	except Exception:
 		logger.exception("failed to vectorize imported memories")
 	try:
 		note_ids = await _pending_note_ids(summary.note_ids, session)
-		await vectorize_notes(note_ids, session)
+		await vectorize_notes(session, note_ids)
 	except Exception:
 		logger.exception("failed to vectorize imported notes")
 	try:
-		await vectorize_threads(summary.thread_ids, session)
+		await vectorize_threads(session, summary.thread_ids)
+		for imported_thread_id in summary.thread_ids:
+			await schedule_thread_content_vectorization(imported_thread_id)
 	except Exception:
 		logger.exception("failed to vectorize imported threads")
 
@@ -252,7 +254,7 @@ async def _pending_memory_ids(
 		).all()
 	)
 	pending = await filter_unvectorized(MEMORY_SPEC, rows, session)
-	return [TypeID(memory.id) for memory in pending]
+	return [memory.id for memory in pending]
 
 
 async def _pending_note_ids(
@@ -275,7 +277,7 @@ async def _pending_note_ids(
 		).all()
 	)
 	pending = await filter_unvectorized(NOTE_SPEC, rows, session)
-	return [TypeID(note.id) for note in pending]
+	return [note.id for note in pending]
 
 
 async def _import_one_chat_worker(
@@ -637,6 +639,10 @@ async def import_from_open_webui(
 					summary=summary,
 				)
 			except Exception as exc:
+				# rollback-and-continue: close-time discard never sees this, so
+				# the actions the rolled-back folder writes queued have to go
+				# now or the next commit would promote and run them.
+				discard_uncommitted_post_commit_actions(session)
 				await session.rollback()
 				logger.exception("failed to import Open WebUI folders")
 				summary.add_error(f"folders import failed: {type(exc).__name__}")
@@ -646,7 +652,7 @@ async def import_from_open_webui(
 			file_locks = _FileLockRegistry()
 			chat_progress = _ProgressReporter(progress_callback, len(chat_list), 40, 35)
 			folder_project_ids = {
-				folder_id: TypeID(project.id)
+				folder_id: project.id
 				for folder_id, project in projects_by_folder_id.items()
 			}
 			# durably persist principal and pre-created projects so per-chat

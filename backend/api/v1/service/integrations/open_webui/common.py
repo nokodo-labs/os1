@@ -1,7 +1,5 @@
 """shared types and parsing helpers used across Open WebUI resource importers."""
 
-from __future__ import annotations
-
 import json
 import mimetypes
 from collections.abc import Iterable

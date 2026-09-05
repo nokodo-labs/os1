@@ -1,7 +1,5 @@
 """Open WebUI chat parsing and import writers."""
 
-from __future__ import annotations
-
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -389,7 +387,7 @@ async def _load_existing_messages_by_owui_id(
 		last_part_index = last_part_index_by_owui_id.get(message_id)
 		if last_part_index is None or part_index >= last_part_index:
 			last_part_index_by_owui_id[message_id] = part_index
-			last_by_owui_id[message_id] = TypeID(message.id)
+			last_by_owui_id[message_id] = message.id
 	return messages_by_part, last_by_owui_id
 
 
@@ -452,7 +450,6 @@ async def _import_one_chat(
 		thread = Thread(
 			title=title[:255] if title is not None else None,
 			owner_id=owner_id,
-			is_archived=_chat_archived(chat),
 			tags=tags,
 			metadata_=thread_metadata,
 			projects=projects,
@@ -462,18 +459,22 @@ async def _import_one_chat(
 		summary.thread_ids.append(thread.id)
 	else:
 		thread.title = title[:255] if title is not None else None
-		thread.is_archived = _chat_archived(chat)
 		if tags or _owui_metadata_value(thread.metadata_, "tags") is not None:
 			thread.tags = tags
-		thread.metadata_ = _merge_metadata(thread.metadata_, thread_metadata)
+		thread.set_metadata(
+			public=_merge_metadata(thread.public_metadata, thread_metadata)
+		)
 		_append_missing_projects_to_thread(thread, projects)
 
 	created_at = _chat_created_at(chat, chat_body)
 	updated_at = _chat_updated_at(chat, chat_body, owui_messages)
-	participant = await ensure_participant(thread.id, owner_id, session)
+	# archived is per-user state now, so the owui chat's archived flag maps onto
+	# the owner's participant row rather than the (shared) thread.
+	participant = await ensure_participant(thread.id, session, user_id=owner_id)
+	participant.archived = _chat_archived(chat)
 
 	existing_messages, owui_to_typeid = await _load_existing_messages_by_owui_id(
-		session, TypeID(thread.id)
+		session, thread.id
 	)
 	for msg in _topo_sort_owui_messages(owui_messages):
 		msg_id = msg.get("id")
@@ -517,8 +518,8 @@ async def _import_one_chat(
 			metadata = _merge_metadata(None, metadata)
 			existing_message = existing_messages.get((msg_id, index))
 			if existing_message is not None:
-				existing_message.metadata_ = _merge_metadata(
-					existing_message.metadata_, metadata
+				existing_message.set_metadata(
+					public=_merge_metadata(existing_message.public_metadata, metadata)
 				)
 				if entry.type == MessageType.ASSISTANT and model_match is not None:
 					existing_message.sender_agent_id = model_match.agent_id
@@ -534,10 +535,11 @@ async def _import_one_chat(
 					deployment=deployment,
 					summary=summary,
 				)
-				last_message_id = TypeID(existing_message.id)
+				last_message_id = existing_message.id
 				parent_typeid = last_message_id
 				continue
-			message = Message(
+			message_cls = Message.__mapper__.polymorphic_map[entry.type].class_
+			message = message_cls(
 				thread_id=thread.id,
 				parent_id=parent_typeid,
 				type=entry.type,
@@ -567,7 +569,7 @@ async def _import_one_chat(
 				deployment=deployment,
 				summary=summary,
 			)
-			last_message_id = TypeID(message.id)
+			last_message_id = message.id
 			parent_typeid = last_message_id
 
 			timestamp = _message_timestamp(msg)
@@ -586,7 +588,7 @@ async def _import_one_chat(
 	elif owui_to_typeid:
 		thread.current_message_id = next(reversed(owui_to_typeid.values()))
 	if thread.current_message_id is not None:
-		participant.last_read_message_id = str(thread.current_message_id)
+		participant.last_read_message_id = thread.current_message_id
 	if created_at:
 		thread.created_at = created_at
 	if updated_at:

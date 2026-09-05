@@ -1,14 +1,12 @@
 """Open WebUI deployment lookup service."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 
 from api.permissions import ActionPermission
 from api.settings import OpenWebUIDeployment, settings
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,10 +49,10 @@ def normalize_origin(origin: str) -> str:
 
 
 def _require_sources_access(principal: Principal) -> None:
-	if principal.has_permission(ActionPermission.THREADS_CREATE.value):
+	if principal.has_permission(ActionPermission.THREADS_CREATE):
 		return
-	if principal.has_permission(ActionPermission.MEMORIES_CREATE.value):
+	if principal.has_permission(ActionPermission.MEMORIES_CREATE):
 		return
-	if principal.has_permission(ActionPermission.NOTES_CREATE.value):
+	if principal.has_permission(ActionPermission.NOTES_CREATE):
 		return
 	raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")

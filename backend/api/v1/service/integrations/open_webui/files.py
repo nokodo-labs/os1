@@ -1,7 +1,5 @@
 """Open WebUI file parsing and import writers."""
 
-from __future__ import annotations
-
 import base64
 import binascii
 import hashlib
@@ -22,7 +20,7 @@ from api.models.project import Project
 from api.open_webui import OpenWebUIClient, OpenWebUIError
 from api.settings import OpenWebUIDeployment
 from api.v1.service.files import remove_file_vectors, store_file
-from api.v1.service.files.content_vectorization import CONTENT_VECTOR_FINGERPRINT_KEY
+from api.v1.service.files.text_contents import CONTENT_VECTOR_FINGERPRINT_KEY
 from api.v1.service.integrations.open_webui.common import (
 	ImportSummary,
 	_append_missing_projects_to_file,
@@ -236,9 +234,9 @@ def _mark_file_for_reprocessing(file: File) -> None:
 	fingerprint and description, and resetting status to PENDING, makes the
 	maintenance sweep redo processing with the corrected routing.
 	"""
-	metadata = dict(file.metadata_ or {})
-	metadata.pop(CONTENT_VECTOR_FINGERPRINT_KEY, None)
-	file.metadata_ = metadata
+	private = file.private_metadata
+	private.pop(CONTENT_VECTOR_FINGERPRINT_KEY, None)
+	file.set_metadata(private=private)
 	file.description = None
 	file.status = FileStatus.PENDING
 
@@ -282,7 +280,7 @@ async def _find_file_by_checksum(
 		select(File)
 		.where(
 			File.owner_id == owner_id,
-			File.message_id == message_id,
+			File.origin_message_id == message_id,
 			File.checksum_sha256 == checksum_sha256,
 			File.deleted_at.is_(None),
 			File.metadata_["imported_from"].as_string() == "open_webui",
@@ -321,11 +319,13 @@ def _heal_existing_file(
 		existing.filename = filename
 		routing_changed = routing_changed or filename is not None
 	_append_missing_projects_to_file(existing, projects)
-	if existing.message_id is None:
-		existing.message_id = message_id
-	existing.metadata_ = _merge_metadata(
-		existing.metadata_,
-		_owui_metadata(deployment, "file", owui_file_id, **metadata_fields),
+	if existing.origin_message_id is None:
+		existing.origin_message_id = message_id
+	existing.set_metadata(
+		public=_merge_metadata(
+			existing.public_metadata,
+			_owui_metadata(deployment, "file", owui_file_id, **metadata_fields),
+		)
 	)
 	if routing_changed:
 		_mark_file_for_reprocessing(existing)
@@ -349,7 +349,7 @@ async def _import_file_entry(
 	metadata: dict[str, Any] | None = None
 	data: bytes | None = None
 	response_media_type: str | None = None
-	project_ids = [TypeID(project.id) for project in projects]
+	project_ids = [project.id for project in projects]
 	metadata_fields = {
 		key: value
 		for key, value in (
@@ -387,7 +387,7 @@ async def _import_file_entry(
 			)
 			summary.files_skipped += 1
 			return _file_content_part(
-				file_id=TypeID(existing.id),
+				file_id=existing.id,
 				url=None,
 				filename=existing.filename,
 				media_type=existing.mime_type,
@@ -433,7 +433,7 @@ async def _import_file_entry(
 			)
 			summary.files_skipped += 1
 			return _file_content_part(
-				file_id=TypeID(existing.id),
+				file_id=existing.id,
 				url=None,
 				filename=existing.filename,
 				media_type=existing.mime_type,
@@ -472,7 +472,7 @@ async def _import_file_entry(
 			owner_id=owner_id,
 			filename=filename,
 			content_type=media_type,
-			source=FileSource.IMPORT,
+			source=FileSource.USER_IMPORTED,
 			project_ids=project_ids,
 			message_id=message_id,
 		)
@@ -489,9 +489,11 @@ async def _import_file_entry(
 			media_type=media_type,
 			owui_file_id=owui_file_id,
 		)
-	file.metadata_ = _merge_metadata(
-		file.metadata_,
-		_owui_metadata(deployment, "file", owui_file_id, **metadata_fields),
+	file.set_metadata(
+		public=_merge_metadata(
+			file.public_metadata,
+			_owui_metadata(deployment, "file", owui_file_id, **metadata_fields),
+		)
 	)
 	summary.files_imported += 1
 	return _file_content_part(
@@ -541,7 +543,7 @@ async def _append_file_parts(
 			client=client,
 			session=session,
 			owner_id=owner_id,
-			message_id=TypeID(message.id),
+			message_id=message.id,
 			chat_id=chat_id,
 			owui_message_id=owui_message_id,
 			projects=projects,

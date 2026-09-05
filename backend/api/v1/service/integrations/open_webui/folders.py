@@ -1,7 +1,5 @@
 """Open WebUI folder parsing and project import writers."""
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from typing import Any
 
@@ -129,7 +127,9 @@ async def _import_folder_projects(
 			folder_id=folder_id,
 		)
 		if existing is not None:
-			existing.metadata_ = _merge_metadata(existing.metadata_, metadata)
+			existing.set_metadata(
+				public=_merge_metadata(existing.public_metadata, metadata)
+			)
 			projects_by_folder_id[folder_id] = existing
 			summary.projects_skipped += 1
 			continue
@@ -170,7 +170,9 @@ async def _import_pinned_chats_project(
 		special_project="pinned_chats",
 	)
 	if existing is not None:
-		existing.metadata_ = _merge_metadata(existing.metadata_, metadata)
+		existing.set_metadata(
+			public=_merge_metadata(existing.public_metadata, metadata)
+		)
 		summary.projects_skipped += 1
 		return existing
 	project = Project(

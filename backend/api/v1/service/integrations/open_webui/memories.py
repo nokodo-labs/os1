@@ -1,7 +1,5 @@
 """Open WebUI memory import writers."""
 
-from __future__ import annotations
-
 import logging
 from collections.abc import Iterable
 from typing import Any
@@ -78,7 +76,9 @@ async def _import_memories(
 		updated_at = _epoch_to_dt(raw.get("updated_at"))
 		if existing is not None:
 			existing.content = content
-			existing.metadata_ = _merge_metadata(existing.metadata_, metadata)
+			existing.set_metadata(
+				public=_merge_metadata(existing.public_metadata, metadata)
+			)
 			if created_at:
 				existing.created_at = created_at
 			if updated_at:

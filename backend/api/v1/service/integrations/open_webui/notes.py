@@ -1,7 +1,5 @@
 """Open WebUI note parsing and import writers."""
 
-from __future__ import annotations
-
 import logging
 from collections.abc import Iterable
 from typing import Any
@@ -132,7 +130,9 @@ async def _import_notes(
 			existing.title = title
 			existing.content = content
 			existing.labels = labels
-			existing.metadata_ = _merge_metadata(existing.metadata_, metadata)
+			existing.set_metadata(
+				public=_merge_metadata(existing.public_metadata, metadata)
+			)
 			if created_at:
 				existing.created_at = created_at
 			if updated_at:
