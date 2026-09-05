@@ -1,243 +1,108 @@
-"""service helpers for threads and messages."""
-
-from __future__ import annotations
+"""thread listing + lifecycle: read, update, soft-delete and restore."""
 
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import overload
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-from sqlalchemy.sql.selectable import Select
 
+from api.database.advisory_locks import acquire_resource_write_lock
 from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
-from api.models.message import Message
+from api.models.project import Project
 from api.models.thread import Thread
 from api.models.user import User
 from api.permissions import ResourceType
-from api.schemas.message import Message as MessageOut
 from api.schemas.thread import Thread as ThreadOut
-from api.schemas.thread import ThreadCreate, ThreadListFilters, ThreadUpdate
+from api.schemas.thread import (
+	ThreadListFilters,
+	ThreadUpdate,
+)
 from api.settings import settings
-from api.v1.service import events as event_service
-from api.v1.service import projects as project_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.authorization import (
-	fetch_acl_metadata,
+	PreparedAccessChange,
+	apply_metadata_write,
+	build_access_change_events,
+	capture_access_change,
+	fetch_bulk_acl_metadata,
 	invalidate_accessible_users_for_resource,
-	list_accessible_user_ids,
-	require_permission,
+	list_accessible_user_ids_for_resources,
+	project_private,
+	public_payload,
+	require_private_write,
 	require_thread_access,
 	resource_access_predicate,
 )
-from api.v1.service.listing import SortDir, apply_sort
+from api.v1.service.events import (
+	fanout_event,
+	persist_and_fanout_event,
+)
+from api.v1.service.listing import SortDir
+from api.v1.service.projects import load_projects
 from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
 	invalidate_resource_payload_cache,
 )
-from api.v1.service.threads.participants import ensure_participant
+from api.v1.service.threads.common import (
+	apply_thread_filters,
+	apply_thread_sort,
+	base_thread_list_stmt,
+	ensure_admin_for_hidden_or_deleted,
+	load_thread,
+	load_thread_payload_source,
+)
+from api.v1.service.threads.content_vectors import (
+	purge_thread_content_vectors,
+	reconcile_thread_content_vectors,
+)
+from api.v1.service.threads.members import build_thread_payload
 from api.v1.service.threads.search import THREAD_SPEC
+from api.v1.service.threads.user_state import apply_participant_state_filters
 from api.v1.service.vectorize import (
 	remove_vectorized_resource,
-	sync_resource_vector_acl,
+	sync_resource_refs_vector_acl,
 	vectorize_resource,
 )
-from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
 
 
+async def filter_active_thread_ids(
+	session: AsyncSession,
+	thread_ids: set[TypeID],
+) -> set[TypeID]:
+	"""return IDs belonging to existing non-deleted threads."""
+	if not thread_ids:
+		return set()
+	return set(
+		await session.scalars(
+			select(Thread.id).where(
+				Thread.id.in_(thread_ids),
+				Thread.deleted_at.is_(None),
+			)
+		)
+	)
+
+
+@dataclass(slots=True)
+class PreparedThreadDeletion:
+	"""authorized state required to delete a thread."""
+
+	thread: Thread
+	permanent: bool
+	owner_id: str
+	project_ids: set[TypeID]
+
+
 async def _invalidate_project_payload_caches(project_ids: set[TypeID]) -> None:
 	for project_id in project_ids:
 		await invalidate_resource_payload_cache(ResourceType.PROJECT, project_id)
-
-
-def _message_event_data(message: Message) -> dict[str, object]:
-	"""serialize a message event payload using the public API field names."""
-	return MessageOut.model_validate(message).model_dump(mode="json", by_alias=True)
-
-
-def _ensure_admin_for_hidden(include_hidden: bool, principal: Principal) -> None:
-	if include_hidden and not principal.is_admin:
-		raise HTTPException(
-			status_code=status.HTTP_403_FORBIDDEN,
-			detail="forbidden",
-		)
-
-
-@overload
-async def _load_thread(
-	thread_id: TypeID,
-	session: AsyncSession,
-	principal: Principal,
-	required_level: AccessLevel = AccessLevel.READER,
-	include_hidden: bool = False,
-) -> Thread: ...
-
-
-@overload
-async def _load_thread(
-	thread_id: TypeID,
-	session: AsyncSession,
-	principal: None = None,
-	required_level: AccessLevel = AccessLevel.READER,
-	include_hidden: bool = False,
-) -> Thread: ...
-
-
-async def _load_thread(
-	thread_id: TypeID,
-	session: AsyncSession,
-	principal: Principal | None = None,
-	required_level: AccessLevel = AccessLevel.READER,
-	include_hidden: bool = False,
-) -> Thread:
-	options = [
-		selectinload(Thread.projects),
-	]
-	stmt = select(Thread).options(*options).where(Thread.id == thread_id)
-
-	if principal is not None:
-		stmt = stmt.where(
-			resource_access_predicate(
-				principal,
-				ResourceType.THREAD,
-				required_level=required_level,
-			)
-		)
-		if include_hidden:
-			stmt = stmt.execution_options(include_deleted=True)
-	else:
-		if include_hidden:
-			stmt = stmt.execution_options(include_deleted=True)
-		else:
-			stmt = stmt.where(
-				Thread.deleted_at.is_(None), Thread.is_temporary.is_(False)
-			)
-	result = await session.execute(stmt)
-	thread = result.scalars().unique().one_or_none()
-
-	if not thread:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="Thread not found",
-		)
-
-	return thread
-
-
-async def _load_thread_payload_source(
-	thread_id: TypeID,
-	session: AsyncSession,
-	include_hidden: bool = False,
-) -> Thread:
-	stmt = (
-		select(Thread)
-		.options(selectinload(Thread.projects))
-		.where(Thread.id == thread_id)
-	)
-	if include_hidden:
-		stmt = stmt.execution_options(include_deleted=True)
-	else:
-		stmt = stmt.where(Thread.deleted_at.is_(None))
-	result = await session.execute(stmt)
-	thread = result.scalars().unique().one_or_none()
-	if not thread:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail="Thread not found",
-		)
-	return thread
-
-
-async def create_thread(
-	thread_in: ThreadCreate,
-	session: AsyncSession,
-	principal: Principal,
-	origin_session_id: str | None = None,
-	override_id: TypeID | None = None,
-) -> Thread:
-	require_permission(principal, "threads:create")
-	owner_id = thread_in.owner_id
-	if not principal.is_admin:
-		owner_id = TypeID(principal.user.id)
-	else:
-		owner = await session.get(User, owner_id)
-		if not owner:
-			raise HTTPException(
-				status_code=status.HTTP_404_NOT_FOUND,
-				detail="User not found",
-			)
-
-	projects = await project_service.load_projects(
-		thread_in.project_ids, session, principal, required_level=AccessLevel.EDITOR
-	)
-	thread_data = thread_in.model_dump(by_alias=True, exclude={"project_ids"})
-	thread_data["owner_id"] = owner_id
-	if override_id is not None:
-		thread_data["id"] = override_id
-	thread = Thread(**thread_data)
-	thread.projects = projects
-	session.add(thread)
-	await session.flush()
-
-	# owner is automatically a participant
-	await ensure_participant(thread.id, owner_id, session)
-
-	await session.refresh(
-		thread, attribute_names=["created_at", "updated_at", "last_activity_at"]
-	)
-
-	# emit thread.created event
-	event = Event(
-		scope=EventScope.THREAD,
-		scope_id=thread.id,
-		type=EventType.THREAD_CREATED,
-		data=ThreadOut.model_validate(thread).model_dump(mode="json"),
-		user_id=str(owner_id),
-		thread_id=thread.id,
-	)
-	await event_service.persist_and_fanout_event(
-		session, event=event, origin_session_id=origin_session_id
-	)
-	await _invalidate_project_payload_caches({project.id for project in projects})
-
-	return thread
-
-
-def _apply_thread_filters(
-	stmt: Select, filters: ThreadListFilters, principal: Principal
-) -> Select:
-	"""apply shared list/count filters for threads."""
-	if filters.include_hidden and not principal.is_admin:
-		raise HTTPException(
-			status_code=status.HTTP_403_FORBIDDEN,
-			detail="forbidden",
-		)
-	if filters.include_deleted and not principal.is_admin:
-		raise HTTPException(
-			status_code=status.HTTP_403_FORBIDDEN,
-			detail="forbidden",
-		)
-	if filters.owner_id is not None:
-		stmt = stmt.where(Thread.owner_id == filters.owner_id)
-	# always exclude temporary threads from listings
-	if not filters.include_hidden:
-		stmt = stmt.where(Thread.is_temporary.is_(False))
-	if filters.is_archived is not None:
-		stmt = stmt.where(Thread.is_archived == filters.is_archived)
-	if filters.q is not None and filters.q.strip():
-		pattern = contains_pattern(filters.q.strip())
-		stmt = stmt.where(Thread.title.ilike(pattern, escape="\\"))
-	if filters.include_hidden or filters.include_deleted:
-		stmt = stmt.execution_options(include_deleted=True)
-	return stmt
 
 
 async def list_threads(
@@ -249,35 +114,17 @@ async def list_threads(
 	sort_by: str = "updated_at",
 	sort_dir: SortDir = "desc",
 ) -> list[Thread]:
-	thread_filters = filters or ThreadListFilters()
-	stmt = (
-		select(Thread)
-		.options(
-			selectinload(Thread.messages),
-			selectinload(Thread.projects),
-		)
-		.where(
-			resource_access_predicate(
-				principal,
-				ResourceType.THREAD,
-				required_level=AccessLevel.READER,
-			)
-		)
-	)
-	stmt = _apply_thread_filters(stmt, thread_filters, principal)
-	stmt = apply_sort(
-		stmt,
-		sort_by=sort_by,
-		sort_dir=sort_dir,
-		columns={
-			"last_activity_at": Thread.last_activity_at,
-			"created_at": Thread.created_at,
-			"updated_at": Thread.updated_at,
-			"title": Thread.title,
-		},
-		tie_breaker=Thread.id,
-	)
+	"""list accessible threads matching the filters.
 
+	the result depends on the principal only through ACCESS; per-user views
+	(archived, pinned, muted, pending invites) are requested through the
+	explicit user-addressed filters.
+	"""
+	thread_filters = filters or ThreadListFilters()
+	stmt = base_thread_list_stmt(principal)
+	stmt = apply_thread_filters(stmt, thread_filters, principal)
+	stmt = apply_participant_state_filters(stmt, thread_filters, principal)
+	stmt = apply_thread_sort(stmt, sort_by, sort_dir)
 	result = await session.execute(stmt.offset(skip).limit(limit))
 	return list(result.scalars().unique().all())
 
@@ -287,6 +134,7 @@ async def count_threads(
 	principal: Principal,
 	filters: ThreadListFilters | None = None,
 ) -> int:
+	"""count threads matching the list filters (see ``list_threads``)."""
 	thread_filters = filters or ThreadListFilters()
 	stmt = (
 		select(func.count())
@@ -299,7 +147,8 @@ async def count_threads(
 			)
 		)
 	)
-	stmt = _apply_thread_filters(stmt, thread_filters, principal)
+	stmt = apply_thread_filters(stmt, thread_filters, principal)
+	stmt = apply_participant_state_filters(stmt, thread_filters, principal)
 	return await session.scalar(stmt) or 0
 
 
@@ -308,14 +157,16 @@ async def get_thread(
 	session: AsyncSession,
 	principal: Principal,
 	include_hidden: bool = False,
+	include_deleted: bool = False,
 ) -> Thread:
-	_ensure_admin_for_hidden(include_hidden, principal)
-	return await _load_thread(
+	ensure_admin_for_hidden_or_deleted(include_hidden, include_deleted, principal)
+	return await load_thread(
 		thread_id,
 		session,
 		principal,
 		required_level=AccessLevel.READER,
 		include_hidden=include_hidden,
+		include_deleted=include_deleted,
 	)
 
 
@@ -324,32 +175,52 @@ async def get_thread_payload(
 	session: AsyncSession,
 	principal: Principal,
 	include_hidden: bool = False,
+	include_deleted: bool = False,
 	use_cache: bool = True,
 ) -> ThreadOut:
 	"""get a thread API payload after access is validated."""
-	_ensure_admin_for_hidden(include_hidden, principal)
+	ensure_admin_for_hidden_or_deleted(include_hidden, include_deleted, principal)
 	await require_thread_access(
 		thread_id,
 		session,
 		principal,
 		required_level=AccessLevel.READER,
 		include_hidden=include_hidden,
+		include_deleted=include_deleted,
 	)
 
 	async def load_payload() -> ThreadOut:
-		return ThreadOut.model_validate(
-			await _load_thread_payload_source(thread_id, session, include_hidden)
+		return await build_thread_payload(
+			session,
+			await load_thread_payload_source(
+				thread_id,
+				session,
+				include_hidden,
+				include_deleted,
+			),
 		)
 
+	# the payload cache is not principal-keyed, so it holds the full payload
+	# and projection happens per request on the way out.
 	if not use_cache:
-		return await load_payload()
-	return await get_or_set_resource_payload_cache(
-		ResourceType.THREAD,
-		thread_id,
-		ThreadOut,
-		load_payload,
-		variant="hidden" if include_hidden else "default",
-	)
+		payload = await load_payload()
+	else:
+		payload = await get_or_set_resource_payload_cache(
+			ResourceType.THREAD,
+			thread_id,
+			ThreadOut,
+			load_payload,
+			variant=(
+				"hidden_deleted"
+				if include_hidden and include_deleted
+				else "hidden"
+				if include_hidden
+				else "deleted"
+				if include_deleted
+				else "default"
+			),
+		)
+	return project_private(principal, ResourceType.THREAD, [payload])[0]
 
 
 async def update_thread(
@@ -361,17 +232,41 @@ async def update_thread(
 	origin_session_id: str | None = None,
 	update_activity: bool = True,
 ) -> Thread:
-	thread = await _load_thread(
+	require_private_write(principal, ResourceType.THREAD, thread_in.private)
+	thread = await load_thread(
 		thread_id,
 		session,
 		principal,
 		required_level=AccessLevel.EDITOR,
 	)
-	update_data = thread_in.model_dump(exclude_unset=True, by_alias=True)
+	update_data = thread_in.model_dump(
+		exclude_unset=True, exclude={"private", "metadata"}
+	)
 	new_owner_id = update_data.pop("owner_id", None)
+	project_ids = update_data.pop("project_ids", None)
+	old_project_ids = {project.id for project in thread.projects}
+	new_projects: list[Project] | None = None
+	new_project_ids: set[TypeID] | None = None
+	if project_ids is not None:
+		new_projects = await load_projects(
+			project_ids, session, principal, required_level=AccessLevel.EDITOR
+		)
+		new_project_ids = {project.id for project in new_projects}
+	owner_will_change = new_owner_id is not None and new_owner_id != thread.owner_id
+	projects_will_change = (
+		new_project_ids is not None and new_project_ids != old_project_ids
+	)
+	access_fields_changed = owner_will_change or projects_will_change
+	prepared_access_events: list[PreparedAccessChange] = []
+	if access_fields_changed:
+		access_change = await capture_access_change(
+			[(ResourceType.THREAD, thread_id)],
+			session,
+		)
+
 	owner_changed = False
-	if new_owner_id is not None and new_owner_id != thread.owner_id:
-		if not principal.is_admin and thread.owner_id != principal.user.id:
+	if owner_will_change:
+		if not principal.user.is_superuser and thread.owner_id != principal.user.id:
 			raise HTTPException(
 				status_code=status.HTTP_403_FORBIDDEN,
 				detail="forbidden",
@@ -398,25 +293,25 @@ async def update_thread(
 			)
 		thread.current_message_id = new_current_message_id """
 
-	project_ids = update_data.pop("project_ids", None)
-	old_project_ids = {project.id for project in thread.projects}
 	changed_project_ids: set[TypeID] = set()
 	for field, value in update_data.items():
 		setattr(thread, field, value)
+	apply_metadata_write(thread, thread_in.metadata, thread_in.private)
 
-	new_project_ids: set[TypeID] | None = None
-	if project_ids is not None:
-		projects = await project_service.load_projects(
-			project_ids, session, principal, required_level=AccessLevel.EDITOR
-		)
-		thread.projects = projects
-		new_project_ids = {project.id for project in projects}
-		changed_project_ids = old_project_ids | new_project_ids
+	if new_projects is not None:
+		thread.projects = new_projects
+		changed_project_ids = old_project_ids | {project.id for project in new_projects}
 
 	if update_activity:
 		thread.last_activity_at = datetime.now(tz=UTC)
 
 	await session.flush()
+	if access_fields_changed:
+		prepared_access_events = await build_access_change_events(
+			access_change,
+			session,
+			actor_user_id=principal.user.id,
+		)
 
 	# create thread.updated event
 	if create_event:
@@ -449,43 +344,67 @@ async def update_thread(
 			user_id=str(thread.owner_id),
 			thread_id=thread.id,
 		)
-		await event_service.persist_and_fanout_event(
-			session, event=event, origin_session_id=origin_session_id
+		event_recipients = (
+			await list_accessible_user_ids_for_resources(
+				[
+					(ResourceType.THREAD, thread_id),
+					*(
+						(ResourceType.PROJECT, project_id)
+						for project_id in changed_project_ids
+					),
+				],
+				session,
+			)
+			if changed_project_ids
+			else None
+		)
+		await persist_and_fanout_event(
+			session,
+			event=event,
+			origin_session_id=origin_session_id,
+			recipient_ids=event_recipients,
+		)
+	for prepared in prepared_access_events:
+		await fanout_event(
+			prepared.event,
+			recipient_ids=prepared.recipient_ids,
 		)
 	await invalidate_resource_payload_cache(ResourceType.THREAD, thread_id)
 	if owner_changed:
 		# owner recipients changed.
-		await invalidate_accessible_users_for_resource(
-			ResourceType.THREAD, thread_id, session
-		)
+		await invalidate_accessible_users_for_resource(ResourceType.THREAD, thread_id)
 
 	# re-index if searchable fields changed
 	if await THREAD_SPEC.should_revectorize(thread, thread_in, session):
-		await session.refresh(thread, attribute_names=["messages"])
+		# summaries is the only relationship the thread point reads (message
+		# content lives in passages); unloaded, the dense text degrades to title.
+		await session.refresh(thread, attribute_names=["summaries"])
 		await vectorize_resource(
 			spec=THREAD_SPEC,
 			resource=thread,
 			session=session,
-			extra_metadata=await fetch_acl_metadata(
-				str(thread.id), ResourceType.THREAD, session
-			),
+			extra_metadata=(
+				await fetch_bulk_acl_metadata(
+					[str(thread.id)], ResourceType.THREAD, session
+				)
+			)[str(thread.id)],
 		)
 
+	if access_fields_changed:
+		await sync_resource_refs_vector_acl([(ResourceType.THREAD, thread_id)], session)
+
 	if new_project_ids is not None:
-		await invalidate_accessible_users_for_resource(
-			ResourceType.THREAD, thread_id, session
-		)
-		await sync_resource_vector_acl(str(thread_id), ResourceType.THREAD, session)
+		await invalidate_accessible_users_for_resource(ResourceType.THREAD, thread_id)
 		await _invalidate_project_payload_caches(changed_project_ids)
 
 	if (
 		owner_changed
-		and not principal.is_admin
+		and not principal.user.is_superuser
 		and str(new_owner_id) != str(principal.user.id)
 	):
-		return await _load_thread(thread_id, session, None)
+		return await load_thread(thread_id, session, None)
 
-	return await _load_thread(
+	return await load_thread(
 		thread_id,
 		session,
 		principal,
@@ -500,41 +419,81 @@ async def delete_thread(
 	origin_session_id: str | None = None,
 	permanent: bool = False,
 ) -> None:
-	thread = await _load_thread(
+	prepared = await prepare_thread_deletion(
+		thread_id,
+		session,
+		principal,
+		permanent=permanent,
+	)
+	await execute_thread_deletion(
+		prepared,
+		session,
+		origin_session_id=origin_session_id,
+	)
+
+
+async def prepare_thread_deletion(
+	thread_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+	permanent: bool = False,
+) -> PreparedThreadDeletion:
+	"""authorize a thread deletion and capture its required state."""
+	if permanent and not principal.user.is_superuser:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
+	thread = await load_thread(
 		thread_id,
 		session,
 		principal,
 		required_level=AccessLevel.EDITOR,
 		include_hidden=permanent,
+		include_deleted=permanent,
 	)
 
-	if not principal.is_admin and thread.owner_id != principal.user.id:
+	if not principal.user.is_superuser and thread.owner_id != principal.user.id:
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="forbidden",
 		)
 
-	if permanent and not principal.is_admin:
-		raise HTTPException(
-			status_code=status.HTTP_403_FORBIDDEN,
-			detail="forbidden",
-		)
+	return PreparedThreadDeletion(
+		thread=thread,
+		permanent=permanent,
+		owner_id=str(thread.owner_id),
+		project_ids={project.id for project in thread.projects},
+	)
 
-	owner_id = str(thread.owner_id)
-	project_ids = {project.id for project in thread.projects}
+
+async def execute_thread_deletion(
+	prepared: PreparedThreadDeletion,
+	session: AsyncSession,
+	origin_session_id: str | None = None,
+) -> None:
+	"""execute an authorized thread deletion."""
+	thread = prepared.thread
+	thread_id = thread.id
+	permanent = prepared.permanent
+	owner_id = prepared.owner_id
+	project_ids = prepared.project_ids
+	await acquire_resource_write_lock(session, "thread", thread_id)
 
 	hard_delete = permanent or not settings.soft_delete.threads
 	# resolve recipients before the row is gone so hard-deletes still notify
 	# everyone who had access. soft-deletes can resolve post-commit normally.
 	delete_recipients: list[TypeID] | None = None
 	if hard_delete:
-		delete_recipients = await list_accessible_user_ids(
-			ResourceType.THREAD, thread_id, session
+		delete_recipients = await list_accessible_user_ids_for_resources(
+			[
+				(ResourceType.THREAD, thread_id),
+				*((ResourceType.PROJECT, project_id) for project_id in project_ids),
+			],
+			session,
 		)
 
-	await invalidate_accessible_users_for_resource(
-		ResourceType.THREAD, thread_id, session
-	)
+	await invalidate_accessible_users_for_resource(ResourceType.THREAD, thread_id)
 	if hard_delete:
 		await session.delete(thread)
 	else:
@@ -554,7 +513,7 @@ async def delete_thread(
 		user_id=owner_id,
 		thread_id=str(thread_id),
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -565,6 +524,10 @@ async def delete_thread(
 	await remove_vectorized_resource(
 		THREAD_SPEC, resource_id=str(thread_id), session=session
 	)
+	# transcript passages are a second tier keyed by their own resource_id, so
+	# the thread-point removal above never matches them. same shape as
+	# delete_file -> remove_file_vectors(include_content_vectors=True).
+	await purge_thread_content_vectors(session, thread_ids=[thread_id])
 	await _invalidate_project_payload_caches(project_ids)
 
 
@@ -574,47 +537,52 @@ async def restore_thread(
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Thread:
-	if not principal.is_admin:
+	if not principal.user.is_superuser:
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="forbidden",
 		)
-	thread = await _load_thread(
+	thread = await load_thread(
 		thread_id,
 		session,
 		principal,
 		required_level=AccessLevel.EDITOR,
-		include_hidden=True,
+		include_deleted=True,
 	)
 	if thread.deleted_at is None:
 		return thread
 	project_ids = {project.id for project in thread.projects}
 	thread.restore()
 	await session.flush()
+	# the flush expires server-side onupdate columns
+	# summaries is loaded here too since the revectorize below reads it.
+	await session.refresh(thread, attribute_names=["updated_at", "summaries"])
 	event = Event(
 		scope=EventScope.THREAD,
 		scope_id=str(thread_id),
 		type=EventType.THREAD_UPDATED,
-		data=ThreadOut.model_validate(thread).model_dump(mode="json"),
+		data=public_payload(ThreadOut.model_validate(thread)).model_dump(mode="json"),
 		user_id=str(thread.owner_id),
 		thread_id=str(thread_id),
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
 	)
 	await invalidate_resource_payload_cache(ResourceType.THREAD, thread_id)
-	await invalidate_accessible_users_for_resource(
-		ResourceType.THREAD, thread_id, session
-	)
+	await invalidate_accessible_users_for_resource(ResourceType.THREAD, thread_id)
 	await vectorize_resource(
 		spec=THREAD_SPEC,
 		resource=thread,
 		session=session,
-		extra_metadata=await fetch_acl_metadata(
-			str(thread.id), ResourceType.THREAD, session
-		),
+		extra_metadata=(
+			await fetch_bulk_acl_metadata(
+				[str(thread.id)], ResourceType.THREAD, session
+			)
+		)[str(thread.id)],
 	)
+	# delete purged the passage tier, so restore has to rebuild it
+	await reconcile_thread_content_vectors(session, thread_ids=[thread_id])
 	await _invalidate_project_payload_caches(project_ids)
 	return thread

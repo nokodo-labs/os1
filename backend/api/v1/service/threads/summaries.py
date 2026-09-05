@@ -1,7 +1,5 @@
 """service helpers for thread summaries."""
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 
 from fastapi import HTTPException, status
@@ -9,13 +7,18 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.database.recursive_cte import cycle_safe_cte
 from api.models.access_rule import AccessLevel
 from api.models.message import Message
 from api.models.thread import Thread
 from api.models.thread_summary import SummaryPurpose, ThreadSummary
 from api.schemas.thread import ThreadSummaryUpdate
-from api.v1.service.auth import Principal
-from api.v1.service.authorization import require_admin, require_thread_access
+from api.v1.service.authentication import Principal
+from api.v1.service.authorization import (
+	apply_metadata_write,
+	require_admin,
+	require_thread_access,
+)
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
@@ -173,7 +176,7 @@ async def list_thread_summaries(
 	purpose: SummaryPurpose | None = None,
 ) -> list[ThreadSummary]:
 	"""list summaries visible to a principal for one thread."""
-	if principal.is_admin:
+	if principal.user.is_superuser:
 		await require_thread_access(thread_id, session, principal, AccessLevel.READER)
 		return await list_summaries(
 			thread_id,
@@ -204,7 +207,7 @@ async def get_thread_summary(
 ) -> ThreadSummary:
 	"""get one summary visible to a principal for one thread."""
 	summary = await _load_summary_for_thread(thread_id, summary_id, session)
-	if principal.is_admin:
+	if principal.user.is_superuser:
 		return summary
 	if summary.purpose == SummaryPurpose.AGENT_CONTEXT:
 		require_admin(principal)
@@ -222,11 +225,10 @@ async def update_thread_summary(
 	"""update a stored summary. admin only."""
 	require_admin(principal)
 	summary = await _load_summary_for_thread(thread_id, summary_id, session)
-	updates = summary_in.model_dump(exclude_unset=True, by_alias=True)
+	updates = summary_in.model_dump(exclude_unset=True, exclude={"metadata"})
 	if "content" in updates:
 		summary.content = updates["content"]
-	if "metadata_" in updates:
-		summary.metadata_ = updates["metadata_"]
+	apply_metadata_write(summary, summary_in.metadata)
 	await session.flush()
 	await session.refresh(summary)
 	return summary
@@ -309,7 +311,11 @@ async def _summary_branch_ids(
 		Message.parent_id.label("parent_id"),
 		(anchor.c.depth + 1).label("depth"),
 	).join(anchor, Message.id == anchor.c.parent_id)
-	branch_cte = anchor.union_all(recursive)
+	branch_cte = cycle_safe_cte(
+		anchor.union_all(recursive),
+		["msg_id"],
+		"summary_branch_safe",
+	)
 	stmt = select(branch_cte.c.msg_id).order_by(branch_cte.c.depth.desc())
 	result = await session.execute(stmt)
 	return [str(row[0]) for row in result]

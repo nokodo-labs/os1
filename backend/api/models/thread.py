@@ -1,7 +1,5 @@
 """thread model."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -19,12 +17,11 @@ from api.models.base import TYPEID_LENGTH, Base
 from api.models.many_to_many import thread_project_association
 from api.models.mixins import (
 	MetadataJSONMixin,
+	OriginMessageMixin,
 	SoftDeleteMixin,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
-from nokodo_ai.messages import Message as SDKMessage
-from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -43,6 +40,7 @@ class Thread(
 	TypeIDPrimaryKeyMixin,
 	TimestampMixin,
 	MetadataJSONMixin,
+	OriginMessageMixin,
 	SoftDeleteMixin,
 	Base,
 ):
@@ -61,7 +59,6 @@ class Thread(
 
 	title: Mapped[str | None] = mapped_column(String(255), nullable=True)
 	tags: Mapped[list[str]] = mapped_column(JSONB, default=list)
-	is_archived: Mapped[bool] = mapped_column(default=False)
 	is_temporary: Mapped[bool] = mapped_column(default=False)
 	last_activity_at: Mapped[datetime] = mapped_column(
 		DateTime(timezone=True),
@@ -71,16 +68,6 @@ class Thread(
 	owner_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id"),
-	)
-	spawned_from_message_id: Mapped[TypeID | None] = mapped_column(
-		String(TYPEID_LENGTH),
-		ForeignKey(
-			"messages.id",
-			ondelete="SET NULL",
-			use_alter=True,
-			name="fk_threads_spawned_from_message_id_messages",
-		),
-		index=True,
 	)
 	current_message_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
@@ -98,9 +85,9 @@ class Thread(
 		back_populates="threads",
 		innerjoin=True,
 	)
-	spawned_from_message: Mapped[Message | None] = relationship(
+	origin_message: Mapped[Message | None] = relationship(
 		"Message",
-		foreign_keys=[spawned_from_message_id],
+		foreign_keys="Thread.origin_message_id",
 	)
 	current_message: Mapped[Message | None] = relationship(
 		"Message",
@@ -146,41 +133,3 @@ class Thread(
 		cascade="all, delete-orphan",
 		passive_deletes=True,
 	)
-
-	def to_sdk(self) -> SDKThread:
-		"""convert thread to sdk thread using the current branch.
-
-		the sdk thread only supports a linear message list.
-		we derive the current root→leaf branch from current_message_id and the
-		in-memory message list, avoiding lazy-loading relationships.
-		"""
-		if not self.current_message_id:
-			sdk_messages: list[SDKMessage] = []
-			return SDKThread(
-				created_at=self.created_at,
-				messages=sdk_messages,
-				metadata=self.metadata_,
-			)
-
-		messages_by_id: dict[TypeID, Message] = {
-			TypeID(msg.id): msg for msg in self.messages
-		}
-		branch: list[Message] = []
-		cur_id: TypeID | None = self.current_message_id
-		visited: set[TypeID] = set()
-		while cur_id is not None:
-			if cur_id in visited:
-				break
-			visited.add(cur_id)
-			cur = messages_by_id.get(cur_id)
-			if cur is None:
-				break
-			branch.insert(0, cur)
-			cur_id = cur.parent_id
-
-		sdk_messages = [msg.to_sdk() for msg in branch]
-		return SDKThread(
-			created_at=self.created_at,
-			messages=sdk_messages,
-			metadata=self.metadata_,
-		)

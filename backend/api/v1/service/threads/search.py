@@ -1,10 +1,8 @@
 """service helpers for threads and messages."""
 
-from __future__ import annotations
-
 import asyncio
 import logging
-from collections.abc import Coroutine, Sequence
+from collections.abc import Coroutine
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
@@ -14,38 +12,88 @@ from sqlalchemy.sql import Select
 
 from api.database.main import session_scope
 from api.models.access_rule import AccessLevel
-from api.models.message import MessageType
+from api.models.message import Message
+from api.models.project import Project
 from api.models.thread import Thread
 from api.models.thread_summary import SummaryPurpose
 from api.permissions import ResourceType
 from api.schemas.search import (
 	SearchMode,
 	SearchParams,
+	SearchResourceReferenceType,
+	SearchResultAnchor,
 	SearchResultItem,
 	SearchResultType,
 )
-from api.schemas.thread import ThreadSearchFilters, ThreadUpdate
-from api.v1.service import vectorstores as vectorstore_service
-from api.v1.service.auth import Principal
+from api.schemas.thread import (
+	ParticipantStatus,
+	ThreadSearchFilters,
+	ThreadUpdate,
+	participant_state_filters,
+)
+from api.settings import settings
+from api.v1.service.authentication import Principal
 from api.v1.service.authorization import (
 	fetch_bulk_acl_metadata,
 	resource_access_predicate,
 	vector_acl_filter,
 )
 from api.v1.service.embeddings import embed_text
-from api.v1.service.search.primitives import ScoredResult, merge_scored
+from api.v1.service.search.grouping import ResourceHitGroup, group_resource_hits
+from api.v1.service.search.primitives import ScoredResult, SearchHit, merge_scored
+from api.v1.service.threads.common import (
+	apply_participant_scope,
+	multi_writer_thread_ids,
+)
+from api.v1.service.threads.content_vectors import (
+	ANCHOR_MESSAGE_ID_KEY,
+	ENRICHMENT_KEY,
+	THREAD_CONTENT_RESOURCE_TYPE,
+)
 from api.v1.service.threads.summaries import latest_active_summary_text
+from api.v1.service.threads.tree import active_branch_message_ids, visible_message_ids
+from api.v1.service.threads.user_state import (
+	STATE_VECTOR_FIELDS,
+	apply_participant_state_filters,
+	thread_state_vector_metadata,
+)
 from api.v1.service.vectorize import (
 	VectorSpec,
+	filter_unvectorized,
 	vectorize_resources,
 )
-from api.v1.service.vectorstores import VectorChunkResourceType
+from api.v1.service.vectorstores import (
+	FieldCondition,
+	FieldMatch,
+	VectorChunkResourceType,
+	merge_filters,
+	search,
+)
+from nokodo_ai.adapters.base.vectorstores import ChunkFilter, ChunkSearchResult
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
+
+_VECTOR_OVERFETCH_FACTOR = 4
+_MESSAGE_AUTOCOMPLETE_OVERFETCH_FACTOR = 3
+_MAX_MATCHED_CHUNKS = 3
+_MATCHED_CHUNK_PREVIEW_CHARS = 500
+_SNIPPET_CHARS = 240
+"""width of the autocomplete match window."""
+
+_PASSAGE_PREVIEW_CHARS = 300
+"""width of the passage transcript preview."""
+
+
+def _message_anchor(message_id: str) -> SearchResultAnchor:
+	"""anchor focusing the message that produced a thread hit."""
+	return SearchResultAnchor(
+		type=SearchResourceReferenceType.MESSAGE,
+		id=TypeID(message_id),
+	)
 
 
 def _thread_dense_text(thread: Thread) -> str:
@@ -65,17 +113,16 @@ def _thread_dense_text(thread: Thread) -> str:
 
 
 def _thread_bm25_text(thread: Thread) -> str:
-	"""build sparse search text from dense fields plus visible message text."""
+	"""build sparse search text from dense fields plus tags.
+
+	message content is indexed separately as transcript passages
+	(thread_content chunks), not folded into the thread point.
+	"""
 	dense = _thread_dense_text(thread)
 	parts = [dense] if dense else []
-	if thread.messages:
-		msg_text = " ".join(
-			m.text_content
-			for m in thread.messages
-			if m.type in (MessageType.USER, MessageType.ASSISTANT) and m.text_content
-		)
-		if msg_text:
-			parts.append(msg_text)
+	tags = " ".join(tag for tag in (thread.tags or []) if tag)
+	if tags:
+		parts.append(tags)
 	return " ".join(parts).strip()
 
 
@@ -86,12 +133,13 @@ def _thread_metadata(thread: Thread) -> JSONObject:
 		"owner_id": str(thread.owner_id),
 		"title": thread.title or "",
 		"tags": list(thread.tags or []),
-		"is_archived": thread.is_archived,
 		"project_ids": [str(p.id) for p in (thread.projects or [])],
 		# acl fields - populated at vectorize time from access_rules table
 		"allowed_user_ids": [],
 		"allowed_group_ids": [],
 		"allowed_role_ids": [],
+		# per-user state - populated at vectorize time from participant rows
+		**{field: [] for field in STATE_VECTOR_FIELDS},
 	}
 
 
@@ -116,7 +164,7 @@ def thread_to_search_item(
 		summary = (thread.metadata_ or {}).get("summary")
 	return SearchResultItem(
 		type=SearchResultType.THREAD,
-		id=TypeID(thread.id),
+		id=thread.id,
 		title=thread.title or "",
 		preview=str(summary)[:100] if summary else None,
 		score=score,
@@ -136,28 +184,60 @@ THREAD_SPEC: VectorSpec[Thread] = VectorSpec(
 
 
 async def _vectorize_threads(threads: list[Thread], session: AsyncSession) -> int:
-	"""embed and upsert the given threads (with acl metadata). returns count."""
+	"""embed and upsert the given threads (with acl + state metadata)."""
 	thread_ids = [str(t.id) for t in threads]
 	if not thread_ids:
 		return 0
 	acl_by_id = await fetch_bulk_acl_metadata(thread_ids, ResourceType.THREAD, session)
+	state_by_id = await thread_state_vector_metadata(session, thread_ids)
+	extra_by_id = {
+		thread_id: {**acl_by_id.get(thread_id, {}), **state_by_id.get(thread_id, {})}
+		for thread_id in thread_ids
+	}
 	return await vectorize_resources(
 		spec=THREAD_SPEC,
 		resources=threads,
 		session=session,
-		extra_metadata_by_id=acl_by_id,
+		extra_metadata_by_id=extra_by_id,
 	)
 
 
-async def vectorize_threads(thread_ids: Sequence[TypeID], session: AsyncSession) -> int:
-	"""vectorize specific threads by id from their title.
-
-	intended for freshly imported threads that have no catalog summary yet:
-	the dense text is the title alone (the spec appends a summary only once
-	one exists), so only threads with a non-empty title are vectorized.
-	thread maintenance later generates a catalog summary and re-vectorizes
-	with richer text. returns count.
+async def vectorize_threads(
+	session: AsyncSession,
+	ids: list[TypeID] | None = None,
+) -> int:
+	"""vectorize thread points; ids=None means every non-deleted, non-temporary
+	thread. threads with an empty title are skipped when targeting ids (fresh
+	imports without a catalog summary have no dense text yet). returns count.
 	"""
+	if ids is not None and not ids:
+		return 0
+	stmt = (
+		select(Thread)
+		.where(
+			Thread.deleted_at.is_(None),
+			Thread.is_temporary.is_(False),
+		)
+		.options(
+			selectinload(Thread.messages),
+			selectinload(Thread.summaries),
+			selectinload(Thread.projects),
+		)
+	)
+	if ids is not None:
+		stmt = stmt.where(Thread.id.in_([str(tid) for tid in ids]))
+	result = await session.execute(stmt)
+	threads = list(result.scalars().unique().all())
+	if ids is not None:
+		threads = [th for th in threads if (th.title or "").strip()]
+	return await _vectorize_threads(threads, session)
+
+
+async def vectorize_stale_threads(
+	thread_ids: list[TypeID],
+	session: AsyncSession,
+) -> int:
+	"""re-vectorize the thread points whose stored vectors are stale. returns count."""
 	if not thread_ids:
 		return 0
 	stmt = (
@@ -175,50 +255,53 @@ async def vectorize_threads(thread_ids: Sequence[TypeID], session: AsyncSession)
 	)
 	result = await session.execute(stmt)
 	threads = [th for th in result.scalars().unique().all() if (th.title or "").strip()]
-	return await _vectorize_threads(threads, session)
+	pending = await filter_unvectorized(THREAD_SPEC, threads, session)
+	return await _vectorize_threads(pending, session)
 
 
-async def vectorize_all_threads(session: AsyncSession) -> int:
-	"""vectorize all non-deleted, non-temporary threads in bulk. returns count."""
-	stmt = (
-		select(Thread)
-		.where(
-			Thread.deleted_at.is_(None),
-			Thread.is_temporary.is_(False),
-		)
-		.options(
-			selectinload(Thread.messages),
-			selectinload(Thread.summaries),
-			selectinload(Thread.projects),
-		)
-	)
-	result = await session.execute(stmt)
-	return await _vectorize_threads(list(result.scalars().unique().all()), session)
+_STATE_VECTOR_KEYS: dict[ParticipantStatus, str] = {
+	"archived": "archived_by",
+	"muted": "muted_by",
+	"pinned": "pinned_by",
+	"invite_pending": "invite_pending_to",
+}
 
 
-def _thread_search_conditions(
-	filters: ThreadSearchFilters | None,
-) -> list[vectorstore_service.FieldCondition]:
-	"""vector-layer narrowing conditions derived from thread search filters."""
-	conditions: list[vectorstore_service.FieldCondition] = []
+def _thread_search_filter(filters: ThreadSearchFilters | None) -> ChunkFilter:
+	"""translate thread search filters into vector-layer conditions.
+
+	EVERY filter must be expressible here: the SQL pass that follows is a
+	redundant second layer, never the gate, so anything only enforceable in
+	SQL would silently truncate a page instead of narrowing it.
+	"""
 	if filters is None:
-		return conditions
+		return ChunkFilter()
+	required: list[FieldCondition] = []
+	excluded: list[FieldCondition] = []
 	if filters.owner_id is not None:
-		conditions.append(
-			vectorstore_service.FieldMatch(key="owner_id", value=str(filters.owner_id))
-		)
-	if filters.is_archived is not None:
-		conditions.append(
-			vectorstore_service.FieldMatch(key="is_archived", value=filters.is_archived)
-		)
-	return conditions
+		required.append(FieldMatch(key="owner_id", value=str(filters.owner_id)))
+	if filters.project_id is not None:
+		required.append(FieldMatch(key="project_ids", value=str(filters.project_id)))
+	for state, include_id, exclude_id in participant_state_filters(filters):
+		key = _STATE_VECTOR_KEYS[state]
+		if include_id is not None:
+			required.append(FieldMatch(key=key, value=str(include_id)))
+		if exclude_id is not None:
+			excluded.append(FieldMatch(key=key, value=str(exclude_id)))
+	return ChunkFilter(all_of=required, none_of=excluded)
 
 
 def _apply_thread_search_filters(
 	stmt: Select,
 	filters: ThreadSearchFilters | None,
+	principal: Principal,
 ) -> Select:
-	"""SQL-layer narrowing mirroring _thread_search_conditions."""
+	"""SQL mirror of ``_thread_search_filter``.
+
+	for the vector tier this is a redundant second layer (the vector filter is
+	the gate); for the pg_trgm autocomplete tier, which never touches the
+	vectorstore, it is the only layer - so both must stay in step.
+	"""
 	if filters is None:
 		return stmt.where(Thread.is_temporary.is_(False))
 	if not filters.include_hidden:
@@ -227,9 +310,10 @@ def _apply_thread_search_filters(
 		stmt = stmt.execution_options(include_deleted=True)
 	if filters.owner_id is not None:
 		stmt = stmt.where(Thread.owner_id == filters.owner_id)
-	if filters.is_archived is not None:
-		stmt = stmt.where(Thread.is_archived.is_(filters.is_archived))
-	return stmt
+	if filters.project_id is not None:
+		stmt = stmt.where(Thread.projects.any(Project.id == str(filters.project_id)))
+	stmt = apply_participant_scope(stmt, filters.participant_scope)
+	return apply_participant_state_filters(stmt, filters, principal)
 
 
 async def _autocomplete_threads(
@@ -261,9 +345,147 @@ async def _autocomplete_threads(
 		.offset(offset)
 		.limit(limit)
 	)
-	stmt = _apply_thread_search_filters(stmt, filters)
+	stmt = _apply_thread_search_filters(stmt, filters, principal)
 	result = await db.execute(stmt)
 	return [ScoredResult(item=t, score=float(s)) for t, s in result.unique().all()]
+
+
+async def _autocomplete_messages(
+	q: str,
+	db: AsyncSession,
+	principal: Principal,
+	limit: int = 5,
+	offset: int = 0,
+	filters: ThreadSearchFilters | None = None,
+) -> list[ScoredResult[Thread]]:
+	"""pg_trgm autocomplete tier over message text, one hit per thread.
+
+	word_similarity scores the best-matching extent inside long messages.
+	hits off the active branch are filtered out; results carry the matched
+	message id as a jump-to anchor.
+	"""
+	pattern = contains_pattern(q)
+	sim = func.word_similarity(q, Message.search_text)
+	fetch = max(limit, limit * _MESSAGE_AUTOCOMPLETE_OVERFETCH_FACTOR)
+	stmt = (
+		select(Message.id, Message.thread_id, Message.search_text, sim.label("sim"))
+		.join(Thread, Thread.id == Message.thread_id)
+		.where(
+			resource_access_predicate(
+				principal,
+				ResourceType.THREAD,
+				required_level=AccessLevel.READER,
+			),
+			Message.search_text.is_not(None),
+			or_(
+				sim > 0.1,
+				Message.search_text.ilike(pattern, escape="\\"),
+			),
+		)
+		.order_by(sim.desc())
+		.offset(offset)
+		.limit(fetch)
+	)
+	stmt = _apply_thread_search_filters(stmt, filters, principal)
+	rows = (await db.execute(stmt)).all()
+	if not rows:
+		return []
+	include_all = bool(filters and filters.include_all_branches)
+	thread_ids = list(dict.fromkeys(str(thread_id) for _, thread_id, _, _ in rows))
+	active: dict[str, set[str]] = {}
+	shared_visible: dict[str, set[str]] = {}
+	if include_all:
+		shared_visible = await _shared_thread_visible_ids(db, thread_ids)
+	else:
+		active = await active_branch_message_ids(db, thread_ids)
+	best: dict[str, tuple[str, float, str]] = {}
+	for message_id, thread_id, text, score in rows:
+		tid = str(thread_id)
+		mid = str(message_id)
+		if not _hit_is_visible(tid, mid, include_all, active, shared_visible):
+			continue
+		if tid not in best:
+			# window around the match, biased to keep some leading context
+			content = text or ""
+			match_at = content.lower().find(q.lower())
+			start = max(match_at - _SNIPPET_CHARS // 3, 0) if match_at >= 0 else 0
+			best[tid] = (mid, float(score), content[start : start + _SNIPPET_CHARS])
+	if not best:
+		return []
+	stmt = (
+		select(Thread)
+		.options(selectinload(Thread.messages), selectinload(Thread.summaries))
+		.where(Thread.id.in_(list(best.keys())))
+	)
+	stmt = _apply_thread_search_filters(stmt, filters, principal)
+	by_id = {str(t.id): t for t in (await db.execute(stmt)).scalars().unique().all()}
+	scored: list[ScoredResult[Thread]] = []
+	for tid, (mid, score, snippet) in best.items():
+		thread = by_id.get(tid)
+		if thread is None:
+			continue
+		hit = SearchHit(anchor=_message_anchor(mid), preview=snippet)
+		scored.append(ScoredResult(item=thread, score=score, hit=hit))
+		if len(scored) >= limit:
+			break
+	return scored
+
+
+def _thread_id_for_hit(hit: ChunkSearchResult) -> str | None:
+	"""resolve the thread id represented by a thread or thread_content hit."""
+	if hit.metadata.get("resource_type") == THREAD_CONTENT_RESOURCE_TYPE.value:
+		parent_id = hit.metadata.get("parent_resource_id")
+		return parent_id if isinstance(parent_id, str) else None
+	resource_id = hit.metadata.get("resource_id")
+	return resource_id if isinstance(resource_id, str) else None
+
+
+def _hit_anchor_message_id(hit: ChunkSearchResult) -> str | None:
+	anchor = hit.metadata.get(ANCHOR_MESSAGE_ID_KEY)
+	return anchor if isinstance(anchor, str) else None
+
+
+async def _shared_thread_visible_ids(
+	db: AsyncSession,
+	thread_ids: list[str],
+) -> dict[str, set[str]]:
+	"""readable message ids per multi-writer thread, for the all-branches path.
+
+	``include_all_branches`` reaches abandoned branches, which in a shared
+	thread were never part of the conversation. solo threads are absent from
+	the map and stay unrestricted.
+	"""
+	shared = await multi_writer_thread_ids(db, thread_ids)
+	if not shared:
+		return {}
+	return await visible_message_ids(db, sorted(shared))
+
+
+def _hit_is_visible(
+	thread_id: str,
+	message_id: str,
+	include_all: bool,
+	active: dict[str, set[str]],
+	shared_visible: dict[str, set[str]],
+) -> bool:
+	"""whether a message hit may surface for the current branch filter."""
+	if not include_all:
+		return message_id in active.get(thread_id, set())
+	readable = shared_visible.get(thread_id)
+	return readable is None or message_id in readable
+
+
+def _valid_group_hits(
+	group: ResourceHitGroup,
+	readable_ids: set[str],
+) -> list[ChunkSearchResult]:
+	"""keep thread-point hits plus passage hits anchored on a readable message."""
+	valid: list[ChunkSearchResult] = []
+	for hit in group.hits:
+		anchor = _hit_anchor_message_id(hit)
+		if anchor is None or anchor in readable_ids:
+			valid.append(hit)
+	return valid
 
 
 async def _hybrid_search_threads(
@@ -275,7 +497,12 @@ async def _hybrid_search_threads(
 	query_embedding: list[float] | None = None,
 	filters: ThreadSearchFilters | None = None,
 ) -> list[ScoredResult[Thread]]:
-	"""qdrant hybrid tier (dense + BM25), scored by fused rank."""
+	"""qdrant hybrid tier (dense + BM25) over thread points and passages.
+
+	thread metadata points and transcript passage chunks are searched in one
+	query, folded to one result per thread, filtered to the active branch,
+	and anchored to the best matching message.
+	"""
 	params = search_params or SearchParams()
 	need_dense = params.mode in (SearchMode.DENSE, SearchMode.HYBRID, SearchMode.FULL)
 	need_sparse = params.mode in (SearchMode.SPARSE, SearchMode.HYBRID, SearchMode.FULL)
@@ -289,27 +516,42 @@ async def _hybrid_search_threads(
 		)
 	)
 	text_query = query_text if need_sparse else None
-	query_filter = vectorstore_service.with_conditions(
-		vector_acl_filter([VectorChunkResourceType.THREAD], principal),
-		_thread_search_conditions(filters),
+	searched_types = [VectorChunkResourceType.THREAD]
+	if settings.assets.thread_passages.enabled:
+		searched_types.append(THREAD_CONTENT_RESOURCE_TYPE)
+	query_filter = merge_filters(
+		vector_acl_filter(searched_types, principal),
+		_thread_search_filter(filters),
 	)
-	results = await vectorstore_service.search(
+	vector_limit = max(limit, limit * _VECTOR_OVERFETCH_FACTOR)
+	results = await search(
 		session=db,
 		query=query_emb,
 		text_query=text_query,
-		limit=limit,
+		limit=vector_limit,
 		query_filter=query_filter,
 		normalize=params.normalize,
-		group_by="resource_id",
 	)
 	if not results:
 		return []
-	resource_ids = [r.metadata["resource_id"] for r in results]
+	groups = group_resource_hits(results, _thread_id_for_hit)
+	include_all = bool(filters and filters.include_all_branches)
+	passage_thread_ids = [
+		tid
+		for tid, group in groups.items()
+		if any(_hit_anchor_message_id(hit) is not None for hit in group.hits)
+	]
+	active: dict[str, set[str]] = {}
+	shared_visible: dict[str, set[str]] = {}
+	if include_all:
+		shared_visible = await _shared_thread_visible_ids(db, passage_thread_ids)
+	else:
+		active = await active_branch_message_ids(db, passage_thread_ids)
 	stmt = (
 		select(Thread)
 		.options(selectinload(Thread.messages), selectinload(Thread.summaries))
 		.where(
-			Thread.id.in_(resource_ids),
+			Thread.id.in_(list(groups.keys())),
 			resource_access_predicate(
 				principal,
 				ResourceType.THREAD,
@@ -317,15 +559,54 @@ async def _hybrid_search_threads(
 			),
 		)
 	)
-	stmt = _apply_thread_search_filters(stmt, filters)
+	stmt = _apply_thread_search_filters(stmt, filters, principal)
 	db_result = await db.execute(stmt)
 	by_id = {str(t.id): t for t in db_result.scalars().unique().all()}
 	scored: list[ScoredResult[Thread]] = []
-	for r in results:
-		thread = by_id.get(str(r.metadata["resource_id"]))
+	for tid, group in groups.items():
+		thread = by_id.get(tid)
 		if thread is None:
 			continue
-		scored.append(ScoredResult(item=thread, score=r.score))
+		if include_all:
+			readable = shared_visible.get(tid)
+			valid = (
+				list(group.hits)
+				if readable is None
+				else _valid_group_hits(group, readable)
+			)
+		else:
+			valid = _valid_group_hits(group, active.get(tid, set()))
+		if not valid:
+			continue
+		best = max(valid, key=lambda hit: hit.score)
+		anchor_hit = best if _hit_anchor_message_id(best) is not None else None
+		if anchor_hit is None:
+			passage_hits = [
+				hit for hit in valid if _hit_anchor_message_id(hit) is not None
+			]
+			if passage_hits:
+				anchor_hit = max(passage_hits, key=lambda hit: hit.score)
+		valid_group = ResourceHitGroup(resource_id=tid, hits=valid)
+		matched_chunks = valid_group.matched_chunks(
+			_MAX_MATCHED_CHUNKS, _MATCHED_CHUNK_PREVIEW_CHARS
+		)
+		anchor = _hit_anchor_message_id(anchor_hit) if anchor_hit is not None else None
+		preview: str | None = None
+		if anchor_hit is not None and anchor is not None:
+			# preview the transcript, not the enrichment blurb prefixed onto it
+			transcript = anchor_hit.content
+			blurb = anchor_hit.metadata.get(ENRICHMENT_KEY)
+			if isinstance(blurb, str) and blurb and transcript.startswith(blurb):
+				transcript = transcript[len(blurb) :].lstrip()
+			preview = transcript[:_PASSAGE_PREVIEW_CHARS]
+		hit = SearchHit(
+			anchor=_message_anchor(anchor) if anchor is not None else None,
+			preview=preview,
+			matched_chunks=matched_chunks,
+		)
+		scored.append(ScoredResult(item=thread, score=best.score, hit=hit))
+		if len(scored) >= limit:
+			break
 	return scored
 
 
@@ -346,18 +627,20 @@ async def search_threads(
 	"""
 	params = search_params or SearchParams()
 	if filters and (filters.include_deleted or filters.include_hidden):
-		if not principal.is_admin:
+		if not principal.user.is_superuser:
 			raise HTTPException(
 				status_code=status.HTTP_403_FORBIDDEN,
 				detail="forbidden",
 			)
 		if params.mode != SearchMode.AUTOCOMPLETE:
 			raise HTTPException(
-				status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+				status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 				detail="include_deleted/include_hidden requires autocomplete mode",
 			)
 	if params.mode == SearchMode.AUTOCOMPLETE:
-		return await _autocomplete_threads(
+		# sequential on purpose: both tiers share the caller's session and
+		# AsyncSession forbids concurrent operations.
+		title_hits = await _autocomplete_threads(
 			query_text,
 			db,
 			principal=principal,
@@ -365,6 +648,15 @@ async def search_threads(
 			offset=offset,
 			filters=filters,
 		)
+		message_hits = await _autocomplete_messages(
+			query_text,
+			db,
+			principal=principal,
+			limit=limit,
+			offset=offset,
+			filters=filters,
+		)
+		return merge_scored([title_hits, message_hits], resource_name="threads")[:limit]
 	fetch = offset + limit
 	coros: list[Coroutine[None, None, list[ScoredResult[Thread]]]] = []
 	run_autocomplete = params.mode in (
@@ -396,10 +688,17 @@ async def search_threads(
 				query_text, s, principal=principal, limit=fetch, filters=filters
 			)
 
+	async def _run_autocomplete_messages() -> list[ScoredResult[Thread]]:
+		async with session_scope(None) as s:
+			return await _autocomplete_messages(
+				query_text, s, principal=principal, limit=fetch, filters=filters
+			)
+
 	if run_hybrid:
 		coros.append(_run_hybrid())
 	if run_autocomplete:
 		coros.append(_run_autocomplete())
+		coros.append(_run_autocomplete_messages())
 	results = await asyncio.gather(*coros, return_exceptions=True)
 	merged = merge_scored(results, resource_name="threads")
 	if score_threshold > 0.0:
