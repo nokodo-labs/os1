@@ -25,7 +25,7 @@ from api.settings import settings
 from ._utils import get_client_ip, get_header
 
 
-_EXEMPT_PATHS = frozenset({"/health", "/", "/v1/docs", "/v1/redoc", "/v1/openapi.json"})
+_EXEMPT_PATHS = frozenset({"/health", "/", "/docs", "/redoc", "/openapi.json"})
 
 # methods that do not count (preflight / metadata)
 _EXEMPT_METHODS = frozenset({"OPTIONS", "HEAD"})

@@ -1,21 +1,21 @@
-# End-to-End Tests
+# end-to-end tests
 
-Integration tests that span the full stack: API → SDK → Database.
+integration tests that span the full stack: API → SDK → database.
 
-## Purpose
+## purpose
 
--   Test complete user workflows
--   Verify API and SDK integration
--   Test with real database connections
--   Validate production-like scenarios
+- test complete user workflows
+- verify API and SDK integration
+- test with real database connections
+- validate production-like scenarios
 
-## Running
+## running
 
 ```bash
-# Run E2E tests
+# run E2E tests
 pytest tests/
 
-# With coverage for entire backend
+# with coverage for entire backend
 pytest tests/ --cov=api --cov=project_name
 ```
 
@@ -23,7 +23,7 @@ pytest tests/ --cov=api --cov=project_name
 
 Place tests here that require both the API layer and SDK layer working together. These tests typically:
 
--   Make HTTP requests to endpoints
--   Verify database state changes
--   Test multi-step workflows
--   Use the full application stack
+- Make HTTP requests to endpoints
+- Verify database state changes
+- Test multi-step workflows
+- Use the full application stack

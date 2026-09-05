@@ -1,7 +1,5 @@
 """OpenAPI utilities and shared response metadata."""
 
-from __future__ import annotations
-
 from api.schemas.errors import ProblemDetails, ValidationProblemDetails
 
 

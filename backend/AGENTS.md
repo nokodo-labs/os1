@@ -40,41 +40,51 @@ backend/
 │   ├── redis/                   # Redis client, pub/sub, cache, cache invalidation
 │   ├── routers/                 # top-level/system routers
 │   ├── schemas/                 # shared Pydantic schemas and API DTOs (one file per domain)
+│   ├── service/                 # app-level services (pwa_manifest, web_assets)
 │   ├── settings/                # settings models + DB/env loading
 │   ├── storage/                 # storage backends (local/s3)
 │   ├── tasks/                   # top-level TaskIQ task registry
 │   ├── tests/                   # API/service/unit coverage for backend package
 │   └── v1/                      # versioned API composition
 │       ├── router.py            # v1 router mount
-│       ├── routers/             # v1 route handlers (one file per domain) + integrations/
+│       ├── routers/             # v1 route handlers (one file per domain)
+│       │   └── integrations/    # integration routers (mcp, open_webui)
 │       ├── schemas/             # v1-only schemas (auth, settings, web_search)
 │       ├── service/             # v1 service layer
 │       │   ├── chat/            # AI chat orchestration
-│       │   │   ├── run_bus.py   # cross-worker run SSE bus (Redis pub/sub + catchup log)
 │       │   │   ├── models.py    # chat model resolution + JSON schema calls
 │       │   │   ├── tools/       # chat tool implementations + registry
-│       │   │   ├── hooks/       # post-execution hooks
-│       │   │   ├── filters/     # pre-execution filters (context injection, windowing, citations, etc.)
-│       │   │   └── ...          # agents, context, steering, summarization, windowing, etc.
-│       │   ├── threads/         # thread CRUD, messages, participants, summaries, search, maintenance
-│       │   ├── calendar/        # calendar + event management, recurrence, search, cache
-│       │   ├── reminders/       # reminder CRUD, lists, search, cache
+│       │   │   ├── hooks/       # post-execution hooks (memory post-processing)
+│       │   │   ├── filters/     # pre-execution filters (context, attachments, citations, memory, steering, etc.)
+│       │   │   ├── context_compaction/  # context budgets, pruning, summarization, tool i/o trimming
+│       │   │   └── ...          # agents, context, steering, messages, message_metadata/references,
+│       │   ├── runs/            # run lifecycle, output, steering, cross-worker routing, access reconciliation
+│       │   ├── threads/         # thread CRUD (core), messages, participants, summaries, search, maintenance
+│       │   ├── calendar/        # calendars, events, recurrence, search, cache
+│       │   ├── reminders/       # reminder CRUD (core), lists, search, cache
 │       │   ├── scheduling/      # recurrence rule helpers
 │       │   ├── web_search/      # agentic web search, loaders, progress tracking
 │       │   ├── media/           # media generation (images, video, audio)
-│       │   ├── integrations/    # third-party integration services (open_webui)
+│       │   ├── files/           # file processing, vectorization, modalities, search, message links
+│       │   ├── prompts/         # prompt CRUD (core/service), runtime, external, cache
+│       │   ├── search/          # cross-resource search aggregator, grouping, primitives
 │       │   ├── social/          # friendship, privacy, visibility helpers
+│       │   ├── authorization/   # access-rule resolution, inheritance, predicates, cache
+│       │   ├── integrations/    # third-party integration services (mcp/, open_webui/)
 │       │   ├── event_bus.py     # cross-process WebSocket fanout relay (Redis pub/sub)
 │       │   ├── task_bus.py      # cross-worker task SSE bus (Redis pub/sub)
 │       │   ├── collaborative_documents.py  # CRDT-based collaborative doc editing
+│       │   ├── document_sessions.py        # collaborative document session tracking
 │       │   ├── listing.py       # shared list-endpoint filtering + sorting helpers
 │       │   ├── resource_payload_cache.py   # per-resource Redis payload cache
-│       │   └── ...              # auth, events, files, friends, groups, memories, models, notes,
-│       │                        #   notifications, plugins, projects, prompts, providers, roles,
-│       │                        #   runs, search, settings, tasks, users, vectorstores, web_push, ...
-│       └── tasks/               # v1 TaskIQ task modules (calendar, reminders, threads, open_webui)
+│       │   └── ...              # access_rules, agents, auth, blocks, embeddings, events, friends,
+│       │                        #   groups, memories, models, notes, notifications, plugins, projects,
+│       │                        #   providers, roles, runs, scheduled_items, settings, tasks, users,
+│       │                        #   user_activity, user_clients, vectorize, vectorstores, web_push
+│       └── tasks/               # v1 TaskIQ task modules (calendar, reminders, threads, files, open_webui)
 ├── nokodo_ai/                   # standalone SDK/runtime library
-│   ├── adapters/                # provider adapters (openai, anthropic, google, ollama, qdrant) + base/
+│   ├── adapters/                # provider adapters + base/ (openai, anthropic, google, ollama, qdrant,
+│   │                            #   voyageai, markitdown, nokodo_ai)
 │   ├── agents.py                # agent orchestration
 │   ├── chat_models.py           # chat model abstractions
 │   ├── messages.py              # message domain primitives
@@ -83,7 +93,8 @@ backend/
 │   ├── filters.py               # filter pipeline interfaces
 │   ├── hooks.py                 # hook pipeline interfaces
 │   ├── deltas.py                # streaming delta primitives
-│   ├── ...                      # audio/image/video models, embeddings, vectorstores, context, token_estimation
+│   ├── ...                      # audio/image/video models, embeddings, chunkers, loaders,
+│   │                            #   vectorstores, context, token_estimation
 │   ├── types/                   # SDK type helpers
 │   ├── utils/                   # SDK utilities (typeid, sse, tokens, security, vectors, etc.)
 │   └── tests/                   # SDK unit tests
@@ -115,6 +126,8 @@ to run backend tests manually instead:
 
 1.  follow the steps in `to run backend` above to ensure correct environment setup.
 2.  run `uv run pytest` from within the `backend/` directory.
+
+pytest natively rejects overlapping controller sessions in the same checkout via `tests/session_lock.py`; xdist workers remain allowed. run pytest normally without a separate process check or external lock.
 
 ### to run type checks:
 

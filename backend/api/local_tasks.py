@@ -10,8 +10,6 @@ TaskIQ execution is explicit and lives in durable task modules. arbitrary
 coroutine helpers stay local because they are not serializable worker jobs.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from collections.abc import Coroutine
@@ -28,33 +26,15 @@ def create_background_task[T](
 	coro: Coroutine[object, object, T],
 	name: str,
 ) -> asyncio.Task[T]:
-	"""create and track an asyncio background task.
+	"""create and track an in-process asyncio background task.
 
-	the task is held by a module-level strong reference set so it
-	will not be garbage-collected before completion. exceptions are
-	logged automatically via a done callback.
+	always local: the task shares this process's state (the run status store,
+	SSE producers its own subscribers consume) and never reaches a remote
+	worker, which is what makes it safe for work a TaskIQ job could not do.
 
-	args:
-		coro: the coroutine to schedule.
-		name: human-readable label for log messages.
-
-	returns:
-		the created asyncio.Task.
-	"""
-	return _spawn_local(coro, name=name)
-
-
-def create_inline_background_task[T](
-	coro: Coroutine[object, object, T],
-	name: str,
-) -> asyncio.Task[T]:
-	"""create an in-process background task that is guaranteed never to be
-	routed to a remote worker.
-
-	use this for work that must share in-process state with the caller
-	(e.g. publishing into the local run_status_store, driving SSE producers
-	that subscribers in the same process consume) or that must stay snappy
-	(no broker hop, no serialization).
+	the task is held by a module-level strong reference set so it will not be
+	garbage-collected before completion. exceptions are logged automatically
+	via a done callback.
 
 	args:
 		coro: the coroutine to schedule.
@@ -63,17 +43,40 @@ def create_inline_background_task[T](
 	returns:
 		the created asyncio.Task.
 	"""
-	return _spawn_local(coro, name=name)
-
-
-def _spawn_local[T](
-	coro: Coroutine[object, object, T],
-	name: str,
-) -> asyncio.Task[T]:
 	task = asyncio.create_task(coro, name=name)
 	_background_tasks.add(task)
 	task.add_done_callback(lambda t: _on_task_done(t, name))
 	return task
+
+
+async def drain_background_tasks(
+	name_prefix: str | None = None,
+	timeout: float = 30.0,
+) -> None:
+	"""wait for in-flight background tasks to finish.
+
+	fire-and-forget work still has to land before a process stops accepting
+	it, so shutdown (and anything else that must observe the result) waits
+	here rather than assuming the loop got around to it.
+	"""
+	deadline = asyncio.get_running_loop().time() + timeout
+	while True:
+		pending = {
+			task
+			for task in _background_tasks
+			if name_prefix is None or (task.get_name() or "").startswith(name_prefix)
+		}
+		if not pending:
+			return
+		remaining = deadline - asyncio.get_running_loop().time()
+		if remaining <= 0:
+			logger.warning(
+				"background tasks still running after %ss: %s",
+				timeout,
+				sorted(task.get_name() for task in pending),
+			)
+			return
+		await asyncio.wait(pending, timeout=remaining)
 
 
 def _on_task_done(task: asyncio.Task[object], name: str) -> None:

@@ -1,7 +1,5 @@
 """exception handlers for fastapi application."""
 
-from __future__ import annotations
-
 from http import HTTPStatus
 
 from fastapi import HTTPException, Request

@@ -4,8 +4,8 @@ this directory is for application data storage.
 
 ## contents
 
--   `htmlcov/` - test coverage reports
--   `.coverage` - coverage data file
+- `htmlcov/` - test coverage reports
+- `.coverage` - coverage data file
 
 ## usage
 
@@ -23,20 +23,20 @@ DATA_DIR = Path("/app/data")
 content = (DATA_DIR / "input.txt").read_text()
 ```
 
-## Docker Volume
+## Docker volume
 
-This directory is mounted in `docker-compose.yml`:
+this directory is mounted in `docker-compose.yml`:
 
 ```yaml
 volumes:
     - ../backend/data:/app/data
 ```
 
-Files persist across container restarts.
+files persist across container restarts.
 
 ## .gitignore
 
-Add to `.gitignore` to exclude data files:
+add to `.gitignore` to exclude data files:
 
 ```
 backend/data/*

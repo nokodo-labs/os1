@@ -4,8 +4,6 @@ these settings are loaded from env + .env only and are intended for values that
 require a server restart to take effect.
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 from pydantic import Field, field_validator
@@ -35,7 +33,11 @@ class BootSettings(BaseSettings):
 	)
 
 	@field_validator(
-		"DEBUG", "JSON_LOGS", "TESTING", "BRANCHING_MIGRATIONS", mode="before"
+		"DEBUG",
+		"JSON_LOGS",
+		"TESTING",
+		"BRANCHING_MIGRATIONS",
+		mode="before",
 	)
 	@classmethod
 	def coerce_bool(cls, v: object) -> bool:
