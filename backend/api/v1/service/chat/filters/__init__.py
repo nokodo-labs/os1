@@ -1,8 +1,9 @@
 """chat filters package - registry + resolution for sdk filters."""
 
-from __future__ import annotations
-
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.filters.agent_view_translation import (
+	AgentViewTranslationFilter,
+)
 from api.v1.service.chat.filters.attachments import AttachmentsFilter
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.filters.chat_context import ChatContextFilter
@@ -10,9 +11,8 @@ from api.v1.service.chat.filters.citation_index import CitationIndexFilter
 from api.v1.service.chat.filters.context_compaction import ContextCompactionFilter
 from api.v1.service.chat.filters.file_resolve import FileResolveFilter
 from api.v1.service.chat.filters.memory import MemoryContextFilter
-from api.v1.service.chat.filters.user_message_timestamp import (
-	UserMessageTimestampFilter,
-)
+from api.v1.service.chat.filters.message_event import MessageEventFilter
+from api.v1.service.chat.filters.user_message import UserMessageFilter
 from nokodo_ai.filters import Filter as SDKFilter
 
 
@@ -22,8 +22,10 @@ type AppFilter = SDKFilter[AppContext]
 FILTER_REGISTRY: dict[str, AppFilter] = {
 	"memory_context": MemoryContextFilter(),
 	"chat_context": ChatContextFilter(),
+	"agent_view_translation": AgentViewTranslationFilter(),
 	"attachments": AttachmentsFilter(),
-	"user_message_timestamp": UserMessageTimestampFilter(),
+	"user_message": UserMessageFilter(),
+	"message_event": MessageEventFilter(),
 	"file_resolve": FileResolveFilter(),
 	"citation_index": CitationIndexFilter(),
 	"context_compaction": ContextCompactionFilter(),
@@ -47,6 +49,7 @@ def resolve_filters(filter_ids: list[str]) -> list[AppFilter]:
 
 
 __all__ = [
+	"AgentViewTranslationFilter",
 	"AttachmentsFilter",
 	"ChatContextFilter",
 	"CitationIndexFilter",
@@ -54,7 +57,8 @@ __all__ = [
 	"FileResolveFilter",
 	"Filter",
 	"MemoryContextFilter",
-	"UserMessageTimestampFilter",
+	"MessageEventFilter",
+	"UserMessageFilter",
 	"FILTER_REGISTRY",
 	"get_registered_names",
 	"resolve_filters",

@@ -14,8 +14,6 @@ media projection lives in ``context_compaction.media``; reference hydration
 is handled inline in this module. this filter performs the I/O and wiring.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from collections.abc import Sequence
@@ -27,20 +25,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.thread_summary import SummaryPurpose
 from api.settings import settings as app_settings
-from api.v1.service.auth import Principal
-from api.v1.service.calendar.calendars import get_calendar
-from api.v1.service.calendar.events import get_calendar_event
+from api.v1.service.authentication import Principal
+from api.v1.service.calendar import get_calendar, get_calendar_event
 from api.v1.service.chat.context_compaction.media import project_attachments
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.message_metadata import ATTACHMENTS_KEY
 from api.v1.service.chat.models import fetch_agent_input_modalities
+from api.v1.service.files import get_file
 from api.v1.service.files.modalities import classify_media, modality_supported
-from api.v1.service.files.service import get_file
 from api.v1.service.notes import get_note
 from api.v1.service.projects import get_project
-from api.v1.service.reminders.core import get_reminder
-from api.v1.service.reminders.lists import get_reminder_list
-from api.v1.service.threads.core import get_thread
+from api.v1.service.reminders import get_reminder, get_reminder_list
+from api.v1.service.threads import get_thread
 from api.v1.service.threads.summaries import list_thread_summaries
 from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
@@ -331,7 +327,7 @@ class AttachmentsFilter(Filter):
 		default="native media projection and attachment-reference rendering"
 	)
 
-	async def process(
+	async def run(
 		self,
 		state: AgentIterationState[AppContext],
 		agent_context: AgentContext,

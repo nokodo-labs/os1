@@ -8,8 +8,6 @@ that actually survives into the model context (active tool-message media).
 delegates actual file data resolution to the file service.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import TYPE_CHECKING
 
@@ -32,7 +30,7 @@ from nokodo_ai.utils.typeid import TypeID
 if TYPE_CHECKING:
 	from sqlalchemy.ext.asyncio import AsyncSession
 
-	from api.v1.service.auth import Principal
+	from api.v1.service.authentication import Principal
 	from api.v1.service.chat.context import AppContext
 
 log = logging.getLogger(__name__)
@@ -75,7 +73,7 @@ class FileResolveFilter(Filter):
 		)
 	)
 
-	async def process(
+	async def run(
 		self,
 		state: AgentIterationState[AppContext],
 		agent_context: AgentContext,

@@ -1,7 +1,5 @@
 """agent-context summarization helpers for context compaction."""
 
-from __future__ import annotations
-
 import json
 import logging
 from collections.abc import Sequence
@@ -15,7 +13,6 @@ from api.database import session_scope
 from api.models.thread import Thread
 from api.models.thread_summary import SummaryPurpose, ThreadSummary
 from api.settings import settings
-from api.v1.service import threads as thread_service
 from api.v1.service.chat.context_compaction.budgets import (
 	estimate_compaction_message_tokens,
 )
@@ -27,7 +24,13 @@ from api.v1.service.chat.models import (
 	run_chat_model_json_schema,
 )
 from api.v1.service.prompts import SENTINEL_CHAT_WINDOW_INFO
-from api.v1.service.threads import summaries as summary_service
+from api.v1.service.threads import walk_message_branch
+from api.v1.service.threads.summaries import (
+	SUMMARY_COVERED_RAW_IDS_METADATA_KEY,
+	create_summary,
+	list_active_summaries,
+	supersede_summaries,
+)
 from nokodo_ai.adapters.chat import GenerationBadRequestError
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
 from nokodo_ai.messages import Message as SDKMessage
@@ -47,9 +50,7 @@ from nokodo_ai.utils.typeid import TypeID, is_typeid
 
 logger = logging.getLogger(__name__)
 SUMMARY_MESSAGE_METADATA_KEY = "_context_summary_id"
-SUMMARY_COVERED_RAW_IDS_METADATA_KEY = (
-	summary_service.SUMMARY_COVERED_RAW_IDS_METADATA_KEY
-)
+"""SDK metadata key; persisted as ``context_summary_id`` in the private namespace."""
 SUMMARY_PREDECESSOR_IDS_METADATA_KEY = "predecessor_summary_ids"
 SUMMARY_BRANCH_HEAD_METADATA_KEY = "branch_head_message_id"
 
@@ -694,10 +695,13 @@ async def summarize_messages(
 
 		try:
 			chat_model = await resolve_task_chat_model(session, "summarization")
+			summarization_prompt = settings.ai.tasks.summarization_prompt
+			if summarization_prompt is None:
+				summarization_prompt = _SUMMARIZE_PROMPT
 			sdk_thread = SDKThread(
 				messages=[
 					SDKSystemMessage.from_text(
-						f"{_SUMMARIZE_PROMPT}\n\n"
+						f"{summarization_prompt}\n\n"
 						f"summary must be {max_summary_chars} characters or fewer."
 					),
 					SDKUserMessage.from_text(transcript),
@@ -738,7 +742,7 @@ async def summarize_messages(
 			)
 			content = _placeholder_summary(messages, max_chars=max_summary_chars)
 
-		summary = await summary_service.create_summary(
+		summary = await create_summary(
 			thread_id=thread_id,
 			purpose=SummaryPurpose.AGENT_CONTEXT,
 			content=content,
@@ -755,7 +759,7 @@ async def summarize_messages(
 		predecessor_ids = summary.metadata_.get(SUMMARY_PREDECESSOR_IDS_METADATA_KEY)
 		parsed_predecessor_ids = _summary_typeids_from_metadata(predecessor_ids)
 		if parsed_predecessor_ids:
-			await summary_service.supersede_summaries(
+			await supersede_summaries(
 				parsed_predecessor_ids,
 				summary.id,
 				session,
@@ -787,7 +791,11 @@ async def summarize_thread_message_range(
 				branch_head_message_id
 			):
 				raise SummaryRangeStaleError("summary branch head is stale")
-		branch = await thread_service.walk_message_branch(session, branch_leaf_id)
+		branch = await walk_message_branch(
+			session,
+			thread_id,
+			branch_leaf_id,
+		)
 		ids = [str(message.id) for message in branch]
 		try:
 			start_index = ids.index(str(start_message_id))
@@ -842,7 +850,7 @@ async def condense_summaries(
 				expected_branch_head_message_id
 			):
 				raise SummaryRangeStaleError("condensation branch head is stale")
-		existing = await summary_service.list_active_summaries(
+		existing = await list_active_summaries(
 			thread_id,
 			session,
 			purpose=SummaryPurpose.AGENT_CONTEXT,
@@ -934,10 +942,13 @@ async def condense_summaries(
 		)
 		try:
 			chat_model = await resolve_task_chat_model(session, "summarization")
+			condensation_prompt = settings.ai.tasks.summary_condensation_prompt
+			if condensation_prompt is None:
+				condensation_prompt = _CONDENSE_PROMPT
 			sdk_thread = SDKThread(
 				messages=[
 					SDKSystemMessage.from_text(
-						f"{_CONDENSE_PROMPT}\n\n"
+						f"{condensation_prompt}\n\n"
 						f"summary must be {max_summary_chars} characters or fewer."
 					),
 					SDKUserMessage.from_text(combined),
@@ -995,7 +1006,7 @@ async def condense_summaries(
 			str(last_end) if last_end else None
 		)
 
-		condensed = await summary_service.create_summary(
+		condensed = await create_summary(
 			thread_id=thread_id,
 			purpose=SummaryPurpose.AGENT_CONTEXT,
 			content=content,
@@ -1007,7 +1018,7 @@ async def condense_summaries(
 		)
 
 		old_ids = [summary.id for summary in existing]
-		await summary_service.supersede_summaries(
+		await supersede_summaries(
 			old_ids,
 			condensed.id,
 			session,

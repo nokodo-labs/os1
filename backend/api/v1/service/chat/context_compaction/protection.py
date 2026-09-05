@@ -1,7 +1,5 @@
 """message protection helpers for context compaction."""
 
-from __future__ import annotations
-
 from api.v1.service.chat.context_compaction.media import (
 	MEDIA_PROTECTED_METADATA_KEY,
 )

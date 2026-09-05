@@ -1,7 +1,5 @@
 """context compaction orchestration."""
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from collections.abc import Sequence
@@ -44,7 +42,7 @@ from api.v1.service.chat.context_compaction.types import (
 	ContextCompactionTriggerReason,
 )
 from api.v1.service.chat.message_metadata import get_message_id
-from api.v1.service.threads import summaries as summary_service
+from api.v1.service.threads.summaries import list_active_summaries
 from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.threads import Thread as SDKThread
@@ -157,7 +155,7 @@ async def apply_context_compaction(
 		"""load active agent-context summaries once per compaction run."""
 		nonlocal summaries_cache
 		if summaries_cache is None:
-			summaries_cache = await summary_service.list_active_summaries(
+			summaries_cache = await list_active_summaries(
 				thread_id,
 				session,
 				purpose=SummaryPurpose.AGENT_CONTEXT,

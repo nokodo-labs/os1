@@ -1,7 +1,5 @@
 """model building and resolution for chat and embedding models."""
 
-from __future__ import annotations
-
 import json
 import logging
 import time
@@ -17,9 +15,10 @@ from api.models.agent import Agent
 from api.models.model import Model, ModelType
 from api.models.provider import Provider
 from api.redis import on_invalidation
+from api.runtime import on_settings_reload
 from api.settings import settings
 from nokodo_ai.adapters.audio import resolve_audio_adapter
-from nokodo_ai.adapters.base.chat import ChatGenerationParams
+from nokodo_ai.adapters.base.chat import ChatGenerationParams, ReasoningEffort
 from nokodo_ai.adapters.chat import (
 	GenerationBadRequestError,
 	GenerationError,
@@ -73,9 +72,10 @@ def reset_task_model_cache() -> None:
 	_task_model_cache.clear()
 
 
-# self-register for cross-worker invalidation. main.py only starts the
-# subscriber; modules own their own reset hook registration.
+# self-register: cleared on model/provider entity changes and after every
+# settings snapshot reload.
 on_invalidation("task_models", reset_task_model_cache)
+on_settings_reload(reset_task_model_cache)
 
 
 def is_context_pressure_generation_error(exc: GenerationError) -> bool:
@@ -146,6 +146,7 @@ async def run_chat_model_json_schema(
 	thread: SDKThread,
 	json_schema: dict[str, object],
 	purpose: str = "structured_output",
+	reasoning_effort: ReasoningEffort | None = None,
 ) -> dict[str, object]:
 	"""run a chat model with a structured json schema response.
 
@@ -159,11 +160,14 @@ async def run_chat_model_json_schema(
 		"structured": True,
 	}
 	logger.info("chat model call started", extra=extra)
+	params: dict[str, object] = {"response_model": json_schema}
+	if reasoning_effort is not None:
+		params["reasoning_effort"] = reasoning_effort
 	try:
 		assistant = await chat_model.generate(
 			thread,
 			stream=False,
-			params={"response_model": json_schema},
+			params=params,
 		)
 		data = assistant.json_content
 		if data is None:
@@ -360,6 +364,8 @@ async def resolve_task_chat_model_config(
 		model_id_str = task_settings.input_autocomplete_model_id
 	elif task == "summarization":
 		model_id_str = task_settings.summarization_model_id
+	elif task == "passage_enrichment":
+		model_id_str = task_settings.passage_enrichment_model_id
 	elif task == "memory_post_processing":
 		model_id_str = task_settings.memory_post_processing_model_id
 	elif task == "web_search":

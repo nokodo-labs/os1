@@ -4,8 +4,6 @@ these references let SDK hooks and TaskIQ workers talk about a future chat
 message without pretending the SDK owns the final database id.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from collections.abc import Awaitable

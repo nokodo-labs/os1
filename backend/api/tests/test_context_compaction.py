@@ -8,6 +8,7 @@ import pytest
 
 from api.local_tasks import _on_task_done
 from api.models.event_types import EventType
+from api.v1.service.activities import start_activity
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.context_compaction.tool_io import (
 	COMPACTED_TOOL_OUTPUT_NOTICE,
@@ -189,6 +190,27 @@ def _mock_ctx(
 	ctx.event_emitter = AsyncMock()
 	ctx.run_id = None
 	ctx.user_id = TypeID("usr_123")
+
+	async def start_context_activity(
+		activity_type: str,
+		message_id: TypeID | str | None,
+		title: str | None = None,
+		message: str | None = None,
+		data: dict[str, object] | None = None,
+	):
+		return await start_activity(
+			ctx.event_emitter,
+			user_id=str(ctx.user_id),
+			thread_id=ctx.thread_id,
+			run_id=ctx.run_id,
+			activity_type=activity_type,
+			message_id=message_id,
+			title=title,
+			message=message,
+			data=data,
+		)
+
+	ctx.start_activity = start_context_activity
 	return ctx
 
 
@@ -500,10 +522,10 @@ class TestContextCompactionFilter:
 				AsyncMock(return_value=mock_compaction_result),
 			) as mock_aw,
 			patch(
-				"api.v1.service.chat.filters.context_compaction.summary_service"
-			) as mock_svc,
+				"api.v1.service.chat.filters.context_compaction.count_active_summaries"
+			) as mock_count_active_summaries,
 		):
-			mock_svc.count_active_summaries = AsyncMock(return_value=0)
+			mock_count_active_summaries.return_value = 0
 			state = _state(thread)
 			result = await f.process(state, _agent_context(), ctx)
 
@@ -528,10 +550,10 @@ class TestContextCompactionFilter:
 				AsyncMock(return_value=mock_wr),
 			) as mock_aw,
 			patch(
-				"api.v1.service.chat.filters.context_compaction.summary_service"
-			) as mock_svc,
+				"api.v1.service.chat.filters.context_compaction.count_active_summaries"
+			) as mock_count_active_summaries,
 		):
-			mock_svc.count_active_summaries = AsyncMock(return_value=0)
+			mock_count_active_summaries.return_value = 0
 			state = _state(thread)
 
 			# first iteration: full compaction
@@ -561,10 +583,10 @@ class TestContextCompactionFilter:
 				AsyncMock(return_value=mock_wr),
 			) as mock_aw,
 			patch(
-				"api.v1.service.chat.filters.context_compaction.summary_service"
-			) as mock_svc,
+				"api.v1.service.chat.filters.context_compaction.count_active_summaries"
+			) as mock_count_active_summaries,
 		):
-			mock_svc.count_active_summaries = AsyncMock(return_value=0)
+			mock_count_active_summaries.return_value = 0
 			state = _state(thread)
 
 			await f.process(state, _agent_context(), ctx)
@@ -609,10 +631,10 @@ class TestContextCompactionFilter:
 				AsyncMock(side_effect=fake_compaction),
 			),
 			patch(
-				"api.v1.service.chat.filters.context_compaction.summary_service"
-			) as mock_svc,
+				"api.v1.service.chat.filters.context_compaction.count_active_summaries"
+			) as mock_count_active_summaries,
 		):
-			mock_svc.count_active_summaries = AsyncMock(return_value=0)
+			mock_count_active_summaries.return_value = 0
 			state = _state(thread)
 
 			await f.process(state, _agent_context(), ctx)
@@ -665,10 +687,10 @@ class TestContextCompactionFilter:
 				AsyncMock(side_effect=fake_compaction),
 			),
 			patch(
-				"api.v1.service.chat.filters.context_compaction.summary_service"
-			) as mock_svc,
+				"api.v1.service.chat.filters.context_compaction.count_active_summaries"
+			) as mock_count_active_summaries,
 		):
-			mock_svc.count_active_summaries = AsyncMock(return_value=0)
+			mock_count_active_summaries.return_value = 0
 			state = _state(thread)
 
 			await f.process(state, _agent_context(), ctx)
@@ -695,14 +717,14 @@ class TestContextCompactionFilter:
 				AsyncMock(return_value=mock_wr),
 			),
 			patch(
-				"api.v1.service.chat.filters.context_compaction.summary_service"
-			) as mock_svc,
+				"api.v1.service.chat.filters.context_compaction.count_active_summaries"
+			) as mock_count_active_summaries,
 			patch(
 				"api.v1.service.chat.filters.context_compaction.start_summarize_messages_task",
 				new_callable=AsyncMock,
 			) as mock_start_summary,
 		):
-			mock_svc.count_active_summaries = AsyncMock(return_value=0)
+			mock_count_active_summaries.return_value = 0
 			state = _state(thread)
 
 			await f.process(state, _agent_context(), ctx)
@@ -729,14 +751,14 @@ class TestContextCompactionFilter:
 				AsyncMock(return_value=mock_wr),
 			),
 			patch(
-				"api.v1.service.chat.filters.context_compaction.summary_service"
-			) as mock_svc,
+				"api.v1.service.chat.filters.context_compaction.count_active_summaries"
+			) as mock_count_active_summaries,
 			patch(
 				"api.v1.service.chat.filters.context_compaction.start_condense_summaries_task",
 				new_callable=AsyncMock,
 			) as mock_start_condense,
 		):
-			mock_svc.count_active_summaries = AsyncMock(return_value=2)
+			mock_count_active_summaries.return_value = 2
 			state = _state(thread)
 
 			await f.process(state, _agent_context(), ctx)
@@ -763,14 +785,14 @@ class TestContextCompactionFilter:
 				AsyncMock(return_value=mock_wr),
 			),
 			patch(
-				"api.v1.service.chat.filters.context_compaction.summary_service"
-			) as mock_svc,
+				"api.v1.service.chat.filters.context_compaction.count_active_summaries"
+			) as mock_count_active_summaries,
 			patch(
 				"api.v1.service.chat.filters.context_compaction.start_summarize_messages_task",
 				new_callable=AsyncMock,
 			) as mock_start_summary,
 		):
-			mock_svc.count_active_summaries = AsyncMock(return_value=0)
+			mock_count_active_summaries.return_value = 0
 			state = _state(thread)
 
 			await f.process(state, _agent_context(), ctx)
@@ -824,14 +846,19 @@ class TestCondensationSizeCap:
 				AsyncMock(return_value=mock_model),
 			),
 			patch(
-				"api.v1.service.chat.context_compaction.summarization.summary_service"
-			) as mock_svc,
+				"api.v1.service.chat.context_compaction.summarization.list_active_summaries",
+				AsyncMock(return_value=existing),
+			),
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.create_summary",
+				AsyncMock(return_value=condensed_mock),
+			),
+			patch(
+				"api.v1.service.chat.context_compaction.summarization.supersede_summaries",
+				AsyncMock(),
+			),
 		):
-			mock_svc.list_active_summaries = AsyncMock(return_value=existing)
-			mock_svc.create_summary = AsyncMock(return_value=condensed_mock)
-			mock_svc.supersede_summaries = AsyncMock()
 			session = AsyncMock()
-
 			await condense_summaries(thread_id=TypeID("th_123"), session=session)
 
 		# verify the model was called (summarization ran)

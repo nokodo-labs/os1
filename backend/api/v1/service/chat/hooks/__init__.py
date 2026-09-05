@@ -1,7 +1,5 @@
 """chat hooks package - registry + resolution for sdk hooks."""
 
-from __future__ import annotations
-
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.hooks.base import Hook
 from api.v1.service.chat.hooks.memory_post_processing import (

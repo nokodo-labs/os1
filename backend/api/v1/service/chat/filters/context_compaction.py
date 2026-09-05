@@ -8,8 +8,6 @@ each iteration: full token budget cascade, then background task scheduling
 for summaries and summary condensation.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from contextlib import suppress
@@ -19,16 +17,19 @@ from pydantic import Field
 
 from api.database import async_session_local
 from api.models.thread_summary import SummaryPurpose, ThreadSummary
+from api.v1.service.activities import ActivityEmitter
 from api.v1.service.chat.context_compaction import apply_context_compaction
 from api.v1.service.chat.context_compaction.summarization import summarize_messages
+from api.v1.service.chat.context_compaction.tasks import (
+	start_condense_summaries_task,
+	start_summarize_messages_task,
+)
 from api.v1.service.chat.context_compaction.types import ContextCompactionError
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.message_metadata import get_message_id
-from api.v1.service.chat.run_activities import RunActivityEmitter, start_run_activity
-from api.v1.service.threads import summaries as summary_service
-from api.v1.tasks.threads import (
-	start_condense_summaries_task,
-	start_summarize_messages_task,
+from api.v1.service.threads.summaries import (
+	count_active_summaries,
+	get_summary,
 )
 from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
@@ -82,7 +83,7 @@ class ContextCompactionFilter(Filter):
 		)
 	)
 
-	async def process(
+	async def run(
 		self,
 		state: AgentIterationState[AppContext],
 		agent_context: AgentContext,
@@ -116,7 +117,7 @@ class ContextCompactionFilter(Filter):
 		latest_progress = 0
 		latest_stage = "compacting context"
 		timer_task: asyncio.Task[None] | None = None
-		activity: RunActivityEmitter | None = None
+		activity: ActivityEmitter | None = None
 
 		async def emit_timer_ticks() -> None:
 			"""emit backend-timed progress ticks while compaction is active."""
@@ -151,12 +152,15 @@ class ContextCompactionFilter(Filter):
 				return
 			compaction_started = True
 			latest_stage = stage
-			activity = await start_run_activity(
-				app_context,
-				activity_type="context_compaction",
-				message_id=anchor_message_id,
-				title="compacting chat",
-				message=stage,
+			activity = (
+				await app_context.start_activity(
+					activity_type="context_compaction",
+					message_id=anchor_message_id,
+					title="compacting chat",
+					message=stage,
+				)
+				if app_context.start_activity is not None
+				else None
 			)
 			if activity is not None:
 				timer_task = asyncio.create_task(
@@ -187,7 +191,7 @@ class ContextCompactionFilter(Filter):
 				session=app_context.session,
 			)
 			await progress(50, "loading context summary")
-			return await summary_service.get_summary(summary_id, app_context.session)
+			return await get_summary(summary_id, app_context.session)
 
 		try:
 			compaction = await apply_context_compaction(
@@ -203,12 +207,15 @@ class ContextCompactionFilter(Filter):
 			)
 		except ContextCompactionError as exc:
 			if not compaction_started:
-				activity = await start_run_activity(
-					app_context,
-					activity_type="context_compaction",
-					message_id=anchor_message_id,
-					title="context limit reached",
-					message=str(exc),
+				activity = (
+					await app_context.start_activity(
+						activity_type="context_compaction",
+						message_id=anchor_message_id,
+						title="context limit reached",
+						message=str(exc),
+					)
+					if app_context.start_activity is not None
+					else None
 				)
 			if activity is not None:
 				await stop_timer()
@@ -290,7 +297,7 @@ class ContextCompactionFilter(Filter):
 				extra={"thread_id": str(thread_id)},
 			)
 
-		summary_count = await summary_service.count_active_summaries(
+		summary_count = await count_active_summaries(
 			thread_id,
 			app_context.session,
 			purpose=SummaryPurpose.AGENT_CONTEXT,

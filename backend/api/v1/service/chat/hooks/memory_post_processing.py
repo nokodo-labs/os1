@@ -1,7 +1,5 @@
 """memory post-processing scheduler helpers."""
 
-from __future__ import annotations
-
 import logging
 from typing import TYPE_CHECKING
 
@@ -11,8 +9,7 @@ from api.database import async_session_local
 from api.schemas.preferences import AIPreferences
 from api.settings import settings as app_settings
 from api.v1.service.chat.hooks.base import Hook
-from api.v1.service.chat.run_status import run_status_store
-from api.v1.tasks.threads import start_memory_post_processing_task
+from api.v1.service.memories import start_memory_post_processing_task
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext
 from nokodo_ai.messages import (
@@ -105,28 +102,69 @@ def _message_snapshot_parts(message: UserMessage | AssistantMessage) -> list[str
 	return parts
 
 
+def _format_tool_cluster(tool_names: list[str]) -> str | None:
+	"""summarize a cluster of tool calls as a compact synthetic line.
+
+	shows names with per-name counts for up to 3 distinct tools, otherwise just
+	the total number of calls. never exposes tool arguments or outputs.
+	"""
+	if not tool_names:
+		return None
+	if len(tool_names) == 1:
+		return f"[called {tool_names[0]} tool]"
+	counts: dict[str, int] = {}
+	for name in tool_names:
+		counts[name] = counts.get(name, 0) + 1
+	if len(counts) <= 3:
+		parts = [
+			f"{name} tool {count} times" if count > 1 else f"{name} tool once"
+			for name, count in counts.items()
+		]
+		return f"[called {', '.join(parts)}]"
+	return f"[called {len(tool_names)} tools]"
+
+
 def _recent_turn_snapshot(thread: SDKThread, k: int) -> str | None:
-	"""build a role snapshot with no tool messages or tool call dumps."""
+	"""build a role snapshot preserving chronological order within each turn.
+
+	text and tool-cluster summaries appear in the order they occurred; a run of
+	consecutive tool calls collapses to one synthetic line at its position. tool
+	messages and tool call arguments/outputs never appear.
+	"""
 	turns: list[tuple[str, str]] = []
 	current_role: str | None = None
-	current_parts: list[str] = []
+	ordered_parts: list[str] = []
+	pending_tools: list[str] = []
+
+	def flush_tools() -> None:
+		nonlocal pending_tools
+		cluster = _format_tool_cluster(pending_tools)
+		if cluster:
+			ordered_parts.append(cluster)
+		pending_tools = []
+
+	def flush_turn() -> None:
+		nonlocal ordered_parts, pending_tools
+		flush_tools()
+		if ordered_parts:
+			turns.append((current_role or "", "\n".join(ordered_parts)))
+		ordered_parts = []
+		pending_tools = []
 
 	for msg in thread.messages:
 		if not isinstance(msg, (UserMessage, AssistantMessage)):
 			continue
-		parts = _message_snapshot_parts(msg)
-		if not parts:
-			continue
 		role = msg.role
 		if role != current_role:
-			if current_parts:
-				turns.append((current_role or "", "\n".join(current_parts)))
+			flush_turn()
 			current_role = role
-			current_parts = []
-		current_parts.extend(parts)
+		for part in _message_snapshot_parts(msg):
+			flush_tools()
+			ordered_parts.append(part)
+		if isinstance(msg, AssistantMessage) and msg.tool_calls:
+			pending_tools.extend(tc.name for tc in msg.tool_calls)
 
-	if current_parts:
-		turns.append((current_role or "", "\n".join(current_parts)))
+	flush_turn()
 
 	if not turns:
 		return None
@@ -156,12 +194,14 @@ async def schedule_memory_post_processing(
 		return
 	if message_id is None and message_ref is None:
 		return
-	if app_context.run_id is not None:
-		if await run_status_store.has_in_flight_steering(app_context.run_id):
-			return
+	if (
+		app_context.has_in_flight_input is not None
+		and await app_context.has_in_flight_input()
+	):
+		return
 
 	# gate on user preference - skip when memories disabled.
-	ai = app_context.principal.user.prefs.ai
+	ai = app_context.principal.subject.prefs.ai
 	if isinstance(ai, AIPreferences) and ai.memories_enabled is False:
 		logger.debug("memory post-processing skipped: disabled by user")
 		return
@@ -211,7 +251,7 @@ class MemoryPostProcessingHook(Hook):
 	)
 	max_related_memories: int = Field(default=10, exclude=True)
 
-	async def execute(
+	async def run(
 		self,
 		state: AgentIterationSnapshot[AppContext],
 		agent_context: AgentContext,

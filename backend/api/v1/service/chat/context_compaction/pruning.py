@@ -1,7 +1,5 @@
 """protocol-aware last-resort message pruning."""
 
-from __future__ import annotations
-
 from api.v1.service.chat.context_compaction.budgets import sum_message_tokens
 from api.v1.service.chat.context_compaction.protection import protected_indices
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage

@@ -1,7 +1,5 @@
 """tool call and tool output compaction helpers."""
 
-from __future__ import annotations
-
 import logging
 from collections.abc import Sequence
 

@@ -4,20 +4,32 @@ AppContext is injected into tools and filters during agent execution.
 it provides access to session, auth, and an event_emitter callback.
 """
 
-from __future__ import annotations
-
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
+from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.event import Event
 from api.schemas.message import Citation
-from api.v1.service.auth import Principal
+from api.v1.service.activities import ActivityEmitter
+from api.v1.service.authentication import Principal
 from nokodo_ai.utils.typeid import TypeID
 
 
 EventEmitter = Callable[[Event], Awaitable[None]]
+InFlightInputChecker = Callable[[], Awaitable[bool]]
+
+
+class ActivityStarter(Protocol):
+	async def __call__(
+		self,
+		activity_type: str,
+		message_id: TypeID | str | None,
+		title: str | None = None,
+		message: str | None = None,
+		data: Mapping[str, object] | None = None,
+	) -> ActivityEmitter | None: ...
 
 
 @dataclass
@@ -66,10 +78,12 @@ class AppContext:
 	citations: list[Citation] = field(
 		default_factory=list,
 	)
+	start_activity: ActivityStarter | None = None
+	has_in_flight_input: InFlightInputChecker | None = None
 
 	@property
 	def user_id(self) -> TypeID:
-		return self.principal.user_id
+		return self.principal.user.id
 
 	def with_emitter(self, emitter: EventEmitter) -> AppContext:
 		"""create a new context with a specific emitter."""
@@ -84,4 +98,6 @@ class AppContext:
 			context_window=self.context_window,
 			retrieval=self.retrieval,
 			citations=self.citations,
+			start_activity=self.start_activity,
+			has_in_flight_input=self.has_in_flight_input,
 		)

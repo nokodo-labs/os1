@@ -86,8 +86,8 @@ def _thread(*msgs: Message) -> Thread:
 
 _TID = TypeID("th_123")
 PIPELINE_SETTINGS = "api.v1.service.chat.context_compaction.pipeline.app_settings"
-PIPELINE_SUMMARY_SERVICE = (
-	"api.v1.service.chat.context_compaction.pipeline.summary_service"
+PIPELINE_LIST_ACTIVE_SUMMARIES = (
+	"api.v1.service.chat.context_compaction.pipeline.list_active_summaries"
 )
 
 
@@ -370,10 +370,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			result = await apply_context_compaction(
 				thread,
 				context_window=128_000,
@@ -399,10 +399,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			result = await apply_context_compaction(
 				thread,
 				context_window=128_000,
@@ -427,10 +427,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			# small positive prompt budget to force hard truncation
 			result = await apply_context_compaction(
 				thread,
@@ -465,10 +465,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			with pytest.raises(ContextCompactionError, match="protected native media"):
 				await apply_context_compaction(
 					thread,
@@ -495,10 +495,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			with pytest.raises(
 				ContextCompactionError, match="protected active-run context"
 			):
@@ -524,10 +524,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			# context window large enough to fit raw messages but small
 			# enough that current pressure crosses the soft threshold
 			result = await apply_context_compaction(
@@ -557,10 +557,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			first_iteration = await apply_context_compaction(
 				thread,
 				context_window=8_000,
@@ -603,10 +603,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			result = await apply_context_compaction(
 				thread,
 				context_window=10_000,
@@ -638,17 +638,17 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[summary])
+			mock_list_active_summaries.return_value = [summary]
 			result = await apply_context_compaction(
 				thread,
 				context_window=128_000,
 				thread_id=_TID,
 				session=mock_session,
 			)
-			mock_svc.list_active_summaries.assert_not_awaited()
+			mock_list_active_summaries.assert_not_awaited()
 
 		sys_msg = result.thread.messages[0]
 		assert isinstance(sys_msg, SystemMessage)
@@ -680,17 +680,17 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[summary])
+			mock_list_active_summaries.return_value = [summary]
 			result = await apply_context_compaction(
 				thread,
 				context_window=5_000,
 				thread_id=_TID,
 				session=mock_session,
 			)
-			mock_svc.list_active_summaries.assert_awaited_once_with(
+			mock_list_active_summaries.assert_awaited_once_with(
 				_TID,
 				mock_session,
 				purpose=SummaryPurpose.AGENT_CONTEXT,
@@ -719,10 +719,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[summary])
+			mock_list_active_summaries.return_value = [summary]
 			result = await apply_context_compaction(
 				thread,
 				context_window=128_000,
@@ -766,12 +766,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(
-				return_value=[first_summary, second_summary]
-			)
+			mock_list_active_summaries.return_value = [first_summary, second_summary]
 			result = await apply_context_compaction(
 				thread,
 				context_window=5_000,
@@ -807,10 +805,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			result = await apply_context_compaction(
 				thread,
 				context_window=5_000,
@@ -850,10 +848,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			result = await apply_context_compaction(
 				thread,
 				context_window=5_000,
@@ -888,10 +886,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			result = await apply_context_compaction(
 				thread,
 				context_window=5_000,
@@ -927,10 +925,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			result = await apply_context_compaction(
 				thread,
 				context_window=5_000,
@@ -971,10 +969,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[summary])
+			mock_list_active_summaries.return_value = [summary]
 			result = await apply_context_compaction(
 				thread,
 				context_window=10_000,
@@ -1013,10 +1011,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[summary])
+			mock_list_active_summaries.return_value = [summary]
 			result = await apply_context_compaction(
 				thread,
 				context_window=5_000,
@@ -1052,10 +1050,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			result = await apply_context_compaction(
 				thread,
 				context_window=5_000,
@@ -1098,10 +1096,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			result = await apply_context_compaction(
 				thread,
 				context_window=5_000,
@@ -1153,10 +1151,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[ready_summary])
+			mock_list_active_summaries.return_value = [ready_summary]
 			result = await apply_context_compaction(
 				thread,
 				context_window=5_000,
@@ -1213,10 +1211,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			result = await apply_context_compaction(
 				thread,
 				context_window=5_000,
@@ -1250,10 +1248,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			result = await apply_context_compaction(
 				thread,
 				context_window=5_000,
@@ -1279,10 +1277,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			result = await apply_context_compaction(
 				thread,
 				context_window=128_000,
@@ -1303,10 +1301,10 @@ class TestApplyContextCompaction:
 
 		with (
 			patch(PIPELINE_SETTINGS) as mock_settings,
-			patch(PIPELINE_SUMMARY_SERVICE) as mock_svc,
+			patch(PIPELINE_LIST_ACTIVE_SUMMARIES) as mock_list_active_summaries,
 		):
 			mock_settings.ai.context_compaction = ws
-			mock_svc.list_active_summaries = AsyncMock(return_value=[])
+			mock_list_active_summaries.return_value = []
 			result = await apply_context_compaction(
 				thread,
 				context_window=128_000,

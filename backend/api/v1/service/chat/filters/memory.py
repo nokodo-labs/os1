@@ -1,7 +1,5 @@
 """memory context filter. injects relevant memories into the system prompt."""
 
-from __future__ import annotations
-
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -44,7 +42,7 @@ class MemoryContextFilter(Filter):
 	name: str = Field(default="memory_context")
 	description: str = Field(default="injects relevant memories into the system prompt")
 
-	async def process(
+	async def run(
 		self,
 		state: AgentIterationState[AppContext],
 		agent_context: AgentContext,
@@ -65,7 +63,7 @@ class MemoryContextFilter(Filter):
 		if not system_text or SENTINEL_USER_MEMORIES not in system_text:
 			return state
 
-		ai = app_context.principal.user.prefs.ai
+		ai = app_context.principal.subject.prefs.ai
 		if isinstance(ai, AIPreferences) and ai.memories_enabled is False:
 			logger.info(
 				"memory context: user has disabled memories; skipping context injection"

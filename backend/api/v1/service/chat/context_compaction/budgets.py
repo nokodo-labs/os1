@@ -1,7 +1,5 @@
 """budgeting helpers for context compaction."""
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage

@@ -1,7 +1,6 @@
 """private SDK message metadata helpers."""
 
-from __future__ import annotations
-
+from collections.abc import Mapping
 from datetime import datetime
 
 from nokodo_ai.messages import Message as SDKMessage
@@ -18,7 +17,7 @@ CLIENT_STEERING_ID_KEY = "client_steering_id"
 NEXT_CITATION_INDEX_KEY = "_next_citation_index"
 CITATIONS_KEY = "_citations"
 ATTACHMENTS_KEY = "attachments"
-CITABLE_SOURCES_KEY = "_citable_sources"
+ORIGINATED_RESOURCES_KEY = "_originated_resources"
 CITATIONS_ASSIGNED_KEY = "_citations_assigned"
 MODEL_ID_KEY = "_model_id"
 E2B_SANDBOX_ID_KEY = "_e2b_sandbox_id"
@@ -30,15 +29,59 @@ E2B_SANDBOX_ID_KEY = "_e2b_sandbox_id"
 ROUND_TRIP_IDENTITY_KEYS: frozenset[str] = frozenset(
 	{MESSAGE_ID_KEY, CREATED_AT_KEY, SENDER_USER_ID_KEY}
 )
-COLUMN_PROJECTED_KEYS: frozenset[str] = frozenset({CITATIONS_KEY, ATTACHMENTS_KEY})
+COLUMN_PROJECTED_KEYS: frozenset[str] = frozenset(
+	{CITATIONS_KEY, ATTACHMENTS_KEY, ORIGINATED_RESOURCES_KEY}
+)
 FOLDED_METADATA_KEYS: frozenset[str] = ROUND_TRIP_IDENTITY_KEYS | COLUMN_PROJECTED_KEYS
 
 
 def to_persisted_metadata(sdk_metadata: JSONObject | None) -> JSONObject:
-	"""SDK→ORM metadata unfold: drop fold-injected keys, carry the rest."""
+	"""SDK→ORM metadata unfold: drop fold-injected keys, carry the rest.
+
+	the result is still in the flat, ``_``-prefixed SDK shape; use
+	``split_sdk_metadata`` to get the two halves the column stores.
+	"""
 	if not sdk_metadata:
 		return {}
 	return {k: v for k, v in sdk_metadata.items() if k not in FOLDED_METADATA_KEYS}
+
+
+def split_sdk_metadata(
+	sdk_metadata: JSONObject | None,
+) -> tuple[JSONObject, JSONObject]:
+	"""split flat SDK metadata into the (public, private) halves.
+
+	inverse of ``Message._sdk_metadata``. private keys are returned de-prefixed.
+	"""
+	public: JSONObject = {}
+	private: JSONObject = {}
+	for key, value in (sdk_metadata or {}).items():
+		if key.startswith("_"):
+			private[key[1:]] = value
+		else:
+			public[key] = value
+	return public, private
+
+
+def strip_private_sdk_metadata(value: object) -> object:
+	"""copy a streamed SDK payload, dropping `_`-prefixed keys from every
+	nested metadata object."""
+	if isinstance(value, Mapping):
+		payload: dict[str, object] = {}
+		for key, item in value.items():
+			key_str = str(key)
+			if key_str == "metadata" and isinstance(item, Mapping):
+				payload[key_str] = {
+					str(meta_key): meta_value
+					for meta_key, meta_value in item.items()
+					if not str(meta_key).startswith("_")
+				}
+			else:
+				payload[key_str] = strip_private_sdk_metadata(item)
+		return payload
+	if isinstance(value, list):
+		return [strip_private_sdk_metadata(item) for item in value]
+	return value
 
 
 def get_message_id(msg: SDKMessage) -> str | None:

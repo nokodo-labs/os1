@@ -1,7 +1,5 @@
 """chat context filter. injects context from other chats into the system prompt."""
 
-from __future__ import annotations
-
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -18,11 +16,11 @@ from api.schemas.preferences import AIPreferences
 from api.schemas.search import SearchMode, SearchParams
 from api.settings import settings as app_settings
 from api.settings.settings import AIChatContextSettings
-from api.v1.service import threads as thread_service
 from api.v1.service.authorization import resource_access_predicate
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.listing import apply_sort
 from api.v1.service.prompts import SENTINEL_CHAT_CONTEXT
+from api.v1.service.threads import search_threads
 from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
 from nokodo_ai.threads import Thread as SDKThread
@@ -65,7 +63,7 @@ class ChatContextFilter(Filter):
 		)
 	)
 
-	async def process(
+	async def run(
 		self,
 		state: AgentIterationState[AppContext],
 		agent_context: AgentContext,
@@ -90,7 +88,7 @@ class ChatContextFilter(Filter):
 		if not system_text or SENTINEL_CHAT_CONTEXT not in system_text:
 			return state
 
-		ai = app_context.principal.user.prefs.ai
+		ai = app_context.principal.subject.prefs.ai
 		if isinstance(ai, AIPreferences) and (
 			ai.memories_enabled is False or ai.chat_recall is False
 		):
@@ -181,7 +179,7 @@ class ChatContextFilter(Filter):
 			query_text = "\n".join(_turns)
 
 		try:
-			scored = await thread_service.search_threads(
+			scored = await search_threads(
 				query_text,
 				session,
 				principal=principal,

@@ -10,8 +10,6 @@ message metadata, so partial branch loads (future) don't require walking
 the full history.
 """
 
-from __future__ import annotations
-
 import logging
 import re
 
@@ -19,13 +17,15 @@ from pydantic import Field
 from sqlalchemy import String, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.constants import PRIVATE_METADATA_KEY
+from api.database.recursive_cte import cycle_safe_cte
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.schemas.message import Citation, CitationSource
+from api.v1.service.chat.citation_sources import CITABLE_SOURCES_KEY
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.message_metadata import (
-	CITABLE_SOURCES_KEY,
 	CITATIONS_ASSIGNED_KEY,
 	CITATIONS_KEY,
 	NEXT_CITATION_INDEX_KEY,
@@ -67,7 +67,7 @@ class CitationIndexFilter(Filter):
 		),
 	)
 
-	async def process(
+	async def run(
 		self,
 		state: AgentIterationState[AppContext],
 		agent_context: AgentContext,
@@ -296,19 +296,25 @@ async def _overfetch_nci(
 		(anchor.c.depth + 1).label("depth"),
 	).where(msg_t.c.id == anchor.c.cur_id)
 
-	ancestors_cte = anchor.union_all(recursive)
+	ancestors_cte = cycle_safe_cte(
+		anchor.union_all(recursive),
+		["cur_id"],
+		"ancestors_safe",
+	)
+
+	# the key is persisted in the PRIVATE namespace, de-prefixed; only the SDK
+	# side of this filter sees the flat `_`-prefixed shape.
+	nci_text = msg_t.c.metadata[
+		(PRIVATE_METADATA_KEY, NEXT_CITATION_INDEX_KEY.removeprefix("_"))
+	].astext
 
 	# join back to messages to read metadata, filter to assistant + has key
 	stmt = (
-		select(
-			msg_t.c.metadata[NEXT_CITATION_INDEX_KEY]
-			.astext.cast(type_=String)
-			.label("nci"),
-		)
+		select(nci_text.cast(type_=String).label("nci"))
 		.join(ancestors_cte, msg_t.c.id == ancestors_cte.c.cur_id)
 		.where(
 			msg_t.c.type == "assistant",
-			msg_t.c.metadata.has_key(NEXT_CITATION_INDEX_KEY),
+			nci_text.is_not(None),
 		)
 		.order_by(ancestors_cte.c.depth.asc())
 		.limit(1)

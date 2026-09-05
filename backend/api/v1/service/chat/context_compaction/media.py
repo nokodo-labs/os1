@@ -15,8 +15,6 @@ the compaction layer reads the protection marker from message metadata;
 this module does not depend on compaction internals, and does no I/O.
 """
 
-from __future__ import annotations
-
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -55,6 +53,10 @@ log = logging.getLogger(__name__)
 # summarize these. this is the one-way signal from media -> compaction.
 # soft-window media stays native but is NOT marked, so compaction may drop it
 # under budget pressure (it is recoverable via file_get).
+#
+# deliberately unprefixed: this is PUBLIC metadata. it reveals nothing about
+# the backend and a client rendering the transcript benefits from knowing a
+# part is pinned, so it does not belong in the private namespace.
 MEDIA_PROTECTED_METADATA_KEY = "media_protected"
 
 # hard protection window in agent-loop ITERATIONS. the read iteration (the

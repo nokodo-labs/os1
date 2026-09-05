@@ -6,14 +6,13 @@ thread used by the agent loop:
 - ``load_sdk_thread`` loads a thread branch and converts it to an SDK thread,
 	enriching each message with its persisted metadata, citation index, and
 	attachment refs so downstream filters need no extra ORM lookups.
-- ``build_message_create`` performs the reverse (streamed SDK message ->
-	``MessageCreate``) for persistence.
+- ``prepare_generated_message`` performs the reverse conversion for thread
+	persistence.
 - ``inject_system_instructions`` renders and prepends an agent's system prompt.
 """
 
-from __future__ import annotations
-
 import re
+from dataclasses import dataclass
 from datetime import datetime
 
 from fastapi import HTTPException, status
@@ -23,13 +22,15 @@ from api.models.agent import Agent as AgentORM
 from api.models.message import Message as MessageORM
 from api.schemas.message import (
 	Citation,
+	FileContent,
+	ImageContent,
 	MessageCreate,
 	ResourceAttachment,
+	TextContent,
 )
-from api.schemas.runs import ClientContext, RunInput
+from api.schemas.runs import ClientContext
 from api.settings import settings
-from api.v1.service import threads as thread_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.chat.filters.citation_index import resolve_assistant_citations
 from api.v1.service.chat.message_metadata import (
 	ATTACHMENTS_KEY,
@@ -38,20 +39,24 @@ from api.v1.service.chat.message_metadata import (
 	MESSAGE_ID_KEY,
 	MODEL_ID_KEY,
 	NEXT_CITATION_INDEX_KEY,
+	ORIGINATED_RESOURCES_KEY,
 	SENDER_USER_ID_KEY,
 	STEERING_ENQUEUED_AT_KEY,
 	persisted_message_metadata,
 	to_persisted_metadata,
 )
 from api.v1.service.prompts import render_agent_instructions
+from api.v1.service.threads import MessageDraft, load_thread_with_branch
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
+from nokodo_ai.messages import FileContent as SDKFileContent
+from nokodo_ai.messages import ImageContent as SDKImageContent
 from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.messages import TextContent as SDKTextContent
-from nokodo_ai.messages import UserContentPart as SDKUserContentPart
 from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.types.json import JSONObject, JSONValue
+from nokodo_ai.types.sentinels import MISSING, MissingType
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -75,9 +80,21 @@ def _has_invisible_payload(text: str) -> bool:
 	return False
 
 
-def validate_run_input(run_input: RunInput | None) -> None:
-	"""validate run input limits and reject suspicious invisible payloads."""
-	text = run_input.text if run_input else None
+def run_input_text(run_input: MessageCreate | None) -> str | None:
+	"""the plain text a run's input message carries, if any."""
+	if run_input is None:
+		return None
+	parts = [
+		part.text
+		for part in run_input.content
+		if isinstance(part, TextContent) and part.text
+	]
+	return " ".join(parts) if parts else None
+
+
+def validate_message_input(message_input: MessageCreate | None) -> None:
+	"""validate message input limits and reject suspicious invisible payloads."""
+	text = run_input_text(message_input)
 	if text is None:
 		return
 	if _has_invisible_payload(text):
@@ -94,15 +111,34 @@ def validate_run_input(run_input: RunInput | None) -> None:
 	)
 
 
-def build_run_input_sdk_user_message(run_input: RunInput) -> SDKUserMessage:
-	"""build an SDK user message from RunInput text and attachment refs."""
-	parts: list[SDKUserContentPart] = []
-	if run_input.text and run_input.text.strip():
-		parts.append(SDKTextContent(text=run_input.text))
-	metadata: JSONObject = {}
+def build_run_input_sdk_user_message(run_input: MessageCreate) -> SDKUserMessage:
+	"""build an SDK user message from a run's input message."""
+	parts: list[SDKTextContent | SDKImageContent | SDKFileContent] = []
+	for part in run_input.content:
+		match part:
+			case TextContent():
+				parts.append(
+					SDKTextContent.model_validate(part.model_dump(mode="json"))
+				)
+			case ImageContent():
+				parts.append(
+					SDKImageContent.model_validate(part.model_dump(mode="json"))
+				)
+			case FileContent():
+				parts.append(
+					SDKFileContent.model_validate(part.model_dump(mode="json"))
+				)
+			case _:
+				raise ValueError("unsupported run input content")
+	metadata: JSONObject = dict(run_input.metadata)
 	if run_input.attachments:
 		metadata[ATTACHMENTS_KEY] = [
 			attachment.model_dump(mode="json") for attachment in run_input.attachments
+		]
+	if run_input.originated_resources:
+		metadata[ORIGINATED_RESOURCES_KEY] = [
+			resource.model_dump(mode="json")
+			for resource in run_input.originated_resources
 		]
 	return SDKUserMessage(content=parts, metadata=(metadata or None))
 
@@ -134,7 +170,8 @@ def build_steering_sdk_message(
 		include_attachments=False,
 		include_existing_metadata=False,
 	)
-	assert isinstance(base_sdk, SDKUserMessage)
+	if not isinstance(base_sdk, SDKUserMessage):
+		raise ValueError("steering input must resolve to a user message")
 	return base_sdk.model_copy(update={"metadata": sdk_metadata})
 
 
@@ -175,7 +212,7 @@ async def load_sdk_thread(
 	thread_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
-	parent_id: TypeID | None = None,
+	parent_id: TypeID | None | MissingType = MISSING,
 ) -> tuple[SDKThread, TypeID | None]:
 	"""load a thread's message branch and convert to an SDK thread.
 
@@ -189,7 +226,7 @@ async def load_sdk_thread(
 	returns (sdk_thread, current_message_id) so callers can derive
 	the parent id for new messages without a separate query.
 	"""
-	thread_orm, branch_orm = await thread_service.load_thread_with_branch(
+	thread_orm, branch_orm = await load_thread_with_branch(
 		thread_id,
 		session,
 		principal=principal,
@@ -202,33 +239,74 @@ async def load_sdk_thread(
 	sdk_thread = SDKThread(
 		created_at=thread_orm.created_at,
 		messages=sdk_messages,
-		metadata=thread_orm.metadata_ or {},
+		metadata=thread_orm.public_metadata,
 	)
 	return sdk_thread, head_id
 
 
-def _build_message_create(
+async def load_sdk_thread_before_message(
+	thread_id: TypeID,
+	message_id: TypeID,
+	session: AsyncSession,
+	principal: Principal,
+) -> tuple[SDKThread, TypeID | None]:
+	"""load conversation context ending immediately before one message."""
+	thread_orm, branch_orm = await load_thread_with_branch(
+		thread_id,
+		session,
+		principal=principal,
+		parent_id=message_id,
+	)
+	if not branch_orm or branch_orm[-1].id != message_id:
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail="message is no longer on its conversation path",
+		)
+	context = branch_orm[:-1]
+	predecessor_id = context[-1].id if context else None
+	return (
+		SDKThread(
+			created_at=thread_orm.created_at,
+			messages=[orm_message_to_sdk_message(message) for message in context],
+			metadata=thread_orm.public_metadata,
+		),
+		predecessor_id,
+	)
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedGeneratedMessage:
+	"""domain input derived from one generated SDK message."""
+
+	draft: MessageDraft
+	originated_resources: list[ResourceAttachment]
+
+
+def prepare_generated_message(
 	sdk_msg: SDKMessage,
 	sender_agent_id: TypeID | None,
 	run_id: TypeID,
 	citations: list[Citation],
 	model_id: str | None,
-) -> MessageCreate:
-	"""build a MessageCreate from a streamed sdk message for persistence.
+) -> PreparedGeneratedMessage:
+	"""convert a generated SDK message into thread-write input.
 
-	SDK→ORM boundary: lifts attachment refs into the attachments column and
-	strips the fold-injected keys via to_persisted_metadata; real metadata rides
-	through.
+	SDK→ORM boundary: strips the fold-injected keys BEFORE the public/private
+	split, lifts attachment refs into the attachments column, and routes
+	backend-owned stamps into the private half. real metadata rides through.
 	"""
-	create_in = MessageCreate.from_sdk_message(
-		sdk_msg,
+	# unfold first: the folded keys are `_`-prefixed, so filtering after the
+	# split would miss all but `attachments` and let identity mirrors and
+	# column projections reach the private half of the column.
+	persisted = to_persisted_metadata(sdk_msg.metadata)
+	draft = MessageDraft.from_sdk_message(
+		sdk_msg.model_copy(update={"metadata": persisted}),
 		sender_agent_id=sender_agent_id,
 	)
 	# lift attachment refs into the column
 	refs = (sdk_msg.metadata or {}).get(ATTACHMENTS_KEY)
 	if isinstance(refs, list):
-		create_in.attachments = [ResourceAttachment.model_validate(r) for r in refs]
-	create_in.metadata = to_persisted_metadata(create_in.metadata)
+		draft.attachments = [ResourceAttachment.model_validate(r) for r in refs]
 	if isinstance(sdk_msg, SDKAssistantMessage):
 		text = ""
 		for part in sdk_msg.content or []:
@@ -236,46 +314,25 @@ def _build_message_create(
 				text += part.text
 		resolved = resolve_assistant_citations(text, citations)
 		if resolved:
-			create_in.citations = resolved
+			draft.citations = resolved
 		# stamp the running index so future runs can pick up without
 		# loading the full branch.
 		if citations:
-			create_in.metadata[NEXT_CITATION_INDEX_KEY] = citations[-1].index + 1
-	create_in.metadata["run_id"] = run_id
+			draft.private_metadata[NEXT_CITATION_INDEX_KEY.removeprefix("_")] = (
+				citations[-1].index + 1
+			)
+	draft.metadata["run_id"] = str(run_id)
 	if model_id:
-		create_in.metadata[MODEL_ID_KEY] = model_id
-	return create_in
-
-
-async def persist_sdk_message(
-	thread_id: TypeID,
-	sdk_msg: SDKMessage,
-	session: AsyncSession,
-	principal: Principal,
-	sender_agent_id: TypeID | None,
-	run_id: TypeID,
-	citations: list[Citation],
-	model_id: str | None,
-	message_id: TypeID | None,
-	parent_id: TypeID | None,
-	origin_session_id: str | None,
-) -> MessageORM:
-	"""persist one SDK message through the threads message service."""
-	create_in = _build_message_create(
-		sdk_msg,
-		sender_agent_id=sender_agent_id,
-		run_id=run_id,
-		citations=citations,
-		model_id=model_id,
+		draft.private_metadata[MODEL_ID_KEY.removeprefix("_")] = model_id
+	refs = (sdk_msg.metadata or {}).get(ORIGINATED_RESOURCES_KEY)
+	originated_resources = (
+		[ResourceAttachment.model_validate(ref) for ref in refs]
+		if isinstance(refs, list)
+		else []
 	)
-	create_in.parent_id = parent_id
-	return await thread_service.create_message(
-		thread_id=thread_id,
-		message_in=create_in,
-		session=session,
-		principal=principal,
-		message_id=message_id,
-		origin_session_id=origin_session_id,
+	return PreparedGeneratedMessage(
+		draft=draft,
+		originated_resources=originated_resources,
 	)
 
 
@@ -290,7 +347,7 @@ async def inject_system_instructions(
 	if not agent_orm.system_prompt:
 		return thread
 
-	user = principal.user if principal else None
+	user = principal.subject if principal else None
 	rendered = await render_agent_instructions(
 		session,
 		text=agent_orm.system_prompt,

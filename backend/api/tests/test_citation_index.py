@@ -6,8 +6,13 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.message import AssistantMessage as AssistantMessageORM
+from api.models.message import UserMessage as UserMessageORM
+from api.models.thread import Thread as ThreadORM
 from api.schemas.message import Citation, CitationSource
+from api.tests.factories import create_user
 from api.v1.service.chat.filters.citation_index import (
 	CitationIndexFilter,
 	_find_nci_in_window,
@@ -30,6 +35,7 @@ from nokodo_ai.messages import (
 )
 from nokodo_ai.threads import Thread
 from nokodo_ai.types import JSONObject, JSONValue
+from nokodo_ai.utils.typeid import new_typeid
 
 
 # helpers
@@ -988,6 +994,35 @@ class TestOverfetchNci:
 		session.execute.return_value = mock_result
 		result = await _overfetch_nci(session, "msg_001")
 		assert result is None
+
+	@pytest.mark.asyncio
+	async def test_reads_the_key_from_the_private_namespace(
+		self,
+		db_session: AsyncSession,
+	) -> None:
+		"""the query must address where the column actually stores the key.
+
+		regression: every other test here mocks the session, so the SQL was
+		never executed against a real column. it kept reading the flat
+		`_next_citation_index` path after the key moved into `_private`,
+		de-prefixed, and silently found nothing - which reads as "no citations
+		yet" and restarts numbering at 1 on a partial branch load.
+		"""
+		owner = await create_user(db_session, f"nci_{new_typeid('user')[-8:]}")
+		thread = ThreadORM(owner_id=owner.id, tags=[])
+		db_session.add(thread)
+		await db_session.flush()
+
+		ancestor = AssistantMessageORM(thread_id=thread.id)
+		ancestor.set_metadata(private={"next_citation_index": 7})
+		db_session.add(ancestor)
+		await db_session.flush()
+
+		child = UserMessageORM(thread_id=thread.id, parent_id=ancestor.id)
+		db_session.add(child)
+		await db_session.commit()
+
+		assert await _overfetch_nci(db_session, str(child.id)) == 7
 
 
 # CitationIndexFilter.process (integration)
