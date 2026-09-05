@@ -4,8 +4,6 @@ all concrete provider adapters should implement this so callers can reliably
 clean up resources via `await adapter.close()`.
 """
 
-from __future__ import annotations
-
 from abc import ABC
 from typing import Self
 

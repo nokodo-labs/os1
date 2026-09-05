@@ -23,8 +23,6 @@ usage:
 	vectors = await embedder.embed(["hello", "world"])
 """
 
-from __future__ import annotations
-
 from .agents import Agent, AgentIterationSnapshot, AgentIterationState, AgentToolChoice
 from .chat_models import ChatModel
 from .chunkers import Chunker
@@ -52,6 +50,7 @@ from .messages import (
 	Usage,
 	UserMessage,
 )
+from .rerankers import Reranker, RerankResult
 from .threads import Thread
 from .tool import Tool, ToolDefinition, tool
 from .types import JSONArray, JSONObject, JSONValue
@@ -64,6 +63,8 @@ __all__ = [
 	"EmbeddingModel",
 	"EmbeddingInputType",
 	"ImageModel",
+	"Reranker",
+	"RerankResult",
 	"Vectorstore",
 	"Loader",
 	"Chunker",

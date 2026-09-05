@@ -3,8 +3,6 @@
 these tests use dummy clients and monkeypatching to avoid network calls.
 """
 
-from __future__ import annotations
-
 from collections.abc import AsyncIterator, Awaitable
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -59,6 +57,8 @@ from nokodo_ai.adapters.qdrant import base as qdrant_base
 from nokodo_ai.adapters.qdrant.base import BaseQdrantAdapter
 from nokodo_ai.messages import (
 	AssistantMessage,
+	FileContent,
+	ImageContent,
 	JsonContent,
 	Message,
 	SystemMessage,
@@ -545,14 +545,21 @@ def test_openai_chat_helpers_cover_branches(
 	)
 	assert len(openai_msgs) == 3
 
-	# tool message without provider data should fall back to sdk tool_call_id
+	# tool results pair with the assistant turn by sdk id and emit the
+	# assistant's resolved id; unmatched results are dropped
+	paired_assistant = AssistantMessage(
+		content=[],
+		tool_calls=[ToolCall(id="sdk_1", name="t", arguments="{}")],
+	)
 	tool_msgs = _messages_to_openai_chatcompletions(
 		[
-			assistant,
-			ToolMessage(tool_call_id="fallback_id", tool_output="y"),
+			paired_assistant,
+			ToolMessage(tool_call_id="sdk_1", tool_output="y"),
+			ToolMessage(tool_call_id="unmatched", tool_output="z"),
 		]
 	)
-	assert tool_msgs[-1]["tool_call_id"] == "fallback_id"  # type: ignore[typeddict-item]
+	assert len(tool_msgs) == 2
+	assert cast(Any, tool_msgs[-1])["tool_call_id"] == "sdk_1"
 
 	with pytest.raises(TypeError, match="unsupported message type"):
 		_messages_to_openai_chatcompletions([object()])  # type: ignore[list-item]
@@ -802,12 +809,15 @@ def test_openai_messages_to_chatcompletions_tool_message_success() -> None:
 	openai_msgs = _messages_to_openai_chatcompletions([assistant])
 	assert len(openai_msgs) == 1
 
-	# ToolMessage success branch
-	openai_msgs2 = _messages_to_openai_chatcompletions(
-		[
-			ToolMessage(
-				tool_call_id="x",
-				tool_output="y",
+	# ToolMessage success branch: pairs by sdk id, emits the assistant's
+	# provider-issued id
+	assistant2 = AssistantMessage(
+		content=[],
+		tool_calls=[
+			ToolCall(
+				id="x",
+				name="t",
+				arguments="{}",
 				metadata={
 					"_provider_data": {
 						"openai.chat_completions": {
@@ -816,9 +826,75 @@ def test_openai_messages_to_chatcompletions_tool_message_success() -> None:
 					}
 				},
 			)
+		],
+	)
+	openai_msgs2 = _messages_to_openai_chatcompletions(
+		[
+			assistant2,
+			ToolMessage(tool_call_id="x", tool_output="y"),
 		]
 	)
-	assert len(openai_msgs2) == 1
+	assert len(openai_msgs2) == 2
+	assert cast(Any, openai_msgs2[-1])["tool_call_id"] == "id1"
+
+
+def test_openai_chatcompletions_tool_message_carries_image_attachment() -> None:
+	"""tool-result image attachments survive as image_url content parts.
+
+	NOTE: the OpenAI spec types tool content as text-only; multimodal tool content
+	is a de-facto extension (OpenAI's own SDK rejects it; OpenRouter/cliproxy accept
+	it). this asserts the runtime shape the adapter intentionally emits. a text-only
+	tool message still collapses to the cheap scalar string form.
+	"""
+	pair = AssistantMessage(
+		content=[],
+		tool_calls=[ToolCall(id="x", name="t", arguments="{}")],
+	)
+	# text-only -> plain string content (the common path is not regressed)
+	plain = _messages_to_openai_chatcompletions(
+		[pair, ToolMessage(tool_call_id="x", tool_output="just text")]
+	)
+	assert cast(Any, plain[-1])["content"] == "just text"
+
+	# base64 image attachment -> text part + image_url part
+	msgs = _messages_to_openai_chatcompletions(
+		[
+			pair,
+			ToolMessage(
+				tool_call_id="x",
+				tool_output="here is the chart",
+				attachments=[
+					ImageContent(
+						base64="AAAB", media_type="image/png", filename="c.png"
+					)
+				],
+			),
+		]
+	)
+	content = cast(Any, msgs[-1])["content"]
+	assert isinstance(content, list)
+	assert content[0] == {"type": "text", "text": "here is the chart"}
+	assert content[1] == {
+		"type": "image_url",
+		"image_url": {"url": "data:image/png;base64,AAAB", "detail": "auto"},
+	}
+
+	# url image attachment -> image_url part pointing at the url
+	msgs_url = _messages_to_openai_chatcompletions(
+		[
+			pair,
+			ToolMessage(
+				tool_call_id="x",
+				tool_output="",
+				attachments=[ImageContent(url="https://example.com/a.png")],
+			),
+		]
+	)
+	content_url = cast(Any, msgs_url[-1])["content"]
+	assert content_url[-1] == {
+		"type": "image_url",
+		"image_url": {"url": "https://example.com/a.png", "detail": "auto"},
+	}
 
 
 @pytest.mark.asyncio
@@ -1054,11 +1130,17 @@ def test_openai_responses_input_helpers_and_errors() -> None:
 	assert cast(Any, items[0])["type"] == "message"
 	assert cast(Any, items[1])["call_id"] == "sdk_tc_1"
 
-	# tool message should fall back to sdk tool_call_id when provider data missing
+	# tool message pairs with the assistant call by sdk id; orphans are dropped
 	tool_items = _messages_to_openai_responses_input(
-		[ToolMessage(tool_call_id="sdk_tc_2", tool_output="y")]
+		[
+			assistant,
+			ToolMessage(tool_call_id="sdk_tc_1", tool_output="y"),
+			ToolMessage(tool_call_id="sdk_tc_2", tool_output="z"),
+		]
 	)
-	assert cast(Any, tool_items[0])["call_id"] == "sdk_tc_2"
+	assert len(tool_items) == 3
+	assert cast(Any, tool_items[-1])["type"] == "function_call_output"
+	assert cast(Any, tool_items[-1])["call_id"] == "sdk_tc_1"
 
 	with pytest.raises(TypeError, match="unsupported message type"):
 		_messages_to_openai_responses_input([object()])  # type: ignore[list-item]
@@ -1078,6 +1160,7 @@ def test_openai_responses_input_happy_paths() -> None:
 	assistant = AssistantMessage.from_text("")
 	assistant.tool_calls = [
 		ToolCall(
+			id="x",
 			name="t",
 			arguments={"a": 1},
 			metadata={
@@ -1095,20 +1178,12 @@ def test_openai_responses_input_happy_paths() -> None:
 	assert first["call_id"] == "id1"
 	assert isinstance(first.get("arguments"), str)
 
-	tool_msg = ToolMessage(
-		tool_call_id="x",
-		tool_output="ok",
-		metadata={
-			"_provider_data": {
-				"openai.responses": {
-					"tool_call_id": "id1",
-				}
-			}
-		},
-	)
-	items2 = _messages_to_openai_responses_input([tool_msg])
-	first2 = cast(Any, items2[0])
+	# tool result pairs by sdk id and emits the assistant's provider id
+	tool_msg = ToolMessage(tool_call_id="x", tool_output="ok")
+	items2 = _messages_to_openai_responses_input([assistant, tool_msg])
+	first2 = cast(Any, items2[-1])
 	assert first2["type"] == "function_call_output"
+	assert first2["call_id"] == "id1"
 
 	# SystemMessage path
 	items3 = _messages_to_openai_responses_input([SystemMessage.from_text("s")])
@@ -1118,6 +1193,80 @@ def test_openai_responses_input_happy_paths() -> None:
 	# empty assistant (no text/tool_calls) should produce no items
 	items4 = _messages_to_openai_responses_input([AssistantMessage(content=[])])
 	assert items4 == []
+
+
+def test_openai_responses_tool_message_carries_image_attachment() -> None:
+	"""tool-result image attachments become native input_image output items inside a
+	Responses function_call_output, instead of being flattened to filename text. a
+	text-only tool message keeps the cheap scalar string output."""
+	pair = AssistantMessage(
+		content=[],
+		tool_calls=[ToolCall(id="x", name="t", arguments="{}")],
+	)
+	# text-only -> plain string output (the common path is not regressed)
+	plain = _messages_to_openai_responses_input(
+		[pair, ToolMessage(tool_call_id="x", tool_output="just text")]
+	)
+	assert cast(Any, plain[-1])["output"] == "just text"
+
+	# base64 image attachment -> input_text + input_image output items
+	items = _messages_to_openai_responses_input(
+		[
+			pair,
+			ToolMessage(
+				tool_call_id="x",
+				tool_output="here is the chart",
+				attachments=[
+					ImageContent(
+						base64="AAAB", media_type="image/png", filename="c.png"
+					)
+				],
+			),
+		]
+	)
+	first = cast(Any, items[-1])
+	assert first["type"] == "function_call_output"
+	output = first["output"]
+	assert isinstance(output, list)
+	assert output[0] == {"type": "input_text", "text": "here is the chart"}
+	assert output[1] == {
+		"type": "input_image",
+		"image_url": "data:image/png;base64,AAAB",
+		"detail": "auto",
+	}
+
+	# url image attachment -> input_image output item pointing at the url
+	items_url = _messages_to_openai_responses_input(
+		[
+			pair,
+			ToolMessage(
+				tool_call_id="x",
+				tool_output="",
+				attachments=[ImageContent(url="https://example.com/a.png")],
+			),
+		]
+	)
+	output_url = cast(Any, items_url[-1])["output"]
+	assert output_url[-1] == {
+		"type": "input_image",
+		"image_url": "https://example.com/a.png",
+		"detail": "auto",
+	}
+
+	# non-image file attachment -> input_text placeholder (Responses output items
+	# carry text + images, not arbitrary files)
+	items_file = _messages_to_openai_responses_input(
+		[
+			pair,
+			ToolMessage(
+				tool_call_id="x",
+				tool_output="",
+				attachments=[FileContent(filename="report.pdf")],
+			),
+		]
+	)
+	output_file = cast(Any, items_file[-1])["output"]
+	assert output_file == [{"type": "input_text", "text": "[file: report.pdf]"}]
 
 
 @pytest.mark.asyncio
@@ -1691,7 +1840,9 @@ def test_anthropic_messages_drop_orphaned_tool_result_blocks() -> None:
 	assert msgs == [{"role": "user", "content": "u"}]
 
 
-def test_anthropic_messages_strip_unmatched_tool_use_blocks() -> None:
+def test_anthropic_messages_pairing_ignores_result_provider_metadata() -> None:
+	"""tool results pair by sdk id; mismatched provider metadata on the
+	result never breaks the exchange, and the assistant's emitted id wins."""
 	assistant = AssistantMessage.from_text("thinking")
 	assistant.tool_calls = [
 		ToolCall(
@@ -1723,8 +1874,17 @@ def test_anthropic_messages_strip_unmatched_tool_use_blocks() -> None:
 		[assistant, tool_msg, UserMessage.from_text("next")]
 	)
 
-	assert msgs[0] == {"role": "assistant", "content": "thinking"}
-	assert msgs[1] == {"role": "user", "content": "next"}
+	assert msgs[0]["role"] == "assistant"
+	tool_use_blocks = [
+		block
+		for block in cast(Any, msgs[0]["content"])
+		if block.get("type") == "tool_use"
+	]
+	assert [b["id"] for b in tool_use_blocks] == ["toolu_expected"]
+	result_blocks = cast(Any, msgs[1]["content"])
+	assert [b["tool_use_id"] for b in result_blocks] == ["toolu_expected"]
+	assert result_blocks[0]["content"] == "ok"
+	assert msgs[2] == {"role": "user", "content": "next"}
 
 
 def test_anthropic_messages_keep_only_matched_tool_turns() -> None:

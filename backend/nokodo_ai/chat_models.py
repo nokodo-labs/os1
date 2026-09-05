@@ -1,7 +1,5 @@
 """chat model high-level interface - unified access to chat models."""
 
-from __future__ import annotations
-
 from collections.abc import AsyncIterator, Awaitable
 from typing import Any, ClassVar, Literal, overload
 

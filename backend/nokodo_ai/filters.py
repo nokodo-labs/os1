@@ -1,7 +1,5 @@
 """SDK-level filters for pre-processing agent messages."""
 
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 

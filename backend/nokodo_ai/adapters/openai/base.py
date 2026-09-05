@@ -1,7 +1,5 @@
 """base openai adapter - shared client infrastructure for openai APIs."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from openai import AsyncOpenAI

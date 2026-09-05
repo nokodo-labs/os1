@@ -4,8 +4,6 @@ no concrete audio adapters are implemented yet. this module provides
 the scaffolding for future provider-specific implementations.
 """
 
-from __future__ import annotations
-
 from .base.audio_generation import (
 	AudioGenerationParams,
 	AudioGenerationResult,

@@ -20,6 +20,7 @@ from typing import (
 	get_type_hints,
 )
 
+import regex
 from pydantic import TypeAdapter
 from typing_extensions import TypeForm
 
@@ -54,6 +55,13 @@ def warn_known_model(value: str, known_type: object) -> str:
 			value,
 			known_type,
 		)
+	return value
+
+
+def validate_single_grapheme(value: str) -> str:
+	"""validate that a string is exactly one user-perceived character."""
+	if not regex.fullmatch(r"\X", value):
+		raise ValueError("must be exactly one character")
 	return value
 
 

@@ -1,25 +1,25 @@
 # nokodo AI SDK
 
-## Purpose
+## purpose
 
-This package contains the core business logic and service layer, separate from the FastAPI application. It can be:
+this package contains the core business logic and service layer, separate from the FastAPI application. it can be:
 
--   Packaged independently and distributed via pip
--   Imported by the API layer (`api/` directory)
--   Used by other Python projects without FastAPI dependencies
--   Tested independently with its own test suite
+- packaged independently and distributed via pip
+- imported by the API layer (`api/` directory)
+- used by other Python projects without FastAPI dependencies
+- tested independently with its own test suite
 
-## Structure
+## structure
 
 ```
 nokodo_ai/
-├── __init__.py          # Package initialization
-├── services/            # Business logic
-├── utils/               # Helper functions
-└── types/               # Type definitions
+├── __init__.py          # package initialization
+├── services/            # business logic
+├── utils/               # helper functions
+└── types/               # type definitions
 ```
 
-## Usage in API
+## usage in API
 
 ```python
 from api.core.database import get_db

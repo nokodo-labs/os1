@@ -1,7 +1,5 @@
 """chunker adapter union - single entry point for content chunkers."""
 
-from __future__ import annotations
-
 from typing import Annotated
 
 from pydantic import Field, TypeAdapter

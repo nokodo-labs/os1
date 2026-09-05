@@ -8,8 +8,6 @@ separated from utils/tokens.py because these functions need runtime
 imports from nokodo_ai.messages, which is forbidden in utils/.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Sequence
 from math import ceil

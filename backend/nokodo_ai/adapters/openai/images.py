@@ -1,7 +1,5 @@
 """openai image generation adapter - DALL-E / gpt-image APIs."""
 
-from __future__ import annotations
-
 import logging
 from typing import Literal, cast
 

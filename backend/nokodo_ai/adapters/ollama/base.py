@@ -1,7 +1,5 @@
 """base ollama adapter - shared client infrastructure for ollama APIs."""
 
-from __future__ import annotations
-
 from pydantic import Field, PrivateAttr
 
 from ...base import Base

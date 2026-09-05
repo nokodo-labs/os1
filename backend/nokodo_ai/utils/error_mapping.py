@@ -1,21 +1,23 @@
 """generic exception shape helpers."""
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable
 class NoArgProviderValue(Protocol):
-	def __call__(self) -> object: ...
+	def __call__(self) -> object:
+		"""return a provider value without arguments."""
+		...
 
 
 def status_is_unavailable(status_code: int | None) -> bool:
+	"""return whether an HTTP status indicates provider unavailability."""
 	return status_code in {500, 502, 503, 529}
 
 
 def status_code_from_attrs(exc: Exception) -> int | None:
+	"""extract an HTTP status code from a provider exception."""
 	for value in (
 		getattr(exc, "status_code", None),
 		response_attr(exc, "status_code"),
@@ -26,6 +28,7 @@ def status_code_from_attrs(exc: Exception) -> int | None:
 
 
 def error_code(exc: Exception) -> str | None:
+	"""extract a normalized provider error code from an exception."""
 	for value in (
 		getattr(exc, "code", None),
 		body_error_value(exc, "code"),
@@ -40,6 +43,7 @@ def error_code(exc: Exception) -> str | None:
 
 
 def error_text(exc: Exception) -> str:
+	"""build deduplicated text from common provider error fields."""
 	parts: list[str] = []
 	for value in (
 		getattr(exc, "message", None),
@@ -58,10 +62,12 @@ def error_text(exc: Exception) -> str:
 
 
 def body_mapping(exc: Exception) -> dict[str, object] | None:
+	"""return the exception body as a string-keyed mapping."""
 	return string_key_mapping(getattr(exc, "body", None))
 
 
 def body_error_value(exc: Exception, key: str) -> object | None:
+	"""read a value from a nested or top-level provider error body."""
 	body = body_mapping(exc)
 	if body is None:
 		return None
@@ -73,19 +79,25 @@ def body_error_value(exc: Exception, key: str) -> object | None:
 
 
 def string_key_mapping(value: object) -> dict[str, object] | None:
+	"""copy a mapping while retaining only string-keyed entries."""
 	if not isinstance(value, Mapping):
 		return None
 	return {key: item for key, item in value.items() if isinstance(key, str)}
 
 
 def response_attr(exc: Exception, attr: str) -> object | None:
+	"""safely read an attribute from an exception's response."""
 	response = getattr(exc, "response", None)
 	if response is None:
 		return None
-	return getattr(response, attr, None)
+	try:
+		return getattr(response, attr, None)
+	except Exception:
+		return None
 
 
 def stringify_code(value: object) -> str | None:
+	"""normalize a provider error-code value to non-empty text."""
 	if value is None:
 		return None
 	if isinstance(value, NoArgProviderValue):

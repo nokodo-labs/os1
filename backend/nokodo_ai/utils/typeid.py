@@ -1,8 +1,5 @@
-from __future__ import annotations
-
 import re
-import secrets
-import time
+import uuid
 from typing import Any, Final
 
 from pydantic import GetCoreSchemaHandler
@@ -30,24 +27,6 @@ _SUFFIX_RE: Final[re.Pattern[str]] = re.compile(
 
 def typeid_max_length() -> int:
 	return TYPEID_MAX_LENGTH
-
-
-def _uuid7_bytes() -> bytes:
-	# uuidv7 per rfc9562 layout:
-	# - 48-bit unix epoch ms
-	# - version 7
-	# - 12 bits rand_a
-	# - variant 10
-	# - 62 bits rand_b
-	ms = time.time_ns() // 1_000_000
-	if ms < 0 or ms > 0xFFFFFFFFFFFF:
-		raise ValueError("timestamp out of range for uuidv7")
-
-	rand_a = secrets.randbits(12)
-	rand_b = secrets.randbits(62)
-
-	uuid_int = (ms << 80) | (0x7 << 76) | (rand_a << 64) | (0x2 << 62) | rand_b
-	return uuid_int.to_bytes(16, byteorder="big", signed=False)
 
 
 def _encode_base32_uuid_suffix(uuid_bytes: bytes) -> str:
@@ -110,7 +89,7 @@ def new_typeid(prefix: str) -> TypeID:
 			"invalid typeid prefix: must match ^([a-z]([a-z_]{0,61}[a-z])?)?$"
 		)
 
-	suffix = _encode_base32_uuid_suffix(_uuid7_bytes())
+	suffix = _encode_base32_uuid_suffix(uuid.uuid7().bytes)
 	if prefix == "":
 		return TypeID(suffix)
 	return TypeID(f"{prefix}{TYPEID_SEPARATOR}{suffix}")
@@ -157,6 +136,13 @@ def assert_typeid(value: str, prefix: str | None = None) -> str:
 			raise ValueError("invalid typeid")
 		raise ValueError(f"invalid typeid: expected prefix '{prefix}'")
 	return value
+
+
+def typeid_tuple(values: object) -> tuple[TypeID, ...]:
+	"""coerce an untrusted list (e.g. deserialized JSON) into TypeIDs."""
+	if not isinstance(values, list):
+		raise ValueError("expected a list of ids")
+	return tuple(TypeID(str(v)) for v in values)
 
 
 class TypeID(str):

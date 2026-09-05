@@ -1,7 +1,5 @@
 """Tool ABC and implementations - callable capabilities for agents."""
 
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from functools import cached_property
@@ -12,7 +10,7 @@ from pydantic import Field
 
 from .base import Base
 from .context import AgentContext, ToolCallContext
-from .messages import ToolMessage
+from .messages import ToolAttachment, ToolMessage
 from .types.json import JSONObject
 from .utils.json_schema import schema_from_callable
 from .utils.validators import validate_callable
@@ -104,25 +102,36 @@ class Tool[AppContextT = None](Base, ABC):
 		self,
 		output: str,
 		tool_call_context: ToolCallContext,
+		metadata: JSONObject | None = None,
+		attachments: list[ToolAttachment] | None = None,
 	) -> ToolMessage:
-		"""helper to create a successful tool response."""
+		"""create a successful tool response."""
+		response_metadata = {
+			**(tool_call_context.metadata or {}),
+			**(metadata or {}),
+		}
 		return ToolMessage(
 			tool_call_id=tool_call_context.tool_call_id,
 			tool_output=output,
-			metadata=tool_call_context.metadata,
+			metadata=response_metadata,
 			is_error=False,
+			attachments=attachments or [],
 		)
 
 	def error(
 		self,
 		message: str,
 		tool_call_context: ToolCallContext,
+		metadata: JSONObject | None = None,
 	) -> ToolMessage:
-		"""helper to create an error tool response."""
+		"""create an error tool response."""
 		return ToolMessage(
 			tool_call_id=tool_call_context.tool_call_id,
 			tool_output=message,
-			metadata=tool_call_context.metadata,
+			metadata={
+				**(tool_call_context.metadata or {}),
+				**(metadata or {}),
+			},
 			is_error=True,
 		)
 

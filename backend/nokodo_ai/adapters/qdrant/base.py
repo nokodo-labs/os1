@@ -1,7 +1,5 @@
 """base qdrant adapter - shared client infrastructure for qdrant APIs."""
 
-from __future__ import annotations
-
 from pydantic import Field
 from qdrant_client import AsyncQdrantClient
 

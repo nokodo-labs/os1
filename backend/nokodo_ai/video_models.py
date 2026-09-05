@@ -1,7 +1,5 @@
 """video model high-level interface - unified access to video generation."""
 
-from __future__ import annotations
-
 from collections.abc import AsyncIterator, Awaitable
 from typing import Any, ClassVar, Literal, overload
 

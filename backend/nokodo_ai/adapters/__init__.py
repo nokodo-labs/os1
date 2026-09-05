@@ -7,6 +7,7 @@ from .base import (
 	BaseEmbeddingAdapter,
 	BaseImageAdapter,
 	BaseLoaderAdapter,
+	BaseRerankerAdapter,
 	BaseVectorstoreAdapter,
 )
 
@@ -18,5 +19,6 @@ __all__ = [
 	"BaseEmbeddingAdapter",
 	"BaseImageAdapter",
 	"BaseLoaderAdapter",
+	"BaseRerankerAdapter",
 	"BaseVectorstoreAdapter",
 ]

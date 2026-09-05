@@ -6,8 +6,6 @@ best for editing workflows where the source image is provided as
 part of the conversation context.
 """
 
-from __future__ import annotations
-
 import base64
 import logging
 from typing import Literal

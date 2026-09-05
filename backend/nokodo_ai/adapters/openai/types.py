@@ -4,8 +4,6 @@ the goal is to keep all OpenAI SDK imports in one place so adapter modules
 stay small and type check cleanly.
 """
 
-from __future__ import annotations
-
 from openai._streaming import AsyncStream as OpenAIAsyncStream
 from openai.types import (
 	ChatModel as OpenAIChatModel,

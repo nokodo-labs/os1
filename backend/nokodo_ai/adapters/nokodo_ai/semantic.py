@@ -1,7 +1,5 @@
 """nokodo_ai semantic chunker adapter."""
 
-from __future__ import annotations
-
 import logging
 import re
 from math import sqrt
@@ -18,9 +16,9 @@ from nokodo_ai.adapters.base.loaders import Text
 from nokodo_ai.adapters.nokodo_ai.recursive import (
 	RecursiveChunkerAdapter,
 	_chunks_from_ranges,
-	_normalize_text,
+	normalize_text,
 )
-from nokodo_ai.embeddings import EmbeddingModel
+from nokodo_ai.embeddings import ContextualizedEmbeddingModel, EmbeddingModel
 from nokodo_ai.utils.tokens import estimate_tokens
 
 
@@ -35,20 +33,20 @@ class SemanticChunkerAdapter(BaseChunkerAdapter):
 	type: Literal["nokodo_ai.semantic"] = "nokodo_ai.semantic"
 	name: Literal["semantic"] = "semantic"
 
-	embedder: EmbeddingModel
+	embedder: EmbeddingModel | ContextualizedEmbeddingModel
 	breakpoint_percentile: float = 95.0
 	min_sentences_per_chunk: int = 2
 	buffer_size: int = 1
 
 	def supports(self, text: Text, params: ChunkingParams) -> bool:
-		return text.status == "loaded" and bool(_normalize_text(text.content))
+		return text.status == "loaded" and bool(normalize_text(text.content))
 
 	async def chunk(
 		self,
 		text: Text,
 		params: ChunkingParams,
 	) -> list[ContentChunk]:
-		normalized = _normalize_text(text.content)
+		normalized = normalize_text(text.content)
 		if not self.supports(text, params):
 			return []
 

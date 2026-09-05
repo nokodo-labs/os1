@@ -1,12 +1,10 @@
 """openai chat completions adapter - /v1/chat/completions endpoint."""
 
-from __future__ import annotations
-
 import json
 import logging
 from collections.abc import AsyncIterator, Awaitable
 from time import time
-from typing import TYPE_CHECKING, Literal, overload
+from typing import TYPE_CHECKING, Literal, cast, overload
 
 import openai
 
@@ -33,7 +31,7 @@ from ...utils.provider_meta import (
 	provider_tool_call_metadata,
 )
 from ...utils.validators import warn_known_model
-from ..base.chat import BaseChatAdapter, ChatGenerationParams
+from ..base.chat import BaseChatAdapter, ChatGenerationParams, ReasoningEffort
 from .base import BaseOpenAIAdapter
 from .exceptions import map_openai_generation_exceptions
 from .types import (
@@ -69,7 +67,7 @@ logger = logging.getLogger(__name__)
 
 
 def _to_openai_reasoning_effort(
-	effort: Literal["none", "minimal", "low", "medium", "high", "max"],
+	effort: ReasoningEffort,
 ) -> OpenAIReasoningEffort:
 	"""map internal effort label to the openai API value ('max' -> 'xhigh')."""
 	return "xhigh" if effort == "max" else effort
@@ -581,27 +579,14 @@ def _content_parts_to_openai_cc(
 	return result
 
 
-def _tool_output_with_attachments(message: ToolMessage) -> str:
-	"""build tool output string including attachment placeholders.
-
-	CC/Responses tool results only support text. if the tool message
-	has attachments, append filename placeholders so the model
-	knows they exist.
-	"""
-	if not message.attachments:
-		return message.tool_output
-	parts = [message.tool_output]
-	for att in message.attachments:
-		label = att.filename or "attachment"
-		parts.append(f"[attached: {label}]")
-	return "\n".join(parts)
-
-
 def _messages_to_openai_chatcompletions(
 	messages: list[Message],
 ) -> list[OpenAIChatCompletionMessageParam]:
 	"""convert SDK messages into OpenAI chat.completions message params."""
 	openai_messages: list[OpenAIChatCompletionMessageParam] = []
+	# tool results pair with assistant tool calls by sdk id; both sides of a
+	# pair must emit the same id.
+	emitted_id_by_sdk_id: dict[str, str] = {}
 	for message in messages:
 		match message:
 			case UserMessage():
@@ -627,45 +612,59 @@ def _messages_to_openai_chatcompletions(
 					content=message.text or None,
 				)
 				if message.tool_calls:
-					openai_message["tool_calls"] = [
-						OpenAIChatCompletionFunctionToolCallParam(
-							id=get_provider_tool_call_id(
+					tool_call_params: list[
+						OpenAIChatCompletionFunctionToolCallParam
+					] = []
+					for tool_call in message.tool_calls:
+						emitted_id = (
+							get_provider_tool_call_id(
 								metadata=tool_call.metadata,
 								provider="openai.chat_completions",
 								fallback_id=tool_call.id,
 							)
-							or tool_call.id,
-							type="function",
-							function={
-								"name": tool_call.name,
-								"arguments": tool_call.arguments
-								if isinstance(tool_call.arguments, str)
-								else json.dumps(tool_call.arguments),
-							},
+							or tool_call.id
 						)
-						for tool_call in message.tool_calls
-					]
+						emitted_id_by_sdk_id[tool_call.id] = emitted_id
+						tool_call_params.append(
+							OpenAIChatCompletionFunctionToolCallParam(
+								id=emitted_id,
+								type="function",
+								function={
+									"name": tool_call.name,
+									"arguments": tool_call.arguments
+									if isinstance(tool_call.arguments, str)
+									else json.dumps(tool_call.arguments),
+								},
+							)
+						)
+					openai_message["tool_calls"] = tool_call_params
 				openai_messages.append(openai_message)
 			case ToolMessage():
-				# CC tool messages only support text -
-				# append attachment placeholders so the model
-				# knows they exist
-				openai_tool_call_id = (
-					get_provider_tool_call_id(
-						metadata=message.metadata,
-						provider="openai.chat_completions",
-						fallback_id=message.tool_call_id,
+				openai_tool_call_id = emitted_id_by_sdk_id.get(message.tool_call_id)
+				if openai_tool_call_id is None:
+					logger.warning(
+						"dropping tool result with no matching tool call: %s",
+						message.tool_call_id,
 					)
-					or message.tool_call_id
-				)
-				content = _tool_output_with_attachments(
-					message,
-				)
+					continue
+				# tool_output + attachments -> the same content-part machinery as
+				# user messages, so image/file attachments survive as content parts
+				# (e.g. image_url) instead of being flattened to text placeholders.
+				# NOTE: the OpenAI spec types tool content as text-only; multimodal
+				# tool content is a de-facto extension (OpenAI's own SDK rejects it;
+				# OpenRouter/cliproxy accept it) — hence the cast.
+				tool_parts: list[ContentPart] = [
+					TextContent(text=message.tool_output),
+					*message.attachments,
+				]
 				openai_messages.append(
 					OpenAIChatCompletionToolMessageParam(
 						role="tool",
 						tool_call_id=openai_tool_call_id,
-						content=content,
+						content=cast(
+							"str | list[OpenAIChatCompletionContentPartTextParam]",
+							_content_parts_to_openai_cc(tool_parts),
+						),
 					)
 				)
 			case _:

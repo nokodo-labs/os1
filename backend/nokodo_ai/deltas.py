@@ -4,8 +4,6 @@ these are transport-layer wrappers for streaming.
 no streaming-related metadata should be stored on domain message models.
 """
 
-from __future__ import annotations
-
 from collections.abc import AsyncIterator
 
 from pydantic import Field

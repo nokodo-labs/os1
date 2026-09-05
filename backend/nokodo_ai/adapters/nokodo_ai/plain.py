@@ -1,7 +1,5 @@
 """nokodo_ai plain text loader adapter."""
 
-from __future__ import annotations
-
 import csv
 import io
 import json

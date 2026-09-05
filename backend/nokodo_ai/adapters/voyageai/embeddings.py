@@ -1,7 +1,5 @@
 """voyageai embedding adapter."""
 
-from __future__ import annotations
-
 from typing import Any, Literal
 
 from ..base.embeddings import BaseEmbeddingAdapter, EmbeddingInputType

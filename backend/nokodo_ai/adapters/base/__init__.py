@@ -16,6 +16,7 @@ from .client import BaseClientAdapter
 from .embeddings import BaseEmbeddingAdapter
 from .image_generation import BaseImageAdapter
 from .loaders import BaseLoaderAdapter
+from .rerankers import BaseRerankerAdapter
 from .vectorstores import BaseVectorstoreAdapter
 from .video_generation import BaseVideoAdapter
 
@@ -36,6 +37,7 @@ __all__ = [
 	"BaseChunkerAdapter",
 	"BaseEmbeddingAdapter",
 	"BaseImageAdapter",
+	"BaseRerankerAdapter",
 	"BaseLoaderAdapter",
 	"BaseVectorstoreAdapter",
 	"BaseVideoAdapter",

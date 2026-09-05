@@ -1,7 +1,5 @@
 """base image generation adapter - capability ABC for image gen APIs."""
 
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable
 from dataclasses import dataclass, field

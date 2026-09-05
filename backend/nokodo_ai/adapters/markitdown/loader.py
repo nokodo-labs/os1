@@ -1,7 +1,5 @@
 """MarkItDown loader adapter."""
 
-from __future__ import annotations
-
 import importlib
 import io
 from types import ModuleType

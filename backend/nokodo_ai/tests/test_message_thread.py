@@ -120,6 +120,27 @@ def test_assistant_merge_does_not_overwrite_earlier_monotonic() -> None:
 	assert base.tool_calls[0].created_at_monotonic == early_mono
 
 
+def test_assistant_merge_preserves_content_part_order() -> None:
+	base = AssistantMessage(content=[TextContent(text="before")])
+	base.merge(AssistantMessage(content=[JsonContent(data={"value": 1})]))
+	base.merge(AssistantMessage(content=[TextContent(text="after")]))
+
+	assert [part.type for part in base.content] == ["text", "json", "text"]
+	assert base.text == "beforeafter"
+
+
+def test_assistant_merge_copies_delta_content_parts() -> None:
+	delta = AssistantMessage(content=[JsonContent(data={"value": 1})])
+	base = AssistantMessage()
+
+	base.merge(delta)
+	assert isinstance(base.content[0], JsonContent)
+	base.content[0].data["value"] = 2
+
+	assert isinstance(delta.content[0], JsonContent)
+	assert delta.content[0].data == {"value": 1}
+
+
 def test_tool_message_creation() -> None:
 	msg = ToolMessage(tool_call_id="call_1", tool_output="sunny")
 	assert msg.tool_output == "sunny"

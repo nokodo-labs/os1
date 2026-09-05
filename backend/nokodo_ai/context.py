@@ -1,7 +1,5 @@
 """agent execution contexts shared by the SDK runtime."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -17,27 +15,21 @@ class AgentContext:
 
 	mutable per-iteration data belongs in ``AgentIterationState``. tool-call
 	data belongs in ``ToolCallContext``.
-
-	attributes:
-		model: the chat model being used for execution
 	"""
 
 	model: ChatModel = field()
+	"""the chat model this run executes against."""
 
 
 @dataclass(frozen=True, slots=True)
 class ToolCallContext:
-	"""tool-specific context for a single tool invocation.
-
-	attributes:
-		tool_call_id: id of the current tool call
-		retry_count: number of retries for the tool call
-		tool_call_start_time: monotonic timestamp from when the tool call generation
-			began. use with time.monotonic() for elapsed time calculations.
-		metadata: tool-call metadata from the provider/runtime
-	"""
+	"""tool-specific context for a single tool invocation."""
 
 	tool_call_id: str = field()
+	"""identifies this call, and correlates the events it emits."""
 	tool_call_start_time: float = field()
+	"""monotonic start of the call; subtract from ``time.monotonic()``."""
 	retry_count: int = field(default=0)
+	"""how many times this call has already been attempted."""
 	metadata: JSONObject = field(default_factory=dict)
+	"""tool-call metadata from the provider or runtime."""

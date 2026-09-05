@@ -1,7 +1,5 @@
 """unit coverage for embedding token counting (exact vs estimate fallback)."""
 
-from __future__ import annotations
-
 from nokodo_ai.adapters.ollama.embeddings import OllamaEmbeddingsAdapter
 from nokodo_ai.adapters.openai.embeddings import OpenAIEmbeddingsAdapter
 from nokodo_ai.embeddings import EmbeddingModel

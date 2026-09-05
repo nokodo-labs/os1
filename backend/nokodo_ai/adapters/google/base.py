@@ -1,7 +1,5 @@
 """base google adapter - shared client infrastructure for google genai APIs."""
 
-from __future__ import annotations
-
 import google.genai as genai
 from google.genai.client import AsyncClient
 from pydantic import Field

@@ -1,7 +1,5 @@
 """high-level content loading surface."""
 
-from __future__ import annotations
-
 from typing import ClassVar
 
 from pydantic import model_validator

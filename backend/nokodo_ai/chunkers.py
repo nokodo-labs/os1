@@ -1,7 +1,5 @@
 """high-level content chunking surface."""
 
-from __future__ import annotations
-
 from typing import ClassVar
 
 from pydantic import model_validator
@@ -13,6 +11,10 @@ from .adapters.chunkers import (
 	ChunkerAdapter,
 	resolve_chunker_adapter,
 )
+from .adapters.nokodo_ai.recursive import normalize_text
+
+
+__all__ = ["Chunker", "normalize_text"]
 
 
 class Chunker(AdapterEnabledBase[BaseChunkerAdapter]):

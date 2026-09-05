@@ -1,8 +1,7 @@
 """anthropic messages adapter - /v1/messages endpoint."""
 
-from __future__ import annotations
-
 import json
+import logging
 from collections.abc import AsyncIterator, Awaitable
 from time import time
 from typing import TYPE_CHECKING, Literal, TypeIs, overload
@@ -30,7 +29,7 @@ from ...utils.provider_meta import (
 	get_provider_tool_call_id,
 	provider_tool_call_metadata,
 )
-from ..base.chat import BaseChatAdapter, ChatGenerationParams
+from ..base.chat import BaseChatAdapter, ChatGenerationParams, ReasoningEffort
 from .base import BaseAnthropicAdapter
 from .exceptions import map_anthropic_generation_exceptions
 from .types import (
@@ -65,6 +64,8 @@ if TYPE_CHECKING:
 	from nokodo_ai.messages import Message
 
 
+logger = logging.getLogger(__name__)
+
 _ANTHROPIC_THINKING_BUDGET: dict[str, int] = {
 	"minimal": 512,
 	"low": 2000,
@@ -74,7 +75,7 @@ _ANTHROPIC_THINKING_BUDGET: dict[str, int] = {
 
 
 def _reasoning_effort_to_anthropic(
-	effort: str,
+	effort: ReasoningEffort,
 ) -> AnthropicThinkingConfigParam:
 	"""convert reasoning_effort to an anthropic thinking config param."""
 	if effort == "none":
@@ -516,17 +517,9 @@ def _content_parts_to_anthropic(
 
 def _tool_message_to_result_block(
 	message: ToolMessage,
+	tool_use_id: str,
 ) -> AnthropicToolResultBlockParam:
 	"""build a single tool_result block from a ToolMessage."""
-	tool_use_id = (
-		get_provider_tool_call_id(
-			metadata=message.metadata,
-			provider="anthropic.messages",
-			fallback_id=message.tool_call_id,
-		)
-		or message.tool_call_id
-	)
-
 	tool_blocks: list[AnthropicTextBlockParam | AnthropicImageBlockParam] = []
 	if message.tool_output:
 		tool_blocks.append(
@@ -604,7 +597,7 @@ def _messages_to_anthropic(
 				if not assistant_text and message.json_content is not None:
 					assistant_text = json.dumps(message.json_content)
 				tool_blocks: list[AnthropicToolUseBlockParam] = []
-				tool_use_by_id: dict[str, AnthropicToolUseBlockParam] = {}
+				emitted_id_by_sdk_id: dict[str, str] = {}
 				for call in message.tool_calls:
 					tool_use_id = (
 						get_provider_tool_call_id(
@@ -635,7 +628,7 @@ def _messages_to_anthropic(
 						"input": input_map,
 					}
 					tool_blocks.append(tool_block)
-					tool_use_by_id[tool_use_id] = tool_block
+					emitted_id_by_sdk_id[call.id] = tool_use_id
 
 				if not tool_blocks:
 					_append_anthropic_assistant_message(
@@ -646,82 +639,54 @@ def _messages_to_anthropic(
 					i += 1
 					continue
 
+				# pair following tool results with this turn's calls by their
+				# sdk ids; both sides of a pair must emit the same id.
 				result_blocks: list[AnthropicToolResultBlockParam] = []
-				matched_tool_ids: list[str] = []
+				resulted_sdk_ids: set[str] = set()
 				j = i + 1
 				while j < len(messages) and isinstance(messages[j], ToolMessage):
 					tm = messages[j]
 					assert isinstance(tm, ToolMessage)
-					result_block = _tool_message_to_result_block(tm)
-					tool_use_id = result_block["tool_use_id"]
-					if tool_use_id in tool_use_by_id:
-						result_blocks.append(result_block)
-						if tool_use_id not in matched_tool_ids:
-							matched_tool_ids.append(tool_use_id)
+					emitted_id = emitted_id_by_sdk_id.get(tm.tool_call_id)
+					if emitted_id is None or tm.tool_call_id in resulted_sdk_ids:
+						logger.warning(
+							"dropping tool result with no matching tool call: %s",
+							tm.tool_call_id,
+						)
+					else:
+						result_blocks.append(
+							_tool_message_to_result_block(tm, emitted_id)
+						)
+						resulted_sdk_ids.add(tm.tool_call_id)
 					j += 1
 
-				had_tool_messages = j > i + 1
-
-				if matched_tool_ids:
-					# some tool results matched - include matched tool_use
-					# blocks plus synthetic error results for any unmatched
-					unmatched_ids = [
-						tid for tid in tool_use_by_id if tid not in matched_tool_ids
-					]
-					for uid in unmatched_ids:
-						result_blocks.append(
-							AnthropicToolResultBlockParam(
-								type="tool_result",
-								tool_use_id=uid,
-								content=(
-									"tool execution was interrupted or never completed"
-								),
-								is_error=True,
-							)
+				for call in message.tool_calls:
+					if call.id in resulted_sdk_ids:
+						continue
+					result_blocks.append(
+						AnthropicToolResultBlockParam(
+							type="tool_result",
+							tool_use_id=emitted_id_by_sdk_id[call.id],
+							content=(
+								"tool execution was interrupted or never completed"
+							),
+							is_error=True,
 						)
-					_append_anthropic_assistant_message(
-						result,
-						assistant_text=assistant_text,
-						tool_blocks=tool_blocks,
 					)
-					result.append({"role": "user", "content": result_blocks})
-					i = j
-					continue
-
-				if had_tool_messages:
-					# tool messages followed but none matched (corrupt data) -
-					# strip tool_use blocks and skip past the lookahead
-					_append_anthropic_assistant_message(
-						result,
-						assistant_text=assistant_text,
-						tool_blocks=[],
-					)
-					i = j
-				else:
-					# no tool messages followed at all (interrupted run) -
-					# keep tool_use blocks with synthetic error results so
-					# anthropic receives a valid tool_use / tool_result pair
-					for tid in tool_use_by_id:
-						result_blocks.append(
-							AnthropicToolResultBlockParam(
-								type="tool_result",
-								tool_use_id=tid,
-								content=(
-									"tool execution was interrupted or never completed"
-								),
-								is_error=True,
-							)
-						)
-					_append_anthropic_assistant_message(
-						result,
-						assistant_text=assistant_text,
-						tool_blocks=tool_blocks,
-					)
-					result.append({"role": "user", "content": result_blocks})
-					i += 1
+				_append_anthropic_assistant_message(
+					result,
+					assistant_text=assistant_text,
+					tool_blocks=tool_blocks,
+				)
+				result.append({"role": "user", "content": result_blocks})
+				i = j
 			case ToolMessage():
-				# skip orphaned tool results. anthropic requires tool_result
-				# blocks to immediately follow the assistant tool_use turn.
+				# anthropic requires tool_result blocks to immediately follow
+				# the assistant tool_use turn; a tool message here is orphaned.
+				logger.warning(
+					"dropping orphaned tool result: %s",
+					message.tool_call_id,
+				)
 				i += 1
 			case _:
 				raise TypeError(f"unsupported message type: {type(message)}")

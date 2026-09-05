@@ -1,7 +1,5 @@
 """tests for SDK Agent class."""
 
-from __future__ import annotations
-
 from collections.abc import AsyncIterator, Awaitable
 
 import pytest
@@ -174,7 +172,7 @@ def _state_from(thread: Thread) -> AgentIterationState[None]:
 	return AgentIterationState(thread=thread, tools=[])
 
 
-def test_iteration_snapshot_copies_thread_and_tools() -> None:
+def test_iteration_snapshot_copies_thread_and_shares_tools() -> None:
 	thread = Thread()
 	thread.add(UserMessage.from_text("hello"))
 	tool: Tool[None] = _EchoTool(name="echo", description="echo")
@@ -189,9 +187,56 @@ def test_iteration_snapshot_copies_thread_and_tools() -> None:
 	assert snapshot.thread is not state.thread
 	assert snapshot.thread.messages[0] is not state.thread.messages[0]
 	assert snapshot.tools is not state.tools
-	assert snapshot_tool is not state.tools[0]
+	assert snapshot_tool is state.tools[0]
 	assert len(state.thread.messages) == 1
 	assert state.tools == [tool]
+
+
+@pytest.mark.asyncio
+async def test_streaming_terminal_delta_gets_default_finish_reason() -> None:
+	adapter = _QueuedChatAdapter(
+		stream_responses=[[AssistantMessage.from_text("done")]]
+	)
+	agent = Agent(chat_model=_make_chat_model(adapter))
+	thread = Thread(messages=[UserMessage.from_text("hello")])
+
+	stream = await agent.run(thread, stream=True)
+	deltas = [delta async for delta in stream]
+	terminal = [delta for delta in deltas if delta.chat is not None and delta.chat.done]
+
+	assert len(terminal) == 1
+	assert terminal[0].chat is not None
+	assert terminal[0].chat.message.finish_reason == "stop"
+	assert isinstance(thread.messages[-1], AssistantMessage)
+	assert thread.messages[-1].finish_reason == "stop"
+
+
+@pytest.mark.asyncio
+async def test_observer_hook_failure_does_not_fail_agent_run() -> None:
+	class _FailingHook(Hook[None]):
+		name: str = "failing"
+
+		async def execute(
+			self,
+			state: AgentIterationSnapshot[None],
+			agent_context: AgentContext,
+			app_context: None,
+		) -> None:
+			_ = (state, agent_context, app_context)
+			raise RuntimeError("observer failed")
+
+	adapter = _QueuedChatAdapter(
+		stream_responses=[[AssistantMessage.from_text("done")]]
+	)
+	agent = Agent(chat_model=_make_chat_model(adapter), hooks=[_FailingHook()])
+	thread = Thread(messages=[UserMessage.from_text("hello")])
+
+	stream = await agent.run(thread, stream=True)
+	deltas = [delta async for delta in stream]
+
+	assert deltas[-1].done
+	assert isinstance(thread.messages[-1], AssistantMessage)
+	assert thread.messages[-1].text == "done"
 
 
 def test_should_continue_agent_run_from_thread_state() -> None:
@@ -689,6 +734,20 @@ async def test_agent_sync_max_iterations_final_call_disables_tools() -> None:
 
 
 @pytest.mark.asyncio
+async def test_agent_sync_omits_empty_final_response() -> None:
+	adapter = _QueuedChatAdapter(sync_responses=[AssistantMessage()])
+	chat_model = _make_chat_model(adapter)
+	agent = Agent(chat_model=chat_model, max_iterations=0)
+	thread = Thread()
+	thread.add(UserMessage.from_text("loop"))
+
+	result = await agent.run(thread)
+
+	assert result == []
+	assert [message.role for message in thread.messages] == ["user"]
+
+
+@pytest.mark.asyncio
 async def test_agent_sync_runs_hooks_after_each_assistant_response() -> None:
 	"""sync hooks observe each assistant response appended by the loop."""
 	seen: list[list[str]] = []
@@ -777,7 +836,7 @@ async def test_agent_streaming_yields_chat_deltas_tool_deltas_and_done() -> None
 
 
 @pytest.mark.asyncio
-async def test_agent_streaming_final_fallback_text_when_empty() -> None:
+async def test_agent_streaming_omits_empty_final_response() -> None:
 	adapter = _QueuedChatAdapter(stream_responses=[[]])
 	chat_model = _make_chat_model(adapter)
 	agent = Agent(chat_model=chat_model, max_iterations=0)
@@ -785,15 +844,15 @@ async def test_agent_streaming_final_fallback_text_when_empty() -> None:
 	thread.add(UserMessage.from_text("hi"))
 
 	stream = await agent.run(thread, stream=True)
-	_ = [d async for d in stream]
+	deltas = [d async for d in stream]
 
-	last = thread.messages[-1]
-	assert isinstance(last, AssistantMessage)
-	assert "unable to complete" in last.text
+	assert [message.role for message in thread.messages] == ["user"]
+	assert all(delta.chat is None for delta in deltas)
+	assert deltas[-1].done is True
 
 
 @pytest.mark.asyncio
-async def test_agent_streaming_final_call_no_fallback_when_text() -> None:
+async def test_agent_streaming_final_call_preserves_model_text() -> None:
 	adapter = _QueuedChatAdapter(
 		stream_responses=[[AssistantMessage.from_text("final")]]
 	)
@@ -808,7 +867,6 @@ async def test_agent_streaming_final_call_no_fallback_when_text() -> None:
 	last = thread.messages[-1]
 	assert isinstance(last, AssistantMessage)
 	assert last.text == "final"
-	assert "unable to complete" not in last.text
 
 
 @pytest.mark.asyncio
@@ -1021,9 +1079,7 @@ async def test_agent_tool_call_with_no_metadata_sets_empty_context_metadata() ->
 
 @pytest.mark.asyncio
 async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
-	"""when a tool returns a ToolMessage with custom metadata (e.g.
-	_citable_sources) but no provider_data, the agent must still propagate
-	provider_data from the original ToolCall into the ToolMessage.
+	"""custom tool metadata must not prevent provider metadata propagation.
 
 	regression test for the bug where deep_merge(overwrite=False) treated
 	None base values for provider_data as existing, silently dropping
@@ -1037,7 +1093,7 @@ async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
 		}
 	}
 
-	class _CitableNoteTool(Tool[None]):
+	class _MetadataTool(Tool[None]):
 		async def call(
 			self,
 			__state__: AgentIterationSnapshot[None],
@@ -1048,15 +1104,10 @@ async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
 		) -> ToolMessage:
 			_ = (__state__, __agent_context__, __app_context__, kwargs)
 			tool_call_id = __tool_call_context__.tool_call_id
-			# mimics NoteGetTool: returns custom metadata without provider_data
 			return ToolMessage(
 				tool_call_id=tool_call_id,
 				tool_output="note content here",
-				metadata={
-					"_citable_sources": [
-						{"source_type": "note", "source_id": "n1", "title": "My Note"},
-					],
-				},
+				metadata={"_application_data": {"resource_id": "n1"}},
 			)
 
 	adapter = _QueuedChatAdapter(
@@ -1065,7 +1116,7 @@ async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
 				tool_calls=[
 					ToolCall(
 						id="tc1",
-						name="citable_note",
+						name="metadata_tool",
 						arguments={},
 						metadata=provider_meta,
 					),
@@ -1078,7 +1129,7 @@ async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
 	agent = Agent(
 		chat_model=chat_model,
 		tools=[
-			_CitableNoteTool(name="citable_note", description="fetch a note"),
+			_MetadataTool(name="metadata_tool", description="return metadata"),
 		],
 	)
 	thread = Thread()
@@ -1094,9 +1145,7 @@ async def test_agent_tool_custom_metadata_preserves_provider_data() -> None:
 	assert pd == {"anthropic.messages": {"tool_call_id": "toolu_01ABC"}}
 
 	# tool's own metadata must also be preserved
-	assert tool_msg.metadata.get("_citable_sources") == [
-		{"source_type": "note", "source_id": "n1", "title": "My Note"},
-	]
+	assert tool_msg.metadata.get("_application_data") == {"resource_id": "n1"}
 
 
 # tool_call_start_time monotonic propagation

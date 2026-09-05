@@ -1,7 +1,5 @@
 """ollama embedding adapter."""
 
-from __future__ import annotations
-
 from typing import Literal
 
 from ..base.embeddings import BaseEmbeddingAdapter, EmbeddingInputType

@@ -1,7 +1,5 @@
 """image model high-level interface - unified access to image generation."""
 
-from __future__ import annotations
-
 from collections.abc import AsyncIterator, Awaitable
 from typing import Any, ClassVar, Literal, overload
 

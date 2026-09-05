@@ -4,8 +4,6 @@ provides helpers for formatting and streaming SSE events in a consistent way
 across the codebase.
 """
 
-from __future__ import annotations
-
 import asyncio
 import contextlib
 import json

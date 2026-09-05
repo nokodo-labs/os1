@@ -146,6 +146,84 @@ async def test_vectorstore_create_supports_adapter_dict_shorthand() -> None:
 	await store.add([make_chunk("id1", [0.1], content="content", metadata={"k": "v"})])
 
 
+# -- scroll ------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_scroll_returns_full_payload_by_default() -> None:
+	store = make_store("scroll-full")
+	await store.ensure_collection(vector_size=2)
+	await store.add(
+		[
+			make_chunk(
+				"s1",
+				[1.0, 0.0],
+				content="the full bm25 text",
+				metadata={"resource_id": "A", "pipeline_v": 1, "extra": "kept"},
+			)
+		]
+	)
+
+	chunks = await store.scroll()
+
+	assert len(chunks) == 1
+	assert chunks[0].id == "s1"
+	assert chunks[0].content == "the full bm25 text"
+	assert chunks[0].metadata["extra"] == "kept"
+
+
+@pytest.mark.asyncio
+async def test_scroll_payload_fields_projects_metadata_and_keeps_id() -> None:
+	"""projection fetches only the named keys, plus the id it needs to rebuild."""
+	store = make_store("scroll-projected")
+	await store.ensure_collection(vector_size=2)
+	await store.add(
+		[
+			make_chunk(
+				"s1",
+				[1.0, 0.0],
+				content="a very long bm25 body we do not want to transfer",
+				metadata={"resource_id": "A", "pipeline_v": 1, "extra": "dropped"},
+			)
+		]
+	)
+
+	chunks = await store.scroll(payload_fields=["resource_id", "pipeline_v"])
+
+	assert len(chunks) == 1
+	# id survives projection even though it was never requested.
+	assert chunks[0].id == "s1"
+	assert chunks[0].metadata["resource_id"] == "A"
+	assert chunks[0].metadata["pipeline_v"] == 1
+	# unnamed keys are not transferred - including the bm25 content.
+	assert "extra" not in chunks[0].metadata
+	assert chunks[0].content == ""
+
+
+@pytest.mark.asyncio
+async def test_scroll_pages_until_drained() -> None:
+	"""paging is internal: every match comes back regardless of page_size."""
+	store = make_store("scroll-paged")
+	await store.ensure_collection(vector_size=2)
+	await store.add(
+		[
+			make_chunk(f"p{i}", [1.0, 0.0], metadata={"resource_id": str(i)})
+			for i in range(7)
+		]
+	)
+
+	chunks = await store.scroll(page_size=2)
+
+	assert {chunk.id for chunk in chunks} == {f"p{i}" for i in range(7)}
+
+
+@pytest.mark.asyncio
+async def test_scroll_missing_collection_returns_empty() -> None:
+	store = make_store("scroll-absent")
+
+	assert await store.scroll() == []
+
+
 # -- ChunkFilter construction ------------------------------------------------
 
 
@@ -180,6 +258,18 @@ def test_chunk_filter_empty_defaults() -> None:
 	f = ChunkFilter()
 	assert f.all_of == []
 	assert f.any_of == []
+	assert f.none_of == []
+
+
+def test_chunk_filter_none_of_maps_to_qdrant_must_not() -> None:
+	f = ChunkFilter(
+		all_of=[FieldMatch(key="resource_type", value="thread")],
+		none_of=[FieldMatch(key="archived_by", value="u1")],
+	)
+	qf = QdrantVectorstoreAdapter._to_qdrant_filter(f)
+	assert qf.must is not None and len(qf.must) == 1
+	assert qf.must_not is not None and len(qf.must_not) == 1
+	assert qf.should is None
 
 
 # -- Vectorstore.update - list[str] path -------------------------------------
@@ -198,6 +288,33 @@ async def test_update_by_id_list_patches_payload() -> None:
 	results = await store.search(query=[0.1, 0.2], limit=1)
 	assert results
 	assert results[0].metadata.get("tag") == "new"
+
+
+@pytest.mark.asyncio
+async def test_update_sets_none_and_deletes_separate_field() -> None:
+	store = make_store("update-set-delete")
+	await store.ensure_collection(vector_size=2)
+	await store.add(
+		[
+			make_chunk(
+				"c1",
+				[0.1, 0.2],
+				metadata={"nullable": "old", "removed": "old"},
+			)
+		]
+	)
+
+	await store.update(
+		["c1"],
+		payload={"nullable": None},
+		delete_fields=["removed"],
+	)
+
+	results = await store.search(query=[0.1, 0.2], limit=1)
+	assert results
+	assert "nullable" in results[0].metadata
+	assert results[0].metadata["nullable"] is None
+	assert "removed" not in results[0].metadata
 
 
 @pytest.mark.asyncio

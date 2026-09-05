@@ -1,7 +1,5 @@
 """base video generation adapter - capability ABC for video gen APIs."""
 
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable
 from dataclasses import dataclass, field

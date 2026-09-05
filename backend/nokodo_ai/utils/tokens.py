@@ -4,8 +4,6 @@ contains ONLY pure functions with no runtime imports from the SDK.
 message-aware estimation lives in nokodo_ai.token_estimation.
 """
 
-from __future__ import annotations
-
 from math import ceil
 
 

@@ -1,7 +1,5 @@
 """openai adapter exception conversion."""
 
-from __future__ import annotations
-
 import openai
 
 from ...utils.error_mapping import (

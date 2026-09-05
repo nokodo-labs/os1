@@ -1,7 +1,5 @@
 """google generate content adapter - google genai models.generate_content API."""
 
-from __future__ import annotations
-
 import base64
 import json
 from collections.abc import AsyncIterator, Awaitable
@@ -19,6 +17,7 @@ from ...messages import (
 	RefusalContent,
 	SystemMessage,
 	TextContent,
+	ToolAttachment,
 	ToolCall,
 	ToolMessage,
 	Usage,
@@ -31,7 +30,7 @@ from ...utils.provider_meta import (
 	get_provider_value,
 	provider_tool_call_metadata,
 )
-from ..base.chat import BaseChatAdapter, ChatGenerationParams
+from ..base.chat import BaseChatAdapter, ChatGenerationParams, ReasoningEffort
 from .base import BaseGoogleAdapter
 from .exceptions import map_google_generation_exceptions
 from .types import (
@@ -41,6 +40,10 @@ from .types import (
 	GoogleFunctionCall,
 	GoogleFunctionCallingConfig,
 	GoogleFunctionDeclaration,
+	GoogleFunctionResponse,
+	GoogleFunctionResponseBlob,
+	GoogleFunctionResponseFileData,
+	GoogleFunctionResponsePart,
 	GoogleGenerateContentConfig,
 	GoogleGenerateContentResponse,
 	GooglePart,
@@ -68,7 +71,7 @@ _GOOGLE_THINKING_LEVEL: dict[str, GoogleThinkingLevel] = {
 
 
 def _reasoning_effort_to_google(
-	effort: str,
+	effort: ReasoningEffort,
 ) -> GoogleThinkingConfig:
 	"""convert reasoning_effort to a google ThinkingConfig."""
 	if effort == "none":
@@ -214,20 +217,32 @@ def _content_parts_to_google(
 	return result
 
 
-def _tool_output_with_attachments(message: ToolMessage) -> str:
-	"""build tool output string including attachment placeholders.
+def _attachment_to_google_function_response_part(
+	att: ToolAttachment,
+) -> GoogleFunctionResponsePart | None:
+	"""convert a tool attachment to a google functionResponse part.
 
-	google function_response is dict-only, no multimodal. if the tool
-	message has attachments, append filename placeholders so the model
-	knows they exist.
+	base64 -> inline_data; url -> file_data (a Files API / accessible URI). gemini
+	natively accepts media nested in a functionResponse part, so tool-result media
+	survives instead of being flattened to a filename placeholder.
 	"""
-	if not message.attachments:
-		return message.tool_output
-	parts = [message.tool_output]
-	for att in message.attachments:
-		label = att.filename or "attachment"
-		parts.append(f"[attached: {label}]")
-	return "\n".join(parts)
+	if att.base64 and att.media_type:
+		return GoogleFunctionResponsePart(
+			inline_data=GoogleFunctionResponseBlob(
+				data=base64.b64decode(att.base64),
+				mime_type=att.media_type,
+				display_name=att.filename,
+			)
+		)
+	if att.url:
+		return GoogleFunctionResponsePart(
+			file_data=GoogleFunctionResponseFileData(
+				file_uri=att.url,
+				mime_type=att.media_type or "application/octet-stream",
+				display_name=att.filename,
+			)
+		)
+	return None
 
 
 def _messages_to_google(
@@ -309,23 +324,32 @@ def _messages_to_google(
 					tool_name = message.tool_call_id
 
 				# parse tool output as json if possible, otherwise wrap in result key
-				# google function_response is dict-only, no multimodal -
-				# include attachments as text
-				output = _tool_output_with_attachments(message)
 				try:
-					response_dict = json.loads(output)
+					response_dict = json.loads(message.tool_output)
 					if not isinstance(response_dict, dict):
 						response_dict = {"result": response_dict}
 				except json.JSONDecodeError:
-					response_dict = {"result": output}
+					response_dict = {"result": message.tool_output}
+
+				# attachments -> multimodal functionResponse parts (gemini natively
+				# accepts media nested in a functionResponse), so images survive
+				# instead of being flattened to filename placeholders.
+				fr_parts: list[GoogleFunctionResponsePart] = []
+				for att in message.attachments:
+					fr_part = _attachment_to_google_function_response_part(att)
+					if fr_part is not None:
+						fr_parts.append(fr_part)
 
 				contents.append(
 					GoogleContent(
 						role="user",
 						parts=[
-							GooglePart.from_function_response(
-								name=tool_name,
-								response=response_dict,
+							GooglePart(
+								function_response=GoogleFunctionResponse(
+									name=tool_name,
+									response=response_dict,
+									parts=fr_parts or None,
+								)
 							)
 						],
 					)

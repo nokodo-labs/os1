@@ -1,10 +1,8 @@
 """base adapter infrastructure shared by all api-client adapters."""
 
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 
-from pydantic import Field, PrivateAttr, model_validator
+from pydantic import Field, PrivateAttr
 
 from ...base import Base
 from .adapter import BaseAdapter
@@ -23,11 +21,9 @@ class BaseClientAdapter[ClientType](BaseAdapter, Base, ABC):
 	timeout: float = Field(default=60.0, description="Request timeout in seconds")
 	_client: ClientType = PrivateAttr()
 
-	@model_validator(mode="after")
-	def _init_client(self) -> BaseClientAdapter[ClientType]:
-		"""initialize the API client after model creation."""
+	def model_post_init(self, __context: object) -> None:
+		"""build the client once per adapter instance."""
 		self._client = self._get_client()
-		return self
 
 	@abstractmethod
 	def _get_client(self) -> ClientType:

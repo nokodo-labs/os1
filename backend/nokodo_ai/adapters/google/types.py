@@ -4,8 +4,6 @@ the goal is to keep all google-genai SDK imports in one place so adapter modules
 stay small and type check cleanly.
 """
 
-from __future__ import annotations
-
 from google.genai.types import (
 	Blob as GoogleBlob,
 )
@@ -26,6 +24,15 @@ from google.genai.types import (
 )
 from google.genai.types import (
 	FunctionResponse as GoogleFunctionResponse,
+)
+from google.genai.types import (
+	FunctionResponseBlob as GoogleFunctionResponseBlob,
+)
+from google.genai.types import (
+	FunctionResponseFileData as GoogleFunctionResponseFileData,
+)
+from google.genai.types import (
+	FunctionResponsePart as GoogleFunctionResponsePart,
 )
 from google.genai.types import (
 	GenerateContentConfig as GoogleGenerateContentConfig,
@@ -61,6 +68,9 @@ __all__ = [
 	"GoogleFunctionCallingConfig",
 	"GoogleFunctionDeclaration",
 	"GoogleFunctionResponse",
+	"GoogleFunctionResponseBlob",
+	"GoogleFunctionResponseFileData",
+	"GoogleFunctionResponsePart",
 	"GoogleGenerateContentConfig",
 	"GoogleGenerateContentResponse",
 	"GooglePart",

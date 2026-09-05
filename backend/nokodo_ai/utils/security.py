@@ -1,12 +1,11 @@
 """Security-related reusable helpers."""
 
-from __future__ import annotations
-
 import base64
 import hashlib
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHash, VerifyMismatchError
@@ -37,6 +36,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 	except VerifyMismatchError, InvalidHash:
 		return False
 	return True
+
+
+def new_jti() -> str:
+	"""Generate a random JWT ID for token rotation tracking."""
+	return uuid4().hex
 
 
 def create_jwt_token(

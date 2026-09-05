@@ -1,7 +1,5 @@
 """nokodo_ai Markdown chunker adapter."""
 
-from __future__ import annotations
-
 from typing import Literal
 
 from nokodo_ai.adapters.base.chunkers import (
@@ -12,7 +10,7 @@ from nokodo_ai.adapters.base.chunkers import (
 from nokodo_ai.adapters.base.loaders import Text
 from nokodo_ai.utils.tokens import CHARS_PER_TOKEN
 
-from .recursive import _chunks_from_ranges, _normalize_text, _recursive_chunk_ranges
+from .recursive import _chunks_from_ranges, _recursive_chunk_ranges, normalize_text
 
 
 class MarkdownChunkerAdapter(BaseChunkerAdapter):
@@ -29,7 +27,7 @@ class MarkdownChunkerAdapter(BaseChunkerAdapter):
 		text: Text,
 		params: ChunkingParams,
 	) -> list[ContentChunk]:
-		normalized = _normalize_text(text.content)
+		normalized = normalize_text(text.content)
 		if not self.supports(text, params) or not normalized:
 			return []
 		target_chars = max(1, int(params.target_tokens * CHARS_PER_TOKEN))

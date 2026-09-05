@@ -4,8 +4,6 @@ the goal is to keep all Anthropic SDK imports in one place so adapter modules
 stay small and type check cleanly.
 """
 
-from __future__ import annotations
-
 from anthropic.types import (
 	Base64ImageSourceParam as AnthropicBase64ImageSourceParam,
 )

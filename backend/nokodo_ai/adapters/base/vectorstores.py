@@ -1,7 +1,5 @@
 """base vectorstore adapter - capability ABC for vector databases."""
 
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from typing import Literal, overload
 
@@ -70,14 +68,17 @@ class ChunkFilter(Base):
 	"""adapter-agnostic filter for chunk queries.
 
 	- all_of: every condition must match (AND).
-	- any_of: at least one condition must match (OR). when both all_of and
-		any_of are non-empty, both constraints apply simultaneously.
+	- any_of: at least one condition must match (OR).
+	- none_of: no condition may match (NOT).
+	when several are non-empty, all constraints apply simultaneously.
 	"""
 
 	all_of: list[FieldCondition] = Field(default_factory=list)
 	"""conditions that must all match (AND logic)."""
 	any_of: list[FieldCondition] = Field(default_factory=list)
 	"""conditions where at least one must match (OR logic)."""
+	none_of: list[FieldCondition] = Field(default_factory=list)
+	"""conditions that must not match (NOT logic)."""
 
 
 Index = dict[str, IndexFieldType]
@@ -229,6 +230,7 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		collection_name: str,
 		target: list[str],
 		payload: dict[str, object] | None = None,
+		delete_fields: list[str] | None = None,
 	) -> None: ...
 
 	@overload
@@ -237,6 +239,7 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		collection_name: str,
 		target: ChunkFilter,
 		payload: dict[str, object] | None = None,
+		delete_fields: list[str] | None = None,
 	) -> None: ...
 
 	@abstractmethod
@@ -245,10 +248,12 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		collection_name: str,
 		target: list[str] | ChunkFilter,
 		payload: dict[str, object] | None = None,
+		delete_fields: list[str] | None = None,
 	) -> None:
 		"""update matching chunks in place.
 
-		only the fields supplied are touched; others are preserved.
+		only the fields supplied are touched; others are preserved. payload
+		values, including None, are stored; delete_fields removes keys.
 
 		target may be:
 		- list[str]: raises ValueError if any id does not exist.
@@ -262,6 +267,7 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 		collection_name: str,
 		query_filter: ChunkFilter | None = None,
 		page_size: int = 256,
+		payload_fields: list[str] | None = None,
 	) -> list[Chunk]:
 		"""enumerate all chunks matching a filter, without scoring.
 
@@ -274,6 +280,13 @@ class BaseVectorstoreAdapter(BaseAdapter, ABC):
 			collection_name: target collection/namespace
 			query_filter: adapter-agnostic filter conditions
 			page_size: number of chunks fetched per internal page
+			payload_fields: when given, only these metadata keys are fetched.
+				enumerating a large collection to read a few stamps otherwise
+				materializes every chunk's full BM25 text. ``content`` is
+				part of the payload, so it comes back empty unless named -
+				only project when the caller reads metadata alone. adapters
+				without projection support may ignore this and return full
+				payloads.
 		"""
 		...
 

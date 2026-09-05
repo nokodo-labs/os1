@@ -1,7 +1,5 @@
 """qdrant vectorstore adapter."""
 
-from __future__ import annotations
-
 import uuid
 from datetime import datetime
 from typing import Literal, overload
@@ -120,27 +118,19 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		"""
 		exists = await self._collection_exists(collection_name)
 		if not exists:
-			if sparse:
-				await self._client.create_collection(
-					collection_name=collection_name,
-					vectors_config={
-						"dense": VectorParams(
-							size=vector_size,
-							distance=Distance.COSINE,
-						),
-					},
-					sparse_vectors_config={
-						"bm25": SparseVectorParams(modifier=Modifier.IDF),
-					},
-				)
-			else:
-				await self._client.create_collection(
-					collection_name=collection_name,
-					vectors_config=VectorParams(
+			sparse_config = (
+				{"bm25": SparseVectorParams(modifier=Modifier.IDF)} if sparse else None
+			)
+			await self._client.create_collection(
+				collection_name=collection_name,
+				vectors_config={
+					"dense": VectorParams(
 						size=vector_size,
 						distance=Distance.COSINE,
 					),
-				)
+				},
+				sparse_vectors_config=sparse_config,
+			)
 			self._known_collections.add(collection_name)
 		# always apply indexes (idempotent - no-op if field already indexed)
 		if indexes:
@@ -162,12 +152,11 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 			return
 		points: list[PointStruct] = []
 		for chunk in chunks:
-			payload = self._build_payload(chunk)
 			if sparse:
 				points.append(
 					PointStruct(
 						id=self._to_point_id(chunk.id),
-						payload=payload,
+						payload=self._build_payload(chunk),
 						vector={
 							"dense": chunk.embedding,
 							"bm25": Document(text=chunk.content, model="Qdrant/bm25"),
@@ -178,8 +167,8 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 				points.append(
 					PointStruct(
 						id=self._to_point_id(chunk.id),
-						payload=payload,
-						vector=chunk.embedding,
+						payload=self._build_payload(chunk),
+						vector={"dense": chunk.embedding},
 					)
 				)
 		await self._client.upsert(collection_name=collection_name, points=points)
@@ -280,12 +269,20 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		collection_name: str,
 		query_filter: ChunkFilter | None = None,
 		page_size: int = 256,
+		payload_fields: list[str] | None = None,
 	) -> list[Chunk]:
 		"""enumerate all chunks matching a filter, paging until drained."""
 		exists = await self._collection_exists(collection_name)
 		if not exists:
 			return []
 		qf = self._to_qdrant_filter(query_filter) if query_filter else None
+		# `id` lives in the payload and is not recoverable from the point id
+		# (_to_point_id hashes non-uuid ids), so a projection must include it.
+		payload_selector: bool | list[str] = (
+			True
+			if payload_fields is None
+			else list(dict.fromkeys(["id", *payload_fields]))
+		)
 		chunks: list[Chunk] = []
 		offset = None
 		while True:
@@ -294,7 +291,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 				scroll_filter=qf,
 				limit=page_size,
 				offset=offset,
-				with_payload=True,
+				with_payload=payload_selector,
 				with_vectors=False,
 			)
 			for point in points:
@@ -325,6 +322,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 			groups = await self._client.query_points_groups(
 				collection_name=collection_name,
 				query=query,
+				using="dense",
 				group_by=group_by,
 				group_size=group_size,
 				limit=limit,
@@ -336,6 +334,7 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		response = await self._client.query_points(
 			collection_name=collection_name,
 			query=query,
+			using="dense",
 			limit=limit,
 			offset=offset,
 			with_payload=True,
@@ -529,9 +528,13 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		"""convert a library ChunkFilter to a Qdrant Filter."""
 		all_conds: list[Condition] = [cls._build_field_condition(m) for m in cf.all_of]
 		any_conds: list[Condition] = [cls._build_field_condition(s) for s in cf.any_of]
+		none_conds: list[Condition] = [
+			cls._build_field_condition(n) for n in cf.none_of
+		]
 		return Filter(
 			must=all_conds or None,
 			should=any_conds or None,
+			must_not=none_conds or None,
 		)
 
 	async def update(
@@ -539,9 +542,13 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 		collection_name: str,
 		target: list[str] | ChunkFilter,
 		payload: dict[str, object] | None = None,
+		delete_fields: list[str] | None = None,
 	) -> None:
 		"""update matching chunks in place."""
-		if payload is None:
+		delete_fields = delete_fields or []
+		if payload is not None and set(payload).intersection(delete_fields):
+			raise ValueError("payload and delete_fields cannot contain the same key")
+		if payload is None and not delete_fields:
 			return
 		exists = await self._collection_exists(collection_name)
 		if not exists:
@@ -568,16 +575,20 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 					i for i in target if str(self._to_point_id(i)) not in found_ids
 				]
 				raise ValueError(f"chunks not found: {missing}")
-			await self._client.set_payload(
-				collection_name=collection_name,
-				payload=payload,
-				points=PointIdsList(points=point_ids),
-			)
+			points: PointIdsList | FilterSelector = PointIdsList(points=point_ids)
 		else:
+			points = FilterSelector(filter=self._to_qdrant_filter(target))
+		if payload is not None:
 			await self._client.set_payload(
 				collection_name=collection_name,
 				payload=payload,
-				points=FilterSelector(filter=self._to_qdrant_filter(target)),
+				points=points,
+			)
+		if delete_fields:
+			await self._client.delete_payload(
+				collection_name=collection_name,
+				keys=delete_fields,
+				points=points,
 			)
 
 	def _build_result(

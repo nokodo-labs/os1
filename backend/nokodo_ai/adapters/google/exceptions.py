@@ -1,7 +1,5 @@
 """google adapter exception conversion."""
 
-from __future__ import annotations
-
 from ...utils.error_mapping import (
 	NoArgProviderValue,
 	error_code,

@@ -1,7 +1,5 @@
 """embedding adapter union - single entry point for all embedding adapters."""
 
-from __future__ import annotations
-
 from typing import Annotated
 
 from pydantic import Field

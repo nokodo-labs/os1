@@ -1,7 +1,5 @@
 """nokodo_ai recursive chunker adapter."""
 
-from __future__ import annotations
-
 from typing import Literal
 
 from nokodo_ai.adapters.base.chunkers import (
@@ -21,14 +19,14 @@ class RecursiveChunkerAdapter(BaseChunkerAdapter):
 	name: Literal["recursive"] = "recursive"
 
 	def supports(self, text: Text, params: ChunkingParams) -> bool:
-		return text.status == "loaded" and bool(_normalize_text(text.content))
+		return text.status == "loaded" and bool(normalize_text(text.content))
 
 	async def chunk(
 		self,
 		text: Text,
 		params: ChunkingParams,
 	) -> list[ContentChunk]:
-		normalized = _normalize_text(text.content)
+		normalized = normalize_text(text.content)
 		if not self.supports(text, params):
 			return []
 		target_chars = max(1, int(params.target_tokens * CHARS_PER_TOKEN))
@@ -42,7 +40,7 @@ class RecursiveChunkerAdapter(BaseChunkerAdapter):
 		return _chunks_from_ranges(normalized, ranges, text.metadata)
 
 
-def _normalize_text(text: str) -> str:
+def normalize_text(text: str) -> str:
 	"""normalize newlines and trim surrounding whitespace before chunking."""
 	return text.replace("\r\n", "\n").replace("\r", "\n").strip()
 

@@ -9,8 +9,6 @@ never floods a provider, the database or the OWUI deployment by accident.
 pass limit=None to opt into fully unbounded fan-out (plain asyncio.gather).
 """
 
-from __future__ import annotations
-
 import asyncio
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Literal, overload

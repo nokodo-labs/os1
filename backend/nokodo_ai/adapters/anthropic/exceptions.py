@@ -1,7 +1,5 @@
 """anthropic adapter exception conversion."""
 
-from __future__ import annotations
-
 import anthropic
 
 from ...utils.error_mapping import (

@@ -1,7 +1,5 @@
 """base voyageai adapter - shared client infrastructure for voyageai APIs."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from voyageai import AsyncClient

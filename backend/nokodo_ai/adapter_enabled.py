@@ -1,7 +1,5 @@
 """shared adapter-enabled model behavior."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from types import TracebackType
 from typing import Any, ClassVar, Self

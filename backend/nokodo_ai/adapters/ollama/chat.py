@@ -1,7 +1,5 @@
 """ollama chat adapter."""
 
-from __future__ import annotations
-
 from collections.abc import AsyncIterator, Awaitable
 from typing import TYPE_CHECKING, Literal, overload
 

@@ -1,7 +1,5 @@
 """tests for SDK Tool base class and decorator."""
 
-from __future__ import annotations
-
 import pytest
 
 from nokodo_ai import (
@@ -14,6 +12,7 @@ from nokodo_ai import (
 	ToolMessage,
 	tool,
 )
+from nokodo_ai.messages import ImageContent
 from nokodo_ai.threads import Thread
 from nokodo_ai.tool import ToolDefinition
 from nokodo_ai.types.json import JSONObject
@@ -128,6 +127,25 @@ def test_tool_success_and_error_helpers_include_metadata() -> None:
 	assert err.tool_output == "no"
 	assert err.is_error is True
 	assert err.metadata == {"x": "y"}
+
+
+def test_tool_success_merges_metadata_and_attachments() -> None:
+	ctx = _make_tool_call_context("call-2", metadata={"context": True})
+	add_tool = _AddTool(name="add", description="add")
+	attachment = ImageContent(filename="chart.png", media_type="image/png")
+
+	result = add_tool.success(
+		"ok",
+		ctx,
+		metadata={"result": True},
+		attachments=[attachment],
+	)
+
+	assert result.metadata == {
+		"context": True,
+		"result": True,
+	}
+	assert result.attachments == [attachment]
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,5 @@
 """tests for file metadata helpers."""
 
-from __future__ import annotations
-
 from nokodo_ai.utils.files import corrected_mime_type, sniff_mime_type
 
 

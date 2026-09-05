@@ -1,7 +1,5 @@
 """vectorstore high-level interface - unified access to vector databases."""
 
-from __future__ import annotations
-
 from typing import ClassVar, overload
 
 from pydantic import Field
@@ -115,6 +113,7 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 		self,
 		query_filter: ChunkFilter | None = None,
 		page_size: int = 256,
+		payload_fields: list[str] | None = None,
 	) -> list[Chunk]:
 		"""enumerate all chunks matching a filter, without scoring.
 
@@ -122,26 +121,41 @@ class Vectorstore(AdapterEnabledBase[VectorstoreAdapter]):
 		match by paging internally. empty when the collection does not exist.
 		"""
 		return await self.adapter.scroll(
-			self.collection, query_filter=query_filter, page_size=page_size
+			self.collection,
+			query_filter=query_filter,
+			page_size=page_size,
+			payload_fields=payload_fields,
 		)
 
 	@overload
 	async def update(
-		self, target: list[str], payload: dict[str, object] | None = None
+		self,
+		target: list[str],
+		payload: dict[str, object] | None = None,
+		delete_fields: list[str] | None = None,
 	) -> None: ...
 
 	@overload
 	async def update(
-		self, target: ChunkFilter, payload: dict[str, object] | None = None
+		self,
+		target: ChunkFilter,
+		payload: dict[str, object] | None = None,
+		delete_fields: list[str] | None = None,
 	) -> None: ...
 
 	async def update(
 		self,
 		target: list[str] | ChunkFilter,
 		payload: dict[str, object] | None = None,
+		delete_fields: list[str] | None = None,
 	) -> None:
 		"""update matching chunks in place. see adapter.update for semantics."""
-		await self.adapter.update(self.collection, target, payload=payload)
+		await self.adapter.update(
+			self.collection,
+			target,
+			payload=payload,
+			delete_fields=delete_fields,
+		)
 
 	async def ensure_collection(
 		self,

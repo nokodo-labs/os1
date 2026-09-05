@@ -5,8 +5,6 @@ supports text-to-image creation and mask-based editing with
 reference images. best for bulk generation (sampleCount).
 """
 
-from __future__ import annotations
-
 import base64
 import logging
 from typing import Literal, cast

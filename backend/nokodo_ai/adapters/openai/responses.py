@@ -1,8 +1,7 @@
 """openai responses adapter - /v1/responses endpoint."""
 
-from __future__ import annotations
-
 import json
+import logging
 from collections.abc import AsyncIterator, Awaitable
 from time import time
 from typing import TYPE_CHECKING, Literal, overload
@@ -44,6 +43,7 @@ from .types import (
 	OpenAIResponseFunctionCallArgumentsDeltaEvent,
 	OpenAIResponseFunctionCallArgumentsDoneEvent,
 	OpenAIResponseFunctionCallOutput,
+	OpenAIResponseFunctionCallOutputItemParam,
 	OpenAIResponseFunctionToolCall,
 	OpenAIResponseFunctionToolCallParam,
 	OpenAIResponseFunctionToolParam,
@@ -63,6 +63,9 @@ from .types import (
 
 if TYPE_CHECKING:
 	from nokodo_ai.messages import Message
+
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
@@ -419,20 +422,39 @@ def _content_parts_to_responses(
 	return result
 
 
-def _tool_output_with_attachments(message: ToolMessage) -> str:
-	"""build tool output string including attachment placeholders.
+def _tool_output_to_responses(
+	message: ToolMessage,
+) -> str | list[OpenAIResponseFunctionCallOutputItemParam]:
+	"""tool_output + attachments as Responses function_call_output content.
 
-	Responses tool output only supports text. if the tool message
-	has attachments, append filename placeholders so the model
-	knows they exist.
+	plain string when text-only; otherwise input_text/input_image content parts.
+	the Responses API natively accepts media in a function_call_output, so image
+	attachments survive instead of being flattened to filename placeholders.
+	(function_call_output uses its own input_*_content param family, distinct from
+	message input content — hence a dedicated builder.)
 	"""
 	if not message.attachments:
 		return message.tool_output
-	parts = [message.tool_output]
+	parts: list[OpenAIResponseFunctionCallOutputItemParam] = []
+	if message.tool_output:
+		parts.append({"type": "input_text", "text": message.tool_output})
 	for att in message.attachments:
-		label = att.filename or "attachment"
-		parts.append(f"[attached: {label}]")
-	return "\n".join(parts)
+		if isinstance(att, ImageContent):
+			if att.base64 and att.media_type:
+				parts.append(
+					{
+						"type": "input_image",
+						"image_url": f"data:{att.media_type};base64,{att.base64}",
+						"detail": "auto",
+					}
+				)
+			elif att.url:
+				parts.append(
+					{"type": "input_image", "image_url": att.url, "detail": "auto"}
+				)
+		elif att.filename:
+			parts.append({"type": "input_text", "text": f"[file: {att.filename}]"})
+	return parts if parts else message.tool_output
 
 
 def _messages_to_openai_responses_input(
@@ -440,6 +462,9 @@ def _messages_to_openai_responses_input(
 ) -> OpenAIResponseInputParam:
 	"""convert SDK messages into OpenAI Responses input items."""
 	openai_messages: list[OpenAIResponseInputItemParam] = []
+	# tool results pair with assistant tool calls by sdk id; both sides of a
+	# pair must emit the same id.
+	emitted_id_by_sdk_id: dict[str, str] = {}
 	for message in messages:
 		match message:
 			case UserMessage():
@@ -480,6 +505,7 @@ def _messages_to_openai_responses_input(
 							)
 							or tool_call.id
 						)
+						emitted_id_by_sdk_id[tool_call.id] = openai_tool_call_id
 						openai_messages.append(
 							OpenAIResponseFunctionToolCallParam(
 								type="function_call",
@@ -491,23 +517,18 @@ def _messages_to_openai_responses_input(
 							)
 						)
 			case ToolMessage():
-				# Responses tool output only supports text -
-				# append attachment placeholders
-				openai_tool_call_id = (
-					get_provider_tool_call_id(
-						metadata=message.metadata,
-						provider="openai.responses",
-						fallback_id=message.tool_call_id,
+				emitted_id = emitted_id_by_sdk_id.get(message.tool_call_id)
+				if emitted_id is None:
+					logger.warning(
+						"dropping tool result with no matching tool call: %s",
+						message.tool_call_id,
 					)
-					or message.tool_call_id
-				)
+					continue
 				openai_messages.append(
 					OpenAIResponseFunctionCallOutput(
 						type="function_call_output",
-						call_id=openai_tool_call_id,
-						output=_tool_output_with_attachments(
-							message,
-						),
+						call_id=emitted_id,
+						output=_tool_output_to_responses(message),
 					)
 				)
 			case _:

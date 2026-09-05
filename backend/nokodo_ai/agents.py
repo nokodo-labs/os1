@@ -1,11 +1,9 @@
 """agent class - orchestrates chat model with tools."""
 
-from __future__ import annotations
-
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from typing import Literal, overload
 
@@ -21,7 +19,6 @@ from .messages import (
 	PROVIDER_DATA_KEY,
 	AssistantMessage,
 	SystemMessage,
-	TextContent,
 	ToolCall,
 	ToolMessage,
 	UserMessage,
@@ -35,7 +32,9 @@ from .utils.dicts import deep_merge
 logger = logging.getLogger(__name__)
 
 AgentProducedMessages = list[AssistantMessage | ToolMessage]
+"""everything one agent run added to the thread, in order."""
 type AgentToolChoice = Literal["auto", "none", "required"] | str | None
+"""how the model may use tools this iteration, or one tool named to force."""
 
 
 @dataclass(slots=True)
@@ -43,17 +42,21 @@ class AgentIterationState[AppContextT = None]:
 	"""mutable state for one agent loop iteration."""
 
 	thread: Thread
+	"""the conversation as the model will see it this iteration."""
 	tools: list[Tool[AppContextT]]
+	"""tools offered this iteration."""
 	# todo: if filters need context-aware model selection, move the chat model
 	# set into iteration state instead of adding model params piecemeal.
 	tool_choice: AgentToolChoice = "auto"
+	"""how the model may use those tools."""
 	iteration: int = 0
+	"""how many iterations have already run, counting from zero."""
 
 	def snapshot(self, final: bool = False) -> AgentIterationSnapshot[AppContextT]:
 		"""return a read-only view for observers."""
 		return AgentIterationSnapshot(
 			thread=self.thread.model_copy(deep=True),
-			tools=[tool.model_copy(deep=True) for tool in self.tools],
+			tools=list(self.tools),
 			tool_choice=self.tool_choice,
 			iteration=self.iteration,
 			final=final,
@@ -64,22 +67,29 @@ class AgentIterationState[AppContextT = None]:
 class AgentIterationSnapshot[AppContextT = None]:
 	"""read-only view of one agent loop iteration for hooks and tools.
 
-	snapshots copy thread and tool data so observers cannot mutate live loop
-	state by accident. filters receive ``AgentIterationState`` when they need
-	to write loop state.
+	the thread is deep-copied and the tool list is a fresh list, so an observer
+	cannot reshape the live loop; the ``Tool`` objects in it are the loop's own.
+	filters receive ``AgentIterationState`` when they need to write loop state.
 	"""
 
 	thread: Thread
+	"""a deep copy, so an observer cannot edit the live conversation."""
 	tools: list[Tool[AppContextT]]
+	"""the tools offered this iteration, in a list the observer owns."""
 	tool_choice: AgentToolChoice
+	"""how the model was allowed to use them."""
 	iteration: int
+	"""which iteration this snapshot was taken from."""
 	final: bool = False
+	"""whether the loop has finished, so this is the run's last snapshot."""
 
 
-# strong references to fire-and-forget cancel tasks so the event loop does
-# not GC them before they have a chance to call the provider cancel API.
-# python 3.12+ keeps only weak references from asyncio.create_task().
 _cancel_tasks: set[asyncio.Task[None]] = set()
+"""holds fire-and-forget provider-cancel tasks until they finish.
+
+``asyncio.create_task`` keeps only a weak reference, so without this a cancel
+could be collected before it ever reached the provider.
+"""
 
 
 def _should_continue_agent_run[AppContextT](
@@ -165,28 +175,23 @@ class Agent[AppContextT = None](Base):
 	chat_model: ChatModel = Field(
 		..., description="which model to use for Agent execution"
 	)
+	"""the model this agent generates with."""
 	tools: list[SkipValidation[Tool[AppContextT]]] = Field(
 		default_factory=list, description="list of tools the agent can use"
 	)
+	"""what the agent can call, offered to the model each iteration."""
 	filters: list[SkipValidation[Filter[AppContextT]]] = Field(
 		default_factory=list,
 		description="pre-processing filters that can modify the thread",
 	)
+	"""run before each iteration and MAY rewrite loop state."""
 	hooks: list[SkipValidation[Hook[AppContextT]]] = Field(
 		default_factory=list,
 		description="post-execution hooks for observation (read-only)",
 	)
+	"""observe each iteration and cannot change it; a failing one is logged."""
 	max_iterations: int = Field(default=10, description="maximum Agent iterations")
-
-	@property
-	def tools_map(self) -> dict[str, Tool[AppContextT]]:
-		"""map of tool names to tool instances for fast lookup."""
-		return {t.name: t for t in self.tools}
-
-	@property
-	def tool_definitions(self) -> list[ToolDefinition]:
-		"""get tool definitions for chat_model.generate() calls."""
-		return [t.definition for t in self.tools]
+	"""bounds the tool-calling loop, so it cannot run forever."""
 
 	@overload
 	async def run(
@@ -195,7 +200,9 @@ class Agent[AppContextT = None](Base):
 		app_context: AppContextT | None = None,
 		tool_choice: AgentToolChoice = "auto",
 		stream: Literal[False] = False,
-	) -> AgentProducedMessages: ...
+	) -> AgentProducedMessages:
+		"""run to completion and return everything the agent produced."""
+		...
 
 	@overload
 	async def run(
@@ -204,7 +211,9 @@ class Agent[AppContextT = None](Base):
 		app_context: AppContextT | None = None,
 		tool_choice: AgentToolChoice = "auto",
 		stream: Literal[True] = True,
-	) -> AsyncIterator[AgentDelta]: ...
+	) -> AsyncGenerator[AgentDelta]:
+		"""run and yield deltas as the agent produces them."""
+		...
 
 	async def run(
 		self,
@@ -212,7 +221,7 @@ class Agent[AppContextT = None](Base):
 		app_context: AppContextT | None = None,
 		tool_choice: AgentToolChoice = "auto",
 		stream: bool = False,
-	) -> AgentProducedMessages | AsyncIterator[AgentDelta]:
+	) -> AgentProducedMessages | AsyncGenerator[AgentDelta]:
 		"""run the agent against a thread.
 
 		the thread should already contain any system prompt and user messages.
@@ -260,7 +269,6 @@ class Agent[AppContextT = None](Base):
 		while True:
 			agent_context = AgentContext(model=self.chat_model)
 			state = await self._apply_filters(state, agent_context, app_context)
-			self.tools = state.tools
 
 			if not _should_continue_agent_run(state):
 				await self._execute_hooks(state, agent_context, app_context, final=True)
@@ -269,10 +277,10 @@ class Agent[AppContextT = None](Base):
 			if model_calls >= self.max_iterations:
 				break
 
-			tool_choice_for_generation = state.tool_choice if self.tools else None
+			tool_choice_for_generation = state.tool_choice if state.tools else None
 			assistant_response = await self.chat_model.generate(
 				state.thread,
-				tools=self.tool_definitions,
+				tools=[tool.definition for tool in state.tools],
 				tool_choice=tool_choice_for_generation,
 			)
 			# tool_choice is consumed for this iteration only; reset to "auto"
@@ -298,11 +306,12 @@ class Agent[AppContextT = None](Base):
 		# max iterations reached. call chat model one more time without tools
 		final_response = await self.chat_model.generate(
 			state.thread,
-			tools=self.tool_definitions,
+			tools=[tool.definition for tool in state.tools],
 			tool_choice="none",
 		)
-		state.thread.add(final_response)
-		produced.append(final_response)
+		if final_response.content or final_response.tool_calls:
+			state.thread.add(final_response)
+			produced.append(final_response)
 		await self._execute_hooks(state, agent_context, app_context, final=True)
 
 		return produced
@@ -312,7 +321,7 @@ class Agent[AppContextT = None](Base):
 		thread: Thread,
 		app_context: AppContextT | None,
 		tool_choice: AgentToolChoice = "auto",
-	) -> AsyncIterator[AgentDelta]:
+	) -> AsyncGenerator[AgentDelta]:
 		"""run the agent loop, yielding deltas as they are produced."""
 		chunk_index = 0
 		state = self._initial_iteration_state(thread, tool_choice)
@@ -321,7 +330,6 @@ class Agent[AppContextT = None](Base):
 		while True:
 			agent_context = AgentContext(model=self.chat_model)
 			state = await self._apply_filters(state, agent_context, app_context)
-			self.tools = state.tools
 
 			if not _should_continue_agent_run(state):
 				await self._execute_hooks(state, agent_context, app_context, final=True)
@@ -331,18 +339,21 @@ class Agent[AppContextT = None](Base):
 			if model_calls >= self.max_iterations:
 				break
 
-			tool_choice_for_generation = state.tool_choice if self.tools else None
+			tool_choice_for_generation = state.tool_choice if state.tools else None
 			# stream from chat model and accumulate full message
 			assistant_message = AssistantMessage()
+			terminal_delta: ChatModelDelta | None = None
 			async for chat_delta in self._stream_with_cancel(
 				state.thread,
-				tools=self.tool_definitions,
+				tools=[tool.definition for tool in state.tools],
 				tool_choice=tool_choice_for_generation,
+				accumulated=assistant_message,
 			):
 				# accumulate into complete message for thread
 				assistant_message = assistant_message.merge(chat_delta.message)
-
-				# yield as agent delta
+				if chat_delta.done:
+					terminal_delta = chat_delta
+					continue
 				yield AgentDelta(chat=chat_delta, chunk_index=chunk_index)
 				chunk_index += 1
 
@@ -351,6 +362,10 @@ class Agent[AppContextT = None](Base):
 			# tool_choice is consumed for this iteration only; reset to "auto"
 			# so a forced choice never carries into later iterations.
 			state.tool_choice = "auto"
+			if terminal_delta is not None:
+				terminal_delta.message.finish_reason = assistant_message.finish_reason
+				yield AgentDelta(chat=terminal_delta, chunk_index=chunk_index)
+				chunk_index += 1
 			state.thread.add(assistant_message)
 
 			await self._execute_hooks(state, agent_context, app_context)
@@ -370,24 +385,30 @@ class Agent[AppContextT = None](Base):
 
 		# max iterations reached - final call without tools
 		final_message = AssistantMessage()
+		terminal_delta: ChatModelDelta | None = None
 		async for chat_delta in self._stream_with_cancel(
 			state.thread,
-			tools=self.tool_definitions,
+			tools=[tool.definition for tool in state.tools],
 			tool_choice="none",
+			accumulated=final_message,
 		):
 			final_message = final_message.merge(chat_delta.message)
+			if chat_delta.done:
+				terminal_delta = chat_delta
+				continue
 			yield AgentDelta(chat=chat_delta, chunk_index=chunk_index)
 			chunk_index += 1
 
-		state.thread.add(final_message)
-
-		# add fallback text if empty
-		if not final_message.text:
-			final_message.content.append(
-				TextContent(
-					text="I was unable to complete the task within the allowed steps."
-				)
-			)
+		has_content = bool(final_message.content or final_message.tool_calls)
+		# the terminal delta closes the stream on the same terms as the main
+		# loop: an empty final answer is still an answer that ended, and
+		# withholding its `done` strands every consumer waiting for one.
+		if terminal_delta is not None:
+			terminal_delta.message.finish_reason = final_message.finish_reason
+			yield AgentDelta(chat=terminal_delta, chunk_index=chunk_index)
+			chunk_index += 1
+		if has_content:
+			state.thread.add(final_message)
 
 		await self._execute_hooks(state, agent_context, app_context, final=True)
 		yield AgentDelta.done_sentinel(chunk_index=chunk_index)
@@ -400,25 +421,32 @@ class Agent[AppContextT = None](Base):
 		final: bool = False,
 	) -> None:
 		"""execute hooks with a read-only snapshot of the current run state."""
+		snapshot = state.snapshot(final=final)
 		for hook in self.hooks:
-			await hook.execute(
-				state.snapshot(final=final),
-				agent_context=agent_context,
-				app_context=app_context,
-			)
+			try:
+				await hook.execute(
+					snapshot,
+					agent_context=agent_context,
+					app_context=app_context,
+				)
+			except Exception:
+				logger.exception("agent observer hook failed: %s", hook.name)
 
 	async def _stream_with_cancel(
 		self,
 		thread: Thread,
 		tools: list[ToolDefinition],
 		tool_choice: AgentToolChoice,
-	) -> AsyncIterator[ChatModelDelta]:
+		accumulated: AssistantMessage,
+	) -> AsyncGenerator[ChatModelDelta]:
 		"""stream chat model deltas; notify provider on any non-natural exit.
 
-		accumulates the ``AssistantMessage`` from streaming deltas. when the
-		loop exits without observing a final ``done`` delta - cancellation,
-		downstream exception, ``aclose`` from the consumer, or any other
-		unclean termination - passes the accumulated message to
+		``accumulated`` is merged by the CALLER, not here: this only holds the
+		reference so a cancel can report whatever had arrived by then.
+
+		when the loop exits without observing a final ``done`` delta -
+		cancellation, downstream exception, ``aclose`` from the consumer, or any
+		other unclean termination - passes the accumulated message to
 		``ChatModel.cancel_generation`` fire-and-forget so the adapter can
 		extract its provider run id and stop the generation server-side.
 
@@ -429,7 +457,6 @@ class Agent[AppContextT = None](Base):
 		:param tools: tool definitions available for this call.
 		:param tool_choice: tool selection strategy.
 		"""
-		accumulated = AssistantMessage()
 		completed_naturally = False
 		try:
 			async for chat_delta in self.chat_model.generate(
@@ -438,7 +465,6 @@ class Agent[AppContextT = None](Base):
 				tools=tools,
 				tool_choice=tool_choice,
 			):
-				accumulated = accumulated.merge(chat_delta.message)
 				yield chat_delta
 				if chat_delta.done:
 					completed_naturally = True
@@ -498,7 +524,7 @@ class Agent[AppContextT = None](Base):
 	) -> ToolMessage:
 		"""execute a single tool call and return the result."""
 		# look up tool first so error messages can include expected schema
-		tool = self.tools_map.get(tool_call.name)
+		tool = next((tool for tool in state.tools if tool.name == tool_call.name), None)
 		if tool is None:
 			return ToolMessage(
 				tool_call_id=tool_call.id,
@@ -549,7 +575,7 @@ class Agent[AppContextT = None](Base):
 		tool_ctx = ToolCallContext(
 			tool_call_id=tool_call.id,
 			tool_call_start_time=tool_call.created_at_monotonic,
-			metadata=tool_call.metadata or {},
+			metadata=(tool_call.metadata or {}).copy(),
 		)
 
 		# execute

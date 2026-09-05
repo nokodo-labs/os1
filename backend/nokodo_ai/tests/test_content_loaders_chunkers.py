@@ -15,6 +15,7 @@ from nokodo_ai.adapters.nokodo_ai.markdown import MarkdownChunkerAdapter
 from nokodo_ai.adapters.nokodo_ai.plain import PlainLoaderAdapter
 from nokodo_ai.adapters.nokodo_ai.semantic import SemanticChunkerAdapter
 from nokodo_ai.chat_models import ChatModel
+from nokodo_ai.chunkers import normalize_text
 from nokodo_ai.embeddings import EmbeddingModel
 from nokodo_ai.loaders import File, LoaderConfig, Text
 from nokodo_ai.messages import (
@@ -254,6 +255,32 @@ async def test_recursive_chunker_can_disable_chunk_cap() -> None:
 
 	assert len(capped) == 2
 	assert len(unlimited) > len(capped)
+
+
+def test_normalize_text_collapses_line_endings_and_trims() -> None:
+	assert normalize_text("\r\n a\r\nb \r\n") == "a\nb"
+
+
+async def test_recursive_chunk_offsets_index_into_normalized_text() -> None:
+	raw = "\r\n".join(f"section {index} " + "word " * 30 for index in range(6))
+	loaded = Text(content=raw, status="loaded", source="plain", metadata={})
+
+	chunks = await Chunker.create(
+		adapter="recursive",
+		target_tokens=40,
+		overlap_tokens=5,
+		max_chunks=50,
+	).chunk(loaded)
+
+	# char offsets must index into the normalized text, not the raw input.
+	stored = normalize_text(raw)
+	assert chunks
+	for chunk in chunks:
+		char_start = chunk.metadata["char_start"]
+		char_end = chunk.metadata["char_end"]
+		assert isinstance(char_start, int)
+		assert isinstance(char_end, int)
+		assert stored[char_start:char_end].strip() == chunk.text
 
 
 # semantic chunker tests

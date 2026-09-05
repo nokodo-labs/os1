@@ -3,8 +3,6 @@
 these tests validate our implementation against the typeid v0.3.0 spec rules.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from nokodo_ai.utils import typeid
@@ -59,18 +57,6 @@ def test_generated_uuid_is_uuidv7() -> None:
 	assert (uuid_bytes[6] >> 4) == 0x7
 	# variant is top two bits of byte 8
 	assert (uuid_bytes[8] >> 6) == 0b10
-
-
-def test_uuid7_timestamp_range_is_validated(monkeypatch: pytest.MonkeyPatch) -> None:
-	monkeypatch.setattr(typeid.time, "time_ns", lambda: -1)
-	with pytest.raises(ValueError, match="timestamp out of range"):
-		typeid.new_typeid("user")
-
-	# 48-bit max ms: 0xFFFFFFFFFFFF
-	too_large_ms = 0x1_0000_0000_0000
-	monkeypatch.setattr(typeid.time, "time_ns", lambda: too_large_ms * 1_000_000)
-	with pytest.raises(ValueError, match="timestamp out of range"):
-		typeid.new_typeid("user")
 
 
 def test_encode_uuid_suffix_requires_16_bytes() -> None:

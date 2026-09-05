@@ -7,8 +7,6 @@ consistently and support cross-provider fallback when a conversation
 switches models mid-stream.
 """
 
-from __future__ import annotations
-
 import logging
 from time import time
 

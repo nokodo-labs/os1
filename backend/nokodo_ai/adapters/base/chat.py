@@ -30,6 +30,10 @@ if TYPE_CHECKING:
 	from nokodo_ai.messages import AssistantMessage, Message
 
 
+type ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "max"]
+"""reasoning/thinking budget label shared across chat adapters."""
+
+
 class ChatGenerationParams(Base):
 	"""generation options shared across chat adapters."""
 
@@ -42,9 +46,7 @@ class ChatGenerationParams(Base):
 	reasoning_tags: list[str] | None = None
 	seed: int | None = None
 	stop: list[str] | None = None
-	reasoning_effort: (
-		Literal["none", "minimal", "low", "medium", "high", "max"] | None
-	) = None
+	reasoning_effort: ReasoningEffort | None = None
 	logit_bias: dict[str, float] | None = None
 	top_k: int | None = None
 	top_p: float | None = None
@@ -130,6 +132,21 @@ class GenerationBadRequestError(GenerationError):
 
 	reason: ClassVar[str] = "provider_bad_request"
 	user_message: ClassVar[str] = "provider rejected the generation request"
+
+
+GENERATION_FAILURE_REASONS = frozenset(
+	{
+		GenerationError.reason,
+		GenerationRateLimitError.reason,
+		GenerationAuthenticationError.reason,
+		GenerationPermissionError.reason,
+		GenerationProviderUnavailableError.reason,
+		GenerationProviderConnectionError.reason,
+		GenerationProviderTimeoutError.reason,
+		GenerationBadRequestError.reason,
+	}
+)
+"""public-safe reason names raised by chat adapters."""
 
 
 GenerationExceptionMapper = Callable[[str, Exception], GenerationError | None]
