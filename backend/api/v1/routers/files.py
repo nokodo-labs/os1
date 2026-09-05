@@ -1,7 +1,5 @@
 """file management routers."""
 
-from __future__ import annotations
-
 from typing import Annotated
 from urllib.parse import quote
 
@@ -11,8 +9,7 @@ from starlette.responses import StreamingResponse
 
 from api.database import get_db
 from api.models.access_rule import AccessLevel
-from api.models.file import File, FileSource
-from api.permissions import ResourceType
+from api.permissions import ActionPermission, ResourceType
 from api.schemas.file import File as FileSchema
 from api.schemas.file import (
 	FileCounts,
@@ -25,10 +22,43 @@ from api.schemas.file import (
 from api.schemas.search import Page, SearchMode, SearchParams
 from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
-from api.v1.service import files as file_service
-from api.v1.service.auth import Principal, get_current_principal
-from api.v1.service.authorization import require_admin, require_resource_access
+from api.v1.service.authentication import Principal, get_current_principal
+from api.v1.service.authorization import require_permission, require_resource_access
 from api.v1.service.events import SessionId
+from api.v1.service.files import (
+	count_files as count_files_service,
+)
+from api.v1.service.files import (
+	delete_file as delete_file_service,
+)
+from api.v1.service.files import (
+	file_payloads,
+	get_file_payload,
+	process_file_description,
+	register_stored_file,
+	vectorize_files,
+)
+from api.v1.service.files import (
+	get_file_content as get_file_content_service,
+)
+from api.v1.service.files import (
+	get_file_url as get_file_url_service,
+)
+from api.v1.service.files import (
+	list_files as list_files_service,
+)
+from api.v1.service.files import (
+	restore_file as restore_file_service,
+)
+from api.v1.service.files import (
+	search_files as search_files_service,
+)
+from api.v1.service.files import (
+	update_file as update_file_service,
+)
+from api.v1.service.files import (
+	upload_file as upload_file_service,
+)
 from api.v1.tasks.files import run_file_maintenance_backfill_sweep
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
@@ -55,14 +85,15 @@ async def create_file(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
-) -> File:
+) -> FileSchema:
 	"""register a new file record (metadata only)."""
-	return await file_service.register_stored_file(
+	file = await register_stored_file(
 		file_in,
 		db,
 		principal=principal,
 		origin_session_id=x_session_id,
 	)
+	return file_payloads([file], principal)[0]
 
 
 @router.post(
@@ -73,20 +104,19 @@ async def create_file(
 async def upload_file(
 	file: UploadFile,
 	project_ids: list[TypeID] = Form(default=[]),
-	source: FileSource = Form(default=FileSource.UPLOAD),
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
-) -> File:
+) -> FileSchema:
 	"""upload a file (multipart) and create the record."""
-	return await file_service.upload_file(
+	stored = await upload_file_service(
 		file,
 		db,
 		principal=principal,
 		project_ids=project_ids,
-		source=source,
 		origin_session_id=x_session_id,
 	)
+	return file_payloads([stored], principal)[0]
 
 
 @router.get("", response_model=list[FileSchema])
@@ -99,9 +129,9 @@ async def list_files(
 	resolve_origin: bool = False,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> list[File]:
+) -> list[FileSchema]:
 	"""list files accessible by the caller."""
-	return await file_service.list_files(
+	files = await list_files_service(
 		db,
 		principal=principal,
 		filters=filters,
@@ -111,6 +141,7 @@ async def list_files(
 		sort_dir=sort_dir,
 		resolve_origin=resolve_origin,
 	)
+	return file_payloads(files, principal)
 
 
 @router.get("/count", response_model=FileCounts)
@@ -120,7 +151,7 @@ async def count_files(
 	db: AsyncSession = Depends(get_db),
 ) -> FileCounts:
 	"""count files accessible by the caller."""
-	return await file_service.count_files(db, principal=principal, filters=filters)
+	return await count_files_service(db, principal=principal, filters=filters)
 
 
 @router.get("/search", response_model=Page[FileSchema])
@@ -134,7 +165,7 @@ async def search_files(
 	db: AsyncSession = Depends(get_db),
 ) -> Page[FileSchema]:
 	"""search files returning ranked file objects."""
-	scored = await file_service.search_files(
+	scored = await search_files_service(
 		q,
 		db,
 		principal=principal,
@@ -144,7 +175,7 @@ async def search_files(
 		filters=filters,
 	)
 	return Page(
-		items=[FileSchema.model_validate(hit.item) for hit in scored[:limit]],
+		items=file_payloads([hit.item for hit in scored[:limit]], principal),
 		has_more=len(scored) > limit,
 	)
 
@@ -154,9 +185,9 @@ async def revectorize_files(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
-	"""vectorize all described files into qdrant. admin only."""
-	require_admin(principal)
-	count = await file_service.vectorize_all_files(db)
+	"""vectorize all described files into qdrant. files operators only."""
+	require_permission(principal, ActionPermission.FILES_MANAGE)
+	count = await vectorize_files(db)
 	return {"vectorized": count}
 
 
@@ -167,11 +198,11 @@ async def run_file_maintenance_backfill(
 ) -> JSONObject:
 	"""manually run one batch of the retroactive file maintenance sweep.
 
-	admin-only. this intentionally ignores the scheduled maintenance enabled
-	flag so admins can spot-check the sweep (deferred content vectorization and
-	description backfill for files) without leaving the periodic schedule on.
+	files operators only. this intentionally ignores the scheduled maintenance
+	enabled flag so operators can spot-check the sweep (deferred content
+	vectorization and description backfill) without leaving the schedule on.
 	"""
-	require_admin(principal)
+	require_permission(principal, ActionPermission.FILES_MANAGE)
 	return await run_file_maintenance_backfill_sweep(
 		batch_size=batch_size,
 		respect_enabled=False,
@@ -183,7 +214,7 @@ async def run_file_maintenance(
 	file_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> File:
+) -> FileSchema:
 	"""regenerate description and re-vectorize a single file.
 
 	caller must have admin-level access on the file (owner or higher). runs
@@ -197,8 +228,13 @@ async def run_file_maintenance(
 		ResourceType.FILE,
 		required_level=AccessLevel.ADMIN,
 	)
-	await file_service.process_file_description(file_id)
-	return await file_service.get_file(file_id, db, principal=principal)
+	await process_file_description(file_id)
+	return await get_file_payload(
+		file_id,
+		db,
+		principal=principal,
+		use_cache=False,
+	)
 
 
 @router.get("/{file_id}", response_model=FileSchema)
@@ -209,7 +245,7 @@ async def get_file(
 	db: AsyncSession = Depends(get_db),
 ) -> FileSchema:
 	"""fetch a file by id."""
-	return await file_service.get_file_payload(
+	return await get_file_payload(
 		file_id,
 		db,
 		principal=principal,
@@ -228,7 +264,7 @@ async def get_file_content(
 	db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
 	"""download file content."""
-	stream, content_type, filename, size_bytes = await file_service.get_file_content(
+	stream, content_type, filename, size_bytes = await get_file_content_service(
 		file_id, db, principal=principal
 	)
 	headers: dict[str, str] = {}
@@ -278,7 +314,7 @@ async def get_file_url(
 	db: AsyncSession = Depends(get_db),
 ) -> dict[str, str | None]:
 	"""get a direct or presigned URL for the file."""
-	url = await file_service.get_file_url(
+	url = await get_file_url_service(
 		file_id, db, principal=principal, expires_in=expires_in
 	)
 	return {"url": url}
@@ -291,15 +327,16 @@ async def update_file(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
-) -> File:
+) -> FileSchema:
 	"""update file metadata."""
-	return await file_service.update_file(
+	file = await update_file_service(
 		file_id,
 		file_in,
 		db,
 		principal=principal,
 		origin_session_id=x_session_id,
 	)
+	return file_payloads([file], principal)[0]
 
 
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -311,7 +348,7 @@ async def delete_file(
 	x_session_id: SessionId = None,
 ) -> None:
 	"""delete a file."""
-	await file_service.delete_file(
+	await delete_file_service(
 		file_id,
 		db,
 		principal=principal,
@@ -326,11 +363,12 @@ async def restore_file(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
-) -> File:
+) -> FileSchema:
 	"""restore a soft-deleted file. admin only."""
-	return await file_service.restore_file(
+	file = await restore_file_service(
 		file_id,
 		db,
 		principal=principal,
 		origin_session_id=x_session_id,
 	)
+	return file_payloads([file], principal)[0]

@@ -1,7 +1,5 @@
 """file description and summary pipeline."""
 
-from __future__ import annotations
-
 import logging
 
 from sqlalchemy import update as sql_update
@@ -11,11 +9,11 @@ from api.models.file import File
 from api.models.model import InputModality
 from api.settings import settings
 from api.v1.service.chat.models import resolve_task_chat_model
-from api.v1.service.files.content_vectorization import (
+from api.v1.service.files.modalities import file_input_modality
+from api.v1.service.files.text_contents import (
 	FileContentChunk,
 	load_file_content_chunks,
 )
-from api.v1.service.files.modalities import file_input_modality
 from nokodo_ai.messages import SystemMessage as SDKSystemMessage
 from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.threads import Thread as SDKThread
@@ -94,9 +92,14 @@ async def build_file_description(
 	fallback = _fallback_description(file, content_chunks)
 	try:
 		chat_model = await resolve_task_chat_model(session, "asset_description")
+		asset_description_prompt = settings.ai.tasks.asset_description_prompt
 		thread = SDKThread(
 			messages=[
-				SDKSystemMessage.from_text(_SYSTEM_PROMPT),
+				SDKSystemMessage.from_text(
+					asset_description_prompt
+					if asset_description_prompt is not None
+					else _SYSTEM_PROMPT
+				),
 				SDKUserMessage.from_text(_description_prompt(file, content_chunks)),
 			]
 		)

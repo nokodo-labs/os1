@@ -1,7 +1,5 @@
 """file search service."""
 
-from __future__ import annotations
-
 import asyncio
 from collections.abc import Awaitable
 
@@ -23,8 +21,7 @@ from api.schemas.search import (
 	SearchResultItem,
 	SearchResultType,
 )
-from api.v1.service import vectorstores as vectorstore_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.authorization import (
 	resource_access_predicate,
 	vector_acl_filter,
@@ -33,11 +30,15 @@ from api.v1.service.embeddings import embed_text
 from api.v1.service.files.metadata import FILE_CONTENT_RESOURCE_TYPE, file_metadata
 from api.v1.service.files.vectorization import FILE_SPEC
 from api.v1.service.search.grouping import group_resource_hits
-from api.v1.service.search.primitives import ScoredResult, merge_scored
+from api.v1.service.search.primitives import ScoredResult, SearchHit, merge_scored
+from api.v1.service.vectorstores import (
+	FieldCondition,
+	FieldMatch,
+	search,
+	with_conditions,
+)
 from nokodo_ai.adapters.base.vectorstores import ChunkSearchResult
-from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.search import contains_pattern
-from nokodo_ai.utils.typeid import TypeID
 
 
 _VECTOR_OVERFETCH_FACTOR = 4
@@ -47,25 +48,17 @@ _MATCHED_CHUNK_PREVIEW_CHARS = 500
 
 def _file_search_conditions(
 	filters: FileSearchFilters | None,
-) -> list[vectorstore_service.FieldCondition]:
+) -> list[FieldCondition]:
 	"""vector-layer narrowing conditions derived from file search filters."""
-	conditions: list[vectorstore_service.FieldCondition] = []
+	conditions: list[FieldCondition] = []
 	if filters is None:
 		return conditions
 	if filters.owner_id is not None:
-		conditions.append(
-			vectorstore_service.FieldMatch(key="owner_id", value=str(filters.owner_id))
-		)
+		conditions.append(FieldMatch(key="owner_id", value=str(filters.owner_id)))
 	if filters.source is not None:
-		conditions.append(
-			vectorstore_service.FieldMatch(key="source", value=filters.source.value)
-		)
+		conditions.append(FieldMatch(key="source", value=filters.source.value))
 	if filters.project_id is not None:
-		conditions.append(
-			vectorstore_service.FieldMatch(
-				key="project_ids", value=str(filters.project_id)
-			)
-		)
+		conditions.append(FieldMatch(key="project_ids", value=str(filters.project_id)))
 	return conditions
 
 
@@ -94,7 +87,7 @@ def file_to_search_item(
 	"""projection from a file (and optional score) to a SearchResultItem."""
 	return SearchResultItem(
 		type=SearchResultType.FILE,
-		id=TypeID(file.id),
+		id=file.id,
 		title=file.filename or "file",
 		preview=file.description[:100] if file.description else None,
 		score=score,
@@ -121,14 +114,14 @@ async def search_files(
 	"""
 	params = search_params or SearchParams()
 	if filters and filters.include_deleted:
-		if not principal.is_admin:
+		if not principal.user.is_superuser:
 			raise HTTPException(
 				status_code=status.HTTP_403_FORBIDDEN,
 				detail="forbidden",
 			)
 		if params.mode != SearchMode.AUTOCOMPLETE:
 			raise HTTPException(
-				status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+				status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 				detail="include_deleted requires autocomplete search mode",
 			)
 	if params.mode == SearchMode.AUTOCOMPLETE:
@@ -199,7 +192,7 @@ async def _autocomplete_files(
 	pattern = contains_pattern(q)
 	sim = func.greatest(
 		func.similarity(func.coalesce(File.filename, ""), q),
-		func.similarity(func.coalesce(File.description, ""), q),
+		func.word_similarity(q, func.coalesce(File.description, "")),
 	)
 	stmt = (
 		select(File, sim.label("sim"))
@@ -248,12 +241,12 @@ async def _hybrid_search_files(
 	)
 	text_query = query_text if need_sparse else None
 	vector_limit = max(limit, limit * _VECTOR_OVERFETCH_FACTOR)
-	results = await vectorstore_service.search(
+	results = await search(
 		session=db,
 		query=query_emb,
 		text_query=text_query,
 		limit=vector_limit,
-		query_filter=vectorstore_service.with_conditions(
+		query_filter=with_conditions(
 			vector_acl_filter(
 				[FILE_SPEC.resource_type, FILE_CONTENT_RESOURCE_TYPE],
 				principal,
@@ -286,16 +279,15 @@ async def _hybrid_search_files(
 		file = by_id.get(resource_id)
 		if file is None:
 			continue
-		extra: JSONObject = {
-			"matched_chunks": groups[resource_id].matched_chunks(
-				_MAX_MATCHED_CHUNKS, _MATCHED_CHUNK_PREVIEW_CHARS
-			)
-		}
 		scored.append(
 			ScoredResult(
 				item=file,
 				score=groups[resource_id].best_score,
-				extra=extra,
+				hit=SearchHit(
+					matched_chunks=groups[resource_id].matched_chunks(
+						_MAX_MATCHED_CHUNKS, _MATCHED_CHUNK_PREVIEW_CHARS
+					)
+				),
 			)
 		)
 		if len(scored) >= limit:

@@ -15,13 +15,9 @@ the low-level and intake functions accept owner_id directly and skip
 access checks, so the caller is responsible for authorization.
 """
 
-from __future__ import annotations
-
 import base64
 import hashlib
 import logging
-import os
-import time
 from collections.abc import AsyncIterator
 
 from fastapi import HTTPException, UploadFile, status
@@ -36,27 +32,33 @@ from api.models.event_types import EventType
 from api.models.file import File, FileSource, FileStatus
 from api.models.many_to_many import file_project_association
 from api.models.project import Project
-from api.permissions import ResourceType
+from api.permissions import ActionPermission, ResourceType
 from api.schemas.file import File as FileOut
 from api.schemas.file import (
 	FileCategoryFilter,
 	FileCounts,
 	FileCreate,
 	FileListFilters,
+	FilePrivateInput,
 	FileUpdate,
 )
 from api.settings import settings
-from api.storage import get_storage_backend
+from api.storage import get_storage_backend, new_storage_key
 from api.storage.base import MimeType
-from api.v1.service.auth import Principal, load_principal_for_user
+from api.v1.service.authentication import Principal, load_principal_for_user
 from api.v1.service.authorization import (
+	apply_metadata_write,
+	apply_resource_access_list_filters,
 	invalidate_accessible_users_for_resource,
-	list_accessible_user_ids,
+	list_accessible_user_ids_for_resources,
+	project_private,
 	require_permission,
+	require_private_write,
 	require_project_access,
 	require_resource_access,
 	resource_access_predicate,
 )
+from api.v1.service.files.derived_files import delete_all_derived_file_bytes
 from api.v1.service.files.events import emit_file_event
 from api.v1.service.files.processing import start_file_processing_task
 from api.v1.service.files.vectorization import (
@@ -81,10 +83,23 @@ log = logging.getLogger(__name__)
 # internal helpers
 
 
+def _apply_private_file_update(file: File, file_in: FileUpdate) -> None:
+	"""apply the private half of a file update to the row."""
+	private = file_in.private
+	if isinstance(private, FilePrivateInput):
+		if isinstance(private.storage_backend, str):
+			file.storage_backend = private.storage_backend
+		if isinstance(private.storage_key, str):
+			file.storage_key = private.storage_key
+		if private.checksum_sha256 is None or isinstance(private.checksum_sha256, str):
+			file.checksum_sha256 = private.checksum_sha256
+	apply_metadata_write(file, file_in.metadata, private)
+
+
 def _file_load_options(resolve_origin: bool = False) -> tuple[ExecutableOption, ...]:
 	options: list[ExecutableOption] = [selectinload(File.projects)]
 	if resolve_origin:
-		options.append(selectinload(File.message))
+		options.append(selectinload(File.origin_message))
 	return tuple(options)
 
 
@@ -133,44 +148,6 @@ async def _get_file_with_projects(
 	return file
 
 
-def _uuid7_hex() -> str:
-	"""generate a uuid v7 value as a 32-char lowercase hex string.
-
-	rfc 9562 layout (128 bits):
-	- bits 0-47:  unix timestamp in ms (big-endian)
-	- bits 48-51: version nibble = 0b0111
-	- bits 52-63: rand_a (12 random bits)
-	- bits 64-65: variant = 0b10
-	- bits 66-127: rand_b (62 random bits)
-
-	time-ordered and globally unique.
-	when python 3.14 is the minimum, swap this for uuid.uuid7().hex.
-	"""
-	ms = int(time.time() * 1000) & 0xFFFF_FFFF_FFFF  # 48 bits
-	rand = int.from_bytes(os.urandom(10), "big")  # 80 random bits
-	rand_a = (rand >> 68) & 0x0FFF  # top 12
-	rand_b = rand & 0x3FFF_FFFF_FFFF_FFFF  # bottom 62
-	hi = (ms << 16) | (0x7 << 12) | rand_a
-	lo = (0b10 << 62) | rand_b
-	return f"{hi:016x}{lo:016x}"
-
-
-def _new_storage_key(prefix: str | None = None) -> str:
-	"""generate a fresh opaque storage key for each stored object.
-
-	uses uuid v7 (rfc 9562, python 3.13 stdlib): time-ordered, globally
-	unique, 32 compact hex chars. fully independent from the file's db id,
-	so ownership changes and re-keys never require moving bytes.
-
-	an optional prefix enables s3 lifecycle rules (e.g. 'tmp/' for
-	auto-expiry) without embedding ownership semantics into the path.
-	"""
-	key = _uuid7_hex()
-	if prefix:
-		return f"{prefix.rstrip('/')}/{key}"
-	return key
-
-
 async def _stream_upload(upload: UploadFile) -> AsyncIterator[bytes]:
 	"""yield chunks from an UploadFile without loading entire file into memory."""
 	while chunk := await upload.read(256 * 1024):
@@ -215,7 +192,7 @@ async def store_file(
 	owner_id: TypeID,
 	filename: str | None = None,
 	content_type: MimeType = "application/octet-stream",
-	source: FileSource = FileSource.GENERATED,
+	source: FileSource = FileSource.AGENT_GENERATED,
 	project_ids: list[TypeID] | None = None,
 	message_id: TypeID | None = None,
 	backend_name: str | None = None,
@@ -238,11 +215,11 @@ async def store_file(
 	for authorization in their own context.
 	"""
 	if backend_name is None:
-		backend_name = settings.assets.storage.backend
+		backend_name = settings.assets.storage.active_backend
 	backend = get_storage_backend(backend_name)
 
 	file_id = new_typeid("file")
-	key = _new_storage_key(prefix=key_prefix)
+	key = new_storage_key(prefix=key_prefix)
 
 	# a declared (often client-supplied) content type can disagree with the
 	# actual bytes - e.g. a jpeg labeled image/png - which downstream model
@@ -285,7 +262,7 @@ async def store_file(
 		size_bytes=size_bytes,
 		checksum_sha256=checksum,
 		status=FileStatus.AVAILABLE,
-		message_id=message_id,
+		origin_message_id=message_id,
 		projects=projects,
 	)
 	session.add(file)
@@ -299,7 +276,7 @@ async def ingest_file(
 	owner_id: TypeID,
 	filename: str | None = None,
 	content_type: MimeType = "application/octet-stream",
-	source: FileSource = FileSource.GENERATED,
+	source: FileSource = FileSource.AGENT_GENERATED,
 	project_ids: list[TypeID] | None = None,
 	message_id: TypeID | None = None,
 	backend_name: str | None = None,
@@ -335,7 +312,7 @@ async def ingest_file(
 	await emit_file_event(
 		session,
 		event_type=EventType.FILE_CREATED,
-		file_id=TypeID(file.id),
+		file_id=file.id,
 		user_id=owner_id,
 		filename=filename,
 		project_ids=project_ids or [],
@@ -346,7 +323,7 @@ async def ingest_file(
 	await start_file_processing_task(
 		session,
 		principal,
-		TypeID(file.id),
+		file.id,
 		origin_session_id=origin_session_id,
 	)
 
@@ -409,7 +386,7 @@ async def read_file_base64(
 		log.warning(
 			"read_file_base64: access denied for file %s (user %s)",
 			file_id,
-			principal.user_id,
+			principal.user.id,
 		)
 		return None
 
@@ -463,7 +440,8 @@ async def register_stored_file(
 	it creates the record, announces it, and indexes the supplied
 	description, but does not enqueue content processing.
 	"""
-	require_permission(principal, "files:create")
+	require_permission(principal, ActionPermission.FILES_CREATE)
+	require_permission(principal, ActionPermission.FILES_MANAGE)
 	for pid in file_in.project_ids:
 		await require_project_access(
 			pid,
@@ -471,14 +449,34 @@ async def register_stored_file(
 			principal,
 			required_level=AccessLevel.EDITOR,
 		)
-	data = file_in.model_dump(by_alias=True, exclude={"project_ids"})
-	data["owner_id"] = principal.user_id
+	private = file_in.private
+	data = file_in.model_dump(exclude={"project_ids", "private", "metadata"})
 	projects = (
 		await load_projects(file_in.project_ids, session, principal)
 		if file_in.project_ids
 		else []
 	)
-	file = File(**data, projects=projects)
+	# size and checksum describe the BYTES, so they are read off the stored
+	# object rather than trusted from the payload - a caller could otherwise
+	# register a 2GB blob declaring one byte, and Content-Length would lie.
+	backend = get_storage_backend(private.storage_backend)
+	info = await backend.stat(private.storage_key)
+	if info is None:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="no stored object at the supplied storage key",
+		)
+	file = File(
+		**data,
+		owner_id=principal.user.id,
+		storage_backend=private.storage_backend,
+		storage_key=private.storage_key,
+		size_bytes=info.size,
+		checksum_sha256=info.checksum_sha256
+		or await backend.checksum_sha256(private.storage_key),
+		projects=projects,
+	)
+	file.set_metadata(public=file_in.metadata, private=private.metadata)
 	session.add(file)
 	await session.flush()
 
@@ -486,7 +484,7 @@ async def register_stored_file(
 		session,
 		event_type=EventType.FILE_CREATED,
 		file_id=file.id,
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 		filename=file.filename,
 		project_ids=file_in.project_ids,
 		origin_session_id=origin_session_id,
@@ -501,15 +499,10 @@ async def upload_file(
 	session: AsyncSession,
 	principal: Principal,
 	project_ids: list[TypeID] | None = None,
-	source: FileSource = FileSource.UPLOAD,
 	origin_session_id: str | None = None,
 ) -> File:
-	"""upload a file via HTTP multipart and create the record.
-
-	delegates to store_file() after extracting data from the UploadFile
-	and checking permissions.
-	"""
-	require_permission(principal, "files:create")
+	"""upload a file via HTTP multipart and create the record."""
+	require_permission(principal, ActionPermission.FILES_CREATE)
 	for pid in project_ids or []:
 		await require_project_access(
 			pid,
@@ -529,10 +522,10 @@ async def upload_file(
 	return await ingest_file(
 		session,
 		data=file_data,
-		owner_id=principal.user_id,
+		owner_id=principal.user.id,
 		filename=upload.filename,
 		content_type=content_type,
-		source=source,
+		source=FileSource.USER_UPLOADED,
 		project_ids=project_ids,
 		origin_session_id=origin_session_id,
 	)
@@ -606,7 +599,7 @@ def _file_category_predicate(category: FileCategoryFilter) -> ColumnElement[bool
 def _apply_file_filters(
 	stmt: Select, filters: FileListFilters, principal: Principal
 ) -> Select:
-	if filters.include_deleted and not principal.is_admin:
+	if filters.include_deleted and not principal.user.is_superuser:
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="forbidden",
@@ -630,7 +623,13 @@ def _apply_file_filters(
 				File.description.ilike(pattern, escape="\\"),
 			)
 		)
-	return stmt
+	return apply_resource_access_list_filters(
+		stmt,
+		principal,
+		ResourceType.FILE,
+		filters.access_relationship,
+		filters.resolved_access_level,
+	)
 
 
 async def list_files(
@@ -717,8 +716,8 @@ async def count_files(
 
 	ownership_result = await session.execute(
 		base_stmt.with_only_columns(
-			func.sum(case((File.owner_id == principal.user_id, 1), else_=0)),
-			func.sum(case((File.owner_id != principal.user_id, 1), else_=0)),
+			func.sum(case((File.owner_id == principal.user.id, 1), else_=0)),
+			func.sum(case((File.owner_id != principal.user.id, 1), else_=0)),
 		).order_by(None)
 	)
 	owned_total, shared_total = ownership_result.one()
@@ -765,6 +764,15 @@ async def get_file(
 	return file
 
 
+def file_payloads(files: list[File], principal: Principal) -> list[FileOut]:
+	"""project file rows to their API payloads for the principal."""
+	return project_private(
+		principal,
+		ResourceType.FILE,
+		[FileOut.from_row(file) for file in files],
+	)
+
+
 async def get_file_payload(
 	file_id: TypeID,
 	session: AsyncSession,
@@ -782,7 +790,7 @@ async def get_file_payload(
 	)
 
 	async def load_payload() -> FileOut:
-		return FileOut.model_validate(
+		return FileOut.from_row(
 			await _get_file_with_projects(
 				file_id,
 				session,
@@ -790,14 +798,18 @@ async def get_file_payload(
 			)
 		)
 
+	# the payload cache is not principal-keyed, so it holds the full payload
+	# and projection happens per request on the way out.
 	if not use_cache or resolve_origin:
-		return await load_payload()
-	return await get_or_set_resource_payload_cache(
-		ResourceType.FILE,
-		file_id,
-		FileOut,
-		load_payload,
-	)
+		payload = await load_payload()
+	else:
+		payload = await get_or_set_resource_payload_cache(
+			ResourceType.FILE,
+			file_id,
+			FileOut,
+			load_payload,
+		)
+	return project_private(principal, ResourceType.FILE, [payload])[0]
 
 
 async def update_file(
@@ -815,8 +827,9 @@ async def update_file(
 		ResourceType.FILE,
 		required_level=AccessLevel.EDITOR,
 	)
+	require_private_write(principal, ResourceType.FILE, file_in.private)
 	file = await _get_file(file_id, session)
-	updates = file_in.model_dump(exclude_unset=True, by_alias=True)
+	updates = file_in.model_dump(exclude_unset=True, exclude={"private", "metadata"})
 	new_project_ids: list[TypeID] | None = updates.pop("project_ids", None)
 	changed_project_ids: set[TypeID] = set()
 	if new_project_ids is not None:
@@ -836,6 +849,7 @@ async def update_file(
 		changed_project_ids = old_project_ids | set(new_project_ids)
 	for field, value in updates.items():
 		setattr(file, field, value)
+	_apply_private_file_update(file, file_in)
 	await session.flush()
 	result = await session.execute(
 		select(File)
@@ -848,7 +862,7 @@ async def update_file(
 		session,
 		event_type=EventType.FILE_UPDATED,
 		file_id=file_id,
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 		filename=file.filename,
 		project_ids=[project.id for project in file.projects],
 		affected_project_ids=changed_project_ids,
@@ -856,9 +870,7 @@ async def update_file(
 	)
 	await invalidate_resource_payload_cache(ResourceType.FILE, file_id)
 	if changed_project_ids:
-		await invalidate_accessible_users_for_resource(
-			ResourceType.FILE, file_id, session
-		)
+		await invalidate_accessible_users_for_resource(ResourceType.FILE, file_id)
 	await invalidate_project_payload_caches(changed_project_ids)
 	if await FILE_SPEC.should_revectorize(file, file_in, session):
 		await replace_all_file_vectors(file, session)
@@ -876,7 +888,7 @@ async def delete_file(
 
 	hard deletes also remove bytes from the storage backend.
 	"""
-	if permanent and not principal.is_admin:
+	if permanent and not principal.user.is_superuser:
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="forbidden",
@@ -891,15 +903,15 @@ async def delete_file(
 	)
 	file = await _get_file_with_projects(file_id, session, include_deleted=permanent)
 	project_ids = {project.id for project in file.projects}
-	delete_recipients = await list_accessible_user_ids(
-		ResourceType.FILE,
-		file_id,
-		session,
+	delete_recipients = await list_accessible_user_ids_for_resources(
+		[(ResourceType.FILE, file_id)], session
 	)
 
 	hard_delete = permanent or not settings.soft_delete.files
 	if hard_delete:
 		await delete_content(file)
+		# the FK cascade drops derivative rows; delete their bytes too.
+		await delete_all_derived_file_bytes(file.id, session)
 
 	if hard_delete:
 		await session.delete(file)
@@ -910,14 +922,14 @@ async def delete_file(
 		session,
 		event_type=EventType.FILE_DELETED,
 		file_id=file_id,
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 		project_ids=list(project_ids),
 		affected_project_ids=project_ids,
 		origin_session_id=origin_session_id,
 		recipient_ids=delete_recipients,
 	)
 	await invalidate_resource_payload_cache(ResourceType.FILE, file_id)
-	await invalidate_accessible_users_for_resource(ResourceType.FILE, file_id, session)
+	await invalidate_accessible_users_for_resource(ResourceType.FILE, file_id)
 	await invalidate_project_payload_caches(project_ids)
 	await remove_file_vectors(str(file_id), session=session)
 
@@ -928,7 +940,7 @@ async def restore_file(
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> File:
-	if not principal.is_admin:
+	if not principal.user.is_superuser:
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="forbidden",
@@ -951,14 +963,14 @@ async def restore_file(
 		session,
 		event_type=EventType.FILE_UPDATED,
 		file_id=file_id,
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 		filename=file.filename,
 		project_ids=[project.id for project in file.projects],
 		affected_project_ids=project_ids,
 		origin_session_id=origin_session_id,
 	)
 	await invalidate_resource_payload_cache(ResourceType.FILE, file_id)
-	await invalidate_accessible_users_for_resource(ResourceType.FILE, file_id, session)
+	await invalidate_accessible_users_for_resource(ResourceType.FILE, file_id)
 	await invalidate_project_payload_caches(project_ids)
 	await replace_all_file_vectors(file, session)
 	return file

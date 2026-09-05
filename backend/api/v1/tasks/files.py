@@ -1,23 +1,24 @@
 """file processing durable tasks."""
 
-from __future__ import annotations
-
-import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
 from api.boot_settings import boot_settings
 from api.database import async_session_local
-from api.redis import on_invalidation
+from api.runtime import on_settings_reload
 from api.settings import settings
 from api.taskiq import broker, redis_schedule_source
-from api.v1.service import tasks as task_service
-from api.v1.service.auth import Principal, load_principal_for_user
+from api.v1.service.authentication import Principal, load_principal_for_user
+from api.v1.service.files import list_files_due_for_processing, process_file
 from api.v1.service.files.processing import (
 	FILE_PROCESSING_TASK,
-	list_files_due_for_processing,
-	process_file,
 	start_file_processing_task,
+)
+from api.v1.service.tasks import (
+	TaskContext,
+	fail_stale_active_tasks,
+	find_active_task,
+	register_task_runner,
 )
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
@@ -29,7 +30,6 @@ logger = logging.getLogger(__name__)
 FILE_PROCESSING_DISPATCH_TASK = "file.processing.dispatch"
 FILE_MAINTENANCE_BACKFILL_TASK = "file.maintenance.backfill_sweep"
 FILE_MAINTENANCE_BACKFILL_SCHEDULE_ID = "file:maintenance-backfill"
-FILE_MAINTENANCE_BACKFILL_INVALIDATION_SIGNAL = "file_maintenance_backfill"
 
 _STALE_FILE_TASKS = (FILE_PROCESSING_TASK,)
 
@@ -52,7 +52,7 @@ async def fail_stale_file_tasks() -> int:
 	active-task guard then skips that file forever. failing the stale task frees
 	the file to be redispatched on the next sweep.
 	"""
-	return await task_service.fail_stale_active_tasks(
+	return await fail_stale_active_tasks(
 		_STALE_FILE_TASKS,
 		_file_stale_task_cleanup_after(),
 		"file processing task stopped reporting progress",
@@ -91,11 +91,11 @@ async def schedule_file_processing_task(
 	)
 
 
-@task_service.register_task_runner(
+@register_task_runner(
 	FILE_PROCESSING_TASK,
 	timeout_seconds=_file_task_runner_timeout_seconds,
 )
-async def run_file_processing_task(context: task_service.TaskContext) -> JSONObject:
+async def run_file_processing_task(context: TaskContext) -> JSONObject:
 	"""run both file processing pipelines for a file."""
 	file_id = _file_id_from_context(context)
 	origin_session_value = context.metadata.get("origin_session_id")
@@ -108,6 +108,7 @@ async def run_file_processing_task(context: task_service.TaskContext) -> JSONObj
 			file_id,
 			session,
 			origin_session_id=origin_session_id,
+			force=context.metadata.get("force") is True,
 		)
 		await session.commit()
 	await context.update(progress=90, stage="finalizing")
@@ -132,7 +133,7 @@ async def dispatch_file_processing(
 		await session.commit()
 
 
-def _file_id_from_context(context: task_service.TaskContext) -> TypeID:
+def _file_id_from_context(context: TaskContext) -> TypeID:
 	file_id_value = context.metadata.get("file_id")
 	if not isinstance(file_id_value, str) or not file_id_value:
 		raise ValueError("file_id metadata is required")
@@ -212,8 +213,8 @@ async def run_file_maintenance_backfill_sweep(
 
 		due_files = await list_files_due_for_processing(session, limit=effective_batch)
 		for file in due_files:
-			file_id = TypeID(file.id)
-			existing = await task_service.find_active_task(
+			file_id = file.id
+			existing = await find_active_task(
 				session, FILE_PROCESSING_TASK, {"file_id": str(file_id)}
 			)
 			if existing is not None:
@@ -250,11 +251,11 @@ async def dispatch_file_maintenance_backfill_sweep() -> JSONObject:
 async def reconcile_file_maintenance_backfill_schedule() -> bool:
 	"""install or remove the backfill cron schedule based on settings.
 
-	called at API boot and again whenever the cache invalidation signal
-	`file_maintenance_backfill` fires. the function is idempotent: it always
-	deletes the existing schedule first, then installs a new one when the
-	feature is enabled. returns True if a schedule is currently installed
-	after the reconcile, False otherwise.
+	called at API boot and again after every settings snapshot reload.
+	the function is idempotent: it always deletes the existing schedule
+	first, then installs a new one when the feature is enabled. returns
+	True if a schedule is currently installed after the reconcile, False
+	otherwise.
 	"""
 	if boot_settings.TESTING:
 		return False
@@ -302,21 +303,4 @@ async def clear_disabled_file_maintenance_backfill_schedule() -> bool:
 	return True
 
 
-def _on_file_maintenance_backfill_settings_invalidation() -> None:
-	"""react to a settings update by reconciling the backfill schedule.
-
-	the cache invalidation pubsub handler is sync, so we hand the async
-	reconcile off to the running event loop without blocking the listener.
-	"""
-	try:
-		loop = asyncio.get_running_loop()
-	except RuntimeError:
-		logger.debug("backfill invalidation received outside an event loop; skipping")
-		return
-	loop.create_task(reconcile_file_maintenance_backfill_schedule())
-
-
-on_invalidation(
-	FILE_MAINTENANCE_BACKFILL_INVALIDATION_SIGNAL,
-	_on_file_maintenance_backfill_settings_invalidation,
-)
+on_settings_reload(reconcile_file_maintenance_backfill_schedule)

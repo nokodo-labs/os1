@@ -1,19 +1,22 @@
 """File schemas."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from api.models.file import FileSource, FileStatus
+from api.schemas.access_rule import ResourceAccessListFilters
 from api.schemas.common import (
 	MISSING,
+	ForbidExtraModel,
 	MetadataModel,
 	MetadataUpdateModel,
 	MissingType,
-	ORMModel,
+	PrivateFacetModel,
+	PrivateInputFacetModel,
+	PrivateInputModel,
+	PrivateModel,
 	TimestampedModel,
 )
 from api.schemas.sorting import CommonSortBy
@@ -24,7 +27,7 @@ type FileSortBy = CommonSortBy | Literal["filename", "size_bytes"]
 type FileCategoryFilter = Literal["image", "audio", "video", "file"]
 
 
-class FileListFilters(BaseModel):
+class FileListFilters(ResourceAccessListFilters):
 	"""filters for listing files."""
 
 	owner_id: TypeID | None = None
@@ -63,17 +66,77 @@ class FileBase(MetadataModel):
 	project_ids: list[TypeID] = Field(default_factory=list)
 
 
-class FileCreate(FileBase):
-	"""payload to register a new file record."""
+class _FilePrivateFields(BaseModel):
+	"""the operator-only file columns."""
 
-	source: FileSource = FileSource.UPLOAD
-	storage_backend: str
-	storage_key: str
-	size_bytes: int | None = None
-	checksum_sha256: str | None = None
+	storage_backend: str = Field(
+		description="name of the storage backend holding the file bytes.",
+	)
+	storage_key: str = Field(
+		description="key identifying the file bytes within the storage backend.",
+	)
+	checksum_sha256: str | None = Field(
+		default=None,
+		description="SHA-256 checksum of the file bytes.",
+	)
 
 
-class FileUpdate(MetadataUpdateModel):
+class FilePrivate(_FilePrivateFields, PrivateModel):
+	"""operator-only view of a file."""
+
+
+class FilePrivateCreate(PrivateInputModel):
+	"""operator-only fields when registering a file for existing bytes.
+
+	only the coordinates are submitted: size and checksum are read back off the
+	stored object, never taken from the caller.
+	"""
+
+	storage_backend: str = Field(
+		description=_FilePrivateFields.model_fields["storage_backend"].description,
+	)
+	storage_key: str = Field(
+		description=_FilePrivateFields.model_fields["storage_key"].description,
+	)
+
+
+class FilePrivateInput(PrivateInputModel):
+	"""operator-only fields on a file update.
+
+	same fields as ``_FilePrivateFields`` with every one optional: an update
+	submits only what changes, so the types and defaults both differ from the
+	read/create facets and cannot share the class.
+	"""
+
+	storage_backend: str | MissingType = Field(
+		default=MISSING,
+		description=_FilePrivateFields.model_fields["storage_backend"].description,
+	)
+	storage_key: str | MissingType = Field(
+		default=MISSING,
+		description=_FilePrivateFields.model_fields["storage_key"].description,
+	)
+	checksum_sha256: str | None | MissingType = Field(
+		default=MISSING,
+		description=_FilePrivateFields.model_fields["checksum_sha256"].description,
+	)
+
+
+class FileCreate(FileBase, ForbidExtraModel):
+	"""payload to register a new file record.
+
+	no ``size_bytes``: it is measured from the stored object, not declared. a
+	stray flat `storage_key` (its pre-facet home) must 422, not be dropped.
+	"""
+
+	private: FilePrivateCreate
+
+
+class FileUpdate(
+	MetadataUpdateModel,
+	ForbidExtraModel,
+	PrivateInputFacetModel[FilePrivateInput],
+):
 	"""payload to update a file record."""
 
 	filename: str | None | MissingType = MISSING
@@ -82,17 +145,14 @@ class FileUpdate(MetadataUpdateModel):
 	status: FileStatus | MissingType = MISSING
 
 
-class File(FileBase, TimestampedModel, ORMModel):
+class File(FileBase, TimestampedModel, PrivateFacetModel[FilePrivate]):
 	"""file response schema."""
 
 	id: TypeID
-	owner_id: TypeID
+	owner_id: TypeID | None = None
 	source: FileSource
-	storage_backend: str
-	storage_key: str
 	size_bytes: int | None = None
-	checksum_sha256: str | None = None
 	status: FileStatus
-	message_id: TypeID | None = None
+	origin_message_id: TypeID | None = None
 	origin_thread_id: TypeID | None = None
 	deleted_at: datetime | None = Field(default=None)

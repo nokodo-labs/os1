@@ -1,7 +1,5 @@
 """shared file search/vector metadata helpers."""
 
-from __future__ import annotations
-
 from api.models.file import File
 from api.v1.service.vectorstores import VectorChunkResourceType
 from nokodo_ai.types.json import JSONObject

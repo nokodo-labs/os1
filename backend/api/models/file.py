@@ -1,17 +1,24 @@
 """file model."""
 
-from __future__ import annotations
-
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, Index, String, Text, inspect
+from sqlalchemy import (
+	BigInteger,
+	ForeignKey,
+	Index,
+	String,
+	Text,
+	inspect,
+	text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base, StringEnum
 from api.models.many_to_many import file_project_association
 from api.models.mixins import (
 	MetadataJSONMixin,
+	OriginMessageMixin,
 	SoftDeleteMixin,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
@@ -27,11 +34,13 @@ if TYPE_CHECKING:
 
 
 class FileSource(StrEnum):
-	"""How a file entered the system."""
+	"""how a file entered the system, and what it is."""
 
-	UPLOAD = "upload"
-	GENERATED = "generated"
-	IMPORT = "import"
+	USER_UPLOADED = "user_uploaded"
+	AGENT_GENERATED = "agent_generated"
+	USER_IMPORTED = "user_imported"
+	TEXT_EXTRACTION = "text_extraction"
+	THUMBNAIL = "thumbnail"
 
 
 class FileStatus(StrEnum):
@@ -45,6 +54,7 @@ class File(
 	TypeIDPrimaryKeyMixin,
 	TimestampMixin,
 	MetadataJSONMixin,
+	OriginMessageMixin,
 	SoftDeleteMixin,
 	Base,
 ):
@@ -65,9 +75,15 @@ class File(
 			postgresql_using="gin",
 			postgresql_ops={"description": "gin_trgm_ops"},
 		),
+		Index(
+			"ix_files_parent_file_id",
+			"parent_file_id",
+			postgresql_where=text("parent_file_id IS NOT NULL"),
+		),
 	)
 
-	owner_id: Mapped[str] = mapped_column(
+	# null on internal derivatives
+	owner_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id"),
 		index=True,
@@ -75,10 +91,10 @@ class File(
 
 	source: Mapped[FileSource] = mapped_column(
 		StringEnum(FileSource),
-		default=FileSource.UPLOAD,
+		default=FileSource.USER_UPLOADED,
 	)
 	storage_backend: Mapped[str] = mapped_column(String(50))
-	storage_key: Mapped[str] = mapped_column(String(1024))
+	storage_key: Mapped[str] = mapped_column(String(1024), unique=True)
 	filename: Mapped[str | None] = mapped_column(String(255))
 	mime_type: Mapped[str | None] = mapped_column(String(255))
 	size_bytes: Mapped[int | None] = mapped_column(BigInteger())
@@ -89,21 +105,20 @@ class File(
 		default=FileStatus.PENDING,
 	)
 
-	message_id: Mapped[str | None] = mapped_column(
+	# the user file an internal derivative was derived from; null on user files.
+	parent_file_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey(
-			"messages.id",
-			ondelete="SET NULL",
+			"files.id",
+			ondelete="CASCADE",
 			use_alter=True,
-			name="files_message_id_fkey",
+			name="files_parent_file_id_fkey",
 		),
-		index=True,
 	)
 
-	owner: Mapped[User] = relationship(
+	owner: Mapped[User | None] = relationship(
 		"User",
 		back_populates="files",
-		innerjoin=True,
 	)
 	projects: Mapped[list[Project]] = relationship(
 		"Project",
@@ -119,13 +134,13 @@ class File(
 	@property
 	def origin_thread_id(self) -> TypeID | None:
 		"""thread id resolved through the linked origin message when loaded."""
-		if self.message_id is None or "message" in inspect(self).unloaded:
+		if self.origin_message_id is None or "origin_message" in inspect(self).unloaded:
 			return None
-		return self.message.thread_id if self.message else None
+		return self.origin_message.thread_id if self.origin_message else None
 
-	message: Mapped[Message | None] = relationship(
+	origin_message: Mapped[Message | None] = relationship(
 		"Message",
-		back_populates="files",
+		foreign_keys="File.origin_message_id",
 	)
 	access_rules: Mapped[list[AccessRule]] = relationship(
 		"AccessRule",

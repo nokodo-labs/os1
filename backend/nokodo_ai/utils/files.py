@@ -1,7 +1,5 @@
 """file metadata helpers."""
 
-from __future__ import annotations
-
 from pathlib import PurePath
 
 import puremagic

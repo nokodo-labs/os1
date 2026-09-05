@@ -1,6 +1,4 @@
-"""API-side file modality and text extraction routing helpers."""
-
-from __future__ import annotations
+"""API-side file modality classification helpers."""
 
 from api.models.model import InputModality
 from nokodo_ai.utils.files import file_extension, normalized_mime_type
@@ -27,10 +25,6 @@ _DOCUMENT_MIME_EXACT = {
 	"application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
 
-_MIN_DOCUMENT_TEXT_CHARS = 40
-_MIN_DOCUMENT_TEXT_DENSITY_BYTES = 64 * 1024
-_MIN_DOCUMENT_TEXT_CHARS_PER_KIB = 4.0
-
 
 def file_input_modality(
 	filename: str | None,
@@ -48,44 +42,6 @@ def file_input_modality(
 	if mime.startswith("video/") or extension in _VIDEO_EXTENSIONS:
 		return InputModality.VIDEO
 	return InputModality.TEXT
-
-
-def is_direct_model_text_candidate(
-	filename: str | None,
-	mime_type: str | None,
-) -> bool:
-	"""return whether local text loaders should be skipped."""
-	return file_input_modality(filename, mime_type) in {
-		InputModality.IMAGES,
-		InputModality.AUDIO,
-		InputModality.VIDEO,
-	}
-
-
-def should_try_model_text(
-	filename: str | None,
-	mime_type: str | None,
-	extracted_text: str,
-	size_bytes: int | None = None,
-) -> bool:
-	"""return whether API policy should try model-backed file text extraction."""
-	modality = file_input_modality(filename, mime_type)
-	if modality in {InputModality.IMAGES, InputModality.AUDIO, InputModality.VIDEO}:
-		return True
-	if modality != InputModality.DOCUMENTS:
-		return False
-	meaningful_chars = len(_meaningful_text(extracted_text))
-	if meaningful_chars < _MIN_DOCUMENT_TEXT_CHARS:
-		return True
-	if size_bytes is None or size_bytes < _MIN_DOCUMENT_TEXT_DENSITY_BYTES:
-		return False
-	chars_per_kib = meaningful_chars / (size_bytes / 1024)
-	return chars_per_kib < _MIN_DOCUMENT_TEXT_CHARS_PER_KIB
-
-
-def _meaningful_text(text: str) -> str:
-	"""return only alphanumeric characters for density heuristics."""
-	return "".join(char for char in text if char.isalnum())
 
 
 _IMAGE_PREFIXES = ("image/",)

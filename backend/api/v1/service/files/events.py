@@ -7,13 +7,13 @@ tasks layer, and the tasks layer wires into processing.py, so a direct
 service <-> processing event dependency would form an import cycle.
 """
 
-from __future__ import annotations
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
-from api.v1.service import events as event_service
+from api.permissions import ResourceType
+from api.v1.service.authorization import list_accessible_user_ids_for_resources
+from api.v1.service.events import persist_and_fanout_event
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -21,7 +21,7 @@ async def emit_file_event(
 	session: AsyncSession,
 	event_type: EventType,
 	file_id: TypeID,
-	user_id: TypeID,
+	user_id: TypeID | None,
 	filename: str | None = None,
 	project_ids: list[TypeID] | None = None,
 	affected_project_ids: set[TypeID] | None = None,
@@ -45,9 +45,21 @@ async def emit_file_event(
 		data=data,
 		user_id=user_id,
 	)
-	await event_service.persist_and_fanout_event(
+	resolved_recipient_ids = recipient_ids
+	if resolved_recipient_ids is None and affected_project_ids:
+		resolved_recipient_ids = await list_accessible_user_ids_for_resources(
+			[
+				(ResourceType.FILE, file_id),
+				*(
+					(ResourceType.PROJECT, project_id)
+					for project_id in affected_project_ids
+				),
+			],
+			session,
+		)
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
-		recipient_ids=recipient_ids,
+		recipient_ids=resolved_recipient_ids,
 	)

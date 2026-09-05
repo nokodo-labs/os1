@@ -1,25 +1,10 @@
 """file service package facade."""
 
-from api.v1.service.files.content_vectorization import (
-	FileContentChunk,
-	FileContentChunkBatch,
-	load_file_content_chunks,
-	vectorize_file_content,
-)
-from api.v1.service.files.description import update_file_description
-from api.v1.service.files.processing import (
-	list_files_due_for_processing,
-	process_file,
-	process_file_description,
-)
-from api.v1.service.files.search import (
-	file_to_search_item,
-	search_files,
-)
-from api.v1.service.files.service import (
+from api.v1.service.files.core import (
 	count_files,
 	delete_content,
 	delete_file,
+	file_payloads,
 	get_file,
 	get_file_content,
 	get_file_payload,
@@ -34,12 +19,36 @@ from api.v1.service.files.service import (
 	update_file,
 	upload_file,
 )
+from api.v1.service.files.description import update_file_description
+from api.v1.service.files.processing import (
+	list_files_due_for_processing,
+	process_file,
+	process_file_description,
+	vectorize_files,
+)
+from api.v1.service.files.search import (
+	file_to_search_item,
+	search_files,
+)
+from api.v1.service.files.text_contents import (
+	FileContentChunk,
+	FileContentChunkBatch,
+	FileContentChunkHit,
+	FileContentLines,
+	delete_extracted_text,
+	load_file_content_chunks,
+	query_file_content,
+	read_extracted_text,
+	read_file_content_lines,
+	store_extracted_text,
+	vectorize_file_content,
+)
 from api.v1.service.files.vectorization import (
 	FILE_SPEC,
 	remove_file_vectors,
 	replace_all_file_vectors,
 	replace_file_description_vectors,
-	vectorize_all_files,
+	vectorize_file_descriptions,
 )
 
 
@@ -47,9 +56,13 @@ __all__ = [
 	"FILE_SPEC",
 	"FileContentChunk",
 	"FileContentChunkBatch",
+	"FileContentChunkHit",
+	"FileContentLines",
 	"count_files",
 	"delete_content",
+	"delete_extracted_text",
 	"delete_file",
+	"file_payloads",
 	"get_file",
 	"get_file_content",
 	"get_file_payload",
@@ -60,8 +73,11 @@ __all__ = [
 	"load_file_content_chunks",
 	"process_file",
 	"process_file_description",
+	"query_file_content",
 	"read_content",
+	"read_extracted_text",
 	"read_file_base64",
+	"read_file_content_lines",
 	"register_stored_file",
 	"remove_file_vectors",
 	"replace_all_file_vectors",
@@ -69,10 +85,12 @@ __all__ = [
 	"restore_file",
 	"file_to_search_item",
 	"search_files",
+	"store_extracted_text",
 	"store_file",
 	"update_file",
 	"update_file_description",
 	"upload_file",
 	"vectorize_file_content",
-	"vectorize_all_files",
+	"vectorize_file_descriptions",
+	"vectorize_files",
 ]
