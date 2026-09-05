@@ -3,14 +3,17 @@
 Keeps global pytest bootstrapping out of the SDK package.
 """
 
-from __future__ import annotations
-
 import asyncio
+import os
 from collections.abc import Callable
 from pathlib import Path
 
+from nokodo_ai.utils.event_loop import configure_windows_selector_event_loop_policy
 
-pytest_plugins = ("tests.live_progress",)
+
+pytest_plugins = ("tests.session_lock", "tests.live_progress")
+
+configure_windows_selector_event_loop_policy()
 
 
 def pytest_asyncio_loop_factories() -> dict[
@@ -23,6 +26,7 @@ def pytest_asyncio_loop_factories() -> dict[
 
 def pytest_configure(config: object) -> None:
 	_ = config
+	os.environ["TESTING"] = "true"
 	# best-effort load of .env so local runs can pick up API keys
 	try:
 		from dotenv import load_dotenv

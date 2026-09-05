@@ -1,25 +1,29 @@
 """Pytest configuration and fixtures for API tests."""
 
-from __future__ import annotations
-
+import asyncio
 import atexit
 import os
 import shutil
 import socket
+import struct
 import subprocess
+import sys
 import tempfile
+import time
 from collections.abc import AsyncGenerator, Generator
 from contextlib import contextmanager
 from pathlib import Path
 from threading import Lock
+from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 import redis
+import redis.asyncio.connection as _redis_async_connection
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.engine import URL, Connection, make_url
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import (
@@ -37,18 +41,149 @@ from api.schemas.provider import ProviderCreate
 from api.settings import settings
 from api.storage import _BACKENDS, register
 from api.storage.local import LocalStorageBackend
+from api.tests.factories import make_principal
+from api.tests.mocks import patch_vectorstore_ops
 from api.v1.service import models as model_service
 from api.v1.service import providers as provider_service
 from api.v1.service import vectorstores as vectorstores_service
-from api.v1.service.auth import Principal
 from nokodo_ai.embeddings import EmbeddingModel
 from nokodo_ai.utils.security import hash_password
+
+
+_SO_LINGER_RST = struct.pack("hh", 1, 0)
+"""SO_LINGER payload (on, timeout 0): close() sends RST and skips TIME_WAIT."""
+
+_WSAENOBUFS = 10055
+"""Transient Windows socket error under connect bursts; safe to retry."""
+
+_CONNECT_RETRIES = 5
+_CONNECT_RETRY_BASE_DELAY_S = 0.2
+
+
+def _is_enobufs(exc: BaseException) -> bool:
+	"""Whether the exception (or its chain) is a WinError 10055."""
+	seen: set[int] = set()
+	current: BaseException | None = exc
+	while current is not None and id(current) not in seen:
+		seen.add(id(current))
+		if getattr(current, "winerror", None) == _WSAENOBUFS:
+			return True
+		if f"{_WSAENOBUFS}" in str(current):
+			return True
+		current = current.__cause__ or current.__context__
+	return False
+
+
+def _dump_socket_state(tag: str) -> None:
+	"""Best-effort TCP state snapshot for post-mortem of a 10055 failure."""
+	try:
+		out = subprocess.run(
+			["netstat", "-ano", "-p", "tcp"],
+			capture_output=True,
+			text=True,
+			timeout=60,
+		).stdout
+		name = f"sockdump_{tag}_{os.getpid()}_{uuid4().hex[:6]}.txt"
+		(Path(tempfile.gettempdir()) / name).write_text(out, encoding="utf-8")
+	except Exception:
+		pass
+
+
+def _set_rst_on_close(fileno: int) -> None:
+	"""Mark a connected socket to reset on close instead of lingering."""
+	sock = socket.socket(fileno=fileno)
+	try:
+		sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, _SO_LINGER_RST)
+	finally:
+		sock.detach()
+
+
+if sys.platform == "win32":
+	# the suite opens and closes short-lived Postgres/redis connections per
+	# test; on Windows each graceful close parks its ephemeral port in
+	# TIME_WAIT (~2 min), and repeated full runs exhaust the 16k-port dynamic
+	# range (WinError 10055). RST-on-close frees the port immediately. tests
+	# only, throwaway connections only, so the dropped FIN handshake is safe.
+
+	@event.listens_for(Engine, "connect")
+	def _pg_rst_on_close(dbapi_connection: Any, connection_record: object) -> None:
+		_ = connection_record
+		try:
+			_set_rst_on_close(dbapi_connection.fileno())
+		except OSError, AttributeError:
+			pass
+
+	@event.listens_for(Engine, "do_connect", retval=True)
+	def _pg_connect_retry(
+		dialect: Any, conn_rec: object, cargs: tuple[Any, ...], cparams: dict[str, Any]
+	) -> Any:
+		_ = conn_rec
+		for attempt in range(_CONNECT_RETRIES):
+			try:
+				return dialect.connect(*cargs, **cparams)
+			except Exception as exc:
+				if not _is_enobufs(exc) or attempt == _CONNECT_RETRIES - 1:
+					if _is_enobufs(exc):
+						_dump_socket_state("pg")
+					raise
+				time.sleep(_CONNECT_RETRY_BASE_DELAY_S * (attempt + 1))
+		return None
+
+	_redis_orig_connect = _redis_async_connection.Connection._connect
+
+	async def _redis_connect_rst(self: _redis_async_connection.Connection) -> None:
+		for attempt in range(_CONNECT_RETRIES):
+			try:
+				await _redis_orig_connect(self)
+				break
+			except OSError as exc:
+				if not _is_enobufs(exc) or attempt == _CONNECT_RETRIES - 1:
+					if _is_enobufs(exc):
+						_dump_socket_state("redis")
+					raise
+				await asyncio.sleep(_CONNECT_RETRY_BASE_DELAY_S * (attempt + 1))
+		writer = self._writer
+		sock = writer.transport.get_extra_info("socket") if writer else None
+		if sock is not None:
+			try:
+				sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, _SO_LINGER_RST)
+			except OSError:
+				pass
+
+	_redis_async_connection.Connection._connect = _redis_connect_rst
+
+	_orig_socketpair = socket.socketpair
+
+	def _socketpair_rst(
+		*args: Any, **kwargs: Any
+	) -> tuple[socket.socket, socket.socket]:
+		# windows emulates socketpair() over loopback TCP, and every asyncio
+		# event loop builds its self-pipe from one; retry absorbs transient
+		# AFD buffer exhaustion (10055) under connect bursts.
+		for attempt in range(_CONNECT_RETRIES):
+			try:
+				pair = _orig_socketpair(*args, **kwargs)
+				break
+			except OSError as exc:
+				if not _is_enobufs(exc) or attempt == _CONNECT_RETRIES - 1:
+					if _is_enobufs(exc):
+						_dump_socket_state("socketpair")
+					raise
+				time.sleep(_CONNECT_RETRY_BASE_DELAY_S * (attempt + 1))
+		for sock in pair:
+			try:
+				sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, _SO_LINGER_RST)
+			except OSError:
+				pass
+		return pair
+
+	socket.socketpair = _socketpair_rst  # ty: ignore[invalid-assignment]
 
 
 @pytest.fixture(scope="session", autouse=True)
 def _register_test_storage_backends(
 	tmp_path_factory: pytest.TempPathFactory,
-) -> Generator[None]:
+) -> Generator[LocalStorageBackend]:
 	"""register the local storage backend for the test session.
 
 	uses a dedicated temp dir so test uploads do not pollute the project
@@ -56,23 +191,37 @@ def _register_test_storage_backends(
 	"""
 
 	root = tmp_path_factory.mktemp("storage", numbered=True)
-	register("local", LocalStorageBackend(root_path=str(root)))
-	yield
+	backend = LocalStorageBackend(name="local", root_path=str(root))
+	register("local", backend)
+	yield backend
 	_BACKENDS.clear()
+
+
+@pytest.fixture(autouse=True)
+def _restore_local_storage_backend(
+	_register_test_storage_backends: LocalStorageBackend,
+) -> None:
+	"""Re-register the local backend if a prior test wiped the registry.
+
+	settings-reload callbacks rebuild ``_BACKENDS`` from (empty) test
+	settings, so any test that triggers a reload leaves later tests in the
+	same worker without a 'local' backend. mirrors the guard in ``client``.
+	"""
+	if "local" not in _BACKENDS:
+		register("local", _register_test_storage_backends)
 
 
 @pytest.fixture(scope="session", autouse=True)
 def _api_test_env_defaults() -> Generator[None]:
 	"""Make api tests self-contained (no external OpenAI/vector DB required)."""
-	from api.boot_settings import boot_settings
-
-	boot_settings.TESTING = True
-
 	monkeypatch = pytest.MonkeyPatch()
 	if not os.getenv("OPENAI_API_KEY"):
 		monkeypatch.setenv("OPENAI_API_KEY", "test")
-	if not os.getenv("NOKODO__ASSETS__VECTOR_DATABASE__QDRANT__URL"):
-		monkeypatch.setenv("NOKODO__ASSETS__VECTOR_DATABASE__QDRANT__URL", ":memory:")
+	# unconditional: backend/.env and dev shells carry a live qdrant URL, and a
+	# leaked live URL makes every adapter rebuild dial a real gRPC channel pool
+	# (socket churn + isolation leak). e2e tests that want a vectorstore pin
+	# :memory: themselves.
+	monkeypatch.setenv("NOKODO__ASSETS__VECTOR_DATABASE__QDRANT__URL", ":memory:")
 	monkeypatch.setenv("NOKODO__SECURITY__AUTO_SIGNUP_ROLE_IDS", "[]")
 
 	settings.reload()
@@ -121,9 +270,12 @@ def _api_test_stub_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
 	async def _noop_search(*args: object, **kwargs: object) -> list[object]:
 		return []
 
-	monkeypatch.setattr(vectorstores_service, "upsert_chunks", _noop_upsert)
-	monkeypatch.setattr(vectorstores_service, "delete", _noop_delete)
-	monkeypatch.setattr(vectorstores_service, "search", _noop_search)
+	patch_vectorstore_ops(
+		monkeypatch,
+		upsert_chunks=_noop_upsert,
+		delete=_noop_delete,
+		search=_noop_search,
+	)
 
 
 @pytest.fixture(autouse=True)
@@ -170,14 +322,9 @@ async def _api_test_seed_default_embedding_model(
 ) -> None:
 	"""Ensure a usable default embedding model exists for memory flows."""
 
-	principal = Principal(
-		user=User(
-			email="seed@example.com",
-			username="seed_test",
-			hashed_password="x",
-			is_superuser=True,
-		),
-		group_ids=(),
+	principal = make_principal(
+		slug="seed_test",
+		is_superuser=True,
 		permissions=frozenset({"providers:manage", "models:manage"}),
 	)
 
@@ -193,9 +340,10 @@ async def _api_test_seed_default_embedding_model(
 
 	model = await model_service.create_model(
 		ModelCreate(
-			provider_id=str(provider.id),
+			provider_id=provider.id,
 			name="seed-embedding",
 			model_type=ModelType.EMBEDDING,
+			context_window=8192,
 		),
 		db_session,
 		principal=principal,
@@ -386,11 +534,13 @@ WHERE datname LIKE :pattern
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 	_ = (session, exitstatus)
 	if os.getenv("PYTEST_XDIST_WORKER"):
+		_dispose_cached_sync_engines()
 		return
 	if _is_ci_run():
 		return
 	_cleanup_leftover_test_databases()
 	_flush_isolated_test_redis()
+	_dispose_cached_sync_engines()
 
 
 def _find_available_port() -> int:
@@ -611,6 +761,31 @@ _TEMPLATE_ROLE_ADVISORY_LOCK_KEY = 0x6E6F4B4F444F  # "nokodo" in hex
 _ADMIN_CONNECTION_URL_IN_USE: URL | None = None
 _EMBEDDED_CLUSTER: EmbeddedPostgresCluster | None = None
 
+_SYNC_ENGINE_CACHE: dict[str, Engine] = {}
+"""Per-process cache of pooled sync engines for admin/owner DDL connections."""
+
+
+def _cached_sync_engine(url: URL) -> Engine:
+	"""Return a small pooled engine for the URL, creating it once per process.
+
+	DDL helpers run several times per test; a fresh engine per call opens and
+	closes a TCP connection each time, which starves the Windows ephemeral
+	port range across a full run. one cached engine per URL reuses a single
+	pooled connection instead.
+	"""
+	key = url.render_as_string(hide_password=False)
+	engine = _SYNC_ENGINE_CACHE.get(key)
+	if engine is None:
+		engine = create_engine(url, pool_size=1, max_overflow=2, pool_pre_ping=True)
+		_SYNC_ENGINE_CACHE[key] = engine
+	return engine
+
+
+def _dispose_cached_sync_engines() -> None:
+	for engine in _SYNC_ENGINE_CACHE.values():
+		engine.dispose()
+	_SYNC_ENGINE_CACHE.clear()
+
 
 def _template_url() -> URL:
 	global TEST_DATABASE_TEMPLATE_URL
@@ -697,9 +872,15 @@ def _connection_has_admin_rights(conn: Connection) -> bool:
 @contextmanager
 def _admin_connection() -> Generator[Connection]:
 	global _ADMIN_CONNECTION_URL_IN_USE
+	if _ADMIN_CONNECTION_URL_IN_USE is not None:
+		engine = _cached_sync_engine(_ADMIN_CONNECTION_URL_IN_USE)
+		with engine.connect() as raw_conn:
+			yield raw_conn.execution_options(isolation_level="AUTOCOMMIT")
+		return
+
 	last_error: Exception | None = None
 	for admin_url in _build_admin_database_urls(_template_url()):
-		engine = create_engine(admin_url)
+		engine = _cached_sync_engine(admin_url)
 		masked_url = admin_url.render_as_string(hide_password=True)
 		try:
 			with engine.connect() as raw_conn:
@@ -716,8 +897,6 @@ def _admin_connection() -> Generator[Connection]:
 				return
 		except OperationalError as exc:  # pragma: no cover
 			last_error = exc
-		finally:
-			engine.dispose()
 
 	raise AdminConnectionUnavailableError(
 		"Unable to establish a privileged Postgres connection for test database "
@@ -730,22 +909,19 @@ def _owner_connection() -> Generator[Connection]:
 	template_url = _template_url()
 	ddl_database = template_url.database or "postgres"
 	owner_url = template_url.set(database=ddl_database)
-	engine = create_engine(owner_url)
+	engine = _cached_sync_engine(owner_url)
 	try:
 		raw_conn = engine.connect()
 	except OperationalError as exc:
-		engine.dispose()
 		raise RuntimeError(
 			"Unable to connect to Postgres using TEST_DATABASE_URL credentials. "
 			"Ensure the configured user can create and drop databases."
 		) from exc
 
 	try:
-		conn = raw_conn.execution_options(isolation_level="AUTOCOMMIT")
-		yield conn
+		yield raw_conn.execution_options(isolation_level="AUTOCOMMIT")
 	finally:
 		raw_conn.close()
-		engine.dispose()
 
 
 def _ensure_template_role_exists() -> None:
@@ -845,8 +1021,12 @@ async def _create_async_engine_with_fallback(url: URL) -> AsyncEngine:
 		engine = create_async_engine(
 			candidate.render_as_string(hide_password=False),
 			echo=False,
-			pool_size=2,
-			max_overflow=5,
+			# overflow connections are torn down on check-in, so a small
+			# pool_size with overflow churns a socket per burst; a fixed-size
+			# pool with no overflow keeps the same 7-connection cap while
+			# reusing every connection for the engine's lifetime.
+			pool_size=7,
+			max_overflow=0,
 			pool_timeout=30,
 		)
 		try:
@@ -894,7 +1074,7 @@ def _flush_isolated_test_redis() -> None:
 		return
 
 
-@pytest_asyncio.fixture(scope="function", loop_scope="function", autouse=True)
+@pytest_asyncio.fixture(scope="function", autouse=True)
 async def _api_test_redis_lifecycle() -> AsyncGenerator[None]:
 	"""Connect the singleton redis client to an isolated test DB per test.
 
@@ -906,11 +1086,11 @@ async def _api_test_redis_lifecycle() -> AsyncGenerator[None]:
 	never clobber or be clobbered by live redis state. TaskIQ stays isolated
 	separately because ``broker.kick`` is stubbed (durable enqueues no-op).
 
-	Function scope binds the connection pool to each test's running loop, and
-	the teardown closes it on that same loop. Tests use the same valkey
-	instance the dev stack starts on ``REDIS_URL``; CI ensures a valkey
-	container is available. There is no in-process fallback - if connection
-	fails, tests fail fast.
+	The session loop scope (shared with test bodies via
+	``asyncio_default_test_loop_scope``) keeps the connection pool and its
+	users on one loop. Tests use the same valkey instance the dev stack
+	starts on ``REDIS_URL``; CI ensures a valkey container is available.
+	There is no in-process fallback - if connection fails, tests fail fast.
 	"""
 	from api.redis import redis_client
 
@@ -941,9 +1121,11 @@ async def db_session() -> AsyncGenerator[AsyncSession]:
 			await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
 			await conn.run_sync(Base.metadata.create_all)
 
+		# the app's own session class: post-commit promotion is registered on it,
+		# so a plain AsyncSession would silently skip every queued action.
 		test_session_local = async_sessionmaker(
 			engine,
-			class_=AsyncSession,
+			class_=_db_module.AppAsyncSession,
 			expire_on_commit=False,
 			autocommit=False,
 			autoflush=False,
@@ -976,7 +1158,10 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 	# fixture was torn down or cleared by another test
 	_needs_storage = "local" not in _BACKENDS
 	if _needs_storage:
-		register("local", LocalStorageBackend(root_path=str(Path(tempfile.mkdtemp()))))
+		register(
+			"local",
+			LocalStorageBackend(name="local", root_path=str(Path(tempfile.mkdtemp()))),
+		)
 
 	async def override_get_db() -> AsyncGenerator[AsyncSession]:
 		yield db_session
