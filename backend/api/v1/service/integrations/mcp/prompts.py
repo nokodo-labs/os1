@@ -1,7 +1,5 @@
 """MCP prompt projection and expansion helpers."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -18,7 +16,7 @@ from api.v1.service.integrations.mcp.cache import (
 	set_cached_mcp_prompt_refs,
 )
 from api.v1.service.integrations.mcp.service import client_config
-from api.v1.service.prompts.external import ExternalPromptSource
+from api.v1.service.prompts import ExternalPromptSource
 
 
 MCP_PROMPT_COMMAND_PREFIX = "mcp-"

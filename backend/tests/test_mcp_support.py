@@ -1,7 +1,5 @@
 """unit tests for MCP support helpers."""
 
-from __future__ import annotations
-
 import asyncio
 import json
 from collections.abc import Awaitable, Callable
@@ -30,7 +28,7 @@ from api.models.user import User
 from api.schemas.mcp import MCPServer as MCPServerSchema
 from api.schemas.mcp import MCPServerCreate
 from api.settings import settings
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.chat.context import AppContext
 from api.v1.service.integrations.mcp.ids import (
 	mcp_server_tools_plugin_id,
@@ -120,11 +118,12 @@ def _app_context() -> AppContext:
 		email="mcp-support@example.com",
 		username="mcp_support_user",
 		hashed_password="x",
+		is_active=True,
 		is_superuser=True,
 	)
 	return AppContext(
 		session=AsyncSession(),
-		principal=Principal(user=user, group_ids=(), permissions=frozenset()),
+		principal=Principal.for_user(user=user, group_ids=(), permissions=frozenset()),
 		event_emitter=_noop_event_emitter,
 	)
 

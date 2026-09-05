@@ -5,8 +5,6 @@ lowest layer that serializes these ids) and re-exported here so the service and
 runtime keep importing from one place.
 """
 
-from __future__ import annotations
-
 from api.schemas.mcp import (
 	MCP_SERVER_TOOLS_PREFIX,
 	MCP_SERVER_TOOLS_SUFFIX,

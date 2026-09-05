@@ -1,7 +1,5 @@
 """MCP-backed chat tools."""
 
-from __future__ import annotations
-
 from fastapi import HTTPException
 from pydantic_core import to_jsonable_python
 from sqlalchemy import select

@@ -1,7 +1,5 @@
 """Redis cache helpers for MCP DB snapshot projections."""
 
-from __future__ import annotations
-
 from hashlib import sha256
 
 from pydantic import BaseModel, ValidationError

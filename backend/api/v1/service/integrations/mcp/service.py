@@ -1,7 +1,5 @@
 """service layer for MCP server operations."""
 
-from __future__ import annotations
-
 import json
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
@@ -37,8 +35,11 @@ from api.schemas.mcp import (
 from api.schemas.mcp import MCPServer as MCPServerSchema
 from api.schemas.plugin import PluginInfo, PluginTypeFilter
 from api.settings import settings
-from api.v1.service.auth import Principal
-from api.v1.service.authorization import require_permission
+from api.v1.service.authentication import Principal
+from api.v1.service.authorization import (
+	apply_metadata_write,
+	require_permission,
+)
 from api.v1.service.integrations.mcp.cache import (
 	get_cached_mcp_capabilities,
 	get_cached_mcp_plugins,
@@ -115,7 +116,7 @@ async def list_servers(
 	if not _can_manage_global_mcp(principal):
 		stmt = stmt.where(
 			MCPServer.scope == MCPServerScope.USER,
-			MCPServer.owner_user_id == str(principal.user_id),
+			MCPServer.owner_user_id == str(principal.user.id),
 		)
 	result = await session.execute(stmt)
 	return list(result.scalars().all())
@@ -131,7 +132,7 @@ async def list_user_servers(
 		select(MCPServer)
 		.where(
 			MCPServer.scope == MCPServerScope.USER,
-			MCPServer.owner_user_id == str(principal.user_id),
+			MCPServer.owner_user_id == str(principal.user.id),
 		)
 		.order_by(MCPServer.created_at.desc())
 	)
@@ -170,13 +171,13 @@ async def create_server(
 		)
 	data = server_in.model_dump(
 		mode="json",
-		exclude={"access_token"},
-		by_alias=True,
+		exclude={"access_token", "metadata"},
 	)
 	if server_in.scope is MCPServerScope.USER:
-		data["owner_user_id"] = str(principal.user_id)
+		data["owner_user_id"] = str(principal.user.id)
 		data["capabilities"] = _user_mcp_surface().model_dump(mode="json")
 	server = MCPServer(**data)
+	apply_metadata_write(server, server_in.metadata)
 	if server_in.access_token:
 		server.encrypted_access_token = _encrypt_access_token(server_in.access_token)
 	session.add(server)
@@ -478,7 +479,7 @@ def _require_server_read(server: MCPServer, principal: Principal) -> None:
 	if _can_manage_global_mcp(principal):
 		return
 	if server.scope is MCPServerScope.USER and server.owner_user_id == str(
-		principal.user_id
+		principal.user.id
 	):
 		_require_user_mcp_manage(principal)
 		return
@@ -522,7 +523,7 @@ async def _get_enabled_user_server(
 		select(MCPServer).where(
 			MCPServer.id == server_id,
 			MCPServer.scope == MCPServerScope.USER,
-			MCPServer.owner_user_id == str(principal.user_id),
+			MCPServer.owner_user_id == str(principal.user.id),
 			MCPServer.enabled.is_(True),
 		)
 	)
@@ -549,7 +550,7 @@ async def _list_enabled_user_servers(
 		select(MCPServer)
 		.where(
 			MCPServer.scope == MCPServerScope.USER,
-			MCPServer.owner_user_id == str(principal.user_id),
+			MCPServer.owner_user_id == str(principal.user.id),
 			MCPServer.enabled.is_(True),
 		)
 		.order_by(MCPServer.name)
@@ -593,7 +594,7 @@ async def _ensure_user_server_count_allowed(
 		.select_from(MCPServer)
 		.where(
 			MCPServer.scope == MCPServerScope.USER,
-			MCPServer.owner_user_id == str(principal.user_id),
+			MCPServer.owner_user_id == str(principal.user.id),
 		)
 	)
 	if (count or 0) >= max_count:

@@ -1,7 +1,5 @@
 """MCP server list-change notification listeners."""
 
-from __future__ import annotations
-
 import asyncio
 import contextlib
 import logging

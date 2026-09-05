@@ -1,11 +1,9 @@
 """MCP schemas."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from api.models.mcp import (
 	MCPAuthType,
@@ -15,6 +13,7 @@ from api.models.mcp import (
 )
 from api.schemas.common import (
 	MISSING,
+	ForbidExtraModel,
 	MetadataModel,
 	MetadataUpdateModel,
 	MissingType,
@@ -54,6 +53,8 @@ MCP_RESULT_TOOL_NAME_KEY = "mcp_tool_name"
 class MCPSurfaceConfig(BaseModel):
 	"""enabled MCP capability families."""
 
+	model_config = ConfigDict(extra="forbid")
+
 	tools: bool = True
 	resources: bool = False
 	prompts: bool = False
@@ -70,6 +71,8 @@ class MCPCapabilityType(StrEnum):
 
 class MCPCapabilityUpdate(BaseModel):
 	"""payload for updating a discovered MCP capability."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	enabled: bool
 
@@ -99,7 +102,7 @@ class MCPServerBase(MetadataModel):
 		return value
 
 
-class MCPServerCreate(MCPServerBase):
+class MCPServerCreate(MCPServerBase, ForbidExtraModel):
 	"""payload for creating an MCP server."""
 
 	access_token: str | None = Field(default=None, max_length=4096)

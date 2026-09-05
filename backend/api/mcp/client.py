@@ -1,7 +1,5 @@
 """raw MCP client adapter."""
 
-from __future__ import annotations
-
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
