@@ -8,7 +8,7 @@ from joserfc.errors import JoseError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.settings import settings
-from api.v1.service import auth as auth_service
+from api.v1.service.authentication import tokens as auth_service
 from nokodo_ai.utils.security import create_jwt_token
 from nokodo_ai.utils.typeid import new_typeid
 

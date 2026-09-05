@@ -1,8 +1,5 @@
 """service helpers for user operations."""
 
-from __future__ import annotations
-
-import asyncio
 from typing import NoReturn
 
 from fastapi import HTTPException, status
@@ -11,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
+from api.database.post_commit import run_post_commit_actions_safely
 from api.models.block import Block
 from api.models.calendar import Calendar
 from api.models.event import Event, EventScope
@@ -29,24 +27,44 @@ from api.models.thread import Thread
 from api.models.user import USER_TYPEID_PREFIX, User
 from api.models.user_client import UserClient
 from api.permissions import (
-	DEFAULT_ACCESS_RESOURCE_TYPES,
 	ActionPermission,
 	ResourceType,
 )
-from api.schemas.user import UserCreate, UserSummary, UserUpdate
+from api.schemas.user import (
+	UserCreate,
+	UserEmailChange,
+	UserPasswordChange,
+	UserSortBy,
+	UserSummary,
+	UserUpdate,
+)
 from api.settings import settings
-from api.v1.service import events as event_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
+from api.v1.service.authentication.cache import (
+	invalidate_principals,
+	mark_sessions_revoked,
+)
+from api.v1.service.authentication.sessions import revoke_all_sessions
 from api.v1.service.authorization import (
+	build_access_change_events,
+	capture_access_change,
+	enqueue_accessible_users_invalidation_for_subject,
 	invalidate_accessible_users_for_resource_types,
 	invalidate_accessible_users_for_role_defaults,
-	invalidate_accessible_users_for_subject,
+	require_permission,
+	require_self_or_permission,
+	resource_refs_for_subject,
+)
+from api.v1.service.events import (
+	fanout_event,
+	persist_and_fanout_event,
+	request_socket_kill,
 )
 from api.v1.service.listing import SortDir, apply_sort, exact_typeid_filter
-from api.v1.service.social import privacy as privacy_service
+from api.v1.service.social.privacy import RedactedUser, redact_users
 from api.v1.service.social.visibility import user_visibility_predicate
 from nokodo_ai.utils.search import contains_pattern
-from nokodo_ai.utils.security import hash_password
+from nokodo_ai.utils.security import hash_password, verify_password
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -90,7 +108,7 @@ def _raise_user_integrity_error(exc: IntegrityError) -> NoReturn:
 
 
 def _build_user_summary(
-	redacted: privacy_service.RedactedUser,
+	redacted: RedactedUser,
 ) -> UserSummary:
 	"""build a user summary without leaking hidden profile fields."""
 	return UserSummary(
@@ -106,12 +124,11 @@ async def list_users(
 	principal: Principal,
 	skip: int = 0,
 	limit: int = 100,
-	sort_by: str = "updated_at",
+	sort_by: UserSortBy = "updated_at",
 	sort_dir: SortDir = "desc",
 	q: str | None = None,
 ) -> list[User]:
-	if not principal.is_admin:
-		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+	require_permission(principal, ActionPermission.USERS_READ)
 	stmt = _apply_admin_user_filters(select(User), q)
 	stmt = apply_sort(
 		stmt,
@@ -136,8 +153,7 @@ async def count_users(
 	principal: Principal,
 	q: str | None = None,
 ) -> int:
-	if not principal.is_admin:
-		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+	require_permission(principal, ActionPermission.USERS_READ)
 	stmt = _apply_admin_user_filters(select(func.count()).select_from(User), q)
 	return await session.scalar(stmt) or 0
 
@@ -147,11 +163,7 @@ async def get_user(
 	session: AsyncSession,
 	principal: Principal,
 ) -> User:
-	if not principal.is_admin and user_id != principal.user.id:
-		raise HTTPException(
-			status_code=status.HTTP_403_FORBIDDEN,
-			detail="forbidden",
-		)
+	require_self_or_permission(user_id, principal, ActionPermission.USERS_READ)
 
 	result = await session.execute(select(User).where(User.id == user_id))
 	user = result.scalar_one_or_none()
@@ -188,13 +200,13 @@ async def get_accessible_user_summaries(
 			User.id.in_(requested),
 			user_visibility_predicate(
 				principal,
-				include_inactive=principal.is_admin,
+				include_inactive=principal.has_permission(ActionPermission.USERS_READ),
 			),
 		)
 	)
 	users = list(result.scalars().all())
 	users_by_id = {str(user.id): user for user in users}
-	redacted = await privacy_service.redact_users(users, session, principal)
+	redacted = await redact_users(users, session, principal)
 	summaries: list[UserSummary] = []
 	for user_id in requested:
 		user = users_by_id.get(str(user_id))
@@ -286,7 +298,7 @@ async def create_user(
 ) -> User:
 	user_count = await session.scalar(select(func.count()).select_from(User))
 	is_bootstrap = (user_count or 0) == 0
-	actor = principal.user if principal else None
+	actor = principal.subject if principal else None
 
 	# determine what privilege level the new user can have:
 	# - bootstrap (first user): must request superuser explicitly (console setup)
@@ -324,16 +336,14 @@ async def create_user(
 				detail="forbidden",
 			)
 
-		if not principal.is_admin and not principal.has_permission(
-			str(ActionPermission.USERS_MANAGE)
-		):
+		if not principal.has_permission(ActionPermission.USERS_MANAGE):
 			raise HTTPException(
 				status_code=status.HTTP_403_FORBIDDEN,
 				detail="forbidden",
 			)
 
 		# allow signups toggle does not block admin/authorized creation
-		if principal.is_admin:
+		if principal.user.is_superuser:
 			is_active = user_in.is_active if user_in.is_active is not None else True
 			is_superuser = (
 				user_in.is_superuser if user_in.is_superuser is not None else False
@@ -389,26 +399,28 @@ async def create_user(
 						for rid in role_ids
 					],
 				)
+			for role_id in role_ids:
+				await enqueue_accessible_users_invalidation_for_subject(
+					"role", TypeID(role_id), session
+				)
 
 		await session.commit()
+		await run_post_commit_actions_safely(session)
 	except IntegrityError as exc:
+		# rollback-and-raise: no explicit discard needed, the session closes on
+		# the way out and drops its uncommitted actions there.
 		await session.rollback()
 		_raise_user_integrity_error(exc)
 	await session.refresh(user)
 	# auto-signup roles may grant access to existing resources via
 	# AccessRule.subject_role_id; bust those caches so the new user
 	# becomes visible to recipients without waiting for the TTL.
-	# fan out concurrently - each subject invalidation is independent.
 	if role_ids:
-		await asyncio.gather(
-			*(
-				invalidate_accessible_users_for_subject("role", TypeID(rid), session)
-				for rid in role_ids
-			)
-		)
 		await invalidate_accessible_users_for_role_defaults(
 			[TypeID(rid) for rid in role_ids], session
 		)
+	if user.is_active:
+		await invalidate_accessible_users_for_resource_types(list(ResourceType))
 	return user
 
 
@@ -420,13 +432,11 @@ async def update_user(
 	origin_session_id: str | None = None,
 ) -> User:
 	changed = user_in.model_fields_set
-	if not principal.is_admin and user_id != principal.user.id:
+	if not principal.user.is_superuser and user_id != principal.user.id:
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 
-	if not principal.is_admin:
+	if not principal.user.is_superuser:
 		admin_fields = {
-			"email",
-			"password",
 			"is_active",
 			"is_superuser",
 			"integration_tokens",
@@ -459,7 +469,7 @@ async def update_user(
 	# difference and invalidate only the affected role subjects.
 	old_role_ids: set[TypeID] = set()
 	new_role_ids: set[TypeID] = set()
-	if principal.is_admin and "role_ids" in changed:
+	if principal.user.is_superuser and "role_ids" in changed:
 		old_role_ids = {
 			TypeID(row[0])
 			for row in (
@@ -470,10 +480,24 @@ async def update_user(
 				)
 			).all()
 		}
+	access_change = None
+	if (
+		principal.user.is_superuser
+		and {
+			"role_ids",
+			"is_active",
+			"is_superuser",
+		}
+		& changed
+	):
+		access_change = await capture_access_change(
+			await resource_refs_for_subject("user", user.id, session),
+			session,
+		)
 
 	update_data = user_in.model_dump(
 		exclude_unset=True,
-		exclude={"password", "preferences", "privacy", "role_ids"},
+		exclude={"preferences", "privacy", "role_ids"},
 	)
 	for key, value in update_data.items():
 		setattr(user, key, value)
@@ -494,12 +518,7 @@ async def update_user(
 		)["privacy"]
 		user.privacy = privacy
 
-	if principal.is_admin:
-		if "password" in changed:
-			password = user_in.password
-			if not isinstance(password, str):
-				raise ValueError("invalid password")
-			user.hashed_password = hash_password(password)
+	if principal.user.is_superuser:
 		if "role_ids" in changed:
 			role_ids_data = user_in.model_dump(
 				exclude_unset=True,
@@ -521,11 +540,29 @@ async def update_user(
 						for rid in new_role_ids
 					],
 				)
+	role_ids_changed = old_role_ids ^ new_role_ids if "role_ids" in changed else set()
+	for changed_role_id in role_ids_changed:
+		await enqueue_accessible_users_invalidation_for_subject(
+			subject_kind="role",
+			subject_id=changed_role_id,
+			session=session,
+		)
 
 	session.add(user)
 	try:
+		await session.flush()
+		prepared_access_events = (
+			await build_access_change_events(
+				access_change,
+				session,
+				actor_user_id=principal.user.id,
+			)
+			if access_change is not None
+			else []
+		)
 		await session.commit()
 	except IntegrityError as exc:
+		# rollback-and-raise: close-time discard drops the uncommitted actions.
 		await session.rollback()
 		msg = str(exc.orig).lower()
 		if "username" in msg and "unique" in msg:
@@ -533,55 +570,30 @@ async def update_user(
 				status_code=status.HTTP_400_BAD_REQUEST,
 				detail="username already taken",
 			) from None
-		if "email" in msg and "unique" in msg:
-			raise HTTPException(
-				status_code=status.HTTP_400_BAD_REQUEST,
-				detail="email already registered",
-			) from None
 		raise HTTPException(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail=f"invalid reference: {exc.orig}",
 		) from None
 	await session.refresh(user)
+	for prepared in prepared_access_events:
+		await fanout_event(
+			prepared.event,
+			recipient_ids=prepared.recipient_ids,
+		)
+
+	# any user-row change may be reflected in the cached principal snapshot.
+	await invalidate_principals([user.id])
 
 	# precise cache invalidation: only the subjects whose effective access
 	# could have changed. avoids a coarse 'invalidate everything' tag.
-	if principal.is_admin:
+	if principal.user.is_superuser:
 		if "is_superuser" in changed:
 			# superuser recipients changed.
-			await invalidate_accessible_users_for_resource_types(
-				list(ResourceType), session
-			)
+			await invalidate_accessible_users_for_resource_types(list(ResourceType))
 		if "is_active" in changed:
-			# direct user-rule grants for this user can flip in/out of the
-			# accessible_users list. invalidate per-subject:user.
-			await invalidate_accessible_users_for_subject(
-				subject_kind="user", subject_id=user.id, session=session
-			)
-			# default recipients changed.
-			default_resource_types = [
-				resource_type
-				for resource_type in DEFAULT_ACCESS_RESOURCE_TYPES
-				if settings.default_permissions.resource_access.get(resource_type)
-				is not None
-			]
-			if default_resource_types:
-				await invalidate_accessible_users_for_resource_types(
-					default_resource_types, session
-				)
+			await invalidate_accessible_users_for_resource_types(list(ResourceType))
 		if "role_ids" in changed:
-			role_ids_changed = old_role_ids ^ new_role_ids
 			if role_ids_changed:
-				await asyncio.gather(
-					*(
-						invalidate_accessible_users_for_subject(
-							subject_kind="role",
-							subject_id=changed_role_id,
-							session=session,
-						)
-						for changed_role_id in role_ids_changed
-					)
-				)
 				await invalidate_accessible_users_for_role_defaults(
 					list(role_ids_changed), session
 				)
@@ -598,10 +610,102 @@ async def update_user(
 			},
 			user_id=user.id,
 		)
-		await event_service.persist_and_fanout_event(
+		await persist_and_fanout_event(
 			session, event=event, origin_session_id=origin_session_id
 		)
 
+	return user
+
+
+def _verify_credential_change(
+	user: User,
+	principal: Principal,
+	current_password: str | None,
+) -> None:
+	"""require current-password proof for self-changes; admins skip it for others."""
+	if principal.user.is_superuser and user.id != principal.user.id:
+		return
+	if not current_password:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="current password is required",
+		)
+	if not verify_password(current_password, user.hashed_password):
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail="current password is incorrect",
+		)
+
+
+async def change_password(
+	user_id: TypeID,
+	body: UserPasswordChange,
+	session: AsyncSession,
+	principal: Principal,
+) -> None:
+	"""set a new password for the user and revoke all their sessions."""
+	user = await get_user(user_id, session, principal=principal)
+	_verify_credential_change(user, principal, body.current_password)
+	user.hashed_password = hash_password(body.new_password)
+	session.add(user)
+	revoked_ids = await revoke_all_sessions(session, user.id)
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=user.id,
+		type=EventType.USER_PASSWORD_CHANGED,
+		data={
+			"user_id": user.id,
+			"actor_id": principal.user.id,
+			"self_service": str(user.id) == principal.user.id,
+		},
+		user_id=user.id,
+	)
+	await persist_and_fanout_event(session, event=event)
+	await mark_sessions_revoked(revoked_ids)
+	await request_socket_kill(user.id)
+
+
+async def change_email(
+	user_id: TypeID,
+	body: UserEmailChange,
+	session: AsyncSession,
+	principal: Principal,
+) -> User:
+	"""set a new email address for the user."""
+	# temporary gate until an email verification flow exists: without it,
+	# self-set addresses are unverified (typo lockouts, squatting).
+	if not principal.user.is_superuser:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="email change is temporarily limited to administrators",
+		)
+	user = await get_user(user_id, session, principal=principal)
+	_verify_credential_change(user, principal, body.current_password)
+	old_email = user.email
+	user.email = body.new_email
+	session.add(user)
+	try:
+		await session.flush()
+	except IntegrityError as exc:
+		# rollback-and-raise: close-time discard drops the uncommitted actions.
+		await session.rollback()
+		_raise_user_integrity_error(exc)
+	event = Event(
+		scope=EventScope.USER,
+		scope_id=user.id,
+		type=EventType.USER_EMAIL_CHANGED,
+		data={
+			"user_id": user.id,
+			"actor_id": principal.user.id,
+			"self_service": str(user.id) == principal.user.id,
+			"old_email": old_email,
+			"new_email": user.email,
+		},
+		user_id=user.id,
+	)
+	await persist_and_fanout_event(session, event=event)
+	await invalidate_principals([user.id])
+	await session.refresh(user)
 	return user
 
 
@@ -611,12 +715,10 @@ async def delete_user(
 	principal: Principal,
 ) -> None:
 	"""delete a user and all their resources."""
-	if not principal.is_admin and not principal.has_permission(
-		str(ActionPermission.USERS_MANAGE)
-	):
+	if not principal.has_permission(ActionPermission.USERS_MANAGE):
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 
-	if str(user_id) == principal.user_id:
+	if str(user_id) == principal.user.id:
 		raise HTTPException(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail="cannot delete your own account",
@@ -646,7 +748,26 @@ async def delete_user(
 				detail="cannot delete the last active superuser",
 			)
 
-	await invalidate_accessible_users_for_subject("user", user.id, session)
-	await invalidate_accessible_users_for_resource_types(list(ResourceType), session)
+	access_change = await capture_access_change(
+		await resource_refs_for_subject("user", user.id, session),
+		session,
+	)
+	await enqueue_accessible_users_invalidation_for_subject("user", user.id, session)
+	await invalidate_accessible_users_for_resource_types(list(ResourceType))
+	revoked_ids = await revoke_all_sessions(session, user.id)
 	await session.delete(user)
+	await session.flush()
+	prepared_access_events = await build_access_change_events(
+		access_change,
+		session,
+		actor_user_id=principal.user.id,
+	)
 	await session.commit()
+	for prepared in prepared_access_events:
+		await fanout_event(
+			prepared.event,
+			recipient_ids=prepared.recipient_ids,
+		)
+	await mark_sessions_revoked(revoked_ids)
+	await invalidate_principals([user_id])
+	await request_socket_kill(user_id)

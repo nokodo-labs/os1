@@ -67,7 +67,7 @@ async def test_refresh_clears_cookie_on_flag(
 		)
 
 	monkeypatch.setattr(
-		"api.v1.service.auth.refresh_token_for_user",
+		"api.v1.routers.auth.refresh_token_for_user",
 		_raise,
 	)
 
@@ -87,7 +87,7 @@ async def test_refresh_sets_cookie_on_success(
 		return Token(access_token="a", token_type="bearer", refresh_token="r2")
 
 	monkeypatch.setattr(
-		"api.v1.service.auth.refresh_token_for_user",
+		"api.v1.routers.auth.refresh_token_for_user",
 		_ok,
 	)
 
@@ -119,7 +119,7 @@ async def test_refresh_does_not_clear_cookie_without_header(
 		raise HTTPException(status_code=401, detail="x")
 
 	monkeypatch.setattr(
-		"api.v1.service.auth.refresh_token_for_user",
+		"api.v1.routers.auth.refresh_token_for_user",
 		_raise,
 	)
 
@@ -139,7 +139,7 @@ async def test_refresh_does_not_set_cookie_when_refresh_token_missing(
 		return Token(access_token="a", token_type="bearer", refresh_token=None)
 
 	monkeypatch.setattr(
-		"api.v1.service.auth.refresh_token_for_user",
+		"api.v1.routers.auth.refresh_token_for_user",
 		_ok,
 	)
 
@@ -161,11 +161,16 @@ async def test_login_does_not_set_cookie_when_refresh_token_missing(
 	assert isinstance(user_email, str)
 	assert isinstance(user_password, str)
 
-	async def _ok(_user: object) -> Token:
+	async def _ok(
+		_user: object,
+		_session: object,
+		client_key: str | None = None,
+		user_agent: str | None = None,
+	) -> Token:
 		return Token(access_token="a", token_type="bearer", refresh_token=None)
 
 	monkeypatch.setattr(
-		"api.v1.service.auth.create_token_pair",
+		"api.v1.routers.auth.create_token_pair",
 		_ok,
 	)
 

@@ -1,7 +1,5 @@
 """service helpers for user clients."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -16,8 +14,8 @@ from api.schemas.user_client import (
 	UserClientPreferences,
 	UserClientUpsert,
 )
-from api.v1.service import events as event_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
+from api.v1.service.events import persist_and_fanout_event
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
@@ -30,7 +28,7 @@ def _preferences_data(payload: UserClientPreferences) -> JSONObject:
 
 def _ensure_user_access(user_id: TypeID, principal: Principal) -> None:
 	"""ensure the principal can manage clients for the user path."""
-	if not principal.is_admin and user_id != principal.user_id:
+	if not principal.user.is_superuser and user_id != principal.user.id:
 		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 
 
@@ -155,7 +153,7 @@ async def update_user_client_preferences(
 		},
 		user_id=user_id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,

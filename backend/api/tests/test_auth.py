@@ -13,15 +13,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.many_to_many import user_role_association
 from api.models.role import Role
 from api.models.user import User
+from api.permissions import ActionPermission, PermissionWildcard
 from api.schemas.user import UserCreate
 from api.settings import settings
-from api.v1.service import auth as auth_service
+from api.tests.factories import make_principal
+from api.v1.service import authentication as auth_service
 from api.v1.service import users as user_service
-from api.v1.service.auth import (
+from api.v1.service.authentication import (
 	Principal,
+	build_principal,
 	get_current_active_user,
-	get_current_principal,
 )
+from api.v1.service.authorization import require_admin
 from nokodo_ai.utils.security import create_jwt_token
 from nokodo_ai.utils.typeid import new_typeid
 
@@ -263,7 +266,7 @@ async def test_principal_permission_checks_and_active_guard(
 		),
 		db_session,
 	)
-	admin_principal = Principal(
+	admin_principal = Principal.for_user(
 		user=admin_seed,
 		group_ids=(),
 		permissions=frozenset(),
@@ -273,27 +276,19 @@ async def test_principal_permission_checks_and_active_guard(
 		db_session,
 		principal=admin_principal,
 	)
-	principal = Principal(
+	principal = Principal.for_user(
 		user=user,
 		group_ids=(),
-		permissions=frozenset({"foo:read", "bar:*"}),
-	)
-	assert principal.has_permission("foo:read")
-	assert principal.has_permission("bar:write")
-	assert not principal.has_permission("baz:read")
-
-	admin = Principal(
-		user=User(
-			email="admin-perm@example.com",
-			username="admin_perm",
-			hashed_password="x",
-			is_superuser=True,
-			is_active=True,
+		permissions=frozenset(
+			{ActionPermission.NOTES_CREATE, PermissionWildcard("agents:*")}
 		),
-		group_ids=(),
-		permissions=frozenset(),
 	)
-	assert admin.has_permission("anything")
+	assert principal.has_permission(ActionPermission.NOTES_CREATE)
+	assert principal.has_permission(ActionPermission.AGENTS_MANAGE)
+	assert not principal.has_permission(ActionPermission.MODELS_READ)
+
+	admin = make_principal(slug="admin_perm", is_superuser=True)
+	assert admin.has_permission(ActionPermission.SETTINGS_MANAGE)
 
 	inactive = User(
 		email="inactive@example.com",
@@ -307,21 +302,12 @@ async def test_principal_permission_checks_and_active_guard(
 
 
 def test_principal_permission_star() -> None:
-	user = User(
-		email="star@example.com",
-		username="star_test",
-		hashed_password="x",
-		is_superuser=False,
+	principal = make_principal(
+		slug="star_test", permissions=frozenset({PermissionWildcard("*")})
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset({"*"}))
-	assert principal.has_permission("any:permission")
-	admin = User(
-		email="star-admin@example.com",
-		username="star_admin",
-		hashed_password="x",
-		is_superuser=True,
-	)
-	assert Principal(user=admin, group_ids=(), permissions=frozenset()).is_admin
+	assert principal.has_permission(ActionPermission.PLUGINS_MANAGE)
+	admin = make_principal(slug="star_admin", is_superuser=True)
+	assert admin.user.is_superuser
 
 
 @pytest.mark.asyncio
@@ -337,9 +323,9 @@ async def test_optional_user_and_require_admin(db_session: AsyncSession) -> None
 
 	assert await auth_service.get_optional_user(None, db_session) is None
 
-	non_admin = Principal(user=user, group_ids=(), permissions=frozenset())
+	non_admin = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	with pytest.raises(HTTPException):
-		await auth_service.require_admin(non_admin)
+		require_admin(non_admin)
 
 
 @pytest.mark.asyncio
@@ -380,6 +366,6 @@ async def test_get_current_principal_with_role(db_session: AsyncSession) -> None
 	# re-load user with roles eagerly
 	await db_session.refresh(user, attribute_names=["roles"])
 
-	principal = await get_current_principal(user, db_session)
-	assert "prompts:read" in principal.permissions
-	assert principal.user_id == str(user.id)
+	principal = await build_principal(user, db_session)
+	assert ActionPermission.PROMPTS_READ in principal.permissions
+	assert principal.user.id == str(user.id)
