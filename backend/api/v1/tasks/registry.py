@@ -10,6 +10,7 @@ from api.v1.tasks import files as _file_tasks
 from api.v1.tasks import open_webui as _open_webui_tasks
 from api.v1.tasks import reminders as _reminder_tasks
 from api.v1.tasks import threads as _thread_tasks
+from api.v1.tasks import user_sessions as _user_session_tasks
 
 
 __all__ = []
@@ -21,4 +22,5 @@ _ = (
 	_open_webui_tasks,
 	_reminder_tasks,
 	_thread_tasks,
+	_user_session_tasks,
 )

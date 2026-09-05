@@ -11,8 +11,6 @@ order and assert every critical durable runner registers. they live outside
 ``api/tests`` on purpose so the heavy DB/redis autouse fixtures do not run.
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 import sys
