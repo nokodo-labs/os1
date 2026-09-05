@@ -4,21 +4,39 @@ leaf module with no resource-service dependencies; imported by both
 individual resource services and the search aggregator.
 """
 
-from __future__ import annotations
-
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
-from typing import Any, Protocol
+from dataclasses import dataclass, field
+from typing import Protocol
 
-from nokodo_ai.types.json import JSONObject
+from api.schemas.search import SearchResultAnchor, SearchResultItem
+from nokodo_ai.types.json import JSONArray
 
 
 logger = logging.getLogger(__name__)
 
 
 class _Identifiable(Protocol):
-	id: Any
+	id: object
+
+
+@dataclass(frozen=True, slots=True)
+class SearchHit:
+	"""per-hit search payload that belongs to the result, not the resource.
+
+	a match is made by something inside the container (a message in a thread,
+	a chunk of a file), so these fields describe the match itself and are
+	unknowable from the resource row alone.
+	"""
+
+	anchor: SearchResultAnchor | None = None
+	"""sub-resource to focus after routing to the container."""
+
+	preview: str | None = None
+	"""excerpt of the matched text, overriding the resource-derived preview."""
+
+	matched_chunks: JSONArray = field(default_factory=list)
+	"""top-scoring chunk payloads behind the match."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,14 +44,35 @@ class ScoredResult[T]:
 	"""service-internal pairing of a hydrated resource with its relevance score.
 
 	the score is never serialized; it exists only so the search layer can rank
-	and fuse results across tiers and resource types. extra carries optional
-	per-hit search payloads (e.g. matched chunks) that belong to the search
-	result, not the resource itself.
+	and fuse results across tiers and resource types.
 	"""
 
 	item: T
 	score: float
-	extra: JSONObject | None = None
+	hit: SearchHit = field(default_factory=SearchHit)
+
+
+def relevance_sort_key[T](
+	hit: SearchResultItem | ScoredResult[T],
+) -> tuple[bool, float]:
+	"""sort key ranking best-scored results first, unscored last."""
+	return (hit.score is None, -(hit.score or 0.0))
+
+
+def apply_hit(item: SearchResultItem, hit: SearchHit) -> SearchResultItem:
+	"""return the projected item with its match details filled in.
+
+	the projector only sees the resource row, so anchor and preview - which
+	describe what actually matched - are merged in here.
+	"""
+	updates: dict[str, object] = {}
+	if item.anchor is None and hit.anchor is not None:
+		updates["anchor"] = hit.anchor
+	if hit.preview:
+		updates["preview"] = hit.preview
+	if not updates:
+		return item
+	return item.model_copy(update=updates)
 
 
 def merge_scored[T: _Identifiable](

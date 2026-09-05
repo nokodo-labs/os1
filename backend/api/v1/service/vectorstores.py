@@ -5,11 +5,10 @@ provisioning, CRUD operations (upsert, search, delete), and cursor-based
 pagination helpers used by all resource services.
 """
 
-from __future__ import annotations
-
+import hashlib
+import json
 import logging
 import re
-from collections.abc import Sequence
 from enum import StrEnum
 from functools import lru_cache
 from typing import overload
@@ -18,6 +17,8 @@ from urllib.parse import urlparse
 from qdrant_client import AsyncQdrantClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.redis import on_invalidation
+from api.runtime import on_settings_reload
 from api.settings import settings
 from api.v1.service.embeddings import resolve_embedding_model
 from nokodo_ai.adapters.base.vectorstores import (
@@ -43,6 +44,7 @@ class VectorChunkResourceType(StrEnum):
 	"""resource_type values stored on vector chunks."""
 
 	THREAD = "thread"
+	THREAD_CONTENT = "thread_content"
 	NOTE = "note"
 	MEMORY = "memory"
 	FILE = "file"
@@ -68,7 +70,11 @@ DEFAULT_INDEXES: Index = {
 	"source": "keyword",  # files
 	"list_id": "keyword",  # reminders
 	"project_ids": "keyword",  # notes, files, threads
-	"is_archived": "bool",  # threads
+	# per-user thread state - which users flagged the thread
+	"archived_by": "keyword",
+	"muted_by": "keyword",
+	"pinned_by": "keyword",
+	"invite_pending_to": "keyword",
 	"due_at": "datetime",  # reminders
 	"remind_at": "datetime",  # reminders
 	"start_at": "datetime",  # calendar events
@@ -168,6 +174,16 @@ async def reset_runtime_state() -> None:
 	_ensured_collections.clear()
 
 
+def reset_collection_cache() -> None:
+	"""invalidate the resolved collection name (e.g. after a model change)."""
+	global _cached_collection_name
+	_cached_collection_name = None
+
+
+on_settings_reload(reset_runtime_state)
+on_invalidation("embedding_model", reset_collection_cache)
+
+
 def get_vectorstore(*, collection: str) -> Vectorstore:
 	"""get a vectorstore for a given collection."""
 	return Vectorstore.create(collection, adapter=_vectorstore_adapter())
@@ -195,11 +211,31 @@ def _slugify_model(name: str) -> str:
 	return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
 
+def collection_config_fp() -> str:
+	"""fingerprint of the settings that shape a collection's physical layout."""
+	payload = json.dumps(
+		{
+			"vector_size": settings.assets.embeddings.vector_size,
+			"sparse": settings.assets.vector.sparse_vectors_enabled,
+			"distance": "cosine",
+		},
+		sort_keys=True,
+	)
+	return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def collection_name(model_name: str) -> str:
-	"""build the default collection name for a given model."""
-	return settings.assets.vector.collection_template.format(
+	"""build the collection name for a given model.
+
+	the name is the collection's full identity: the model that defines the
+	vector space plus a fingerprint of the layout config. a model switch or
+	layout change therefore lands in a different (initially empty) collection,
+	making cross-space vectors structurally unreachable rather than stale.
+	"""
+	base = settings.assets.vector.collection_template.format(
 		model=_slugify_model(model_name)
 	)
+	return f"{base}__{collection_config_fp()[:8]}"
 
 
 def _resource_type_condition(
@@ -233,17 +269,31 @@ def resource_types_filter(
 	return ChunkFilter(all_of=all_of)
 
 
+def merge_filters(base: ChunkFilter, extra: ChunkFilter) -> ChunkFilter:
+	"""combine two filters, ANDing their required and excluded conditions.
+
+	used to narrow an ACL prefilter with per-resource structured search
+	filters. ``any_of`` is taken from base only: two independent OR groups
+	cannot be merged without changing their meaning, and only the ACL filter
+	uses one.
+	"""
+	if not extra.all_of and not extra.none_of:
+		return base
+	if extra.any_of:
+		raise ValueError("merge_filters cannot combine two any_of groups")
+	return ChunkFilter(
+		all_of=[*base.all_of, *extra.all_of],
+		any_of=base.any_of,
+		none_of=[*base.none_of, *extra.none_of],
+	)
+
+
 def with_conditions(
 	base: ChunkFilter,
-	conditions: Sequence[FieldCondition],
+	conditions: list[FieldCondition],
 ) -> ChunkFilter:
-	"""return a copy of base with extra all_of (AND) conditions appended.
-
-	used to narrow an ACL prefilter with per-resource structured search filters.
-	"""
-	if not conditions:
-		return base
-	return ChunkFilter(all_of=[*base.all_of, *conditions], any_of=base.any_of)
+	"""narrow a filter with extra required (AND) conditions."""
+	return merge_filters(base, ChunkFilter(all_of=conditions))
 
 
 def parent_resource_filter(
@@ -271,22 +321,23 @@ def parent_resource_filter(
 
 def acl_filter(
 	chunk_resource_types: list[VectorChunkResourceType],
-	is_admin: bool,
+	skip_principal_filter: bool,
 	user_id: str,
 	group_ids: tuple[str, ...] | list[str] = (),
 	role_ids: tuple[str, ...] | list[str] = (),
 ) -> ChunkFilter:
-	"""build a principal-scoped filter for qdrant that enforces ACL at the vector layer.
+	"""build the vector ACL prefilter for one principal.
 
-	for admins: returns a resource-type-only filter (sees everything).
-	for regular principals: adds should-conditions for owner + stored ACL principals:
+	operators and default-access holders skip principal filtering because the
+	flattened payload cannot represent their access without becoming under-inclusive.
+	otherwise, adds should-conditions for owner + stored ACL principals:
 	- owner_id == me
 	- me in allowed_user_ids
 	- any(group_ids) in allowed_group_ids
 	- any(role_ids) in allowed_role_ids
 	"""
 	all_of: list[FieldCondition] = [_resource_type_condition(chunk_resource_types)]
-	if is_admin:
+	if skip_principal_filter:
 		return ChunkFilter(all_of=all_of)
 	any_of: list[FieldCondition] = [
 		FieldMatch(key="owner_id", value=user_id),
@@ -389,7 +440,7 @@ async def delete(
 
 async def scroll_resource_chunks(
 	resource_type: VectorChunkResourceType,
-	resource_ids: Sequence[str],
+	resource_ids: list[str],
 	session: AsyncSession,
 	collection: str | None = None,
 	store: Vectorstore | None = None,
@@ -400,13 +451,12 @@ async def scroll_resource_chunks(
 	vectorized: the caller compares the returned chunks against the expected
 	fingerprint and chunk set. empty when the collection does not exist yet.
 	"""
-	ids = list(resource_ids)
-	if not ids:
+	if not resource_ids:
 		return []
 	query_filter = ChunkFilter(
 		all_of=[
 			_resource_type_condition([resource_type]),
-			FieldMatchAny(key="resource_id", values=ids),
+			FieldMatchAny(key="resource_id", values=resource_ids),
 		]
 	)
 	return await scroll_chunks(query_filter, session, collection, store)
@@ -414,7 +464,7 @@ async def scroll_resource_chunks(
 
 def child_resource_filter(
 	parent_resource_type: VectorChunkResourceType,
-	parent_resource_ids: Sequence[str],
+	parent_resource_ids: list[str],
 	child_resource_type: VectorChunkResourceType,
 ) -> ChunkFilter:
 	"""build a filter for child chunks of one or more parent resources."""
@@ -427,7 +477,7 @@ def child_resource_filter(
 			),
 			FieldMatchAny(
 				key="parent_resource_id",
-				values=list(parent_resource_ids),
+				values=parent_resource_ids,
 			),
 		]
 	)
@@ -438,11 +488,12 @@ async def scroll_chunks(
 	session: AsyncSession,
 	collection: str | None = None,
 	store: Vectorstore | None = None,
+	payload_fields: list[str] | None = None,
 ) -> list[Chunk]:
 	"""enumerate all chunks matching a filter from the default collection."""
 	coll = collection or await get_collection(session)
 	vs = store or get_vectorstore(collection=coll)
-	return await vs.scroll(query_filter=query_filter)
+	return await vs.scroll(query_filter=query_filter, payload_fields=payload_fields)
 
 
 async def search(

@@ -12,37 +12,68 @@ chunks are assigned random UUIDs so a single resource can grow to N
 chunks in the future without any schema changes.
 
 concrete specs live in each resource's service module.
-"""
 
-from __future__ import annotations
+resource tier contract - how unbounded content is vectorized:
+  - single-tier (this module): the resource is one logical text (note,
+    memory, reminder, calendar event, thread/file metadata point).
+    oversized dense_text overflow-splits via split_for_embedding; the
+    chunks share the resource_id and collapse at search time through
+    group_by="resource_id". use this by default.
+  - two-tier (custom pipeline per resource): content chunks carry their
+    own resource_id plus parent_resource_type/id, so a hit can anchor a
+    sub-resource and rebuilds can be incremental. precedents:
+    files/text_contents/vectors.py (FILE_CONTENT, extraction-input
+    fingerprint) and threads/content_vectors.py (THREAD_CONTENT,
+    per-passage content-hash fingerprints + row stamps for sweep
+    dueness). upgrade a resource to two-tier only when it needs
+    sub-resource anchors or incremental reconcile.
+  - staleness is split by cause: fingerprints digest CONTENT only, and
+    every stored chunk carries pipeline_v/config_fp provenance stamps.
+    content mismatch always rebuilds; version/config mismatch rebuilds
+    only when the pipeline's settings.assets.revectorize triggers allow
+    it, or when an admin explicitly targets that staleness cause.
+  - splitting decisions route on embeddings.embedding_token_capacity():
+    how many tokens one embedding call accepts. None (unlimited,
+    contextualized models) never splits; finite capacities split before
+    embedding. chunk/passage sizes remain retrieval-granularity knobs,
+    independent of call capacity.
+"""
 
 import hashlib
 import json
 import logging
 import uuid
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.permissions import ResourceType
 from api.settings import settings
-from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.authorization import (
+	ACL_REVISION_KEY,
 	ACL_SYNC_VECTOR_CHUNK_RESOURCE_TYPES,
 	VECTOR_CHUNK_PARENT_RESOURCE_TYPES,
-	fetch_acl_metadata,
 	fetch_bulk_acl_metadata,
-	load_descendant_resource_ids,
 )
 from api.v1.service.embeddings import (
 	_get_embedding_model,
 	count_input_tokens,
 	embed_texts,
-	get_embedding_input_limit,
+	embedding_token_capacity,
 )
-from api.v1.service.vectorstores import VectorChunkResourceType
+from api.v1.service.vectorstores import (
+	VectorChunkResourceType,
+	delete,
+	get_collection,
+	get_vectorstore,
+	parent_resource_filter,
+	resource_types_filter,
+	scroll_resource_chunks,
+	upsert_chunks,
+)
 from nokodo_ai.adapters.base.loaders import Text
 from nokodo_ai.adapters.base.vectorstores import Chunk, ChunkFilter
 from nokodo_ai.adapters.nokodo_ai.semantic import SemanticChunkerAdapter
@@ -54,6 +85,24 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 _VECTOR_ACL_UPDATE_CONCURRENCY = 32
+VECTORIZATION_PIPELINE_VERSION = 1
+"""provenance version stamped on generic single-tier chunks; bump after a
+chunking/text-building code change so stale vectors become targetable."""
+
+PIPELINE_VERSION_KEY = "pipeline_v"
+"""chunk metadata key holding the pipeline version that built the chunk."""
+
+CONFIG_FP_KEY = "config_fp"
+"""chunk metadata key holding the config fingerprint the chunk was built with."""
+
+
+class StaleBy(StrEnum):
+	"""non-content staleness causes an explicit revectorize can target."""
+
+	PIPELINE_VERSION = "pipeline_version"
+	CONFIG = "config"
+	ACL = "acl"
+
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +114,7 @@ _FINGERPRINT_EXCLUDED_METADATA = frozenset(
 		"allowed_user_ids",
 		"allowed_group_ids",
 		"allowed_role_ids",
+		ACL_REVISION_KEY,
 		"vec_fingerprint",
 		"chunk_index",
 		"chunk_count",
@@ -111,31 +161,50 @@ def fingerprint_payload(payload: JSONObject) -> str:
 
 
 def resource_fingerprint[T](spec: VectorSpec[T], resource: T) -> str:
-	"""compute the vectorization fingerprint for a resource.
+	"""compute the content fingerprint for a resource.
 
-	a fingerprint captures the deterministic inputs that produced the stored
-	chunks. when it matches the stored chunks the resource is already
-	correctly vectorized; when it differs the vectors are stale and must be
-	rebuilt. uses the spec override when provided, else hashes bm25_text plus
-	comparable metadata (acl and chunk-bookkeeping fields excluded).
+	digests only the content inputs that produced the stored chunks; pipeline
+	version and configuration are tracked as separate provenance stamps so
+	their staleness can be policy-gated. uses the spec override when provided,
+	else hashes bm25_text plus comparable metadata (acl and chunk-bookkeeping
+	fields excluded).
 	"""
 	if spec.fingerprint is not None:
 		return spec.fingerprint(resource)
-	# future: fold a vectorization pipeline version into the digest so an
-	# embedding/chunker code change (not just content) invalidates vectors.
 	meta = {
 		key: value
 		for key, value in spec.metadata(resource).items()
 		if key not in _FINGERPRINT_EXCLUDED_METADATA
 	}
-	return fingerprint_payload({"text": spec.bm25_text(resource), "meta": meta})
+	return fingerprint_payload(
+		{
+			"text": spec.bm25_text(resource),
+			"meta": meta,
+		}
+	)
+
+
+def vectorization_config_fp() -> str:
+	"""fingerprint of the settings that shape generic single-tier chunking."""
+	cfg = settings.assets.content_vectorization
+	return fingerprint_payload(
+		{
+			"chunker": cfg.chunking_algorithm,
+			"target_tokens": cfg.target_tokens,
+			"overlap_tokens": cfg.overlap_tokens,
+			"max_chunks": cfg.max_chunks,
+			"semantic_breakpoint_percentile": cfg.semantic_breakpoint_percentile,
+			"semantic_min_sentences": cfg.semantic_min_sentences,
+			"semantic_buffer_size": cfg.semantic_buffer_size,
+		}
+	)
 
 
 def build_chunk[T](
 	spec: VectorSpec[T],
 	resource: T,
 	embedding: list[float],
-	extra_metadata: dict[str, Any] | None = None,
+	extra_metadata: Mapping[str, Any] | None = None,
 	chunk_index: int = 0,
 	chunk_count: int = 1,
 	fingerprint: str | None = None,
@@ -171,6 +240,8 @@ def build_chunk[T](
 			if fingerprint is not None
 			else resource_fingerprint(spec, resource)
 		),
+		PIPELINE_VERSION_KEY: VECTORIZATION_PIPELINE_VERSION,
+		CONFIG_FP_KEY: vectorization_config_fp(),
 		"chunk_index": chunk_index,
 		"chunk_count": chunk_count,
 	}
@@ -212,6 +283,37 @@ def chunks_match_fingerprint(chunks: Sequence[Chunk], fingerprint: str) -> bool:
 	return indices == set(range(count))
 
 
+def chunk_stamps_stale(
+	chunks: Sequence[Chunk],
+	by: Collection[StaleBy] | None = None,
+) -> bool:
+	"""whether stored chunks are provenance-stale by any of the given causes.
+
+	without ``by``, staleness is gated by the generic pipeline's revectorize
+	triggers; with ``by``, exactly those causes are checked, ungated (explicit
+	admin targeting). chunks missing a stamp count as stale for its cause.
+	"""
+	if not chunks:
+		return False
+	triggers = settings.assets.revectorize.resources
+	check_version = (
+		StaleBy.PIPELINE_VERSION in by
+		if by is not None
+		else triggers.on_pipeline_version
+	)
+	check_config = StaleBy.CONFIG in by if by is not None else triggers.on_config_change
+	if check_version and any(
+		chunk.metadata.get(PIPELINE_VERSION_KEY) != VECTORIZATION_PIPELINE_VERSION
+		for chunk in chunks
+	):
+		return True
+	if check_config:
+		config_fp = vectorization_config_fp()
+		if any(chunk.metadata.get(CONFIG_FP_KEY) != config_fp for chunk in chunks):
+			return True
+	return False
+
+
 async def filter_unvectorized[T](
 	spec: VectorSpec[T],
 	resources: Sequence[T],
@@ -220,9 +322,10 @@ async def filter_unvectorized[T](
 	"""return resources whose stored vectors are missing or stale.
 
 	one scroll fetches every chunk for the candidate resource ids; each
-	resource is kept only when its stored chunks fail the fingerprint and
-	completeness check. callers re-vectorize the returned subset, making
-	bulk vectorization idempotent and gap-filling on re-runs.
+	resource is kept when its stored chunks fail the content fingerprint and
+	completeness check, or are provenance-stale per the revectorize triggers.
+	callers re-vectorize the returned subset, making bulk vectorization
+	idempotent and gap-filling on re-runs.
 	"""
 	if not resources:
 		return []
@@ -230,7 +333,7 @@ async def filter_unvectorized[T](
 		spec.resource_id(resource): resource_fingerprint(spec, resource)
 		for resource in resources
 	}
-	chunks = await vectorstore_service.scroll_resource_chunks(
+	chunks = await scroll_resource_chunks(
 		spec.resource_type,
 		list(expected.keys()),
 		session,
@@ -243,7 +346,10 @@ async def filter_unvectorized[T](
 	pending: list[T] = []
 	for resource in resources:
 		rid = spec.resource_id(resource)
-		if not chunks_match_fingerprint(grouped.get(rid, []), expected[rid]):
+		stored = grouped.get(rid, [])
+		if not chunks_match_fingerprint(stored, expected[rid]) or chunk_stamps_stale(
+			stored
+		):
 			pending.append(resource)
 	return pending
 
@@ -254,10 +360,8 @@ async def remove_vectorized_resource[T](
 	session: AsyncSession,
 ) -> None:
 	"""remove all chunks for a resource from the vectorstore."""
-	await vectorstore_service.delete(
-		target=vectorstore_service.resource_types_filter(
-			[spec.resource_type], resource_id=resource_id
-		),
+	await delete(
+		target=resource_types_filter([spec.resource_type], resource_id=resource_id),
 		session=session,
 	)
 
@@ -324,12 +428,12 @@ async def split_for_embedding[T](
 	dense = spec.dense_text(resource)
 	if not dense.strip():
 		return []
-	limit = await get_embedding_input_limit(session)
+	capacity = await embedding_token_capacity(session)
 	counts = await count_input_tokens([dense], session)
 	# estimate_tokens already applies a safety margin, so the estimate path
 	# chunks slightly earlier than strictly necessary - the safe direction.
 	tokens = counts[0] if counts is not None else estimate_tokens(dense)
-	if tokens <= limit:
+	if capacity is None or tokens <= capacity:
 		return [
 			_EmbeddingPiece(
 				embed_text=dense,
@@ -350,14 +454,14 @@ async def split_for_embedding[T](
 				metadata={},
 			)
 		]
-	# defensive backstop: a misconfigured target_tokens above the model limit
+	# defensive backstop: a misconfigured target_tokens above the capacity
 	# could still emit an oversized chunk; hard-truncate by character budget.
-	char_budget = int(limit * CHARS_PER_TOKEN)
+	char_budget = int(capacity * CHARS_PER_TOKEN)
 	total = len(chunks)
 	pieces: list[_EmbeddingPiece] = []
 	for index, chunk in enumerate(chunks):
 		text = chunk.text
-		if estimate_tokens(text) > limit:
+		if estimate_tokens(text) > capacity:
 			text = text[:char_budget]
 		pieces.append(
 			_EmbeddingPiece(
@@ -375,7 +479,7 @@ async def vectorize_resource[T](
 	spec: VectorSpec[T],
 	resource: T,
 	session: AsyncSession,
-	extra_metadata: dict[str, Any] | None = None,
+	extra_metadata: Mapping[str, Any] | None = None,
 ) -> None:
 	"""vectorize a single resource: delete existing chunks then insert fresh.
 
@@ -409,7 +513,7 @@ async def vectorize_resource[T](
 		)
 		for piece, embedding in zip(pieces, embeddings)
 	]
-	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
+	await upsert_chunks(chunks=chunks, session=session)
 
 
 async def vectorize_resources[T](
@@ -434,6 +538,10 @@ async def vectorize_resources[T](
 		plans.append((resource, rid, resource_fingerprint(spec, resource), pieces))
 	if not plans:
 		return 0
+	# TODO(contextualized-embeddings): route on embedding_token_capacity().
+	# unlimited capacity (voyage-context-4) embeds each resource's ordered
+	# pieces as ONE document call; finite capacity groups pieces into
+	# capacity-sized calls instead of flattening into independent texts.
 	flat_texts = [piece.embed_text for _, _, _, pieces in plans for piece in pieces]
 	embeddings = await embed_texts(flat_texts, session, input_type="document")
 	chunks: list[Chunk] = []
@@ -456,7 +564,7 @@ async def vectorize_resources[T](
 					fingerprint=fingerprint,
 				)
 			)
-	await vectorstore_service.upsert_chunks(chunks=chunks, session=session)
+	await upsert_chunks(chunks=chunks, session=session)
 	return len(plans)
 
 
@@ -466,56 +574,22 @@ async def vectorize_resources[T](
 # patches vectorstore payloads.
 
 
-async def sync_resource_vector_acl(
-	resource_id: str,
-	resource_type: ResourceType,
+async def sync_resource_refs_vector_acl(
+	resource_refs: list[tuple[ResourceType, TypeID]],
 	session: AsyncSession,
 ) -> None:
-	"""patch acl payload fields for a resource and all inheriting resources."""
-	resources_by_type: dict[ResourceType, set[str]] = {
-		resource_type: {resource_id},
-	}
-	descendants = await load_descendant_resource_ids(
-		resource_type,
-		TypeID(resource_id),
-		session,
-	)
-	for descendant_type, descendant_ids in descendants.items():
-		resources_by_type.setdefault(descendant_type, set()).update(
-			str(descendant_id) for descendant_id in descendant_ids
-		)
-	for affected_type, affected_ids in resources_by_type.items():
-		await _sync_resource_vector_acl_payloads(
-			list(affected_ids),
-			affected_type,
-			session,
-		)
+	"""patch ACL payloads for concrete resource references.
 
-
-async def _sync_resource_vector_acl_payload(
-	resource_id: str,
-	resource_type: ResourceType,
-	session: AsyncSession,
-) -> None:
-	"""patch acl payload fields on all chunks for a resource.
-
-	resolves current access rules from postgres then calls vs.update() with
-	the latest acl fields. vectors and other metadata are untouched.
-	silent no-op when the resource has no chunks (never vectorized).
+	descendants are deliberately not walked: a chunk's stamped revision
+	aggregates its resource's own revision with every ancestor's, so an
+	ancestor-only change already makes descendant stamps differ and the ACL
+	staleness sweep repairs them.
 	"""
-	payload: dict[str, object] = {
-		key: value
-		for key, value in (
-			await fetch_acl_metadata(resource_id, resource_type, session)
-		).items()
-	}
-	targets = _acl_sync_chunk_filters(resource_type, resource_id)
-	if not targets:
-		return
-	coll = await vectorstore_service.get_collection(session)
-	vs = vectorstore_service.get_vectorstore(collection=coll)
-	for target in targets:
-		await vs.update(target, payload=payload)
+	resources_by_type: dict[ResourceType, list[str]] = {}
+	for resource_type, resource_id in resource_refs:
+		resources_by_type.setdefault(resource_type, []).append(str(resource_id))
+	for resource_type, resource_ids in resources_by_type.items():
+		await _sync_resource_vector_acl_payloads(resource_ids, resource_type, session)
 
 
 async def _sync_resource_vector_acl_payloads(
@@ -538,13 +612,46 @@ async def _sync_resource_vector_acl_payloads(
 		resource_type,
 		session,
 	)
-	coll = await vectorstore_service.get_collection(session)
-	vs = vectorstore_service.get_vectorstore(collection=coll)
+	coll = await get_collection(session)
+	vs = get_vectorstore(collection=coll)
 
 	async def _sync_one(rid: str) -> None:
 		payload: dict[str, object] = {
 			key: value for key, value in acl_by_id[rid].items()
 		}
+		for target in _acl_sync_chunk_filters(resource_type, rid):
+			await vs.update(target, payload=payload)
+
+	await map_concurrently(
+		_sync_one,
+		unique_resource_ids,
+		limit=_VECTOR_ACL_UPDATE_CONCURRENCY,
+	)
+
+
+async def sync_resource_vector_payload(
+	resource_ids: list[str],
+	resource_type: ResourceType,
+	payload_by_id: Mapping[str, Mapping[str, object]],
+	session: AsyncSession,
+) -> None:
+	"""patch arbitrary filterable payload fields on a resource's chunks.
+
+	same mechanism as the acl sync (payload-only ``vs.update``: vectors and
+	other metadata are untouched, no re-embedding), for fields the caller
+	resolves itself - e.g. per-user thread state. silent no-op for resources
+	that were never vectorized.
+	"""
+	unique_resource_ids = [
+		rid for rid in dict.fromkeys(resource_ids) if rid in payload_by_id
+	]
+	if not unique_resource_ids:
+		return
+	coll = await get_collection(session)
+	vs = get_vectorstore(collection=coll)
+
+	async def _sync_one(rid: str) -> None:
+		payload: dict[str, object] = dict(payload_by_id[rid])
 		for target in _acl_sync_chunk_filters(resource_type, rid):
 			await vs.update(target, payload=payload)
 
@@ -572,7 +679,7 @@ def _acl_sync_chunk_filters(
 			direct_resource_types.append(chunk_resource_type)
 			continue
 		targets.append(
-			vectorstore_service.parent_resource_filter(
+			parent_resource_filter(
 				parent_resource_type,
 				resource_id,
 				resource_types=[chunk_resource_type],
@@ -580,7 +687,7 @@ def _acl_sync_chunk_filters(
 		)
 	if direct_resource_types:
 		targets.append(
-			vectorstore_service.resource_types_filter(
+			resource_types_filter(
 				direct_resource_types,
 				resource_id=resource_id,
 			)

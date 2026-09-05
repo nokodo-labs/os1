@@ -1,7 +1,5 @@
 """search router - unified SSE and paginated search across entities."""
 
-from __future__ import annotations
-
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, Query
@@ -15,9 +13,18 @@ from api.schemas.search import (
 	SearchResultItem,
 	SearchResultType,
 )
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authentication import Principal, get_current_principal
 from api.v1.service.authorization import require_admin
-from api.v1.service.search import aggregator as search_service
+from api.v1.service.search.aggregator import (
+	count_stale_vectors,
+	vectorize,
+)
+from api.v1.service.search.aggregator import (
+	search_stream as search_stream_service,
+)
+from api.v1.service.search.primitives import relevance_sort_key
+from api.v1.service.vectorize import StaleBy
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.sse import sse_done, sse_encode, sse_response
 
 
@@ -27,8 +34,8 @@ router = APIRouter(prefix="/search", tags=["search"])
 _GLOBAL_TYPES = [
 	SearchResultType.NOTE,
 	SearchResultType.THREAD,
-	SearchResultType.REMINDER,
-	SearchResultType.CALENDAR_EVENT,
+	SearchResultType.REMINDER_LIST,
+	SearchResultType.CALENDAR,
 	SearchResultType.PROJECT,
 	SearchResultType.FILE,
 ]
@@ -58,7 +65,7 @@ async def search_stream(
 	the stream ends with an `event: done`.
 	"""
 	effective_types = [t for t in (types or _GLOBAL_TYPES) if t in _GLOBAL_TYPES]
-	stream = search_service.search_stream(
+	stream = search_stream_service(
 		q,
 		db,
 		principal=principal,
@@ -81,7 +88,7 @@ async def search(
 	"""non-streaming search across all entity types."""
 	effective_types = [t for t in (types or _GLOBAL_TYPES) if t in _GLOBAL_TYPES]
 	results: list[SearchResultItem] = []
-	async for item in search_service.search_stream(
+	async for item in search_stream_service(
 		q,
 		db,
 		principal=principal,
@@ -90,16 +97,36 @@ async def search(
 		search_params=SearchParams(mode=mode),
 	):
 		results.append(item)
-	# sort by score DESC (relevance), unscored items last, id as tiebreaker
-	results.sort(key=lambda r: (r.score is None, -(r.score or 0.0), str(r.id)))
+	# id tiebreaker keeps equal-scored results stable across calls
+	results.sort(key=lambda r: (*relevance_sort_key(r), str(r.id)))
 	return results[:limit]
 
 
-@router.post("/revectorize")
-async def revectorize_all(
+@router.get("/revectorize")
+async def revectorize_preview(
+	by: list[StaleBy] | None = Query(default=None),
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> dict[str, int]:
-	"""vectorize all searchable resources into qdrant. admin only."""
+) -> JSONObject:
+	"""count provenance-stale vectors per pipeline without rebuilding. admin only.
+
+	repeat `by` to narrow to specific causes (OR); omit for all causes.
+	"""
 	require_admin(principal)
-	return await search_service.vectorize_all(db)
+	return await count_stale_vectors(by or list(StaleBy), db)
+
+
+@router.post("/revectorize")
+async def revectorize(
+	by: list[StaleBy] | None = Query(default=None),
+	principal: Principal = Depends(get_current_principal),
+	db: AsyncSession = Depends(get_db),
+) -> JSONObject:
+	"""rebuild vectors across every pipeline. admin only.
+
+	without `by`, rebuilds everything: every resource point plus a passage
+	reconcile per thread. with `by` (repeatable, OR), rebuilds only resources
+	provenance-stale by those causes.
+	"""
+	require_admin(principal)
+	return await vectorize(db, by=by or None)

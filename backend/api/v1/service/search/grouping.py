@@ -10,8 +10,6 @@ where FILE and FILE_CONTENT chunks share a logical resource but have distinct
 resource_ids in the vector store).
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass, field
 

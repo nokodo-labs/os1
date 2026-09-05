@@ -7,11 +7,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.schemas.search import SearchMode
-from api.v1.service import vectorstores as vectorstore_service
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authentication import Principal, get_current_principal
 from api.v1.service.authorization import require_admin
 from api.v1.service.embeddings import embed_text
-from api.v1.service.search import aggregator as search_service
+from api.v1.service.search.aggregator import vectorize
+from api.v1.service.vectorstores import (
+	delete_collection as delete_collection_service,
+)
+from api.v1.service.vectorstores import (
+	get_collection as get_collection_service,
+)
+from api.v1.service.vectorstores import (
+	get_collection_info,
+	search,
+)
+from api.v1.service.vectorstores import (
+	list_collections as list_collections_service,
+)
+from api.v1.service.vectorstores import (
+	wipe_all_collections as wipe_all_collections_service,
+)
+from nokodo_ai.types.json import JSONObject
 
 
 router = APIRouter(prefix="/vectorstores", tags=["vectorstores"])
@@ -26,7 +42,7 @@ async def list_collections(
 ) -> list[dict[str, object]]:
 	"""list all vectorstore collections. admin only."""
 	require_admin(principal)
-	return await vectorstore_service.list_collections()
+	return await list_collections_service()
 
 
 @router.get("/collections/{name}")
@@ -37,7 +53,7 @@ async def get_collection(
 	"""get detailed info for a specific collection. admin only."""
 	require_admin(principal)
 	try:
-		return await vectorstore_service.get_collection_info(name)
+		return await get_collection_info(name)
 	except Exception as exc:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,
@@ -52,7 +68,7 @@ async def delete_collection(
 ) -> dict[str, str]:
 	"""delete a collection. admin only."""
 	require_admin(principal)
-	deleted = await vectorstore_service.delete_collection(name)
+	deleted = await delete_collection_service(name)
 	if not deleted:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,
@@ -67,7 +83,7 @@ async def wipe_all_collections(
 ) -> dict[str, list[str]]:
 	"""delete ALL collections. admin only. use with caution."""
 	require_admin(principal)
-	deleted = await vectorstore_service.wipe_all_collections()
+	deleted = await wipe_all_collections_service()
 	return {"deleted": deleted}
 
 
@@ -88,7 +104,7 @@ async def search_collection(
 	returns raw chunk results with scores for diagnostics.
 	"""
 	require_admin(principal)
-	coll = collection or await vectorstore_service.get_collection(db)
+	coll = collection or await get_collection_service(db)
 	query_emb = await embed_text(q, db, input_type="query")
 
 	text_query: str | None = q
@@ -98,7 +114,7 @@ async def search_collection(
 	elif mode == SearchMode.SPARSE:
 		query_vec = None
 
-	results = await vectorstore_service.search(
+	results = await search(
 		session=db,
 		query=query_vec,
 		text_query=text_query,
@@ -123,7 +139,7 @@ async def search_collection(
 async def revectorize_all(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> dict[str, int]:
+) -> JSONObject:
 	"""vectorize all searchable resources. admin only."""
 	require_admin(principal)
-	return await search_service.vectorize_all(db)
+	return await vectorize(db)
