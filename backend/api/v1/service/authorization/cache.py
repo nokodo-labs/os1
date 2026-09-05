@@ -1,268 +1,641 @@
 """accessible-user cache and recipient expansion for ACL resources."""
 
-from __future__ import annotations
-
 import asyncio
+import logging
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Literal
 
-from sqlalchemy import select, union
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql import Select
+from sqlalchemy.orm import aliased
 
-from api.models.access_rule import AccessLevel, AccessRule
-from api.models.group import GroupMembership
-from api.models.many_to_many import user_role_association
+from api.database.main import session_scope
+from api.database.post_commit import enqueue_post_commit_action
+from api.models.access_rule import AccessRule
 from api.models.role import Role
 from api.models.user import User
-from api.permissions import ResourceType
+from api.permissions import AccessLevel, ResourceType
 from api.redis import cache
 from api.settings import settings
 from api.v1.service.authorization.config import (
+	MAX_INHERITANCE_DEPTH,
 	RESOURCE_CONFIG,
-	allowed_levels,
 	default_access_resource_types,
-	level_satisfies,
-	unique_resource_types,
+	is_acl_resource_config,
 )
 from api.v1.service.authorization.inheritance import (
-	load_descendant_resource_ids,
+	affected_resource_types,
 	load_parent_resource_refs,
 )
+from api.v1.service.authorization.predicates import (
+	direct_resource_access_predicate,
+	resource_operator_predicate,
+)
+from api.v1.service.authorization.types import ResourceRef
 from nokodo_ai.utils.typeid import TypeID
 
 
-def accessible_users_tag(resource_type: ResourceType, resource_id: TypeID) -> str:
-	return f"resource:{resource_type.value}:{resource_id}"
+logger = logging.getLogger(__name__)
 
 
-async def list_accessible_user_ids(
+@dataclass(frozen=True, slots=True)
+class _CachedUserIds:
+	"""one cached answer plus the ancestor versions it was computed from."""
+
+	user_ids: list[TypeID]
+	ancestor_versions: dict[str, int]
+
+
+def _cached_typeids(value: object) -> list[TypeID] | None:
+	"""parse a cached ID list, returning None for any unexpected shape."""
+	if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+		return None
+	return [TypeID(item) for item in value]
+
+
+def _cached_entry(value: object) -> _CachedUserIds | None:
+	"""parse a cached accessible-users entry, returning None for any bad shape."""
+	if not isinstance(value, dict):
+		return None
+	user_ids = _cached_typeids(value.get("user_ids"))
+	if user_ids is None:
+		return None
+	raw_ancestors = value.get("ancestors")
+	if not isinstance(raw_ancestors, dict):
+		return None
+	ancestor_versions: dict[str, int] = {}
+	for key, version in raw_ancestors.items():
+		if not isinstance(key, str) or not isinstance(version, int):
+			return None
+		ancestor_versions[key] = version
+	return _CachedUserIds(user_ids=user_ids, ancestor_versions=ancestor_versions)
+
+
+def _accessible_users_version_key(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+) -> str:
+	return f"accessible_users_version:{resource_type.value}:{resource_id}"
+
+
+def _accessible_users_type_version_key(resource_type: ResourceType) -> str:
+	return f"accessible_users_type_version:{resource_type.value}"
+
+
+async def _cache_versions(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+) -> tuple[int, int] | None:
+	type_version, resource_version = await cache.get_many(
+		[
+			_accessible_users_type_version_key(resource_type),
+			_accessible_users_version_key(resource_type, resource_id),
+		]
+	)
+	if type_version is not None and not isinstance(type_version, int):
+		return None
+	if resource_version is not None and not isinstance(resource_version, int):
+		return None
+	return (
+		type_version if isinstance(type_version, int) else 0,
+		resource_version if isinstance(resource_version, int) else 0,
+	)
+
+
+async def _current_ancestor_versions(keys: list[str]) -> dict[str, int] | None:
+	"""read the current version of every recorded ancestor in one round trip."""
+	if not keys:
+		return {}
+	values = await cache.get_many(keys)
+	versions: dict[str, int] = {}
+	for key, value in zip(keys, values, strict=True):
+		if value is not None and not isinstance(value, int):
+			return None
+		versions[key] = value if isinstance(value, int) else 0
+	return versions
+
+
+async def _record_versions(
+	resource_refs: list[ResourceRef],
+	consulted_refs: dict[ResourceRef, int] | None,
+) -> None:
+	"""stamp versions for refs the walk is about to consult, in one round trip.
+
+	read BEFORE the rows they describe, so a bump racing the resolve lands
+	after the stamp and is caught by the post-resolve re-read. batched per
+	frame rather than per ancestor: a wide parent set would otherwise cost one
+	GET each.
+	"""
+	if consulted_refs is None:
+		return
+	pending = [ref for ref in dict.fromkeys(resource_refs) if ref not in consulted_refs]
+	if not pending:
+		return
+	values = await cache.get_many(
+		[
+			_accessible_users_version_key(resource_type, resource_id)
+			for resource_type, resource_id in pending
+		]
+	)
+	for ref, value in zip(pending, values, strict=True):
+		consulted_refs[ref] = value if isinstance(value, int) else 0
+
+
+type _UserIdResolver = Callable[
+	[ResourceType, TypeID, AsyncSession, AccessLevel, dict[ResourceRef, int] | None],
+	Awaitable[list[TypeID]],
+]
+
+
+async def _list_user_ids(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	session: AsyncSession | None,
+	required_level: AccessLevel,
+	key_prefix: str,
+	resolver: _UserIdResolver,
+	warning: str,
+) -> list[TypeID]:
+	"""return a cached or freshly resolved answer, validated against ancestors.
+
+	an ACL change bumps only the changed resource's version, so a cached entry is
+	valid only while every ancestor it was computed from still carries the version
+	recorded at fill time. that keeps invalidation O(1) in the size of a
+	resource's subtree while still expiring every answer that depended on it.
+
+	the stored versions are the ones read BEFORE the resolve, and every one is
+	re-read after: an ancestor bumped while the resolve was in flight would
+	otherwise be stamped with its new version, leaving an entry computed from
+	stale data validating as fresh. any movement discards the entry instead.
+	"""
+	async with session_scope(session) as db:
+		versions = await _cache_versions(resource_type, resource_id)
+		if versions is None:
+			return await resolver(resource_type, resource_id, db, required_level, None)
+		type_version, resource_version = versions
+		cache_key = (
+			f"{key_prefix}:{resource_type.value}:{resource_id}:"
+			f"{required_level.value}:{type_version}:{resource_version}"
+		)
+		cached = _cached_entry(await cache.get(cache_key))
+		if cached is not None:
+			current = await _current_ancestor_versions(list(cached.ancestor_versions))
+			if current is not None and current == cached.ancestor_versions:
+				return cached.user_ids
+		# the resolver records each ancestor's version as it consults it, before
+		# reading that ancestor's rows, so the stamp always predates the data it
+		# describes.
+		consulted: dict[ResourceRef, int] = {}
+		result = await resolver(
+			resource_type,
+			resource_id,
+			db,
+			required_level,
+			consulted,
+		)
+		snapshot = {
+			_accessible_users_version_key(ancestor_type, ancestor_id): version
+			for (ancestor_type, ancestor_id), version in sorted(
+				consulted.items(),
+				key=lambda item: (item[0][0].value, str(item[0][1])),
+			)
+			if (ancestor_type, ancestor_id) != (resource_type, resource_id)
+		}
+		after = await _current_ancestor_versions(list(snapshot))
+		if after is None or after != snapshot:
+			# an ancestor moved while resolving: this answer may already be stale
+			return result
+		written = await cache.set(
+			cache_key,
+			{
+				"user_ids": [str(uid) for uid in result],
+				"ancestors": snapshot,
+			},
+			ttl=settings.cache.accessible_users_ttl_seconds,
+		)
+		if not written:
+			logger.warning(warning, resource_type.value, resource_id)
+		return result
+
+
+async def _list_accessible_user_ids(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	session: AsyncSession | None,
+	required_level: AccessLevel = AccessLevel.READER,
+) -> list[TypeID]:
+	"""return users with access to one resource, using its cache entry."""
+	return await _list_user_ids(
+		resource_type,
+		resource_id,
+		session,
+		required_level,
+		"accessible_users",
+		_resolve_accessible_user_ids_for_cache,
+		"accessible-user cache write failed for %s %s",
+	)
+
+
+async def _list_resource_access_user_ids(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	session: AsyncSession | None,
+	required_level: AccessLevel = AccessLevel.READER,
+) -> list[TypeID]:
+	"""return resource-derived users for one resource, using its cache entry."""
+	return await _list_user_ids(
+		resource_type,
+		resource_id,
+		session,
+		required_level,
+		"resource_access_users",
+		_resolve_resource_access_user_ids_for_cache,
+		"resource-access user cache write failed for %s %s",
+	)
+
+
+async def _resolve_accessible_user_ids_for_cache(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	session: AsyncSession,
+	required_level: AccessLevel,
+	consulted_refs: dict[ResourceRef, int] | None,
+) -> list[TypeID]:
+	return await resolve_accessible_user_ids(
+		resource_type,
+		resource_id,
+		session,
+		required_level,
+		consulted_refs=consulted_refs,
+	)
+
+
+async def _resolve_resource_access_user_ids_for_cache(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	session: AsyncSession,
+	required_level: AccessLevel,
+	consulted_refs: dict[ResourceRef, int] | None,
+) -> list[TypeID]:
+	return await resolve_resource_access_user_ids(
+		resource_type,
+		resource_id,
+		session,
+		required_level,
+		consulted_refs=consulted_refs,
+	)
+
+
+async def list_accessible_user_ids_for_resources(
+	resource_refs: list[ResourceRef],
+	session: AsyncSession | None,
+	required_level: AccessLevel = AccessLevel.READER,
+) -> list[TypeID]:
+	"""return users who can access any resource in the list."""
+	result: list[TypeID] = []
+	seen: set[str] = set()
+	for resource_type, resource_id in resource_refs:
+		for user_id in await _list_accessible_user_ids(
+			resource_type,
+			resource_id,
+			session,
+			required_level,
+		):
+			key = str(user_id)
+			if key not in seen:
+				seen.add(key)
+				result.append(user_id)
+	return result
+
+
+async def list_resource_access_user_ids_for_resources(
+	resource_refs: list[ResourceRef],
+	session: AsyncSession | None,
+	required_level: AccessLevel = AccessLevel.READER,
+) -> list[TypeID]:
+	"""return users with resource-derived access to any resource in the list."""
+	result: list[TypeID] = []
+	seen: set[str] = set()
+	for resource_type, resource_id in resource_refs:
+		for user_id in await _list_resource_access_user_ids(
+			resource_type,
+			resource_id,
+			session,
+			required_level,
+		):
+			key = str(user_id)
+			if key not in seen:
+				seen.add(key)
+				result.append(user_id)
+	return result
+
+
+async def resolve_accessible_user_ids(
 	resource_type: ResourceType,
 	resource_id: TypeID,
 	session: AsyncSession,
 	required_level: AccessLevel = AccessLevel.READER,
+	resolved_user_ids: dict[
+		tuple[ResourceType, TypeID, AccessLevel, bool, bool], frozenset[TypeID]
+	]
+	| None = None,
+	resolving_access: set[tuple[ResourceType, TypeID, AccessLevel, bool, bool]]
+	| None = None,
+	consulted_refs: dict[ResourceRef, int] | None = None,
 ) -> list[TypeID]:
-	"""return all user IDs that have at least required_level access."""
-	cache_key = (
-		f"accessible_users:{resource_type.value}:{resource_id}:{required_level.value}"
+	"""freshly resolve active users with effective access, including operators."""
+	return await _resolve_accessible_user_ids(
+		resource_type,
+		resource_id,
+		session,
+		required_level,
+		include_operators=True,
+		resolved_user_ids=resolved_user_ids,
+		resolving_access=resolving_access,
+		consulted_refs=consulted_refs,
 	)
 
-	cached = await cache.get(cache_key)
-	if cached is not None and isinstance(cached, list):
-		return [TypeID(uid) for uid in cached]
 
-	result = await _list_accessible_user_ids_uncached(
-		resource_type, resource_id, session, required_level=required_level
+async def resolve_resource_access_user_ids(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	session: AsyncSession,
+	required_level: AccessLevel = AccessLevel.READER,
+	resolved_user_ids: dict[
+		tuple[ResourceType, TypeID, AccessLevel, bool, bool], frozenset[TypeID]
+	]
+	| None = None,
+	resolving_access: set[tuple[ResourceType, TypeID, AccessLevel, bool, bool]]
+	| None = None,
+	consulted_refs: dict[ResourceRef, int] | None = None,
+) -> list[TypeID]:
+	"""freshly resolve active users with resource-derived access only."""
+	return await _resolve_accessible_user_ids(
+		resource_type,
+		resource_id,
+		session,
+		required_level,
+		include_operators=False,
+		resolved_user_ids=resolved_user_ids,
+		resolving_access=resolving_access,
+		consulted_refs=consulted_refs,
 	)
-	await cache.set(
-		cache_key,
-		[str(uid) for uid in result],
-		ttl=settings.cache.accessible_users_ttl_seconds,
-		tags=[accessible_users_tag(resource_type, resource_id)],
-	)
-	return result
 
 
 async def invalidate_accessible_users_for_resource(
 	resource_type: ResourceType,
 	resource_id: TypeID,
-	session: AsyncSession | None = None,
 ) -> None:
-	"""invalidate accessible_users entries for a resource and descendants."""
-	if session is None:
-		await cache.invalidate_tag(accessible_users_tag(resource_type, resource_id))
-		return
-	tags = await _accessible_users_tags_for_acl_update(
-		resource_type, resource_id, session
-	)
-	if tags:
-		await asyncio.gather(*(cache.invalidate_tag(tag) for tag in tags))
+	"""invalidate accessible-user entries computed from one resource.
+
+	only this resource's version is bumped. entries for resources that inherit
+	from it recorded its version when they were filled, so they self-invalidate
+	on their next read - no descendant walk, at any subtree size.
+	"""
+	await _invalidate_resource_refs([(resource_type, resource_id)])
 
 
-async def _accessible_users_tags_for_acl_update(
-	resource_type: ResourceType,
-	resource_id: TypeID,
-	session: AsyncSession,
-) -> set[str]:
-	"""return cache tags for a resource and resources inheriting from it."""
-	tags = {accessible_users_tag(resource_type, resource_id)}
-	descendants = await load_descendant_resource_ids(
-		resource_type, resource_id, session
-	)
-	for descendant_type, descendant_ids in descendants.items():
-		for descendant_id in descendant_ids:
-			tags.add(accessible_users_tag(descendant_type, descendant_id))
-	return tags
+async def invalidate_accessible_users_for_refs(
+	resource_refs: list[ResourceRef],
+) -> None:
+	"""invalidate accessible-user entries for concrete resources."""
+	await _invalidate_resource_refs(resource_refs)
 
 
-async def invalidate_accessible_users_for_subject(
+async def resource_refs_for_subject(
 	subject_kind: Literal["user", "group", "role"],
 	subject_id: TypeID,
 	session: AsyncSession,
-) -> None:
-	"""invalidate accessible_users for every resource referencing a subject."""
+) -> list[ResourceRef]:
+	"""return resources carrying a rule for one subject.
+
+	descendants are deliberately excluded: their cached answers record these
+	resources as ancestors and expire themselves on the next read.
+	"""
 	subject_col = {
 		"user": AccessRule.subject_user_id,
 		"group": AccessRule.subject_group_id,
 		"role": AccessRule.subject_role_id,
 	}[subject_kind]
-	fk_cols = [(cfg.rule_fk, rtype) for rtype, cfg in RESOURCE_CONFIG.items()]
-	stmt = select(*[col for col, _ in fk_cols]).where(subject_col == str(subject_id))
-	rows = (await session.execute(stmt)).all()
-	tags: set[str] = set()
+	fk_cols = [
+		(config.rule_fk, resource_type)
+		for resource_type, config in RESOURCE_CONFIG.items()
+		if is_acl_resource_config(config)
+	]
+	rows = (
+		await session.execute(
+			select(*[column for column, _ in fk_cols]).where(subject_col == subject_id)
+		)
+	).all()
+	refs: list[ResourceRef] = []
 	for row in rows:
-		for value, (_col, resource_type) in zip(row, fk_cols, strict=True):
+		for value, (_column, resource_type) in zip(row, fk_cols, strict=True):
 			if value is not None:
-				tags.update(
-					await _accessible_users_tags_for_acl_update(
-						resource_type,
-						TypeID(str(value)),
-						session,
-					)
-				)
-	if tags:
-		await asyncio.gather(*(cache.invalidate_tag(tag) for tag in tags))
+				refs.append((resource_type, TypeID(value)))
+	return list(dict.fromkeys(refs))
+
+
+async def enqueue_accessible_users_invalidation_for_subject(
+	subject_kind: Literal["user", "group", "role"],
+	subject_id: TypeID,
+	session: AsyncSession,
+) -> None:
+	"""invalidate resources using one subject after the transaction commits."""
+	resource_refs = await resource_refs_for_subject(subject_kind, subject_id, session)
+
+	async def invalidate_after_commit(db: AsyncSession) -> None:
+		_ = db
+		await _invalidate_resource_refs(resource_refs)
+
+	enqueue_post_commit_action(session, invalidate_after_commit)
 
 
 async def invalidate_accessible_users_for_resource_types(
 	resource_types: list[ResourceType],
-	session: AsyncSession,
 ) -> None:
-	"""invalidate accessible_users entries for every resource of each type."""
-	tags: set[str] = set()
-	for resource_type in unique_resource_types(resource_types):
-		config = RESOURCE_CONFIG[resource_type]
-		rows = (await session.execute(select(config.id_col))).all()
-		for row in rows:
-			tags.update(
-				await _accessible_users_tags_for_acl_update(
-					resource_type,
-					TypeID(str(row[0])),
-					session,
-				)
-			)
-	if tags:
-		await asyncio.gather(*(cache.invalidate_tag(tag) for tag in tags))
+	"""invalidate whole resource types through bounded generation increments."""
+	if not await cache.increment_many(
+		[
+			_accessible_users_type_version_key(resource_type)
+			for resource_type in affected_resource_types(resource_types)
+		]
+	):
+		logger.error("accessible-user type version increment failed")
 
 
 async def invalidate_accessible_users_for_role_defaults(
 	role_ids: list[TypeID],
 	session: AsyncSession,
 ) -> None:
-	"""invalidate default-access resource caches affected by role membership."""
+	"""invalidate resource types affected by role-default access."""
 	if not role_ids:
 		return
-	roles = (
-		(await session.execute(select(Role).where(Role.id.in_(role_ids))))
-		.scalars()
-		.all()
-	)
-	resource_types: list[ResourceType] = []
-	for role in roles:
-		resource_types.extend(
-			default_access_resource_types(
-				role.get_default_permissions().resource_access
+	roles = list(await session.scalars(select(Role).where(Role.id.in_(role_ids))))
+	resource_types = [
+		resource_type
+		for role in roles
+		for resource_type in default_access_resource_types(
+			role.get_default_permissions().resource_access
+		)
+	]
+	await invalidate_accessible_users_for_resource_types(resource_types)
+
+
+async def _invalidate_resource_refs(
+	resource_refs: list[ResourceRef],
+) -> None:
+	"""orphan cached values by incrementing concrete resource versions."""
+	if resource_refs:
+		versions = await asyncio.gather(
+			*(
+				cache.increment(
+					_accessible_users_version_key(resource_type, resource_id)
+				)
+				for resource_type, resource_id in resource_refs
 			)
 		)
-	await invalidate_accessible_users_for_resource_types(resource_types, session)
+		for (resource_type, resource_id), version in zip(
+			resource_refs,
+			versions,
+			strict=True,
+		):
+			if version is None:
+				logger.warning(
+					"accessible-user cache version increment failed for %s %s",
+					resource_type.value,
+					resource_id,
+				)
 
 
-async def _list_accessible_user_ids_uncached(
+async def _resolve_accessible_user_ids(
 	resource_type: ResourceType,
 	resource_id: TypeID,
 	session: AsyncSession,
 	required_level: AccessLevel = AccessLevel.READER,
-	visited_resource_refs: set[tuple[ResourceType, TypeID]] | None = None,
-) -> list[TypeID]:
-	if visited_resource_refs is None:
-		visited_resource_refs = set()
-	resource_ref = (resource_type, resource_id)
-	if resource_ref in visited_resource_refs:
-		return []
-	visited_resource_refs.add(resource_ref)
-
-	config = RESOURCE_CONFIG[resource_type]
-	matching_levels = allowed_levels(required_level)
-	queries: list[Select] = []
-
-	if config.owner_fk is not None:
-		queries.append(select(config.owner_fk).where(config.id_col == resource_id))
-
-	queries.append(select(User.id).where(User.is_superuser.is_(True)))
-
-	queries.append(
-		select(AccessRule.subject_user_id).where(
-			config.rule_fk == resource_id,
-			AccessRule.subject_user_id.is_not(None),
-			AccessRule.level.in_(matching_levels),
-		)
-	)
-
-	queries.append(
-		select(GroupMembership.user_id).where(
-			GroupMembership.group_id.in_(
-				select(AccessRule.subject_group_id).where(
-					config.rule_fk == resource_id,
-					AccessRule.subject_group_id.is_not(None),
-					AccessRule.level.in_(matching_levels),
-				)
-			)
-		)
-	)
-
-	queries.append(
-		select(user_role_association.c.user_id).where(
-			user_role_association.c.role_id.in_(
-				select(AccessRule.subject_role_id).where(
-					config.rule_fk == resource_id,
-					AccessRule.subject_role_id.is_not(None),
-					AccessRule.level.in_(matching_levels),
-				)
-			)
-		)
-	)
-
-	role_result = await session.execute(select(Role))
-	default_role_ids = [
-		role.id
-		for role in role_result.scalars().all()
-		if _role_grants_default(role, resource_type, required_level)
+	resolved_user_ids: dict[
+		tuple[ResourceType, TypeID, AccessLevel, bool, bool], frozenset[TypeID]
 	]
-	if default_role_ids:
-		queries.append(
-			select(user_role_association.c.user_id).where(
-				user_role_association.c.role_id.in_(default_role_ids)
-			)
-		)
-
-	global_level = settings.default_permissions.resource_access.get(resource_type)
-	if global_level is not None and level_satisfies(global_level, required_level):
-		queries.append(select(User.id).where(User.is_active.is_(True)))
-
-	if not queries:
+	| None = None,
+	resolving_access: set[tuple[ResourceType, TypeID, AccessLevel, bool, bool]]
+	| None = None,
+	include_operators: bool = True,
+	non_transitive_used: bool = False,
+	consulted_refs: dict[ResourceRef, int] | None = None,
+	traversal_depth: int = 0,
+	cycle_truncated: set[tuple[ResourceType, TypeID, AccessLevel, bool, bool]]
+	| None = None,
+) -> list[TypeID]:
+	"""recursively resolve accessible users through the inheritance graph."""
+	if resolved_user_ids is None:
+		resolved_user_ids = {}
+	if resolving_access is None:
+		resolving_access = set()
+	if cycle_truncated is None:
+		cycle_truncated = set()
+	if traversal_depth >= MAX_INHERITANCE_DEPTH:
+		# same class as the cycle break below: `[]` is a truncation, not an
+		# answer. the callers still on the stack fold it in, so none of them may
+		# be memoised or a shallower ref would later read the truncated set.
+		cycle_truncated.update(resolving_access)
 		return []
-
-	combined = union(*queries).subquery()
-	result = await session.execute(select(combined.c[0]))
-	user_ids = {TypeID(row[0]) for row in result.all()}
-	for parent_type, parent_id in await load_parent_resource_refs(
-		resource_type, resource_id, session
+	await _record_versions([(resource_type, resource_id)], consulted_refs)
+	access_key = (
+		resource_type,
+		resource_id,
+		required_level,
+		include_operators,
+		non_transitive_used,
+	)
+	if access_key in resolved_user_ids:
+		return list(resolved_user_ids[access_key])
+	if access_key in resolving_access:
+		# cycle break: `[]` is a truncation, not an answer. every frame still on
+		# the stack folds it in, so none of them may be memoised - a shared memo
+		# would otherwise publish the truncated set to later top-level refs.
+		cycle_truncated.update(resolving_access)
+		return []
+	resolving_access.add(access_key)
+	config = RESOURCE_CONFIG[resource_type]
+	if (
+		await session.scalar(select(config.id_col).where(config.id_col == resource_id))
+		is None
 	):
+		resolving_access.remove(access_key)
+		resolved_user_ids[access_key] = frozenset()
+		return []
+	candidate = aliased(User)
+	user_ids: set[TypeID] = set()
+	if is_acl_resource_config(config):
+		direct_access = direct_resource_access_predicate(
+			candidate.id,
+			resource_type,
+			required_level,
+		)
+		access = (
+			resource_operator_predicate(candidate.id, resource_type) | direct_access
+			if include_operators
+			else direct_access
+		)
+		stmt = select(candidate.id).where(
+			candidate.is_active.is_(True),
+			exists(
+				select(1)
+				.where(
+					config.id_col == resource_id,
+					access,
+				)
+				.correlate(candidate)
+			),
+		)
+		user_ids.update(await session.scalars(stmt))
+	elif include_operators:
 		user_ids.update(
-			await _list_accessible_user_ids_uncached(
-				parent_type,
-				parent_id,
-				session,
-				required_level=required_level,
-				visited_resource_refs=visited_resource_refs,
+			await session.scalars(
+				select(candidate.id).where(
+					candidate.is_active.is_(True),
+					resource_operator_predicate(candidate.id, resource_type),
+				)
 			)
 		)
+	author_id = (
+		await session.scalar(
+			select(config.author_fk).where(config.id_col == resource_id)
+		)
+		if config.author_fk is not None
+		else None
+	)
+	parents = await load_parent_resource_refs(resource_type, resource_id, session)
+	# one round trip for the whole parent set, before any of their rows are read
+	await _record_versions(
+		[(parent.parent_type, parent.parent_id) for parent in parents],
+		consulted_refs,
+	)
+	for parent in parents:
+		if not parent.transitive and non_transitive_used:
+			continue
+		for grant in parent.inherited_levels.get(required_level, ()):
+			parent_user_ids = await _resolve_accessible_user_ids(
+				parent.parent_type,
+				parent.parent_id,
+				session,
+				grant.parent_level,
+				resolved_user_ids,
+				resolving_access,
+				include_operators,
+				non_transitive_used or not parent.transitive,
+				consulted_refs,
+				traversal_depth + 1,
+				cycle_truncated,
+			)
+			if grant.requires_author:
+				if author_id is not None and author_id in parent_user_ids:
+					user_ids.add(author_id)
+			else:
+				user_ids.update(parent_user_ids)
+	resolving_access.remove(access_key)
+	if access_key in cycle_truncated:
+		cycle_truncated.discard(access_key)
+	else:
+		resolved_user_ids[access_key] = frozenset(user_ids)
 	return list(user_ids)
-
-
-def _role_grants_default(
-	role: Role,
-	resource_type: ResourceType,
-	required_level: AccessLevel,
-) -> bool:
-	level = role.get_default_permissions().resource_access.get(resource_type)
-	return level is not None and level_satisfies(level, required_level)

@@ -25,14 +25,13 @@ design rules:
 
 from __future__ import annotations
 
-import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from enum import StrEnum
+from types import MappingProxyType
+from typing import Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-
-logger = logging.getLogger(__name__)
+from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler
+from pydantic_core import core_schema
 
 
 class AccessLevel(StrEnum):
@@ -65,6 +64,8 @@ class ActionPermission(StrEnum):
 	USER_BLOCKS_MANAGE = "user.blocks:manage"
 
 	# settings
+	# currently unenforced: the public settings dump is anonymous (login /
+	# bootstrap need it) and the private dump is gated by settings:manage.
 	SETTINGS_READ = "settings:read"
 	SETTINGS_MANAGE = "settings:manage"
 
@@ -72,13 +73,17 @@ class ActionPermission(StrEnum):
 	EVENTS_READ = "events:read"
 	EVENTS_MANAGE = "events:manage"
 
-	# resource creation (for types governed by access rules)
+	# notifications
+	NOTIFICATIONS_MANAGE = "notifications:manage"
+
+	# resource creation (for types governed by access rules).
+	# a domain permission covers every resource type in that domain, so
+	# reminders also covers reminder lists and calendar also covers events.
 	THREADS_CREATE = "threads:create"
 	PROJECTS_CREATE = "projects:create"
 	NOTES_CREATE = "notes:create"
 	GROUPS_CREATE = "groups:create"
 	REMINDERS_CREATE = "reminders:create"
-	# grants creation of calendars and calendar events.
 	CALENDAR_CREATE = "calendar:create"
 	MEMORIES_CREATE = "memories:create"
 	TASKS_CREATE = "tasks:create"
@@ -86,7 +91,16 @@ class ActionPermission(StrEnum):
 	FILES_CREATE = "files:create"
 
 	# resource admin-override (bypass access rules)
+	THREADS_MANAGE = "threads:manage"
+	PROJECTS_MANAGE = "projects:manage"
+	NOTES_MANAGE = "notes:manage"
+	GROUPS_MANAGE = "groups:manage"
+	REMINDERS_MANAGE = "reminders:manage"
+	CALENDAR_MANAGE = "calendar:manage"
+	FILES_MANAGE = "files:manage"
 	AGENTS_MANAGE = "agents:manage"
+	TASKS_MANAGE = "tasks:manage"
+	MEMORIES_MANAGE = "memories:manage"
 
 	# admin-managed resources (no access rules, manage includes create)
 	PLUGINS_READ = "plugins:read"
@@ -111,6 +125,7 @@ class ResourceType(StrEnum):
 	"""supported resource types for access control."""
 
 	THREAD = "thread"
+	MESSAGE = "message"
 	PROJECT = "project"
 	AGENT = "agent"
 	NOTE = "note"
@@ -118,10 +133,71 @@ class ResourceType(StrEnum):
 	TASK = "task"
 	FILE = "file"
 	CALENDAR = "calendar"
+	CALENDAR_EVENT = "calendar_event"
 	PLUGIN = "plugin"
 	PROMPT = "prompt"
 	GROUP = "group"
+	REMINDER = "reminder"
 	REMINDER_LIST = "reminder_list"
+
+
+type AttachableResourceType = Literal[
+	ResourceType.FILE,
+	ResourceType.NOTE,
+	ResourceType.THREAD,
+	ResourceType.PROJECT,
+	ResourceType.REMINDER,
+	ResourceType.REMINDER_LIST,
+	ResourceType.CALENDAR_EVENT,
+	ResourceType.CALENDAR,
+]
+
+
+ATTACHABLE_RESOURCE_TYPES: frozenset[ResourceType] = frozenset(
+	get_args(AttachableResourceType.__value__)
+)
+"""resource types that can be attached to messages."""
+
+
+class MentionableSubjectType(StrEnum):
+	"""kinds of subject a message can address.
+
+	not a ``ResourceType`` subset: a user is a principal rather than an owned
+	resource, so mentionable subjects are their own closed set.
+	"""
+
+	AGENT = "agent"
+	USER = "user"
+	GROUP = "group"
+
+
+RESOURCE_MANAGE_PERMISSION: Mapping[ResourceType, ActionPermission] = MappingProxyType(
+	{
+		ResourceType.THREAD: ActionPermission.THREADS_MANAGE,
+		ResourceType.MESSAGE: ActionPermission.THREADS_MANAGE,
+		ResourceType.PROJECT: ActionPermission.PROJECTS_MANAGE,
+		ResourceType.NOTE: ActionPermission.NOTES_MANAGE,
+		ResourceType.GROUP: ActionPermission.GROUPS_MANAGE,
+		ResourceType.REMINDER_LIST: ActionPermission.REMINDERS_MANAGE,
+		ResourceType.REMINDER: ActionPermission.REMINDERS_MANAGE,
+		ResourceType.CALENDAR: ActionPermission.CALENDAR_MANAGE,
+		ResourceType.CALENDAR_EVENT: ActionPermission.CALENDAR_MANAGE,
+		ResourceType.FILE: ActionPermission.FILES_MANAGE,
+		ResourceType.AGENT: ActionPermission.AGENTS_MANAGE,
+		ResourceType.TASK: ActionPermission.TASKS_MANAGE,
+		ResourceType.PLUGIN: ActionPermission.PLUGINS_MANAGE,
+		ResourceType.PROMPT: ActionPermission.PROMPTS_MANAGE,
+		ResourceType.MEMORY: ActionPermission.MEMORIES_MANAGE,
+	}
+)
+"""the operator permission for each resource type.
+
+leaf types resolve to their parent domain's permission, so an operator of a
+domain is an operator of everything in it.
+"""
+
+if set(RESOURCE_MANAGE_PERMISSION) != set(ResourceType):
+	raise RuntimeError("RESOURCE_MANAGE_PERMISSION must cover every resource type")
 
 
 # access-level rank helper
@@ -151,6 +227,25 @@ def highest_access(levels: Iterable[AccessLevel | None]) -> AccessLevel | None:
 	for level in levels:
 		result = higher_access(result, level)
 	return result
+
+
+def lowest_access(levels: Iterable[AccessLevel]) -> AccessLevel | None:
+	"""return the lowest access level in an iterable, or None if empty."""
+	result: AccessLevel | None = None
+	for level in levels:
+		if result is None or _LEVEL_RANK[level] < _LEVEL_RANK[result]:
+			result = level
+	return result
+
+
+def level_satisfies(granted: AccessLevel, required: AccessLevel) -> bool:
+	"""check whether one access level satisfies another."""
+	return _LEVEL_RANK[granted] >= _LEVEL_RANK[required]
+
+
+def access_level_index(level: AccessLevel) -> int:
+	"""return the canonical index of an access level."""
+	return _LEVEL_RANK[level]
 
 
 # default resource access - typed model, one field per resource type
@@ -212,23 +307,92 @@ class DefaultResourceAccess(BaseModel):
 		)
 
 
-def strip_unknown_action_permissions(v: object) -> object:
-	"""silently discard permission values that no longer exist.
+ALL_PERMISSIONS_WILDCARD = "*"
+"""grants every action permission."""
 
-	use as the body of a pydantic ``field_validator(mode="before")``
-	on any field typed as ``set[ActionPermission]`` or
-	``list[ActionPermission]``.
+DOMAIN_WILDCARD_SUFFIX = ":*"
+"""suffix marking a `<domain>:*` grant."""
 
-	this prevents deserialization failures when stored data contains
-	permissions that were renamed or removed.
+ACTION_PERMISSION_DOMAINS: frozenset[str] = frozenset(
+	permission.value.split(":", 1)[0] for permission in ActionPermission
+)
+"""every domain that a `<domain>:*` wildcard may name."""
+
+
+def permission_domain(permission: str) -> str:
+	"""return the domain half of a `{domain}:{action}` permission."""
+	return permission.split(":", 1)[0]
+
+
+def domain_wildcard(domain: str) -> str:
+	"""return the wildcard grant covering one domain."""
+	return f"{domain}{DOMAIN_WILDCARD_SUFFIX}"
+
+
+def wildcards_granting(permission: str) -> tuple[str, str]:
+	"""return every wildcard grant that satisfies one permission.
+
+	the ONE place that says which wildcards imply a permission. both the python
+	resolver and the SQL operator arms match against exactly these, so the two
+	engines cannot drift on wildcard semantics.
 	"""
-	if isinstance(v, (list, set, frozenset)):
-		known = {p.value for p in ActionPermission}
-		dropped = {x for x in v if isinstance(x, str) and x not in known}
-		if dropped:
-			logger.debug("ignoring unknown action permissions: %s", dropped)
-		return {x for x in v if isinstance(x, str) and x in known}
-	return v
+	return (
+		ALL_PERMISSIONS_WILDCARD,
+		domain_wildcard(permission_domain(permission)),
+	)
+
+
+def permission_satisfied_by(permission: str, granted: Iterable[str]) -> bool:
+	"""whether a set of grants confers one permission, wildcards included."""
+	grants = set(granted)
+	if permission in grants:
+		return True
+	return any(wildcard in grants for wildcard in wildcards_granting(permission))
+
+
+class PermissionWildcard(str):
+	"""`*` or `<domain>:*` - the only non-enum action-permission grants.
+
+	a real type, not an alias: constructing one validates, so a wildcard that
+	reaches a principal or the settings store has been checked exactly once, by
+	the same code pydantic runs. `wildcards_granting` produces exactly these
+	two shapes, so any other string would be a silently dead grant.
+	"""
+
+	__slots__ = ()
+
+	def __new__(cls, value: str) -> PermissionWildcard:
+		if value != ALL_PERMISSIONS_WILDCARD:
+			if not value.endswith(DOMAIN_WILDCARD_SUFFIX):
+				raise ValueError(f"not an action permission or wildcard: {value!r}")
+			domain = value[: -len(DOMAIN_WILDCARD_SUFFIX)]
+			if domain not in ACTION_PERMISSION_DOMAINS:
+				raise ValueError(f"unknown action permission domain: {domain!r}")
+		return super().__new__(cls, value)
+
+	@classmethod
+	def __get_pydantic_core_schema__(
+		cls,
+		source_type: object,
+		handler: GetCoreSchemaHandler,
+	) -> core_schema.CoreSchema:
+		_ = source_type, handler
+		return core_schema.no_info_after_validator_function(
+			cls,
+			core_schema.str_schema(),
+		)
+
+
+type PermissionGrant = ActionPermission | PermissionWildcard
+"""one stored action-permission grant: a known permission or a wildcard."""
+
+
+def permission_grant(value: str) -> PermissionGrant:
+	"""parse one stored grant, raising for a name that is neither."""
+	try:
+		return ActionPermission(value)
+	except ValueError:
+		return PermissionWildcard(value)
 
 
 class DefaultPermissions(BaseModel):
@@ -239,16 +403,15 @@ class DefaultPermissions(BaseModel):
 	resource_access: per-resource-type access level defaults.
 	action_permissions: set of action permissions granted by
 		default.
+
+	an unknown permission name is an error, not something to drop: renaming or
+	removing a permission ships with a data migration that rewrites the stored
+	values, so stale names never reach this model.
 	"""
 
 	resource_access: DefaultResourceAccess = Field(
 		default_factory=DefaultResourceAccess,
 	)
-	action_permissions: set[ActionPermission] = Field(
+	action_permissions: set[PermissionGrant] = Field(
 		default_factory=set,
 	)
-
-	@field_validator("action_permissions", mode="before")
-	@classmethod
-	def _strip_unknown(cls, v: object) -> object:
-		return strip_unknown_action_permissions(v)
