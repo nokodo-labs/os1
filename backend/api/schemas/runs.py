@@ -1,17 +1,26 @@
 """run (chat model execution) schemas."""
 
-from __future__ import annotations
-
 from datetime import datetime
-from typing import Literal
+from enum import StrEnum
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import Field, model_validator
 
-from api.schemas.message import Message, ResourceAttachment
+from api.models.message import MessageType
+from api.schemas.common import ForbidExtraModel, ORMModel
+from api.schemas.message import MessageCreate, MessageSplice
 from nokodo_ai.utils.typeid import TypeID
 
 
-class ClientContext(BaseModel):
+class RunState(StrEnum):
+	"""lifecycle states for an agent run."""
+
+	RUNNING = "running"
+	COMPLETED = "completed"
+	ERROR = "error"
+
+
+class ClientContext(ForbidExtraModel):
 	"""optional runtime context sent by the client with each agent run.
 
 	the frontend collects device and environment data that the agent
@@ -163,22 +172,6 @@ class ClientContext(BaseModel):
 	)
 
 
-class RunInput(BaseModel):
-	"""structured input for an agent run.
-
-	supports plain text, resource attachments, or both.
-	"""
-
-	text: str | None = Field(
-		default=None,
-		description="user message text content",
-	)
-	attachments: list[ResourceAttachment] = Field(
-		default_factory=list,
-		description="resource references to attach to the message.",
-	)
-
-
 # allowed tool_choice values - only specific tools can be forced by the client
 ToolChoice = Literal["agentic_web_search", "think", "generate_image"]
 
@@ -186,13 +179,13 @@ ToolChoice = Literal["agentic_web_search", "think", "generate_image"]
 # base run fields shared across request types
 
 
-class _RunBase(BaseModel):
+class _RunBase(ForbidExtraModel):
 	"""fields common to every run request."""
 
 	agent_id: TypeID
-	input: RunInput | None = Field(
+	input: MessageCreate | None = Field(
 		default=None,
-		description="structured user input with text and/or attachment IDs. "
+		description="the message this run answers, written before it starts. "
 		"omit for regeneration/retry on an existing thread.",
 	)
 	tool_choice: ToolChoice | None = Field(
@@ -204,19 +197,28 @@ class _RunBase(BaseModel):
 		default_factory=list,
 		description="extra tool plugin ids to include for this run only.",
 	)
-	stream: bool = Field(
-		default=True,
-		description="when true (default) the response is an SSE stream; "
-		"when false a JSON response is returned (not yet implemented).",
-	)
 	client_context: ClientContext | None = Field(
 		default=None,
 		alias="clientContext",
 		description="optional device/environment context from the client",
 	)
+	stream: bool = Field(
+		default=True,
+		description="when true (default) the response is an SSE stream; "
+		"when false a JSON response is returned (not yet implemented).",
+	)
 
-
-# run request variants
+	@model_validator(mode="after")
+	def validate_run_input(self) -> _RunBase:
+		if self.input is None:
+			return self
+		if self.input.type != MessageType.USER:
+			raise ValueError("run input must be a user message")
+		if self.input.splice is not None:
+			raise ValueError("run input placement belongs in run.splice")
+		if not self.input.content and not self.input.attachments:
+			raise ValueError("run input requires content or attachments")
+		return self
 
 
 class RunRequest(_RunBase):
@@ -233,7 +235,12 @@ class RunRequest(_RunBase):
 	"""
 
 	thread_id: TypeID | None = None
-	parent_id: TypeID | None = None
+	splice: MessageSplice | None = None
+	invoking_message_id: TypeID | None = Field(
+		default=None,
+		description="persisted message whose mention starts this run. the run "
+		"answers that message, so ``input`` must be omitted.",
+	)
 	persist: bool = True
 
 
@@ -258,43 +265,27 @@ class ThreadCreateAndRunRequest(_RunBase):
 # response schemas
 
 
-class ThreadRunResponse(BaseModel):
-	"""response containing all messages produced by a run.
-
-	an agent run can produce multiple messages:
-	- assistant message with tool calls
-	- tool result messages
-	- more assistant messages
-	- … repeat until final assistant message
-
-	the messages list contains all new messages produced during the run.
-	"""
-
-	thread_id: TypeID
-	user_message: Message | None = None
-	messages: list[Message]
-
-
-class ActiveRunOut(BaseModel):
+class ActiveRunOut(ORMModel):
 	"""lightweight snapshot of an in-memory active run."""
 
 	run_id: TypeID
 	thread_id: TypeID | None = None
 	agent_id: TypeID
 	user_id: TypeID
-	state: Literal["running", "completed", "error"]
+	state: RunState
 	started_at: datetime
 	updated_at: datetime
 
 
-class SteerRunRequest(BaseModel):
-	"""inject a user message into a running agent loop.
+class SteerTextRequest(ForbidExtraModel):
+	"""steer a run with a new message.
 
-	the message is persisted immediately and queued for delivery at the
-	next iteration boundary of the SDK loop.
+	the message does not exist yet: it is persisted immediately and queued for
+	delivery at the next iteration boundary of the SDK loop.
 	"""
 
-	input: RunInput
+	form: Literal["text"] = "text"
+	input: MessageCreate
 	parent_id: TypeID | None = Field(
 		default=None,
 		description="parent message id for the persisted user message. "
@@ -307,8 +298,35 @@ class SteerRunRequest(BaseModel):
 		description="client-generated id used to reconcile optimistic queued messages.",
 	)
 
+	@model_validator(mode="after")
+	def validate_input(self) -> SteerTextRequest:
+		if self.input.type != MessageType.USER:
+			raise ValueError("steering input must be a user message")
+		if self.input.splice is not None:
+			raise ValueError("steering input placement belongs in parent_id")
+		return self
 
-class SteerRunResponse(BaseModel):
+
+class SteerInvocationRequest(ForbidExtraModel):
+	"""steer a run with a message that already exists.
+
+	the run receives the conversation it has not read yet, up to and including
+	that message. nothing is written.
+	"""
+
+	form: Literal["invocation"]
+	invoking_message_id: TypeID = Field(
+		description="persisted message addressed to this run's agent.",
+	)
+
+
+SteerRunRequest = Annotated[
+	SteerTextRequest | SteerInvocationRequest,
+	Field(discriminator="form"),
+]
+
+
+class SteerRunResponse(ORMModel):
 	"""response from a successful steering enqueue."""
 
 	message_id: TypeID
