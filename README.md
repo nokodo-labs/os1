@@ -155,7 +155,7 @@ contributions are welcome! see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
 ## 📄 license
 
 OS1 is open-source under a permissive attribution license built on AGPL-3.0 with
-additional permissions that allow commercial and closed-source use. See
+additional permissions that allow commercial and closed-source use. see
 [LICENSE](LICENSE) for details.
 
 ---
