@@ -1,17 +1,19 @@
 """Service helpers for providers."""
 
-from __future__ import annotations
-
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.provider import Provider
+from api.permissions import ActionPermission
 from api.schemas.provider import ProviderCreate, ProviderUpdate
 from api.settings import settings
-from api.v1.service.auth import Principal
-from api.v1.service.authorization import require_permission
+from api.v1.service.authentication import Principal
+from api.v1.service.authorization import (
+	apply_metadata_write,
+	require_permission,
+)
 from nokodo_ai.utils.security import decrypt_string_with_fallback, encrypt_string
 
 
@@ -20,7 +22,6 @@ async def _get_provider(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Provider:
-	require_permission(principal, "providers:manage")
 	provider = await session.get(Provider, provider_id)
 	if not provider:
 		raise HTTPException(
@@ -35,8 +36,11 @@ async def create_provider(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Provider:
-	require_permission(principal, "providers:manage")
-	data = provider_in.model_dump(by_alias=True, exclude={"api_key"})
+	require_permission(principal, ActionPermission.PROVIDERS_MANAGE)
+	data = provider_in.model_dump(
+		by_alias=True,
+		exclude={"api_key"},
+	)
 	if provider_in.api_key:
 		data["encrypted_api_key"] = encrypt_string(
 			provider_in.api_key,
@@ -48,6 +52,7 @@ async def create_provider(
 	try:
 		await session.commit()
 	except IntegrityError as exc:
+		# rollback-and-raise: close-time discard drops the uncommitted actions.
 		await session.rollback()
 		msg = str(exc.orig).lower()
 		if "name" in msg and "unique" in msg:
@@ -64,7 +69,7 @@ async def list_providers(
 	session: AsyncSession,
 	principal: Principal,
 ) -> list[Provider]:
-	require_permission(principal, "providers:manage")
+	require_permission(principal, ActionPermission.PROVIDERS_READ)
 	result = await session.execute(select(Provider).order_by(Provider.name))
 	return list(result.scalars().all())
 
@@ -74,6 +79,7 @@ async def get_provider(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Provider:
+	require_permission(principal, ActionPermission.PROVIDERS_READ)
 	return await _get_provider(provider_id, session, principal)
 
 
@@ -83,9 +89,10 @@ async def update_provider(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Provider:
+	require_permission(principal, ActionPermission.PROVIDERS_MANAGE)
 	provider = await _get_provider(provider_id, session, principal)
 	updates = provider_in.model_dump(
-		exclude_unset=True, by_alias=True, exclude={"api_key"}
+		exclude_unset=True, exclude={"api_key", "metadata"}
 	)
 
 	if "api_key" in provider_in.model_fields_set:
@@ -113,11 +120,13 @@ async def update_provider(
 
 	for field, value in updates.items():
 		setattr(provider, field, value)
+	apply_metadata_write(provider, provider_in.metadata)
 
 	session.add(provider)
 	try:
 		await session.commit()
 	except IntegrityError as exc:
+		# rollback-and-raise: close-time discard drops the uncommitted actions.
 		await session.rollback()
 		msg = str(exc.orig).lower()
 		if "name" in msg and "unique" in msg:

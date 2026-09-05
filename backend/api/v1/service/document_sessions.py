@@ -17,8 +17,6 @@ this module mirrors the user_activity store pattern for easy swap to Redis:
 the public API should stay identical after the swap.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from dataclasses import dataclass, field

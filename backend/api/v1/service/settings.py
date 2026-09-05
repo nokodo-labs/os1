@@ -1,22 +1,30 @@
 """settings service."""
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.database.post_commit import run_post_commit_actions_safely
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.setting import SettingsDocument
-from api.permissions import DEFAULT_ACCESS_RESOURCE_TYPES
-from api.settings import Settings, check_writable
+from api.permissions import ResourceType
+from api.redis import publish_invalidation
+from api.runtime import SETTINGS_INVALIDATION_SIGNAL, apply_settings_change
+from api.settings import Settings, check_writable, settings
 from api.v1.schemas.settings import SettingsPatch, SettingsVersions
-from api.v1.service import events as event_service
-from api.v1.service.authorization import invalidate_accessible_users_for_resource_types
+from api.v1.service.authorization import (
+	changed_default_access_resource_types,
+	invalidate_accessible_users_for_resource_types,
+)
+from api.v1.service.events import (
+	persist_and_fanout_event,
+)
+from api.v1.service.threads import purge_thread_content_vectors
 from nokodo_ai.utils.dicts import deep_merge
+from nokodo_ai.utils.typeid import TypeID
 
 
 class VersionConflictError(Exception):
@@ -40,26 +48,42 @@ async def get_versions(db: AsyncSession) -> SettingsVersions:
 	return SettingsVersions.model_validate(values)
 
 
-def _updates_default_resource_access(updates: Mapping[str, object]) -> bool:
-	default_permissions = updates.get("default_permissions")
-	return (
-		isinstance(default_permissions, Mapping)
-		and "resource_access" in default_permissions
-	)
-
-
 async def update(
 	db: AsyncSession,
 	patch: SettingsPatch,
 	expected_versions: SettingsVersions | None = None,
-	changed_by_id: str | None = None,
+	changed_by_id: TypeID | None = None,
 	origin_session_id: str | None = None,
 ) -> SettingsVersions:
-	"""apply patch to db overrides, return new versions."""
+	"""apply patch to db overrides, return new versions.
+
+	commits, reloads the settings snapshot in this process, signals every other
+	process to do the same, then drops derived state belonging to features the
+	patch turned off.
+	"""
 	# exclude_unset=True: only include fields present in the request body.
 	# this lets callers explicitly send null to clear a nullable field,
 	# while omitted fields stay default (None) and are excluded.
 	raw_updates = patch.model_dump(exclude_unset=True)
+	affected_access_types: list[ResourceType] = []
+	patched_default_permissions = settings.default_permissions
+	default_permissions_update = raw_updates.get("default_permissions")
+	if isinstance(default_permissions_update, Mapping):
+		patched_default_permissions = type(settings.default_permissions).model_validate(
+			deep_merge(
+				settings.default_permissions.model_dump(mode="json"),
+				default_permissions_update,
+			)
+		)
+		affected_access_types = changed_default_access_resource_types(
+			settings.default_permissions.resource_access,
+			patched_default_permissions.resource_access,
+		)
+		if (
+			settings.default_permissions.action_permissions
+			!= patched_default_permissions.action_permissions
+		):
+			affected_access_types = list(ResourceType)
 	updates: dict[str, dict[str, object]] = {}
 	for section, fields in raw_updates.items():
 		if not isinstance(section, str) or not isinstance(fields, dict) or not fields:
@@ -111,7 +135,6 @@ async def update(
 			new_versions[section] = doc.version if doc else 0
 
 	versions_out = SettingsVersions.model_validate(new_versions)
-
 	event = Event(
 		scope=EventScope.SYSTEM,
 		type=EventType.SETTINGS_UPDATED,
@@ -121,13 +144,33 @@ async def update(
 			"updated_by_id": changed_by_id,
 		},
 	)
-	await event_service.persist_and_fanout_event(
-		db, event=event, origin_session_id=origin_session_id
-	)
-	if _updates_default_resource_access(updates):
-		# default recipients changed.
-		await invalidate_accessible_users_for_resource_types(
-			list(DEFAULT_ACCESS_RESOURCE_TYPES), db
+	await persist_and_fanout_event(db, event=event, origin_session_id=origin_session_id)
+	if affected_access_types:
+		await invalidate_accessible_users_for_resource_types(affected_access_types)
+		await persist_and_fanout_event(
+			db,
+			Event(
+				scope=EventScope.SYSTEM,
+				type=EventType.ACCESS_DEFAULTS_CHANGED,
+				data={
+					"resource_types": [
+						resource_type.value for resource_type in affected_access_types
+					]
+				},
+				user_id=changed_by_id,
+			),
+			origin_session_id=origin_session_id,
 		)
+
+	await db.commit()
+	await run_post_commit_actions_safely(db)
+	# apply locally, then signal every other process to do the same
+	await apply_settings_change()
+	await publish_invalidation(SETTINGS_INVALIDATION_SIGNAL)
+
+	if not settings.assets.thread_passages.enabled:
+		# no stale rows, vectors, or reconcile stamps may survive the toggle.
+		await purge_thread_content_vectors(db)
+		await db.commit()
 
 	return versions_out

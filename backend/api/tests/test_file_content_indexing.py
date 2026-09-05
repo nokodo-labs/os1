@@ -14,22 +14,27 @@ from api.models.file import File, FileSource, FileStatus
 from api.settings import settings
 from api.storage.base import FileInfo, MimeType, StorageBackend
 from api.v1.service.chat.models import TaskChatModel
-from api.v1.service.files import content_vectorization as content_vectorization_service
+from api.v1.service.files import description as description_service
 from api.v1.service.files import processing as processing_service
-from api.v1.service.files.content_vectorization import (
+from api.v1.service.files.description import _content_excerpt, _truncate_description
+from api.v1.service.files.metadata import FILE_CONTENT_RESOURCE_TYPE, FILE_RESOURCE_TYPE
+from api.v1.service.files.search import _file_id_for_hit
+from api.v1.service.files.text_contents import extraction as extraction_service
+from api.v1.service.files.text_contents import vectors as vectors_service
+from api.v1.service.files.text_contents.extraction import (
 	FileContentChunkBatch,
 	chunk_loaded_text,
 	load_file_content_chunks,
 	load_sdk_file_text,
+	should_try_model_text,
+)
+from api.v1.service.files.text_contents.vectors import (
+	_build_file_content_chunk,
 	vectorize_file_content,
 )
-from api.v1.service.files.description import _content_excerpt, _truncate_description
-from api.v1.service.files.metadata import FILE_CONTENT_RESOURCE_TYPE, FILE_RESOURCE_TYPE
-from api.v1.service.files.modalities import should_try_model_text
-from api.v1.service.files.search import _file_id_for_hit
-from api.v1.service.files.vectorization import FILE_SPEC, _build_file_content_chunk
+from api.v1.service.files.vectorization import FILE_SPEC
 from api.v1.service.search.grouping import ResourceHitGroup, group_resource_hits
-from api.v1.service.vectorize import build_chunk
+from api.v1.service.vectorize import CONFIG_FP_KEY, PIPELINE_VERSION_KEY, build_chunk
 from nokodo_ai.adapters.base.chat import BaseChatAdapter, ChatGenerationParams
 from nokodo_ai.adapters.base.vectorstores import Chunk as VectorChunk
 from nokodo_ai.adapters.base.vectorstores import ChunkSearchResult
@@ -42,10 +47,30 @@ from nokodo_ai.messages import (
 	FileContent,
 	ImageContent,
 	Message,
+	SystemMessage,
 	UserMessage,
 )
 from nokodo_ai.tool import ToolDefinition
-from nokodo_ai.utils.typeid import TypeID, new_typeid
+from nokodo_ai.utils.typeid import new_typeid
+
+
+@pytest.fixture(autouse=True)
+def _stub_embedding_capacity(monkeypatch: pytest.MonkeyPatch) -> None:
+	"""pin chunk-size clamping to a fixed capacity; no embedding model here."""
+
+	async def _capacity(session: object = None) -> int:
+		return 8192
+
+	monkeypatch.setattr(extraction_service, "embedding_token_capacity", _capacity)
+
+	async def _collection(session: object = None) -> str:
+		return "test_collection"
+
+	monkeypatch.setattr(
+		vectors_service,
+		"get_collection",
+		_collection,
+	)
 
 
 class _ExtractionChatAdapter(BaseChatAdapter):
@@ -236,7 +261,7 @@ def _file_record(
 	return File(
 		id=new_typeid("file"),
 		owner_id=new_typeid("user"),
-		source=FileSource.UPLOAD,
+		source=FileSource.USER_UPLOADED,
 		storage_backend="memory",
 		storage_key=f"tests/{filename}",
 		filename=filename,
@@ -253,6 +278,32 @@ def _user_message(adapter: _ExtractionChatAdapter) -> UserMessage:
 	message = adapter.messages[1]
 	assert isinstance(message, UserMessage)
 	return message
+
+
+@pytest.mark.asyncio
+async def test_file_description_uses_custom_prompt(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	file = _file_record("notes.txt", "text/plain", b"release notes")
+	task_chat_model, adapter = _task_chat_model("concise release notes")
+	chat_model = task_chat_model.chat_model
+
+	async def _resolve_model(*args: object, **kwargs: object) -> ChatModel:
+		return chat_model
+
+	monkeypatch.setattr(description_service, "resolve_task_chat_model", _resolve_model)
+	monkeypatch.setattr(
+		settings.ai.tasks, "asset_description_prompt", "custom description prompt"
+	)
+	description = await description_service.build_file_description(
+		file,
+		[ContentChunk(index=0, total=1, text="release notes")],
+	)
+
+	assert description == "concise release notes"
+	system_message = adapter.messages[0]
+	assert isinstance(system_message, SystemMessage)
+	assert system_message.text == "custom description prompt"
 
 
 async def test_content_chunks_are_indexed_with_total(monkeypatch) -> None:
@@ -292,7 +343,7 @@ def test_file_vector_metadata_uses_file_resource_identity() -> None:
 	file = File(
 		id=file_id,
 		owner_id=owner_id,
-		source=FileSource.UPLOAD,
+		source=FileSource.USER_UPLOADED,
 		storage_backend="local",
 		storage_key="file-key",
 		filename="report.txt",
@@ -322,7 +373,7 @@ def test_file_content_chunk_metadata_uses_parent_resource_identity() -> None:
 	file = File(
 		id=file_id,
 		owner_id=owner_id,
-		source=FileSource.UPLOAD,
+		source=FileSource.USER_UPLOADED,
 		storage_backend="local",
 		storage_key="file-key",
 		filename="report.txt",
@@ -350,6 +401,7 @@ def test_file_content_chunk_metadata_uses_parent_resource_identity() -> None:
 	assert chunk.metadata["owner_id"] == str(owner_id)
 	assert chunk.metadata["chunk_index"] == 2
 	assert chunk.metadata["chunk_count"] == 7
+	assert chunk.id == f"{file_id}:content:2"
 	assert chunk.metadata["line_start"] == 10
 	assert chunk.metadata["line_end"] == 20
 	assert "filename" not in chunk.metadata
@@ -559,12 +611,12 @@ async def test_load_file_content_chunks_reads_storage_extracts_and_chunks_media(
 		return chat_model
 
 	monkeypatch.setattr(
-		content_vectorization_service,
+		extraction_service,
 		"get_storage_backend",
 		lambda storage_backend: backend,
 	)
 	monkeypatch.setattr(
-		content_vectorization_service,
+		extraction_service,
 		"resolve_content_loader_chat_model",
 		resolve_chat_model,
 	)
@@ -595,12 +647,12 @@ async def test_load_file_content_chunks_can_disable_byte_cap(monkeypatch) -> Non
 		return chat_model
 
 	monkeypatch.setattr(
-		content_vectorization_service,
+		extraction_service,
 		"get_storage_backend",
 		lambda storage_backend: backend,
 	)
 	monkeypatch.setattr(
-		content_vectorization_service,
+		extraction_service,
 		"resolve_content_loader_chat_model",
 		resolve_chat_model,
 	)
@@ -635,24 +687,25 @@ async def test_vectorize_file_content_upserts_content_chunks(monkeypatch) -> Non
 		),
 	]
 	upserted_chunks: list[VectorChunk] = []
-	removed: list[tuple[str, bool, bool]] = []
+	deleted: list[object] = []
 
-	async def remove_vectors(
-		file_id: str,
+	async def delete_vectors(
+		target: object,
 		session: AsyncSession,
-		include_file_vector: bool = True,
-		include_content_vectors: bool = True,
 	) -> None:
 		_ = session
-		removed.append((file_id, include_file_vector, include_content_vectors))
+		deleted.append(target)
 
 	async def fetch_acl(
-		resource_id: str,
+		resource_ids: list[str],
 		resource_type: object,
 		session: AsyncSession,
-	) -> dict[str, object]:
+	) -> dict[str, dict[str, object]]:
 		_ = resource_type, session
-		return {"acl_resource_id": resource_id}
+		return {
+			resource_id: {"acl_resource_id": resource_id}
+			for resource_id in resource_ids
+		}
 
 	async def embed(
 		texts: list[str],
@@ -671,18 +724,18 @@ async def test_vectorize_file_content_upserts_content_chunks(monkeypatch) -> Non
 		upserted_chunks.extend(chunks)
 
 	monkeypatch.setattr(
-		content_vectorization_service,
-		"remove_file_vectors",
-		remove_vectors,
+		vectors_service,
+		"delete",
+		delete_vectors,
 	)
 	monkeypatch.setattr(
-		content_vectorization_service,
-		"fetch_acl_metadata",
+		vectors_service,
+		"fetch_bulk_acl_metadata",
 		fetch_acl,
 	)
-	monkeypatch.setattr(content_vectorization_service, "embed_texts", embed)
+	monkeypatch.setattr(vectors_service, "embed_texts", embed)
 	monkeypatch.setattr(
-		content_vectorization_service.vectorstore_service,
+		vectors_service,
 		"upsert_chunks",
 		upsert_chunks,
 	)
@@ -692,7 +745,7 @@ async def test_vectorize_file_content_upserts_content_chunks(monkeypatch) -> Non
 
 	assert batch.chunks == content_chunks
 	assert batch.text_loadable
-	assert removed == [(str(file.id), False, True)]
+	assert len(deleted) == 1
 	assert len(upserted_chunks) == 2
 	assert upserted_chunks[0].content.startswith("report.txt")
 	assert "quarterly revenue report" in upserted_chunks[0].content
@@ -724,7 +777,7 @@ async def test_vectorize_file_content_upserts_content_chunks(monkeypatch) -> Non
 	assert isinstance(metadata["vec_fingerprint"], str)
 	assert metadata["vec_fingerprint"]
 	assert (
-		file.metadata_[content_vectorization_service.CONTENT_VECTOR_FINGERPRINT_KEY]
+		file.private_metadata[vectors_service.CONTENT_VECTOR_FINGERPRINT_KEY]
 		== metadata["vec_fingerprint"]
 	)
 
@@ -812,7 +865,7 @@ def _stub_no_loader_model(monkeypatch) -> None:
 		return None
 
 	monkeypatch.setattr(
-		content_vectorization_service,
+		vectors_service,
 		"resolve_content_loader_chat_model",
 		_resolve,
 	)
@@ -837,66 +890,51 @@ def _content_chunk(
 	)
 
 
-async def test_file_content_fingerprint_is_stable(monkeypatch) -> None:
-	_stub_no_loader_model(monkeypatch)
+def test_file_content_fingerprint_is_stable() -> None:
 	file = _content_file()
-	async with AsyncSession() as session:
-		first = await content_vectorization_service.file_content_fingerprint(
-			file, session
-		)
-		second = await content_vectorization_service.file_content_fingerprint(
-			file, session
-		)
-	assert first == second
+	assert vectors_service.file_content_fingerprint(
+		file
+	) == vectors_service.file_content_fingerprint(file)
 
 
-async def test_file_content_fingerprint_changes_with_checksum(monkeypatch) -> None:
-	_stub_no_loader_model(monkeypatch)
-	async with AsyncSession() as session:
-		base = await content_vectorization_service.file_content_fingerprint(
-			_content_file("sum-1"), session
-		)
-		other = await content_vectorization_service.file_content_fingerprint(
-			_content_file("sum-2"), session
-		)
+def test_file_content_fingerprint_changes_with_checksum() -> None:
+	base = vectors_service.file_content_fingerprint(_content_file("sum-1"))
+	other = vectors_service.file_content_fingerprint(_content_file("sum-2"))
 	assert base != other
 
 
-async def test_file_content_fingerprint_changes_with_settings(monkeypatch) -> None:
-	_stub_no_loader_model(monkeypatch)
+def test_file_content_fingerprint_ignores_settings(monkeypatch) -> None:
+	"""settings shape the config fingerprint, not the content fingerprint."""
 	file = _content_file()
+	base = vectors_service.file_content_fingerprint(file)
+	monkeypatch.setattr(settings.assets.content_vectorization, "target_tokens", 999)
+	assert vectors_service.file_content_fingerprint(file) == base
+
+
+async def test_file_content_config_fp_changes_with_settings(monkeypatch) -> None:
+	_stub_no_loader_model(monkeypatch)
 	async with AsyncSession() as session:
-		base = await content_vectorization_service.file_content_fingerprint(
-			file, session
-		)
+		base = await vectors_service.file_content_config_fp(session)
 		monkeypatch.setattr(settings.assets.content_vectorization, "target_tokens", 999)
-		after_tokens = await content_vectorization_service.file_content_fingerprint(
-			file, session
-		)
+		after_tokens = await vectors_service.file_content_config_fp(session)
 		monkeypatch.setattr(settings.assets.content_vectorization, "loader", "plain")
-		after_loader = await content_vectorization_service.file_content_fingerprint(
-			file, session
-		)
+		after_loader = await vectors_service.file_content_config_fp(session)
 	assert base != after_tokens
 	assert after_tokens != after_loader
 
 
-async def test_file_content_fingerprint_changes_with_model(monkeypatch) -> None:
-	file = _content_file()
-
+async def test_file_content_config_fp_changes_with_model(monkeypatch) -> None:
 	async def _no_model(session: AsyncSession) -> TaskChatModel | None:
 		_ = session
 		return None
 
 	monkeypatch.setattr(
-		content_vectorization_service,
+		vectors_service,
 		"resolve_content_loader_chat_model",
 		_no_model,
 	)
 	async with AsyncSession() as session:
-		without_model = await content_vectorization_service.file_content_fingerprint(
-			file, session
-		)
+		without_model = await vectors_service.file_content_config_fp(session)
 
 	model, _adapter = _task_chat_model("extracted")
 
@@ -905,14 +943,12 @@ async def test_file_content_fingerprint_changes_with_model(monkeypatch) -> None:
 		return model
 
 	monkeypatch.setattr(
-		content_vectorization_service,
+		vectors_service,
 		"resolve_content_loader_chat_model",
 		_with_model,
 	)
 	async with AsyncSession() as session:
-		with_model = await content_vectorization_service.file_content_fingerprint(
-			file, session
-		)
+		with_model = await vectors_service.file_content_config_fp(session)
 	assert without_model != with_model
 
 
@@ -925,19 +961,252 @@ async def test_filter_unvectorized_files_uses_recorded_fingerprint(monkeypatch) 
 		return []
 
 	monkeypatch.setattr(
-		content_vectorization_service.vectorstore_service,
+		vectors_service,
 		"scroll_chunks",
 		_empty_scroll,
 	)
 	async with AsyncSession() as session:
-		fingerprint = await content_vectorization_service.file_content_fingerprint(
-			file, session
+		fingerprint = vectors_service.file_content_fingerprint(file)
+		config_fp = await vectors_service.file_content_config_fp(session)
+		vectors_service._record_content_vector_state(
+			file, fingerprint, config_fp, "test_collection"
 		)
-		content_vectorization_service._record_content_fingerprint(file, fingerprint)
-		pending = await content_vectorization_service.filter_unvectorized_files(
-			[file], session
-		)
+		pending = await vectors_service.filter_unvectorized_files([file], session)
 	assert pending == []
+
+
+def _patch_vectorize_collaborators(
+	monkeypatch,
+	upserted: list[list[VectorChunk]],
+) -> None:
+	"""stub the load/embed/store collaborators of vectorize_file_content."""
+
+	async def _load_chunks(f: File, session: object = None) -> FileContentChunkBatch:
+		_ = session
+		return FileContentChunkBatch(
+			chunks=[ContentChunk(index=0, total=1, text="body text")],
+			text_loadable=True,
+			loader="plain",
+			chunker="recursive",
+			content="body text",
+		)
+
+	async def _noop(*args: object, **kwargs: object) -> None:
+		_ = (args, kwargs)
+
+	async def _acl(*args: object, **kwargs: object) -> dict[str, dict[str, list[str]]]:
+		_ = (args, kwargs)
+		resource_ids = args[0]
+		assert isinstance(resource_ids, list)
+		return {str(resource_id): {} for resource_id in resource_ids}
+
+	async def _embed(texts: list[str], *args: object, **kwargs: object):
+		_ = (args, kwargs)
+		return [[0.0, 0.0] for _ in texts]
+
+	async def _upsert(
+		chunks: list[VectorChunk], session: object = None, **kwargs: object
+	) -> None:
+		_ = (session, kwargs)
+		upserted.append(chunks)
+
+	monkeypatch.setattr(
+		vectors_service, "load_file_content_chunks_reusing_stored_text", _load_chunks
+	)
+	monkeypatch.setattr(vectors_service, "delete", _noop)
+	monkeypatch.setattr(vectors_service, "fetch_bulk_acl_metadata", _acl)
+	monkeypatch.setattr(vectors_service, "embed_texts", _embed)
+	monkeypatch.setattr(vectors_service, "upsert_chunks", _upsert)
+
+
+async def test_vectorize_file_content_skips_when_current(monkeypatch) -> None:
+	"""content-current stamps with triggers off short-circuit to a no-op."""
+	_stub_no_loader_model(monkeypatch)
+	file = _content_file()
+	async with AsyncSession() as session:
+		fingerprint = vectors_service.file_content_fingerprint(file)
+		config_fp = await vectors_service.file_content_config_fp(session)
+		vectors_service._record_content_vector_state(
+			file, fingerprint, config_fp, "test_collection"
+		)
+		batch = await vectors_service.vectorize_file_content(file, session)
+	assert batch.skipped_reason == "already_current"
+
+
+async def test_vectorize_file_content_rebuilds_when_provenance_stale(
+	monkeypatch,
+) -> None:
+	"""a content-current file rebuilds when the version trigger flags its stamp."""
+	_stub_no_loader_model(monkeypatch)
+	file = _content_file()
+	upserted: list[list[VectorChunk]] = []
+	_patch_vectorize_collaborators(monkeypatch, upserted)
+	monkeypatch.setattr(
+		settings.assets.revectorize.file_contents, "on_pipeline_version", True
+	)
+	async with AsyncSession() as session:
+		fingerprint = vectors_service.file_content_fingerprint(file)
+		config_fp = await vectors_service.file_content_config_fp(session)
+		vectors_service._record_content_vector_state(
+			file, fingerprint, config_fp, "test_collection"
+		)
+		file.set_metadata(
+			private={
+				**file.private_metadata,
+				vectors_service.CONTENT_VECTOR_PIPELINE_KEY: (
+					vectors_service.FILE_CONTENT_PIPELINE_VERSION - 1
+				),
+			}
+		)
+		batch = await vectors_service.vectorize_file_content(file, session)
+	assert batch.skipped_reason is None
+	assert len(upserted) == 1
+	# ALL provenance re-stamps on the row: rebuilds must converge.
+	metadata = file.private_metadata
+	assert (
+		metadata[vectors_service.CONTENT_VECTOR_PIPELINE_KEY]
+		== vectors_service.FILE_CONTENT_PIPELINE_VERSION
+	)
+	assert metadata[vectors_service.CONTENT_VECTOR_CONFIG_KEY] == config_fp
+	assert metadata[vectors_service.CONTENT_VECTOR_FINGERPRINT_KEY] == fingerprint
+	# and on the stored chunks themselves.
+	chunks = upserted[0]
+	assert isinstance(chunks, list) and chunks
+	chunk_meta = chunks[0].metadata
+	assert (
+		chunk_meta[PIPELINE_VERSION_KEY]
+		== vectors_service.FILE_CONTENT_PIPELINE_VERSION
+	)
+	assert chunk_meta[CONFIG_FP_KEY] == config_fp
+
+
+async def test_vectorize_file_content_rebuilds_on_content_change(
+	monkeypatch,
+) -> None:
+	"""a changed checksum rebuilds with every trigger knob off."""
+	_stub_no_loader_model(monkeypatch)
+	file = _content_file(checksum="sum-new")
+	upserted: list[list[VectorChunk]] = []
+	_patch_vectorize_collaborators(monkeypatch, upserted)
+	async with AsyncSession() as session:
+		config_fp = await vectors_service.file_content_config_fp(session)
+		stale_fp = vectors_service.file_content_fingerprint(
+			_content_file(checksum="sum-old")
+		)
+		vectors_service._record_content_vector_state(
+			file, stale_fp, config_fp, "test_collection"
+		)
+		batch = await vectors_service.vectorize_file_content(file, session)
+	assert batch.skipped_reason is None
+	assert len(upserted) == 1
+	assert file.private_metadata[
+		vectors_service.CONTENT_VECTOR_FINGERPRINT_KEY
+	] == vectors_service.file_content_fingerprint(file)
+
+
+async def test_vectorize_file_content_force_rebuilds_current(monkeypatch) -> None:
+	"""force=True rebuilds even fully current stamps with triggers off."""
+	_stub_no_loader_model(monkeypatch)
+	file = _content_file()
+	upserted: list[list[VectorChunk]] = []
+	_patch_vectorize_collaborators(monkeypatch, upserted)
+	async with AsyncSession() as session:
+		fingerprint = vectors_service.file_content_fingerprint(file)
+		config_fp = await vectors_service.file_content_config_fp(session)
+		vectors_service._record_content_vector_state(
+			file, fingerprint, config_fp, "test_collection"
+		)
+		batch = await vectors_service.vectorize_file_content(file, session, force=True)
+	assert batch.skipped_reason is None
+	assert len(upserted) == 1
+
+
+async def test_vectorize_file_content_rebuilds_on_collection_switch(
+	monkeypatch,
+) -> None:
+	_stub_no_loader_model(monkeypatch)
+	file = _content_file()
+	upserted: list[list[VectorChunk]] = []
+	_patch_vectorize_collaborators(monkeypatch, upserted)
+	async with AsyncSession() as session:
+		fingerprint = vectors_service.file_content_fingerprint(file)
+		config_fp = await vectors_service.file_content_config_fp(session)
+		vectors_service._record_content_vector_state(
+			file, fingerprint, config_fp, "previous_collection"
+		)
+		batch = await vectors_service.vectorize_file_content(file, session)
+	assert batch.skipped_reason is None
+	assert len(upserted) == 1
+	assert (
+		file.private_metadata[vectors_service.CONTENT_VECTOR_COLLECTION_KEY]
+		== "test_collection"
+	)
+
+
+async def test_vectorize_file_content_reuses_stored_text(monkeypatch) -> None:
+	_stub_no_loader_model(monkeypatch)
+	file = _content_file()
+	upserted: list[list[VectorChunk]] = []
+	_patch_vectorize_collaborators(monkeypatch, upserted)
+	loader_calls = 0
+
+	async def _stored_text(file: File, session: object) -> str:
+		return "persisted extracted body"
+
+	async def _loader(file: File, session: object = None) -> FileContentChunkBatch:
+		nonlocal loader_calls
+		loader_calls += 1
+		raise AssertionError("loader must not run when stored extracted text exists")
+
+	async def _chunk_stored(loaded: Text, session: object = None) -> list[ContentChunk]:
+		assert loaded.content == "persisted extracted body"
+		return [ContentChunk(index=0, total=1, text=loaded.content)]
+
+	monkeypatch.setattr(vectors_service, "read_extracted_text", _stored_text)
+	monkeypatch.setattr(vectors_service, "load_file_content_chunks", _loader)
+	monkeypatch.setattr(vectors_service, "chunk_loaded_text", _chunk_stored)
+	async with AsyncSession() as session:
+		await vectors_service.vectorize_file_content(file, session, force=True)
+	assert loader_calls == 0
+	assert len(upserted) == 1
+
+
+async def test_filter_unvectorized_files_provenance_triggers(monkeypatch) -> None:
+	"""provenance staleness is gated by the file_contents revectorize triggers."""
+	_stub_no_loader_model(monkeypatch)
+	file = _content_file()
+
+	async def _empty_scroll(*args: object, **kwargs: object) -> list[VectorChunk]:
+		return []
+
+	monkeypatch.setattr(
+		vectors_service,
+		"scroll_chunks",
+		_empty_scroll,
+	)
+	async with AsyncSession() as session:
+		fingerprint = vectors_service.file_content_fingerprint(file)
+		config_fp = await vectors_service.file_content_config_fp(session)
+		# content-current but stamped by an older pipeline version.
+		vectors_service._record_content_vector_state(
+			file, fingerprint, config_fp, "test_collection"
+		)
+		file.set_metadata(
+			private={
+				**file.private_metadata,
+				vectors_service.CONTENT_VECTOR_PIPELINE_KEY: (
+					vectors_service.FILE_CONTENT_PIPELINE_VERSION - 1
+				),
+			}
+		)
+		assert await vectors_service.filter_unvectorized_files([file], session) == []
+		monkeypatch.setattr(
+			settings.assets.revectorize.file_contents,
+			"on_pipeline_version",
+			True,
+		)
+		pending = await vectors_service.filter_unvectorized_files([file], session)
+	assert [str(f.id) for f in pending] == [str(file.id)]
 
 
 async def test_filter_unvectorized_files_falls_back_to_chunks(monkeypatch) -> None:
@@ -945,11 +1214,13 @@ async def test_filter_unvectorized_files_falls_back_to_chunks(monkeypatch) -> No
 	current = _content_file("sum-current")
 	stale = _content_file("sum-stale")
 	missing = _content_file("sum-missing")
+	for file in (current, stale, missing):
+		file.set_metadata(
+			private={vectors_service.CONTENT_VECTOR_COLLECTION_KEY: "test_collection"}
+		)
 
 	async with AsyncSession() as session:
-		current_fp = await content_vectorization_service.file_content_fingerprint(
-			current, session
-		)
+		current_fp = vectors_service.file_content_fingerprint(current)
 
 		stored = [
 			_content_chunk(str(current.id), current_fp, chunk_index=0, chunk_count=2),
@@ -961,11 +1232,11 @@ async def test_filter_unvectorized_files_falls_back_to_chunks(monkeypatch) -> No
 			return stored
 
 		monkeypatch.setattr(
-			content_vectorization_service.vectorstore_service,
+			vectors_service,
 			"scroll_chunks",
 			_scroll,
 		)
-		pending = await content_vectorization_service.filter_unvectorized_files(
+		pending = await vectors_service.filter_unvectorized_files(
 			[current, stale, missing], session
 		)
 	pending_ids = {str(file.id) for file in pending}
@@ -977,11 +1248,12 @@ async def test_filter_unvectorized_files_keeps_incomplete_chunk_set(
 ) -> None:
 	_stub_no_loader_model(monkeypatch)
 	file = _content_file()
+	file.set_metadata(
+		private={vectors_service.CONTENT_VECTOR_COLLECTION_KEY: "test_collection"}
+	)
 
 	async with AsyncSession() as session:
-		fingerprint = await content_vectorization_service.file_content_fingerprint(
-			file, session
-		)
+		fingerprint = vectors_service.file_content_fingerprint(file)
 
 		# only one of two expected chunks made it to the store (partial upsert).
 		stored = [
@@ -992,13 +1264,11 @@ async def test_filter_unvectorized_files_keeps_incomplete_chunk_set(
 			return stored
 
 		monkeypatch.setattr(
-			content_vectorization_service.vectorstore_service,
+			vectors_service,
 			"scroll_chunks",
 			_scroll,
 		)
-		pending = await content_vectorization_service.filter_unvectorized_files(
-			[file], session
-		)
+		pending = await vectors_service.filter_unvectorized_files([file], session)
 	assert [str(f.id) for f in pending] == [str(file.id)]
 
 
@@ -1012,6 +1282,8 @@ def _patch_process_file_collaborators(
 	vectorize_calls: list[bool],
 	load_calls: list[str],
 	described: list[str],
+	stored: list[str],
+	has_extracted_text: bool = True,
 ) -> None:
 	async def _load_file(file_id: object, session: object) -> File:
 		_ = (file_id, session)
@@ -1056,16 +1328,30 @@ def _patch_process_file_collaborators(
 		f.description = "generated"
 		return "generated"
 
+	async def _store_text(f: File, raw: str, session: object) -> None:
+		_ = (f, session)
+		stored.append(raw)
+
+	async def _has_text(file_id: object, session: object) -> bool:
+		_ = (file_id, session)
+		return has_extracted_text
+
 	async def _noop(*args: object, **kwargs: object) -> None:
 		_ = (args, kwargs)
 		return None
 
 	monkeypatch.setattr(processing_service, "_load_file", _load_file)
 	monkeypatch.setattr(processing_service, "vectorize_file_content", _vectorize)
-	monkeypatch.setattr(processing_service, "load_file_content_chunks", _load_chunks)
+	monkeypatch.setattr(
+		processing_service,
+		"load_file_content_chunks_reusing_stored_text",
+		_load_chunks,
+	)
 	monkeypatch.setattr(
 		processing_service, "update_file_description", _update_description
 	)
+	monkeypatch.setattr(processing_service, "store_extracted_text", _store_text)
+	monkeypatch.setattr(processing_service, "has_extracted_text_child", _has_text)
 	monkeypatch.setattr(processing_service, "replace_file_description_vectors", _noop)
 	monkeypatch.setattr(processing_service, "emit_file_event", _noop)
 	monkeypatch.setattr(processing_service, "invalidate_resource_payload_cache", _noop)
@@ -1083,46 +1369,78 @@ async def test_process_file_reloads_chunks_when_description_owed(
 	vectorize_calls: list[bool] = []
 	load_calls: list[str] = []
 	described: list[str] = []
+	stored: list[str] = []
+	# already has its extracted-text child, so only the description is owed.
 	_patch_process_file_collaborators(
 		monkeypatch,
 		file,
 		vectorize_calls=vectorize_calls,
 		load_calls=load_calls,
 		described=described,
+		stored=stored,
+		has_extracted_text=True,
 	)
 
-	result = await processing_service.process_file(TypeID(file.id), db_session)
+	result = await processing_service.process_file(file.id, db_session)
 
-	# vectorization ran once without force; the description path reloaded chunks.
+	# vectorization ran once without force; the description path reused stored text.
 	assert vectorize_calls == [False]
 	assert load_calls == [str(file.id)]
 	assert described == ["body text"]
+	# extracted text already current, so it is not re-stored.
+	assert stored == []
 	assert result["content_chunks"] == 1
 	assert result["skipped_reason"] is None
+
+
+async def test_process_file_passes_force_through(
+	db_session: AsyncSession,
+	monkeypatch,
+) -> None:
+	file = _file_record("doc.txt", "text/plain", b"body")
+	file.description = "existing"
+	vectorize_calls: list[bool] = []
+	_patch_process_file_collaborators(
+		monkeypatch,
+		file,
+		vectorize_calls=vectorize_calls,
+		load_calls=[],
+		described=[],
+		stored=[],
+		has_extracted_text=True,
+	)
+
+	await processing_service.process_file(file.id, db_session, force=True)
+
+	assert vectorize_calls == [True]
 
 
 async def test_process_file_skips_description_work_when_present(
 	db_session: AsyncSession,
 	monkeypatch,
 ) -> None:
-	"""a file that already has a description neither reloads chunks nor invokes
-	description generation."""
+	"""a file that already has a description and stored extracted text neither
+	reloads chunks nor invokes description generation."""
 	file = _file_record("doc.txt", "text/plain", b"body")
 	file.description = "existing"
 	vectorize_calls: list[bool] = []
 	load_calls: list[str] = []
 	described: list[str] = []
+	stored: list[str] = []
 	_patch_process_file_collaborators(
 		monkeypatch,
 		file,
 		vectorize_calls=vectorize_calls,
 		load_calls=load_calls,
 		described=described,
+		stored=stored,
+		has_extracted_text=True,
 	)
 
-	result = await processing_service.process_file(TypeID(file.id), db_session)
+	result = await processing_service.process_file(file.id, db_session)
 
 	assert vectorize_calls == [False]
 	assert load_calls == []
 	assert described == []
+	assert stored == []
 	assert result["skipped_reason"] == "already_current"

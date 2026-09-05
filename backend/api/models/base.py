@@ -1,7 +1,5 @@
 """Shared SQLAlchemy model primitives."""
 
-from __future__ import annotations
-
 from typing import Any, Final
 
 from sqlalchemy import String
@@ -12,6 +10,14 @@ from nokodo_ai.utils.typeid import typeid_max_length
 
 
 TYPEID_LENGTH: Final[int] = typeid_max_length()
+
+TOOL_CALL_ID_LENGTH: Final[int] = TYPEID_LENGTH
+"""bound on a tool-call identifier, wherever one is declared or stored.
+
+one constant because an assistant message declares the id and its tool result
+references it: a bound the declaration accepts and the reference rejects leaves
+a tool call that can never be answered.
+"""
 
 
 class Base(DeclarativeBase):

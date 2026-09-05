@@ -1,7 +1,5 @@
 """Task model."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -16,6 +14,7 @@ from api.models.mixins import (
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -52,7 +51,7 @@ class Task(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	__tablename__ = "tasks"
 	__typeid_prefix__ = "task"
 
-	user_id: Mapped[str] = mapped_column(
+	user_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id"),
 		index=True,
@@ -68,7 +67,7 @@ class Task(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	progress: Mapped[int | None] = mapped_column(Integer())
 	stage: Mapped[str | None] = mapped_column(String(100))
 	result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-	spawned_thread_id: Mapped[str | None] = mapped_column(
+	spawned_thread_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("threads.id", ondelete="SET NULL"),
 	)

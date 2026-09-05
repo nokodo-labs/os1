@@ -19,7 +19,7 @@ async def test_health_check(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_api_docs_accessible(client: AsyncClient) -> None:
 	"""Test that API documentation is accessible."""
-	response = await client.get("/v1/docs")
+	response = await client.get("/docs")
 	assert response.status_code == 200
 
 
@@ -31,6 +31,8 @@ async def test_root_endpoint(client: AsyncClient) -> None:
 	payload = response.json()
 	assert payload["name"] == runtime_settings.branding.site_name
 	assert payload["api_version"] == "v1"
+	assert payload["docs"] == "/docs"
+	assert payload["openapi"] == "/openapi.json"
 
 
 @pytest.mark.asyncio
@@ -44,10 +46,7 @@ async def test_lifespan_initializes_database(monkeypatch: pytest.MonkeyPatch) ->
 	async def fake_noop() -> None:
 		return None
 
-	async def fake_start_invalidation_subscriber() -> None:
-		return None
-
-	async def fake_start_remote_fanout_relay() -> None:
+	async def fake_start_remote_fanout_relay(_on_connected=None) -> None:
 		return None
 
 	monkeypatch.setattr(main_module, "init_db", fake_init_db)
@@ -63,11 +62,8 @@ async def test_lifespan_initializes_database(monkeypatch: pytest.MonkeyPatch) ->
 		"reconcile_reminder_notification_schedules",
 		fake_noop,
 	)
-	monkeypatch.setattr(
-		main_module,
-		"start_invalidation_subscriber",
-		fake_start_invalidation_subscriber,
-	)
+	monkeypatch.setattr(main_module, "start_process_runtime", fake_noop)
+	monkeypatch.setattr(main_module, "stop_process_runtime", fake_noop)
 	monkeypatch.setattr(
 		main_module,
 		"start_remote_fanout_relay",

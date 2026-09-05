@@ -1,10 +1,8 @@
 """notification schemas."""
 
-from __future__ import annotations
-
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.schemas.common import ORMModel, TimestampedModel
 from api.schemas.event import Event
@@ -14,6 +12,8 @@ from nokodo_ai.utils.typeid import TypeID
 
 class NotificationAction(BaseModel):
 	"""action button shown by capable notification surfaces."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	action: str = Field(min_length=1, max_length=64)
 	title: str = Field(min_length=1, max_length=80)
@@ -39,6 +39,8 @@ class NotificationAction(BaseModel):
 
 class NotificationPayload(BaseModel):
 	"""user-facing notification payload."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	title: str = Field(min_length=1, max_length=200)
 	body: str | None = Field(default=None, max_length=4000)
@@ -123,12 +125,16 @@ class NotificationListFilters(BaseModel):
 class NotificationPushSubscriptionKeys(BaseModel):
 	"""browser-provided web push encryption keys."""
 
+	model_config = ConfigDict(extra="forbid")
+
 	p256dh: str = Field(min_length=1, max_length=4096)
 	auth: str = Field(min_length=1, max_length=4096)
 
 
 class NotificationPushSubscriptionCreate(BaseModel):
 	"""request schema for registering a web push subscription."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	endpoint: str = Field(min_length=1, max_length=4096)
 	keys: NotificationPushSubscriptionKeys
@@ -137,6 +143,8 @@ class NotificationPushSubscriptionCreate(BaseModel):
 
 class NotificationPushSubscriptionDelete(BaseModel):
 	"""request schema for unregistering a web push subscription."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	endpoint: str = Field(min_length=1, max_length=4096)
 

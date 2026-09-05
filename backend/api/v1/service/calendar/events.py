@@ -1,7 +1,5 @@
 """calendar event and occurrence service helpers."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
@@ -23,8 +21,12 @@ from api.schemas.scheduled_item import (
 	CalendarSeriesEdit,
 	ScheduledItem,
 )
-from api.v1.service.auth import Principal
-from api.v1.service.authorization import require_permission, resource_access_predicate
+from api.v1.service.authentication import Principal
+from api.v1.service.authorization import (
+	apply_metadata_write,
+	require_permission,
+	resource_access_predicate,
+)
 from api.v1.service.calendar.cache import (
 	get_cached_calendar_event_items,
 	invalidate_calendar_event_scheduled_items,
@@ -33,10 +35,14 @@ from api.v1.service.calendar.cache import (
 from api.v1.service.calendar.common import (
 	CALENDAR_CREATE_PERMISSION,
 	get_accessible_calendar,
-	get_accessible_calendar_event,
+	get_calendar_event,
 	get_or_create_default_calendar,
 	publish_calendar_event,
 	validate_calendar_event_range,
+)
+from api.v1.service.calendar.notifications import (
+	cancel_calendar_event_notifications,
+	schedule_calendar_event_notifications,
 )
 from api.v1.service.calendar.search import CALENDAR_EVENT_SPEC
 from api.v1.service.listing import SortDir, apply_sort
@@ -47,10 +53,6 @@ from api.v1.service.scheduling.recurrence import (
 	recurrence_to_storage,
 )
 from api.v1.service.vectorize import remove_vectorized_resource, vectorize_resource
-from api.v1.tasks.calendar import (
-	cancel_calendar_event_notifications,
-	schedule_calendar_event_notifications,
-)
 from nokodo_ai.types import JSONObject
 from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
@@ -293,8 +295,7 @@ async def create_calendar_event(
 	)
 	create_data = data.model_dump(
 		exclude_unset=True,
-		by_alias=True,
-		exclude={"recurrence"},
+		exclude={"recurrence", "metadata"},
 	)
 	create_data["recurrence"] = recurrence_to_storage(data.recurrence)
 	calendar_event = CalendarEvent(
@@ -302,6 +303,7 @@ async def create_calendar_event(
 		calendar_id=calendar.id,
 		**create_data,
 	)
+	apply_metadata_write(calendar_event, data.metadata)
 	session.add(calendar_event)
 	await session.flush()
 	await session.refresh(calendar_event)
@@ -320,21 +322,6 @@ async def create_calendar_event(
 	return calendar_event
 
 
-async def get_calendar_event(
-	event_id: TypeID,
-	session: AsyncSession,
-	principal: Principal,
-	calendar_id: TypeID | None = None,
-) -> CalendarEvent:
-	"""get a calendar event by id."""
-	return await get_accessible_calendar_event(
-		event_id,
-		session,
-		principal,
-		calendar_id=calendar_id,
-	)
-
-
 async def update_calendar_event(
 	event_id: TypeID,
 	data: CalendarEventUpdate,
@@ -344,7 +331,7 @@ async def update_calendar_event(
 	origin_session_id: str | None = None,
 ) -> CalendarEvent:
 	"""update a calendar event."""
-	calendar_event = await get_accessible_calendar_event(
+	calendar_event = await get_calendar_event(
 		event_id,
 		session,
 		principal,
@@ -352,7 +339,7 @@ async def update_calendar_event(
 		calendar_id=calendar_id,
 	)
 	changed = data.model_fields_set
-	update_data = data.model_dump(exclude_unset=True, by_alias=True)
+	update_data = data.model_dump(exclude_unset=True, exclude={"metadata"})
 	if "recurrence" in changed:
 		update_data["recurrence"] = recurrence_to_storage(update_data["recurrence"])
 	start_at = calendar_event.start_at
@@ -364,6 +351,7 @@ async def update_calendar_event(
 	validate_calendar_event_range(start_at, end_at)
 	for key, value in update_data.items():
 		setattr(calendar_event, key, value)
+	apply_metadata_write(calendar_event, data.metadata)
 	if "location" in update_data:
 		if update_data["location"]:
 			calendar_event.virtual_url = None
@@ -398,7 +386,7 @@ async def edit_calendar_event_occurrence(
 	origin_session_id: str | None = None,
 ) -> ScheduledItem:
 	"""edit a single calendar event occurrence."""
-	calendar_event = await get_accessible_calendar_event(
+	calendar_event = await get_calendar_event(
 		event_id,
 		session,
 		principal,
@@ -447,7 +435,7 @@ async def cancel_calendar_event_occurrence(
 	origin_session_id: str | None = None,
 ) -> None:
 	"""cancel a single calendar event occurrence."""
-	calendar_event = await get_accessible_calendar_event(
+	calendar_event = await get_calendar_event(
 		event_id,
 		session,
 		principal,
@@ -492,7 +480,7 @@ async def edit_calendar_event_series(
 	origin_session_id: str | None = None,
 ) -> CalendarEvent:
 	"""split a recurring event and edit this/following occurrences."""
-	calendar_event = await get_accessible_calendar_event(
+	calendar_event = await get_calendar_event(
 		event_id,
 		session,
 		principal,
@@ -547,7 +535,7 @@ def _validate_event_occurrence(
 ) -> None:
 	if _after_recurrence_until(calendar_event.recurrence_until, original_occurrence_at):
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="occurrence does not belong to event recurrence",
 		)
 	if not occurrence_exists(
@@ -556,7 +544,7 @@ def _validate_event_occurrence(
 		original_occurrence_at,
 	):
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="occurrence does not belong to event recurrence",
 		)
 
@@ -567,7 +555,7 @@ def _validate_event_series_split(
 ) -> None:
 	if calendar_event.recurrence is None:
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="event is not recurring",
 		)
 	_validate_event_occurrence(calendar_event, original_occurrence_at)
@@ -736,7 +724,7 @@ async def delete_calendar_event(
 	origin_session_id: str | None = None,
 ) -> None:
 	"""delete a calendar event."""
-	calendar_event = await get_accessible_calendar_event(
+	calendar_event = await get_calendar_event(
 		event_id,
 		session,
 		principal,

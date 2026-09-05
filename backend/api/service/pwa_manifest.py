@@ -22,13 +22,12 @@ well-known CDN paths are resolved from:
 +-- screenshots/wide-{1..8}-3840x2160.png     desktop screenshots
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 from typing import Any, TypedDict
 from urllib.parse import urlsplit, urlunsplit
 
+from api.runtime import on_settings_reload
 from api.service.web_assets import (
 	STATIC_ASSET_PATH,
 	app_url,
@@ -59,6 +58,9 @@ _cache: dict[str, ManifestCacheEntry] = {}
 def invalidate_cache() -> None:
 	"""clear cached manifest so the next request recompiles."""
 	_cache.clear()
+
+
+on_settings_reload(invalidate_cache)
 
 
 # -- public API --

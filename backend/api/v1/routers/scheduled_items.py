@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_db
 from api.schemas.scheduled_item import ScheduledItem, ScheduledItemListFilters
 from api.settings import settings
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authentication import Principal, get_current_principal
 from api.v1.service.calendar.events import list_calendar_scheduled_items
 from api.v1.service.reminders.core import list_reminder_scheduled_items
 
@@ -29,14 +29,14 @@ async def list_scheduled_items(
 	"""list merged scheduled instances from calendar and reminder domains."""
 	if filters.end_at <= filters.start_at:
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="end time must be after start time",
 		)
 	if filters.end_at - filters.start_at > timedelta(
 		days=settings.limits.max_scheduled_items_window_days,
 	):
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="scheduled item window cannot exceed"
 			f" {settings.limits.max_scheduled_items_window_days} days",
 		)

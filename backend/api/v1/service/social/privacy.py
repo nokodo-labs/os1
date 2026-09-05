@@ -1,14 +1,13 @@
 """python-side user privacy and redaction helpers."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.user import User
+from api.permissions import ActionPermission
 from api.schemas.privacy import PRIVACY_FIELDS, PrivacyField, UserPrivacy, Visibility
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.social.friendship import accepted_friend_ids, are_friends
 from nokodo_ai.utils.typeid import TypeID
 
@@ -76,7 +75,9 @@ async def redact_user(
 	is_friend: bool | None = None,
 ) -> RedactedUser:
 	"""return a privacy-redacted user identity."""
-	if principal.is_admin or user.id == principal.user_id:
+	if user.id == principal.user.id or principal.has_permission(
+		ActionPermission.USERS_READ
+	):
 		return RedactedUser(
 			id=user.id,
 			username=user.username,
@@ -86,7 +87,7 @@ async def redact_user(
 		)
 
 	visible = await visible_fields(
-		user, principal.user_id, session, is_friend=is_friend
+		user, principal.user.id, session, is_friend=is_friend
 	)
 	return RedactedUser(
 		id=user.id,
@@ -103,11 +104,11 @@ async def redact_users(
 	principal: Principal,
 ) -> dict[TypeID, RedactedUser]:
 	"""redact many users with one friendship lookup."""
-	if principal.is_admin:
+	if principal.has_permission(ActionPermission.USERS_READ):
 		return {user.id: await redact_user(user, session, principal) for user in users}
 
-	target_ids = [user.id for user in users if user.id != principal.user_id]
-	friend_ids = await accepted_friend_ids(principal.user_id, target_ids, session)
+	target_ids = [user.id for user in users if user.id != principal.user.id]
+	friend_ids = await accepted_friend_ids(principal.user.id, target_ids, session)
 	redacted: dict[TypeID, RedactedUser] = {}
 	for user in users:
 		redacted[user.id] = await redact_user(
@@ -127,7 +128,7 @@ async def can_send_friend_request(
 	"""return whether the target allows a non-friend request from principal."""
 	visible = await visible_fields(
 		target,
-		principal.user_id,
+		principal.user.id,
 		session,
 		is_friend=False,
 	)

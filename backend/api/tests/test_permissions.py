@@ -15,40 +15,61 @@ covers:
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel, AccessRule
+from api.models.agent import Agent
+from api.models.calendar import Calendar, CalendarEvent
 from api.models.file import File
 from api.models.group import Group
 from api.models.many_to_many import thread_project_association, user_role_association
-from api.models.message import Message
+from api.models.message import AssistantMessage, UserMessage
+from api.models.message_attachment import MessageAttachment, resource_fk_name
+from api.models.note import Note
 from api.models.project import Project
+from api.models.reminder import Reminder, ReminderList
 from api.models.role import Role
 from api.models.thread import Thread
+from api.models.thread_participant import ThreadParticipant
 from api.models.user import User
 from api.permissions import (
+	ATTACHABLE_RESOURCE_TYPES,
 	ActionPermission,
 	DefaultPermissions,
 	DefaultResourceAccess,
+	PermissionGrant,
+	PermissionWildcard,
 	ResourceType,
 )
 from api.schemas.role import RoleCreate, RoleUpdate
+from api.tests.factories import make_principal
 from api.v1.service import roles as roles_service
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authentication import Principal, build_principal
 from api.v1.service.authorization import (
 	RESOURCE_CONFIG,
 	allowed_levels,
 	get_effective_access_level,
 	level_satisfies,
-	list_accessible_user_ids,
+	list_accessible_user_ids_for_resources,
 	require_permission,
 	require_resource_access,
 	resource_access_predicate,
 )
+from api.v1.service.authorization.predicates import resource_operator_predicate
 from nokodo_ai.utils.typeid import TypeID, new_typeid
+
+
+_CONFIGURED_ATTACHABLE_RESOURCE_TYPES = [
+	resource_type
+	for resource_type, config in RESOURCE_CONFIG.items()
+	if config.attachment_fk is not None
+]
 
 
 # DefaultPermissions model tests
@@ -149,19 +170,28 @@ class TestDefaultPermissions:
 				}
 			)
 
-	def test_strips_unknown_action_permission(self) -> None:
-		"""unknown action permissions are silently dropped (handles removed perms)."""
+	def test_rejects_unknown_action_permission(self) -> None:
+		"""an unknown name is an error: renames ship with a data migration."""
+		with pytest.raises(ValidationError):
+			DefaultPermissions.model_validate(
+				{"action_permissions": ["agents:create", "old:removed"]}
+			)
+
+	def test_accepts_wildcard_grants(self) -> None:
+		"""the two wildcard forms the resolvers honour survive validation."""
 		dp = DefaultPermissions.model_validate(
-			{
-				"action_permissions": [
-					"invalid:permission",
-					"agents:create",
-					"old:removed",
-				],
-			}
+			{"action_permissions": ["*", "agents:*", "agents:create"]}
 		)
-		# only valid permission survives
-		assert dp.action_permissions == {ActionPermission.AGENTS_CREATE}
+		assert dp.action_permissions == {
+			"*",
+			"agents:*",
+			ActionPermission.AGENTS_CREATE,
+		}
+
+	def test_rejects_wildcard_for_unknown_domain(self) -> None:
+		"""a domain no permission uses would be a silently dead grant."""
+		with pytest.raises(ValidationError):
+			DefaultPermissions.model_validate({"action_permissions": ["nosuch:*"]})
 
 
 # ActionPermission enum tests
@@ -199,6 +229,7 @@ class TestActionPermission:
 			"user.blocks",
 			"settings",
 			"events",
+			"notifications",
 			"threads",
 			"projects",
 			"notes",
@@ -236,6 +267,9 @@ class TestResourceType:
 		assert ResourceType.THREAD == "thread"
 		assert ResourceType.PROJECT == "project"
 		assert ResourceType.FILE == "file"
+
+	def test_attachable_resource_config_matches_registry(self) -> None:
+		assert set(_CONFIGURED_ATTACHABLE_RESOURCE_TYPES) == ATTACHABLE_RESOURCE_TYPES
 
 
 # Role model tests
@@ -324,66 +358,93 @@ class TestPrincipalPermissions:
 
 	def _make_principal(
 		self,
-		permissions: frozenset[str] = frozenset(),
-		global_action_permissions: frozenset[str] = frozenset(),
+		permissions: frozenset[PermissionGrant] = frozenset(),
+		global_action_permissions: frozenset[PermissionGrant] = frozenset(),
 		is_superuser: bool = False,
 	) -> Principal:
-		tid = new_typeid("user")
-		user = User(
-			email=f"test-{tid}@example.com",
-			username=f"test_{tid}",
-			hashed_password="x",
+		return make_principal(
 			is_superuser=is_superuser,
-		)
-		return Principal(
-			user=user,
-			group_ids=(),
-			role_ids=(),
 			permissions=permissions,
 			global_action_permissions=global_action_permissions,
 		)
 
 	def test_no_permissions(self) -> None:
 		p = self._make_principal()
-		assert not p.has_permission("agents:create")
+		assert not p.has_permission(ActionPermission.AGENTS_CREATE)
 
 	def test_role_permission_exact(self) -> None:
-		p = self._make_principal(permissions=frozenset({"agents:create"}))
-		assert p.has_permission("agents:create")
-		assert not p.has_permission("agents:manage")
+		p = self._make_principal(
+			permissions=frozenset({ActionPermission.AGENTS_CREATE})
+		)
+		assert p.has_permission(ActionPermission.AGENTS_CREATE)
+		assert not p.has_permission(ActionPermission.AGENTS_MANAGE)
 
 	def test_role_permission_wildcard(self) -> None:
-		p = self._make_principal(permissions=frozenset({"agents:*"}))
-		assert p.has_permission("agents:create")
-		assert p.has_permission("agents:manage")
-		assert not p.has_permission("models:read")
+		p = self._make_principal(
+			permissions=frozenset({PermissionWildcard("agents:*")})
+		)
+		assert p.has_permission(ActionPermission.AGENTS_CREATE)
+		assert p.has_permission(ActionPermission.AGENTS_MANAGE)
+		assert not p.has_permission(ActionPermission.MODELS_READ)
 
 	def test_star_permission(self) -> None:
-		p = self._make_principal(permissions=frozenset({"*"}))
-		assert p.has_permission("anything:here")
+		p = self._make_principal(permissions=frozenset({PermissionWildcard("*")}))
+		assert p.has_permission(ActionPermission.PLUGINS_MANAGE)
+
+	@pytest.mark.asyncio
+	@pytest.mark.parametrize("permission", ["*", "threads:*"])
+	async def test_column_subject_wildcards_match_principal_semantics(
+		self,
+		db_session: AsyncSession,
+		permission: str,
+	) -> None:
+		user = User(
+			email=f"wildcard-{permission.replace(':', '-')}@example.com",
+			username=f"wildcard_{permission.replace(':', '_')}",
+			hashed_password="pw",
+			is_active=True,
+		)
+		role = Role(
+			name=f"wildcard {permission}",
+			default_permissions={"action_permissions": [permission]},
+		)
+		db_session.add_all([user, role])
+		await db_session.flush()
+		await db_session.execute(
+			insert(user_role_association).values(user_id=user.id, role_id=role.id)
+		)
+		matched = await db_session.scalar(
+			select(User.id).where(
+				User.id == user.id,
+				resource_operator_predicate(User.id, ResourceType.THREAD),
+			)
+		)
+		assert matched == user.id
 
 	def test_superuser_bypass(self) -> None:
 		p = self._make_principal(is_superuser=True)
-		assert p.has_permission("any:permission")
+		assert p.has_permission(ActionPermission.SETTINGS_MANAGE)
 
 	def test_global_action_permissions(self) -> None:
 		"""global defaults should grant permissions even without role perms."""
 		p = self._make_principal(
-			global_action_permissions=frozenset({"agents:create", "prompts:read"})
+			global_action_permissions=frozenset(
+				{ActionPermission.AGENTS_CREATE, ActionPermission.PROMPTS_READ}
+			)
 		)
-		assert p.has_permission("agents:create")
-		assert p.has_permission("prompts:read")
-		assert not p.has_permission("agents:manage")
+		assert p.has_permission(ActionPermission.AGENTS_CREATE)
+		assert p.has_permission(ActionPermission.PROMPTS_READ)
+		assert not p.has_permission(ActionPermission.AGENTS_MANAGE)
 
 	def test_role_perms_take_priority_over_global(self) -> None:
 		"""role perms and global perms combine (union)."""
 		p = self._make_principal(
-			permissions=frozenset({"models:manage"}),
-			global_action_permissions=frozenset({"agents:create"}),
+			permissions=frozenset({ActionPermission.MODELS_MANAGE}),
+			global_action_permissions=frozenset({ActionPermission.AGENTS_CREATE}),
 		)
-		assert p.has_permission("models:manage")
-		assert p.has_permission("agents:create")
-		assert not p.has_permission("settings:manage")
+		assert p.has_permission(ActionPermission.MODELS_MANAGE)
+		assert p.has_permission(ActionPermission.AGENTS_CREATE)
+		assert not p.has_permission(ActionPermission.SETTINGS_MANAGE)
 
 
 # get_current_principal integration tests
@@ -404,7 +465,7 @@ class TestGetCurrentPrincipal:
 		await db_session.commit()
 		await db_session.refresh(user, attribute_names=["roles"])
 
-		principal = await get_current_principal(user, db_session)
+		principal = await build_principal(user, db_session)
 		assert principal.permissions == frozenset()
 		assert principal.role_ids == ()
 
@@ -436,9 +497,9 @@ class TestGetCurrentPrincipal:
 		await db_session.commit()
 		await db_session.refresh(user, attribute_names=["roles"])
 
-		principal = await get_current_principal(user, db_session)
-		assert "agents:create" in principal.permissions
-		assert "models:read" in principal.permissions
+		principal = await build_principal(user, db_session)
+		assert ActionPermission.AGENTS_CREATE in principal.permissions
+		assert ActionPermission.MODELS_READ in principal.permissions
 		assert str(role.id) in principal.role_ids
 
 	@pytest.mark.asyncio
@@ -469,7 +530,7 @@ class TestGetCurrentPrincipal:
 		await db_session.commit()
 		await db_session.refresh(user, attribute_names=["roles"])
 
-		principal = await get_current_principal(user, db_session)
+		principal = await build_principal(user, db_session)
 		assert principal.role_resource_defaults.thread == AccessLevel.EDITOR
 		assert principal.role_resource_defaults.project == AccessLevel.READER
 
@@ -512,14 +573,14 @@ class TestGetCurrentPrincipal:
 		await db_session.commit()
 		await db_session.refresh(user, attribute_names=["roles"])
 
-		principal = await get_current_principal(user, db_session)
+		principal = await build_principal(user, db_session)
 		# thread: admin wins over reader
 		assert principal.role_resource_defaults.thread == AccessLevel.ADMIN
 		# file: only role2 has it
 		assert principal.role_resource_defaults.file == AccessLevel.EDITOR
 		# action perms: union of both
-		assert "agents:create" in principal.permissions
-		assert "models:manage" in principal.permissions
+		assert ActionPermission.AGENTS_CREATE in principal.permissions
+		assert ActionPermission.MODELS_MANAGE in principal.permissions
 
 
 # authorization predicate tests with role resource defaults
@@ -535,7 +596,7 @@ class TestResourceAccessPredicateWithDefaults:
 		group_ids: tuple[TypeID, ...] = (),
 		role_ids: tuple[TypeID, ...] = (),
 	) -> Principal:
-		return Principal(
+		return Principal.for_user(
 			user=user,
 			group_ids=group_ids,
 			role_ids=role_ids,
@@ -656,7 +717,7 @@ class TestGetEffectiveAccessLevel:
 		db_session.add(thread)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=user,
 			group_ids=(),
 			role_ids=(),
@@ -685,7 +746,7 @@ class TestGetEffectiveAccessLevel:
 		db_session.add(thread)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=user,
 			group_ids=(),
 			role_ids=(),
@@ -727,7 +788,7 @@ class TestGetEffectiveAccessLevel:
 		db_session.add(rule)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=user,
 			group_ids=(),
 			role_ids=(),
@@ -766,7 +827,7 @@ class TestGetEffectiveAccessLevel:
 		db_session.add(thread)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=user,
 			group_ids=(),
 			role_ids=(),
@@ -802,7 +863,7 @@ class TestGetEffectiveAccessLevel:
 		db_session.add(thread)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=admin,
 			group_ids=(),
 			role_ids=(),
@@ -815,7 +876,9 @@ class TestGetEffectiveAccessLevel:
 		assert level == AccessLevel.ADMIN
 
 	@pytest.mark.asyncio
-	async def test_public_rule_grants_access(self, db_session: AsyncSession) -> None:
+	async def test_subjectless_rule_grants_direct_access(
+		self, db_session: AsyncSession
+	) -> None:
 		owner = User(
 			email="pub-owner@example.com", username="pub_owner", hashed_password="pw"
 		)
@@ -840,7 +903,7 @@ class TestGetEffectiveAccessLevel:
 		db_session.add(rule)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=user,
 			group_ids=(),
 			role_ids=(),
@@ -848,9 +911,19 @@ class TestGetEffectiveAccessLevel:
 			global_action_permissions=frozenset(),
 		)
 		level = await get_effective_access_level(
-			db_session, principal, ResourceType.THREAD, thread.id
+			db_session,
+			principal,
+			ResourceType.THREAD,
+			thread.id,
+			include_link_access=True,
 		)
 		assert level == AccessLevel.READER
+		assert (
+			await get_effective_access_level(
+				db_session, principal, ResourceType.THREAD, thread.id
+			)
+			is None
+		)
 
 	@pytest.mark.asyncio
 	async def test_group_rule_grants_access(self, db_session: AsyncSession) -> None:
@@ -883,7 +956,7 @@ class TestGetEffectiveAccessLevel:
 		db_session.add(rule)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=user,
 			group_ids=(group.id,),
 			role_ids=(),
@@ -935,7 +1008,7 @@ class TestGetEffectiveAccessLevel:
 		)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=viewer,
 			group_ids=(),
 			role_ids=(),
@@ -966,17 +1039,24 @@ class TestGetEffectiveAccessLevel:
 			)
 		)
 		assert result.scalar_one_or_none() == thread.id
-		accessible_user_ids = await list_accessible_user_ids(
-			ResourceType.THREAD,
-			thread.id,
-			db_session,
+		accessible_user_ids = await list_accessible_user_ids_for_resources(
+			[(ResourceType.THREAD, thread.id)], db_session
 		)
 		assert viewer.id in accessible_user_ids
 
 	@pytest.mark.asyncio
-	async def test_project_rule_inherits_through_thread_to_attached_file(
+	async def test_project_access_reaches_chat_attachment_as_reader_only(
 		self, db_session: AsyncSession
 	) -> None:
+		"""reaching a chat attachment through a thread tops out at READER.
+
+		the viewer is a project EDITOR and the thread lives in that project, so
+		they can edit the thread - but a file merely attached to a message is a
+		chat attachment owned by someone else. thread-reached file access is
+		capped at READER, so the viewer can view it but not edit or delete it.
+		project *documents* (project -> file association) are a separate uncapped
+		link and are unaffected.
+		"""
 		owner = User(
 			email="proj-file-owner@example.com",
 			username="proj_file_owner",
@@ -998,7 +1078,7 @@ class TestGetEffectiveAccessLevel:
 		)
 		db_session.add_all([project, thread])
 		await db_session.flush()
-		message = Message(thread_id=thread.id)
+		message = UserMessage(thread_id=thread.id)
 		db_session.add(message)
 		await db_session.flush()
 		file = File(
@@ -1006,9 +1086,16 @@ class TestGetEffectiveAccessLevel:
 			storage_backend="local",
 			storage_key="acl-inherited-file.txt",
 			filename="acl-inherited-file.txt",
-			message_id=message.id,
 		)
 		db_session.add(file)
+		await db_session.flush()
+		db_session.add(
+			MessageAttachment(
+				message_id=message.id,
+				position=0,
+				file_id=file.id,
+			)
+		)
 		await db_session.execute(
 			insert(thread_project_association).values(
 				thread_id=thread.id,
@@ -1024,26 +1111,28 @@ class TestGetEffectiveAccessLevel:
 		)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=viewer,
 			group_ids=(),
 			role_ids=(),
 			permissions=frozenset(),
 			global_action_permissions=frozenset(),
 		)
+		# capped at READER even though the viewer is a project (and thus thread)
+		# EDITOR.
 		level = await get_effective_access_level(
 			db_session,
 			principal,
 			ResourceType.FILE,
 			file.id,
 		)
-		assert level == AccessLevel.EDITOR
+		assert level == AccessLevel.READER
 		await require_resource_access(
 			file.id,
 			db_session,
 			principal,
 			ResourceType.FILE,
-			required_level=AccessLevel.EDITOR,
+			required_level=AccessLevel.READER,
 		)
 		result = await db_session.execute(
 			select(File.id).where(
@@ -1051,18 +1140,252 @@ class TestGetEffectiveAccessLevel:
 				resource_access_predicate(
 					principal,
 					ResourceType.FILE,
-					required_level=AccessLevel.EDITOR,
+					required_level=AccessLevel.READER,
 				),
 			)
 		)
 		assert result.scalar_one_or_none() == file.id
-		accessible_user_ids = await list_accessible_user_ids(
-			ResourceType.FILE,
-			file.id,
+		accessible_user_ids = await list_accessible_user_ids_for_resources(
+			[(ResourceType.FILE, file.id)],
+			db_session,
+			required_level=AccessLevel.READER,
+		)
+		assert viewer.id in accessible_user_ids
+		# but editing the chat attachment is denied - the cap blocks it.
+		with pytest.raises(HTTPException) as exc:
+			await require_resource_access(
+				file.id,
+				db_session,
+				principal,
+				ResourceType.FILE,
+				required_level=AccessLevel.EDITOR,
+			)
+		assert exc.value.status_code == 404
+		editor_user_ids = await list_accessible_user_ids_for_resources(
+			[(ResourceType.FILE, file.id)],
 			db_session,
 			required_level=AccessLevel.EDITOR,
 		)
-		assert viewer.id in accessible_user_ids
+		assert viewer.id not in editor_user_ids
+
+	@pytest.mark.asyncio
+	@pytest.mark.parametrize(
+		"resource_type",
+		_CONFIGURED_ATTACHABLE_RESOURCE_TYPES,
+	)
+	async def test_thread_admin_reaches_every_attachment_as_reader_only(
+		self,
+		db_session: AsyncSession,
+		resource_type: ResourceType,
+	) -> None:
+		thread_owner = User(
+			email=f"attachment-admin-{resource_type.value}@example.com",
+			username=f"attachment_admin_{resource_type.value}",
+			hashed_password="pw",
+		)
+		resource_owner = User(
+			email=f"attachment-owner-{resource_type.value}@example.com",
+			username=f"attachment_owner_{resource_type.value}",
+			hashed_password="pw",
+		)
+		db_session.add_all([thread_owner, resource_owner])
+		await db_session.flush()
+		thread = Thread(
+			title=f"{resource_type.value} attachment parent",
+			owner_id=thread_owner.id,
+			is_temporary=False,
+		)
+		db_session.add(thread)
+		await db_session.flush()
+		message = UserMessage(thread_id=thread.id, sender_user_id=thread_owner.id)
+		db_session.add(message)
+		await db_session.flush()
+
+		match resource_type:
+			case ResourceType.FILE:
+				resource = File(
+					owner_id=resource_owner.id,
+					storage_backend="local",
+					storage_key="all-attachment-types.txt",
+					filename="all-attachment-types.txt",
+				)
+			case ResourceType.NOTE:
+				resource = Note(
+					user_id=resource_owner.id,
+					title="attachment note",
+					content="private",
+				)
+			case ResourceType.THREAD:
+				resource = Thread(
+					owner_id=resource_owner.id,
+					title="attached thread",
+					is_temporary=False,
+				)
+			case ResourceType.PROJECT:
+				resource = Project(
+					owner_id=resource_owner.id,
+					name="attached project",
+				)
+			case ResourceType.REMINDER_LIST:
+				resource = ReminderList(
+					owner_id=resource_owner.id,
+					name="attached reminder list",
+				)
+			case ResourceType.REMINDER:
+				parent = ReminderList(
+					owner_id=resource_owner.id,
+					name="private reminder list",
+				)
+				db_session.add(parent)
+				await db_session.flush()
+				resource = Reminder(
+					owner_id=resource_owner.id,
+					list_id=parent.id,
+					title="attached reminder",
+				)
+			case ResourceType.CALENDAR:
+				resource = Calendar(
+					owner_id=resource_owner.id,
+					name="attached calendar",
+				)
+			case ResourceType.CALENDAR_EVENT:
+				parent = Calendar(
+					owner_id=resource_owner.id,
+					name="private calendar",
+				)
+				db_session.add(parent)
+				await db_session.flush()
+				start_at = datetime(2026, 8, 10, 9, tzinfo=UTC)
+				resource = CalendarEvent(
+					owner_id=resource_owner.id,
+					calendar_id=parent.id,
+					title="attached event",
+					start_at=start_at,
+					end_at=start_at + timedelta(hours=1),
+				)
+			case _:
+				raise AssertionError(f"unsupported attachment type {resource_type}")
+		db_session.add(resource)
+		await db_session.flush()
+		db_session.add(
+			MessageAttachment(
+				message_id=message.id,
+				position=0,
+				**{resource_fk_name(resource_type): resource.id},
+			)
+		)
+		await db_session.flush()
+		principal = Principal.for_user(
+			user=thread_owner,
+			group_ids=(),
+			role_ids=(),
+			permissions=frozenset(),
+			global_action_permissions=frozenset(),
+		)
+
+		assert (
+			await get_effective_access_level(
+				db_session,
+				principal,
+				resource_type,
+				resource.id,
+			)
+			== AccessLevel.READER
+		)
+		with pytest.raises(HTTPException) as exc:
+			await require_resource_access(
+				resource.id,
+				db_session,
+				principal,
+				resource_type,
+				required_level=AccessLevel.EDITOR,
+			)
+		assert exc.value.status_code == 404
+
+	@pytest.mark.asyncio
+	async def test_thread_participant_reads_attached_file_but_not_admin(
+		self, db_session: AsyncSession
+	) -> None:
+		"""a co-participant inherits read access to attachments but never ADMIN.
+
+		sharing a conversation lets you view its attachments (inherited through
+		the thread), but it must NOT make you owner/admin of someone else's
+		file - you cannot delete the original or change its sharing.
+		"""
+		owner = User(
+			email="tp-file-owner@example.com",
+			username="tp_file_owner",
+			hashed_password="pw",
+		)
+		participant = User(
+			email="tp-file-participant@example.com",
+			username="tp_file_participant",
+			hashed_password="pw",
+		)
+		db_session.add_all([owner, participant])
+		await db_session.flush()
+
+		thread = Thread(
+			title="attachment thread",
+			owner_id=owner.id,
+			is_temporary=False,
+		)
+		db_session.add(thread)
+		await db_session.flush()
+		message = UserMessage(thread_id=thread.id)
+		db_session.add(message)
+		await db_session.flush()
+		file = File(
+			owner_id=owner.id,
+			storage_backend="local",
+			storage_key="tp-attached-file.txt",
+			filename="tp-attached-file.txt",
+		)
+		db_session.add(file)
+		await db_session.flush()
+		db_session.add(
+			MessageAttachment(
+				message_id=message.id,
+				position=0,
+				file_id=file.id,
+			)
+		)
+		# a participant is granted access on the THREAD (what ensure_participant
+		# does on join); access to the attached file is derived from this.
+		db_session.add(
+			AccessRule(
+				thread_id=thread.id,
+				subject_user_id=participant.id,
+				level=AccessLevel.EDITOR,
+			)
+		)
+		await db_session.commit()
+
+		principal = Principal.for_user(
+			user=participant,
+			group_ids=(),
+			role_ids=(),
+			permissions=frozenset(),
+			global_action_permissions=frozenset(),
+		)
+		# can view the attachment (read access inherited through the thread)
+		await require_resource_access(
+			file.id,
+			db_session,
+			principal,
+			ResourceType.FILE,
+			required_level=AccessLevel.READER,
+		)
+		with pytest.raises(HTTPException) as exc:
+			await require_resource_access(
+				file.id,
+				db_session,
+				principal,
+				ResourceType.FILE,
+				required_level=AccessLevel.EDITOR,
+			)
+		assert exc.value.status_code == 404
+		# but never ADMIN on a file they do not own - no delete / resharing.
 		with pytest.raises(HTTPException) as exc:
 			await require_resource_access(
 				file.id,
@@ -1073,6 +1396,209 @@ class TestGetEffectiveAccessLevel:
 			)
 		assert exc.value.status_code == 404
 
+	@pytest.mark.asyncio
+	async def test_thread_participant_loses_attached_file_access_on_leave(
+		self, db_session: AsyncSession
+	) -> None:
+		"""leaving a thread revokes access to its attachments automatically.
+
+		file access is derived through the thread link, not copied onto the
+		file, so dropping the thread access rule (what removal/decline does)
+		removes attachment access with no per-file cleanup.
+		"""
+		owner = User(
+			email="leave-file-owner@example.com",
+			username="leave_file_owner",
+			hashed_password="pw",
+		)
+		participant = User(
+			email="leave-file-participant@example.com",
+			username="leave_file_participant",
+			hashed_password="pw",
+		)
+		db_session.add_all([owner, participant])
+		await db_session.flush()
+
+		thread = Thread(
+			title="leave attachment thread",
+			owner_id=owner.id,
+			is_temporary=False,
+		)
+		db_session.add(thread)
+		await db_session.flush()
+		message = UserMessage(thread_id=thread.id)
+		db_session.add(message)
+		await db_session.flush()
+		file = File(
+			owner_id=owner.id,
+			storage_backend="local",
+			storage_key="leave-attached-file.txt",
+			filename="leave-attached-file.txt",
+		)
+		db_session.add(file)
+		await db_session.flush()
+		db_session.add(
+			MessageAttachment(
+				message_id=message.id,
+				position=0,
+				file_id=file.id,
+			)
+		)
+		rule = AccessRule(
+			thread_id=thread.id,
+			subject_user_id=participant.id,
+			level=AccessLevel.EDITOR,
+		)
+		db_session.add(rule)
+		await db_session.commit()
+
+		principal = Principal.for_user(
+			user=participant,
+			group_ids=(),
+			role_ids=(),
+			permissions=frozenset(),
+			global_action_permissions=frozenset(),
+		)
+		# while participating, the attachment is readable.
+		await require_resource_access(
+			file.id,
+			db_session,
+			principal,
+			ResourceType.FILE,
+			required_level=AccessLevel.READER,
+		)
+
+		# leave the thread: drop the thread access rule.
+		await db_session.delete(rule)
+		await db_session.commit()
+
+		# attachment access is gone - it was derived, never copied onto the file.
+		assert (
+			await get_effective_access_level(
+				db_session,
+				principal,
+				ResourceType.FILE,
+				file.id,
+			)
+			is None
+		)
+		with pytest.raises(HTTPException) as exc:
+			await require_resource_access(
+				file.id,
+				db_session,
+				principal,
+				ResourceType.FILE,
+				required_level=AccessLevel.READER,
+			)
+		assert exc.value.status_code == 404
+
+	@pytest.mark.asyncio
+	async def test_thread_reader_inherits_reader_on_thread_agents_capped(
+		self, db_session: AsyncSession
+	) -> None:
+		"""reading a thread grants READER on its agents - never more.
+
+		an agent that is a thread participant, or that authored any message in
+		the thread, is readable by anyone who can read the thread (so they can
+		see who is in the conversation). but thread access is capped at READER:
+		even a thread EDITOR must not be able to edit or delete the agent.
+		"""
+		owner = User(
+			email="agent-inherit-owner@example.com",
+			username="agent_inherit_owner",
+			hashed_password="pw",
+		)
+		viewer = User(
+			email="agent-inherit-viewer@example.com",
+			username="agent_inherit_viewer",
+			hashed_password="pw",
+		)
+		outsider = User(
+			email="agent-inherit-outsider@example.com",
+			username="agent_inherit_outsider",
+			hashed_password="pw",
+		)
+		db_session.add_all([owner, viewer, outsider])
+		await db_session.flush()
+
+		participant_agent = Agent(name="participant agent")
+		author_agent = Agent(name="author agent")
+		db_session.add_all([participant_agent, author_agent])
+		await db_session.flush()
+
+		thread = Thread(
+			title="agent inheritance thread",
+			owner_id=owner.id,
+			is_temporary=False,
+		)
+		db_session.add(thread)
+		await db_session.flush()
+		# one agent is a participant, the other only authored a message.
+		db_session.add(
+			ThreadParticipant(thread_id=thread.id, agent_id=participant_agent.id)
+		)
+		db_session.add(
+			AssistantMessage(thread_id=thread.id, sender_agent_id=author_agent.id)
+		)
+		# the viewer is a thread EDITOR - strong enough to expose any cap bug.
+		db_session.add(
+			AccessRule(
+				thread_id=thread.id,
+				subject_user_id=viewer.id,
+				level=AccessLevel.EDITOR,
+			)
+		)
+		await db_session.commit()
+
+		viewer_principal = Principal.for_user(
+			user=viewer,
+			group_ids=(),
+			role_ids=(),
+			permissions=frozenset(),
+			global_action_permissions=frozenset(),
+		)
+		for agent in (participant_agent, author_agent):
+			# inherits READER through the thread...
+			assert (
+				await get_effective_access_level(
+					db_session,
+					viewer_principal,
+					ResourceType.AGENT,
+					agent.id,
+				)
+				== AccessLevel.READER
+			)
+			# ...but the EDITOR thread level is clamped: no edit on the agent.
+			result = await db_session.execute(
+				select(Agent.id).where(
+					Agent.id == agent.id,
+					resource_access_predicate(
+						viewer_principal,
+						ResourceType.AGENT,
+						required_level=AccessLevel.EDITOR,
+					),
+				)
+			)
+			assert result.scalar_one_or_none() is None
+
+		# someone with no thread access sees neither agent.
+		outsider_principal = Principal.for_user(
+			user=outsider,
+			group_ids=(),
+			role_ids=(),
+			permissions=frozenset(),
+			global_action_permissions=frozenset(),
+		)
+		assert (
+			await get_effective_access_level(
+				db_session,
+				outsider_principal,
+				ResourceType.AGENT,
+				participant_agent.id,
+			)
+			is None
+		)
+
 
 # require_permission tests
 
@@ -1081,63 +1607,28 @@ class TestRequirePermission:
 	"""tests for require_permission with typed ActionPermission."""
 
 	def test_denies_without_permission(self) -> None:
-		user = User(
-			email="deny@example.com", username="deny_perm", hashed_password="pw"
-		)
-		principal = Principal(
-			user=user,
-			group_ids=(),
-			role_ids=(),
-			permissions=frozenset(),
-			global_action_permissions=frozenset(),
-		)
+		principal = make_principal(slug="deny_perm")
 		with pytest.raises(HTTPException) as exc:
 			require_permission(principal, ActionPermission.AGENTS_MANAGE)
 		assert exc.value.status_code == 403
 
 	def test_allows_with_exact_permission(self) -> None:
-		user = User(
-			email="allow@example.com", username="allow_perm", hashed_password="pw"
-		)
-		principal = Principal(
-			user=user,
-			group_ids=(),
-			role_ids=(),
+		principal = make_principal(
+			slug="allow_perm",
 			permissions=frozenset({ActionPermission.AGENTS_MANAGE}),
-			global_action_permissions=frozenset(),
 		)
 		require_permission(principal, ActionPermission.AGENTS_MANAGE)
 
 	def test_allows_with_global_defaults(self) -> None:
 		"""global default action perms should satisfy require_permission."""
-		user = User(
-			email="global-allow@example.com",
-			username="global_allow",
-			hashed_password="pw",
-		)
-		principal = Principal(
-			user=user,
-			group_ids=(),
-			role_ids=(),
-			permissions=frozenset(),
-			global_action_permissions=frozenset({"agents:create"}),
+		principal = make_principal(
+			slug="global_allow",
+			global_action_permissions=frozenset({ActionPermission.AGENTS_CREATE}),
 		)
 		require_permission(principal, ActionPermission.AGENTS_CREATE)
 
 	def test_superuser_bypass(self) -> None:
-		user = User(
-			email="su-perm@example.com",
-			username="su_perm_test",
-			hashed_password="pw",
-			is_superuser=True,
-		)
-		principal = Principal(
-			user=user,
-			group_ids=(),
-			role_ids=(),
-			permissions=frozenset(),
-			global_action_permissions=frozenset(),
-		)
+		principal = make_principal(slug="su_perm_test", is_superuser=True)
 		require_permission(principal, ActionPermission.SETTINGS_MANAGE)
 
 
@@ -1155,7 +1646,7 @@ class TestRequireResourceAccess:
 		db_session.add(user)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=user,
 			group_ids=(),
 			role_ids=(),
@@ -1201,7 +1692,7 @@ class TestRequireResourceAccess:
 		db_session.add(rule)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=user,
 			group_ids=(),
 			role_ids=(),
@@ -1233,7 +1724,7 @@ class TestRequireResourceAccess:
 		db_session.add(thread)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=user,
 			group_ids=(),
 			role_ids=(),
@@ -1268,7 +1759,7 @@ class TestRolesService:
 		db_session.add(admin_user)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=admin_user,
 			group_ids=(),
 			role_ids=(),
@@ -1307,7 +1798,7 @@ class TestRolesService:
 		db_session.add(admin)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=admin,
 			group_ids=(),
 			role_ids=(),
@@ -1351,7 +1842,7 @@ class TestRolesService:
 		db_session.add(admin)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=admin,
 			group_ids=(),
 			role_ids=(),
@@ -1385,7 +1876,7 @@ class TestRolesService:
 		db_session.add(user)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=user,
 			group_ids=(),
 			role_ids=(),
@@ -1407,7 +1898,7 @@ class TestRolesService:
 		db_session.add(admin)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=admin,
 			group_ids=(),
 			role_ids=(),
@@ -1467,7 +1958,7 @@ class TestAccessRuleWithRole:
 		await db_session.commit()
 
 		# user WITHOUT the role
-		principal_no_role = Principal(
+		principal_no_role = Principal.for_user(
 			user=user,
 			group_ids=(),
 			role_ids=(),
@@ -1480,7 +1971,7 @@ class TestAccessRuleWithRole:
 		assert level is None
 
 		# user WITH the role
-		principal_with_role = Principal(
+		principal_with_role = Principal.for_user(
 			user=user,
 			group_ids=(),
 			role_ids=(role.id,),
@@ -1544,8 +2035,8 @@ class TestEdgeCases:
 		}
 
 	@pytest.mark.asyncio
-	async def test_last_rule_wins_ordering(self, db_session: AsyncSession) -> None:
-		"""explicit rules: last matching rule by order_index wins."""
+	async def test_highest_matching_rule_wins(self, db_session: AsyncSession) -> None:
+		"""the highest matching explicit rule wins regardless of display order."""
 		owner = User(
 			email="order-owner@example.com",
 			username="order_owner",
@@ -1562,29 +2053,29 @@ class TestEdgeCases:
 			owner_id=str(owner.id),
 			is_temporary=False,
 		)
-		db_session.add(thread)
+		group = Group(name="order-group", owner_id=owner.id)
+		db_session.add_all([thread, group])
 		await db_session.flush()
 
-		# first rule: reader
+		# Both subjects match; the later reader cannot demote the earlier admin.
 		rule1 = AccessRule(
 			subject_user_id=str(user.id),
 			thread_id=str(thread.id),
-			level=AccessLevel.READER,
+			level=AccessLevel.ADMIN,
 			order_index=0,
 		)
-		# second rule: admin (should win)
 		rule2 = AccessRule(
-			subject_user_id=str(user.id),
+			subject_group_id=group.id,
 			thread_id=str(thread.id),
-			level=AccessLevel.ADMIN,
+			level=AccessLevel.READER,
 			order_index=1,
 		)
 		db_session.add_all([rule1, rule2])
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=user,
-			group_ids=(),
+			group_ids=(group.id,),
 			role_ids=(),
 			permissions=frozenset(),
 			global_action_permissions=frozenset(),
@@ -1605,7 +2096,7 @@ class TestEdgeCases:
 		db_session.add(user)
 		await db_session.commit()
 
-		principal = Principal(
+		principal = Principal.for_user(
 			user=user,
 			group_ids=(),
 			role_ids=(),

@@ -1,7 +1,5 @@
 """reminder scheduled item cache helpers."""
 
-from __future__ import annotations
-
 from datetime import datetime
 
 from api.redis import cache

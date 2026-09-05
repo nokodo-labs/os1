@@ -14,36 +14,50 @@ Task row. routing those events through ResourceType.TASK can cache an empty
 recipient set and suppress later live updates for the same task.
 """
 
-from __future__ import annotations
-
 import asyncio
+import copy
 import logging
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any
 
-from fastapi import Header, HTTPException, WebSocket, status
+from fastapi import Header, WebSocket
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import async_session_local
+from api.database.post_commit import run_post_commit_actions_safely
 from api.local_tasks import create_background_task
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
-from api.permissions import ResourceType
+from api.permissions import ActionPermission, ResourceType
 from api.schemas.event import EventCreate, EventListFilters
-from api.v1.service import event_bus
-from api.v1.service.auth import Principal
-from api.v1.service.authorization import list_accessible_user_ids, require_permission
-from nokodo_ai.utils.typeid import TypeID, new_typeid
+from api.v1.service.authentication import Principal
+from api.v1.service.authorization import (
+	apply_metadata_write,
+	list_accessible_user_ids_for_resources,
+	require_permission,
+)
+from api.v1.service.event_bus import (
+	dispatch_server_event,
+	publish_remote_fanout,
+	publish_socket_kill,
+	start_remote_fanout_listener,
+	start_socket_kill_listener,
+)
+from nokodo_ai.utils.typeid import TypeID, is_typeid, new_typeid
 
 
 logger = logging.getLogger(__name__)
 
-# shared annotated type - add to any router param that mutates resources.
-# FastAPI maps the parameter name x_session_id -> header X-Session-ID.
 SessionId = Annotated[str | None, Header()]
+"""the client session behind a mutating request, from ``X-Session-ID``.
+
+add to any router param that mutates resources: it is what lets the originating
+client be excluded from its own fanout. FastAPI derives the header name from the
+parameter, so it must be declared as ``x_session_id``.
+"""
 
 
 if TYPE_CHECKING:
@@ -52,14 +66,19 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class _EventResourceTarget:
+	"""which resource governs who receives one kind of event."""
+
 	resource_type: ResourceType
+	"""the resource whose access list decides the recipients."""
 	data_keys: tuple[str, ...]
+	"""where to find that resource's id in the event payload, in order."""
 
 
 def _event_target(
 	resource_type: ResourceType,
 	data_keys: tuple[str, ...],
 ) -> _EventResourceTarget:
+	"""name the resource one event type routes by."""
 	return _EventResourceTarget(
 		resource_type=resource_type,
 		data_keys=data_keys,
@@ -73,7 +92,6 @@ _EVENT_ROUTING_TARGETS: dict[str, _EventResourceTarget] = {
 	EventType.THREAD_CREATED: _event_target(ResourceType.THREAD, ("id",)),
 	EventType.THREAD_UPDATED: _event_target(ResourceType.THREAD, ("id",)),
 	EventType.THREAD_DELETED: _event_target(ResourceType.THREAD, ("id",)),
-	EventType.THREAD_READ: _event_target(ResourceType.THREAD, ("thread_id", "id")),
 	EventType.MESSAGE_CREATED: _event_target(ResourceType.THREAD, ("thread_id",)),
 	EventType.MESSAGE_UPDATED: _event_target(ResourceType.THREAD, ("thread_id",)),
 	EventType.MESSAGE_DELETED: _event_target(ResourceType.THREAD, ("thread_id",)),
@@ -162,15 +180,25 @@ _EVENT_ROUTING_TARGETS: dict[str, _EventResourceTarget] = {
 	EventType.TOOL_NOTIFICATION: _event_target(ResourceType.THREAD, ("thread_id",)),
 	EventType.CITATION_SOURCES: _event_target(ResourceType.THREAD, ("thread_id",)),
 }
+"""every event type that fans out by resource access, and what it routes by.
+
+an event type absent from here has no resource governing it, so it falls back
+to scope routing: one user, or a system broadcast.
+"""
 
 
 def _resource_id_from_data(
 	data: Mapping[str, object],
 	keys: tuple[str, ...],
 ) -> TypeID | None:
+	"""pull the routing resource's id out of an event payload.
+
+	keys are tried in order, so an event carrying several ids names the one it
+	routes by first.
+	"""
 	for key in keys:
 		value = data.get(key)
-		if value is not None:
+		if value is not None and is_typeid(str(value)):
 			return TypeID(str(value))
 	return None
 
@@ -198,6 +226,11 @@ def _resolve_routing(event: Event) -> tuple[ResourceType, TypeID] | None:
 
 
 def _event_scope(event: Event) -> str:
+	"""the event's scope as a plain string.
+
+	the column round-trips as either the enum or its value depending on where
+	the row came from, and every caller only wants to compare it.
+	"""
 	if isinstance(event.scope, EventScope):
 		return event.scope.value
 	return str(event.scope)
@@ -211,6 +244,7 @@ def _scope_user_recipient_id(event: Event) -> TypeID | None:
 
 
 def _scope_broadcasts(event: Event) -> bool:
+	"""whether this event goes to everyone rather than a resolved audience."""
 	return _event_scope(event) == EventScope.SYSTEM.value
 
 
@@ -225,7 +259,9 @@ def _build_event_data(
 		"scope": _event_scope(event),
 		"scope_id": str(event.scope_id) if event.scope_id else None,
 		"data": event.data,
+		"metadata": event.public_metadata,
 		"version": event.version,
+		"resource_revision": event.resource_revision,
 		"user_id": str(event.user_id) if event.user_id else None,
 		"thread_id": str(event.thread_id) if event.thread_id else None,
 		"message_id": str(event.message_id) if event.message_id else None,
@@ -244,20 +280,6 @@ def _build_event_data(
 	}
 
 
-def _affected_project_ids(event: Event) -> list[TypeID]:
-	if not event.data:
-		return []
-	value = event.data.get("affected_project_ids")
-	if not isinstance(value, Iterable) or isinstance(value, (str, bytes)):
-		return []
-	project_ids: list[TypeID] = []
-	for raw_project_id in value:
-		if raw_project_id is None:
-			continue
-		project_ids.append(TypeID(str(raw_project_id)))
-	return _unique_recipient_ids(project_ids)
-
-
 async def _resolve_event_recipient_ids(
 	event: Event,
 ) -> list[TypeID] | None:
@@ -266,8 +288,6 @@ async def _resolve_event_recipient_ids(
 	uses a fresh read-only session because the caller's session may already
 	be closed by the time recipients are needed (persist_and_fanout_event commits
 	before resolving so newly-created rows are visible to the lookup).
-	resource events carrying affected_project_ids are also routed to users who
-	can read those projects, so moved resources reach old and new project viewers.
 	returns None when the event has no resource route; scope routing handles
 	direct-user or system broadcast delivery.
 	"""
@@ -275,21 +295,17 @@ async def _resolve_event_recipient_ids(
 	if not routing:
 		return None
 	resource_type, resource_id = routing
-	async with async_session_local() as session:
-		recipients = await list_accessible_user_ids(
-			resource_type,
-			resource_id,
-			session,
-		)
-		project_ids = _affected_project_ids(event)
-		if project_ids:
-			recipients.extend(
-				await _resolve_project_recipient_ids(project_ids, session)
-			)
-		return _unique_recipient_ids(recipients)
+	return await list_accessible_user_ids_for_resources(
+		[(resource_type, resource_id)], None
+	)
 
 
 def _unique_recipient_ids(values: Iterable[TypeID]) -> list[TypeID]:
+	"""dedupe recipients while keeping their order.
+
+	the same user can be reached through several rules at once, and nobody
+	should receive one event twice.
+	"""
 	result: list[TypeID] = []
 	seen: set[str] = set()
 	for value in values:
@@ -301,23 +317,6 @@ def _unique_recipient_ids(values: Iterable[TypeID]) -> list[TypeID]:
 	return result
 
 
-async def _resolve_project_recipient_ids(
-	project_ids: Iterable[TypeID],
-	session: AsyncSession,
-) -> list[TypeID]:
-	"""return users who can currently read any of the given projects."""
-	recipients: list[TypeID] = []
-	for project_id in project_ids:
-		recipients.extend(
-			await list_accessible_user_ids(
-				ResourceType.PROJECT,
-				project_id,
-				session,
-			)
-		)
-	return _unique_recipient_ids(recipients)
-
-
 async def _send_live_payload_locally(
 	stream_payload: dict[str, Any],
 	recipient_ids: list[TypeID] | None,
@@ -325,6 +324,8 @@ async def _send_live_payload_locally(
 	broadcast: bool,
 	exclude_user_id: TypeID | str | None = None,
 ) -> None:
+	"""dispatch server subscribers, then deliver to local WebSockets."""
+	await dispatch_server_event(stream_payload)
 	if recipient_ids is not None:
 		if recipient_ids:
 			exclude = TypeID(str(exclude_user_id)) if exclude_user_id else None
@@ -347,15 +348,7 @@ async def fanout_live_payload(
 	broadcast: bool,
 	exclude_user_id: TypeID | str | None = None,
 ) -> None:
-	"""deliver a websocket payload locally and relay it to other API workers."""
-	if recipient_ids is not None and not recipient_ids:
-		return
-	if recipient_ids is None and user_id is None and not broadcast:
-		logger.debug(
-			"live payload has no delivery target: %s",
-			stream_payload.get("type"),
-		)
-		return
+	"""dispatch a live event locally and relay it to every API process."""
 	await _send_live_payload_locally(
 		stream_payload,
 		recipient_ids,
@@ -363,7 +356,7 @@ async def fanout_live_payload(
 		broadcast,
 		exclude_user_id,
 	)
-	await event_bus.publish_remote_fanout(
+	await publish_remote_fanout(
 		stream_payload,
 		recipient_ids=recipient_ids,
 		user_id=user_id,
@@ -372,10 +365,36 @@ async def fanout_live_payload(
 	)
 
 
+async def broadcast_to_resource(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	stream_payload: dict[str, Any],
+	exclude_user_id: TypeID | str | None = None,
+) -> None:
+	"""deliver a live payload to everyone who can read a resource."""
+	recipient_ids = await list_accessible_user_ids_for_resources(
+		[(resource_type, resource_id)], None
+	)
+	if not recipient_ids:
+		return
+	await fanout_live_payload(
+		stream_payload,
+		recipient_ids,
+		None,
+		False,
+		exclude_user_id=exclude_user_id,
+	)
+
+
 async def _fanout_event_scope(
 	event: Event,
 	stream_payload: dict[str, Any],
 ) -> None:
+	"""deliver an event that no resource governs, by its scope alone.
+
+	an event with neither a user nor a system scope has nowhere to go: it is
+	still persisted, so it is logged rather than raised on.
+	"""
 	user_id = _scope_user_recipient_id(event)
 	if user_id is not None:
 		await fanout_live_payload(stream_payload, None, user_id, False)
@@ -389,25 +408,48 @@ async def _fanout_event_scope(
 		)
 
 
-async def start_remote_fanout_relay() -> asyncio.Task[None]:
+async def start_remote_fanout_relay(
+	on_connected: Callable[[], Awaitable[None]] | None = None,
+) -> asyncio.Task[None]:
 	"""start the redis listener that sends remote websocket payloads locally."""
-	return await event_bus.start_remote_fanout_listener(_send_live_payload_locally)
+	return await start_remote_fanout_listener(
+		_send_live_payload_locally,
+		on_connected,
+	)
+
+
+async def request_socket_kill(user_id: TypeID) -> None:
+	"""close the user's websockets on every backend process."""
+	await publish_socket_kill(user_id)
+
+
+async def start_socket_kill_relay() -> asyncio.Task[None]:
+	"""start the redis listener that force-closes revoked users' sockets."""
+
+	async def _kill(user_id: TypeID) -> None:
+		"""drop this process's sockets for a user revoked on another one."""
+		await event_connections.close_user_connections(user_id)
+
+	return await start_socket_kill_listener(_kill)
 
 
 class ConnectionManager:
 	"""manages process-local websocket connections per user."""
 
 	def __init__(self) -> None:
+		"""start with no connections held."""
 		self._connections: dict[TypeID, set[WebSocket]] = defaultdict(set)
 		self._lock = asyncio.Lock()
 
 	async def connect(self, user_id: TypeID, websocket: WebSocket) -> None:
+		"""accept one socket and track it against its user."""
 		await websocket.accept()
 		async with self._lock:
 			self._connections[user_id].add(websocket)
 		logger.debug("websocket connected for user %s", user_id)
 
 	async def disconnect(self, user_id: TypeID, websocket: WebSocket) -> None:
+		"""stop tracking one socket, and the user once none are left."""
 		async with self._lock:
 			self._connections[user_id].discard(websocket)
 			if not self._connections[user_id]:
@@ -415,6 +457,11 @@ class ConnectionManager:
 		logger.debug("websocket disconnected for user %s", user_id)
 
 	async def send_to_user(self, user_id: TypeID, data: dict[str, Any]) -> None:
+		"""send to every socket this user has open here.
+
+		a socket that refuses the payload is already gone, so it is dropped
+		rather than retried.
+		"""
 		async with self._lock:
 			connections = list(self._connections.get(user_id, []))
 
@@ -423,6 +470,7 @@ class ConnectionManager:
 				await websocket.send_json(data)
 			except Exception:
 				logger.debug("failed to send to websocket for user %s", user_id)
+				await self.disconnect(user_id, websocket)
 
 	async def send_to_users(
 		self,
@@ -435,6 +483,7 @@ class ConnectionManager:
 		await asyncio.gather(*(self.send_to_user(uid, data) for uid in targets))
 
 	async def send_to_all(self, data: dict[str, Any]) -> None:
+		"""send to every socket on this process, for system broadcasts."""
 		async with self._lock:
 			all_connections = [
 				(user_id, ws)
@@ -447,94 +496,173 @@ class ConnectionManager:
 				await websocket.send_json(data)
 			except Exception:
 				logger.debug("failed to broadcast to user %s", user_id)
+				await self.disconnect(user_id, websocket)
+
+	async def close_user_connections(self, user_id: TypeID) -> None:
+		"""force-close every open websocket for a user (session revocation)."""
+		async with self._lock:
+			connections = list(self._connections.pop(user_id, ()))
+		for websocket in connections:
+			try:
+				await websocket.close(code=4002, reason="session revoked")
+			except Exception:
+				logger.debug("failed to close websocket for user %s", user_id)
 
 
 event_connections = ConnectionManager()
+"""this process's websocket connections; remote ones are reached over Redis."""
 
 EventEmitter = Callable[[Event], Awaitable[None]]
+"""how a tool or filter emits an event without knowing where it goes.
+
+what an emitter does with the event - persist it, deliver it live, or both - is
+the caller's choice at construction, not the tool's.
+"""
+
+
+def _copy_event(event: Event) -> Event:
+	"""snapshot an event so later mutation cannot change what was delivered.
+
+	the emitter hands events to a drain task, and the caller keeps using the
+	original: without a copy, a payload could change between emit and write.
+	"""
+	return Event(
+		id=event.id,
+		scope=event.scope,
+		scope_id=event.scope_id,
+		type=event.type,
+		data=copy.deepcopy(event.data),
+		expires_at=event.expires_at,
+		version=event.version,
+		resource_revision=event.resource_revision,
+		user_id=event.user_id,
+		thread_id=event.thread_id,
+		message_id=event.message_id,
+		task_id=event.task_id,
+		project_id=event.project_id,
+		calendar_id=event.calendar_id,
+		calendar_event_id=event.calendar_event_id,
+		reminder_list_id=event.reminder_list_id,
+		reminder_id=event.reminder_id,
+		metadata_=copy.deepcopy(event.metadata_),
+	)
+
+
+def build_live_user_event_emitter(user_id: TypeID) -> EventEmitter:
+	"""create an emitter that reaches one user's sockets and writes nothing.
+
+	for a run defined by leaving no trace: its requester still watches it work,
+	but no row outlives the request and nobody else is told it happened.
+	"""
+
+	async def emit(event: Event) -> None:
+		"""deliver one event to its user, giving it an id if it has none."""
+		if not event.id:
+			event.id = TypeID(new_typeid("event"))
+		await fanout_live_payload(_build_event_data(event), None, user_id, False)
+
+	return emit
 
 
 def build_live_persisting_event_emitter(
-	message_id_provider: Callable[[], str | None] | None = None,
 	before_persist: Callable[[Event], Awaitable[None]] | None = None,
+	on_emit: Callable[[], Awaitable[None]] | None = None,
 ) -> EventEmitter:
-	"""create a non-blocking emitter that fanouts immediately and persists async.
+	"""create an emitter for consistent durable and live events.
 
-	This is the "core" behavior: tools/filters should never be able to emit events
-	that vanish (no no-op emitter). Persistence happens in a separate session.
+	this is the core behavior: tools and filters never emit events
+	that vanish (no no-op emitter). delivery happens from the persisted snapshot.
 
-	recipient lists are resolved on first use per resource and cached for the
-	lifetime of this emitter (a single agent run).
+	emitting hands the event to a drain task rather than awaiting the write, so
+	it does not block a run's tool loop until ``maxsize`` events are in flight;
+	past that it applies backpressure, which is deliberate - a producer that
+	outruns the database that far is emitting faster than anyone can read.
+
+	recipient lists are resolved for every event so access changes take effect
+	during a long-running emitter.
 	"""
-	_recipient_cache: dict[str, list[TypeID]] = {}
+	queue: asyncio.Queue[Event] = asyncio.Queue(maxsize=256)
+	drain_lock = asyncio.Lock()
+	drain_task: asyncio.Task[None] | None = None
 
-	async def _fanout_with_cached_route(event: Event) -> None:
-		"""fanout an event with access-based routing cached per resource."""
+	async def _fanout_with_current_route(event: Event) -> None:
+		"""fanout an event using the current access route."""
 		event_data = _build_event_data(event)
 		routing = _resolve_routing(event)
 		if routing:
 			resource_type, resource_id = routing
-			cache_key = f"{resource_type.value}:{resource_id}"
-			if cache_key not in _recipient_cache:
-				async with async_session_local() as read_session:
-					_recipient_cache[cache_key] = await list_accessible_user_ids(
-						resource_type,
-						resource_id,
-						read_session,
-					)
-			user_ids = _recipient_cache[cache_key]
+			user_ids = await list_accessible_user_ids_for_resources(
+				[(resource_type, resource_id)], None
+			)
 			await fanout_live_payload(event_data, user_ids, None, False)
 			return
 		await _fanout_event_scope(event, event_data)
 
-	def _track(name: str, coro: Coroutine[object, object, object]) -> None:
-		create_background_task(coro, name=name)
+	async def _persist_and_fanout(snapshot: Event) -> None:
+		"""write one event, then deliver the row that was written.
+
+		delivering from the snapshot rather than the caller's object is what
+		makes the durable and live views of an event identical.
+		"""
+		if before_persist is not None:
+			await before_persist(snapshot)
+		async with async_session_local() as bg_session:
+			bg_session.add(snapshot)
+			await bg_session.commit()
+		await _fanout_with_current_route(snapshot)
+
+	async def _drain() -> None:
+		"""write queued events until the queue empties, then hand off.
+
+		one event failing must not strand the rest, so each is logged and the
+		drain continues; the re-spawn on exit closes the race where a producer
+		enqueues just as this task decides it is done.
+		"""
+		nonlocal drain_task
+		try:
+			while True:
+				try:
+					snapshot = queue.get_nowait()
+				except asyncio.QueueEmpty:
+					return
+				try:
+					await _persist_and_fanout(snapshot)
+				except Exception:
+					logger.exception(
+						"event persistence or fanout failed",
+						extra={
+							"event_id": str(snapshot.id),
+							"event_type": snapshot.type,
+						},
+					)
+				finally:
+					queue.task_done()
+		finally:
+			async with drain_lock:
+				drain_task = None
+				if not queue.empty():
+					drain_task = create_background_task(
+						_drain(),
+						name="event_persist_and_fanout",
+					)
 
 	async def emit(event: Event) -> None:
+		"""queue one event for durable delivery, and start the drain if idle."""
+		nonlocal drain_task
+		if on_emit is not None:
+			await on_emit()
 		# ensure stable id for correlation
 		if not event.id:
 			event.id = TypeID(new_typeid("event"))
 
-		# attach message correlation if available
-		if event.message_id is None and message_id_provider:
-			msg_id = message_id_provider()
-			if msg_id:
-				event.message_id = TypeID(msg_id)
-
-		# fanout immediately with access-based routing
-		_track(
-			"event_fanout",
-			_fanout_with_cached_route(event),
-		)
-
-		# persist in background (without broadcasting again)
-		async def _persist() -> None:
-			if before_persist is not None:
-				await before_persist(event)
-			copy = Event(
-				id=event.id,
-				scope=event.scope,
-				scope_id=event.scope_id,
-				type=event.type,
-				data=event.data,
-				expires_at=event.expires_at,
-				version=event.version,
-				user_id=event.user_id,
-				thread_id=event.thread_id,
-				message_id=event.message_id,
-				task_id=event.task_id,
-				project_id=event.project_id,
-				calendar_id=event.calendar_id,
-				calendar_event_id=event.calendar_event_id,
-				reminder_list_id=event.reminder_list_id,
-				reminder_id=event.reminder_id,
-				metadata_=event.metadata_,
-			)
-			async with async_session_local() as bg_session:
-				bg_session.add(copy)
-				await bg_session.commit()
-
-		_track("event_persist", _persist())
+		snapshot = _copy_event(event)
+		await queue.put(snapshot)
+		async with drain_lock:
+			if drain_task is None or drain_task.done():
+				drain_task = create_background_task(
+					_drain(),
+					name="event_persist_and_fanout",
+				)
 
 	return emit
 
@@ -558,6 +686,11 @@ async def _fanout_event_with_recipients(
 	stream_payload: dict[str, Any],
 	recipient_ids: list[TypeID] | None,
 ) -> None:
+	"""deliver to a resolved audience, or fall back to scope routing.
+
+	an empty recipient list is not the same as no list: the first means the
+	event resolved to nobody, the second that no resource governs it.
+	"""
 	if recipient_ids is not None:
 		await fanout_live_payload(stream_payload, recipient_ids, None, False)
 	else:
@@ -585,6 +718,7 @@ async def persist_and_fanout_event(
 	"""
 	session.add(event)
 	await session.commit()
+	await run_post_commit_actions_safely(session)
 
 	resolved_recipient_ids = recipient_ids
 	if resolved_recipient_ids is None:
@@ -605,24 +739,9 @@ async def create_event_from_request(
 	principal: Principal,
 ) -> Event:
 	"""validate an event create request, persist it, and fanout live updates."""
-	require_permission(principal, "events:manage")
-	if event_in.user_id is not None and not principal.is_admin:
-		if event_in.user_id != principal.user_id:
-			raise HTTPException(
-				status_code=status.HTTP_403_FORBIDDEN,
-				detail="forbidden",
-			)
-	if (
-		event_in.scope == EventScope.USER
-		and event_in.scope_id is not None
-		and not principal.is_admin
-		and event_in.scope_id != principal.user_id
-	):
-		raise HTTPException(
-			status_code=status.HTTP_403_FORBIDDEN,
-			detail="forbidden",
-		)
-	event = Event(**event_in.model_dump(by_alias=True))
+	require_permission(principal, ActionPermission.EVENTS_MANAGE)
+	event = Event(**event_in.model_dump(exclude={"metadata"}))
+	apply_metadata_write(event, event_in.metadata)
 	return await persist_and_fanout_event(session, event=event)
 
 
@@ -631,7 +750,13 @@ async def list_events(
 	principal: Principal,
 	filters: EventListFilters | None = None,
 ) -> list[Event]:
-	require_permission(principal, "events:manage")
+	"""query the event log as an operator.
+
+	an operator surface, not a participant one: it reads across resources, so
+	it is gated on the permission rather than on access to any one of them.
+	participants read events through the message-anchored thread endpoint.
+	"""
+	require_permission(principal, ActionPermission.EVENTS_READ)
 	event_filters = filters or EventListFilters()
 	stmt = select(Event).order_by(Event.created_at.desc())
 

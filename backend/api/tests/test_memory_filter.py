@@ -54,7 +54,7 @@ def _app_context(ai: AIPreferences) -> AppContext:
 		AppContext,
 		SimpleNamespace(
 			principal=SimpleNamespace(
-				user=SimpleNamespace(prefs=SimpleNamespace(ai=ai))
+				subject=SimpleNamespace(prefs=SimpleNamespace(ai=ai))
 			),
 			retrieval=SimpleNamespace(query_text=None, query_embedding=None),
 			session=None,

@@ -1,7 +1,5 @@
 """user client schemas."""
 
-from __future__ import annotations
-
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -38,6 +36,8 @@ class UserClientPreferences(BaseModel):
 class UserClientUpsert(BaseModel):
 	"""request schema for registering a user client."""
 
+	model_config = ConfigDict(extra="forbid")
+
 	client_key: str = Field(min_length=8, max_length=128)
 	name: str | None = Field(default=None, max_length=120)
 	user_agent: str | None = Field(default=None, max_length=2048)
@@ -46,6 +46,8 @@ class UserClientUpsert(BaseModel):
 
 class UserClientPatch(BaseModel):
 	"""request schema for updating user-client-specific data."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	name: str | None = Field(default=None, max_length=120)
 	info: JSONObject | None = None

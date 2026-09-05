@@ -1,7 +1,5 @@
 """reminder list service helpers."""
 
-from __future__ import annotations
-
 from fastapi import HTTPException, status
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +10,7 @@ from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.reminder import Reminder, ReminderList, ReminderStatus
-from api.permissions import ResourceType
+from api.permissions import ActionPermission, ResourceType
 from api.schemas.reminder import ReminderList as ReminderListOut
 from api.schemas.reminder import (
 	ReminderListCreate,
@@ -20,23 +18,26 @@ from api.schemas.reminder import (
 	ReminderListUpdate,
 	ReminderListWithCounts,
 )
-from api.v1.service import events as event_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.authorization import (
+	apply_metadata_write,
+	apply_resource_access_list_filters,
 	invalidate_accessible_users_for_resource,
+	list_accessible_user_ids_for_resources,
 	require_permission,
 	require_project_access,
 	require_resource_access,
 	resource_access_predicate,
 )
+from api.v1.service.events import persist_and_fanout_event
 from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.projects import invalidate_project_payload_caches, load_projects
 from api.v1.service.reminders.cache import (
 	invalidate_reminder_list_scheduled_items,
 )
+from api.v1.service.reminders.notifications import cancel_reminder_notifications
 from api.v1.service.reminders.search import REMINDER_SPEC, vectorize_reminders_for_list
 from api.v1.service.vectorize import remove_vectorized_resource
-from api.v1.tasks.reminders import cancel_reminder_notifications
 from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
 
@@ -57,7 +58,7 @@ async def _clear_default_reminder_lists(
 	except_id: TypeID | None = None,
 	owner_id: TypeID | None = None,
 ) -> None:
-	target_owner_id = owner_id if owner_id is not None else principal.user_id
+	target_owner_id = owner_id if owner_id is not None else principal.user.id
 	stmt = select(ReminderList).where(
 		ReminderList.owner_id == target_owner_id,
 		ReminderList.is_default.is_(True),
@@ -77,7 +78,7 @@ async def get_or_create_default_reminder_list(
 	stmt = (
 		select(ReminderList)
 		.where(
-			ReminderList.owner_id == principal.user_id,
+			ReminderList.owner_id == principal.user.id,
 			ReminderList.is_default.is_(True),
 		)
 		.order_by(ReminderList.created_at.asc())
@@ -88,7 +89,7 @@ async def get_or_create_default_reminder_list(
 		return reminder_list
 
 	reminder_list = ReminderList(
-		owner_id=principal.user_id,
+		owner_id=principal.user.id,
 		name=_DEFAULT_REMINDER_LIST_NAME,
 		description=None,
 		color="#22c55e",
@@ -108,7 +109,7 @@ async def create_reminder_list(
 	origin_session_id: str | None = None,
 ) -> ReminderList:
 	"""create a new reminder list."""
-	require_permission(principal, "reminders:create")
+	require_permission(principal, ActionPermission.REMINDERS_CREATE)
 	for pid in data.project_ids:
 		await require_project_access(
 			pid,
@@ -119,27 +120,33 @@ async def create_reminder_list(
 	if data.is_default:
 		await _clear_default_reminder_lists(session, principal)
 	reminder_list = ReminderList(
-		owner_id=principal.user_id,
-		**data.model_dump(exclude_unset=True, by_alias=True, exclude={"project_ids"}),
+		owner_id=principal.user.id,
+		**data.model_dump(
+			exclude_unset=True,
+			exclude={"project_ids", "metadata"},
+		),
 		projects=(
 			await load_projects(data.project_ids, session, principal)
 			if data.project_ids
 			else []
 		),
 	)
+	apply_metadata_write(reminder_list, data.metadata)
 	session.add(reminder_list)
 	await session.flush()
 
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.REMINDER_LIST_CREATED,
 		data=ReminderListOut.model_validate(reminder_list).model_dump(mode="json"),
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 		reminder_list_id=reminder_list.id,
 	)
-	await event_service.persist_and_fanout_event(
-		session, event=event, origin_session_id=origin_session_id
+	await persist_and_fanout_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
 	)
 	await invalidate_project_payload_caches(set(data.project_ids))
 
@@ -163,7 +170,7 @@ async def list_reminder_lists(
 		stmt = select(ReminderList).where(
 			resource_access_predicate(principal, ResourceType.REMINDER_LIST),
 		)
-		stmt = _apply_reminder_list_filters(stmt, list_filters)
+		stmt = _apply_reminder_list_filters(stmt, list_filters, principal)
 		stmt = apply_sort(
 			stmt,
 			sort_by=sort_by,
@@ -209,7 +216,7 @@ async def list_reminder_lists(
 			resource_access_predicate(principal, ResourceType.REMINDER_LIST),
 		)
 	)
-	counts_stmt = _apply_reminder_list_filters(counts_stmt, list_filters)
+	counts_stmt = _apply_reminder_list_filters(counts_stmt, list_filters, principal)
 	counts_stmt = apply_sort(
 		counts_stmt,
 		sort_by=sort_by,
@@ -253,75 +260,14 @@ async def count_reminder_lists(
 			resource_access_predicate(principal, ResourceType.REMINDER_LIST),
 		)
 	)
-	stmt = _apply_reminder_list_filters(stmt, list_filters)
+	stmt = _apply_reminder_list_filters(stmt, list_filters, principal)
 	return await session.scalar(stmt) or 0
-
-
-async def search_reminder_lists(
-	query_text: str,
-	session: AsyncSession,
-	principal: Principal,
-	offset: int = 0,
-	limit: int = 50,
-) -> list[ReminderListWithCounts]:
-	"""search accessible reminder lists by name and description."""
-	await get_or_create_default_reminder_list(session, principal)
-	query = query_text.strip()
-	if not query:
-		return []
-	pattern = contains_pattern(query)
-	counts_subq = (
-		select(
-			Reminder.list_id,
-			func.count(Reminder.id).label("total"),
-			func.sum(
-				case((Reminder.status == ReminderStatus.PENDING, 1), else_=0)
-			).label("pending"),
-			func.sum(
-				case((Reminder.status == ReminderStatus.COMPLETED, 1), else_=0)
-			).label("completed"),
-		)
-		.where(Reminder.parent_id.is_(None))
-		.group_by(Reminder.list_id)
-		.subquery()
-	)
-	stmt = (
-		select(
-			ReminderList,
-			func.coalesce(counts_subq.c.total, 0).label("total_count"),
-			func.coalesce(counts_subq.c.pending, 0).label("pending_count"),
-			func.coalesce(counts_subq.c.completed, 0).label("completed_count"),
-		)
-		.outerjoin(counts_subq, ReminderList.id == counts_subq.c.list_id)
-		.where(
-			resource_access_predicate(principal, ResourceType.REMINDER_LIST),
-			or_(
-				ReminderList.name.ilike(pattern, escape="\\"),
-				ReminderList.description.ilike(pattern, escape="\\"),
-			),
-		)
-		.order_by(ReminderList.position.asc(), ReminderList.name.asc())
-		.offset(offset)
-		.limit(limit)
-		.options(selectinload(ReminderList.projects))
-	)
-	result = await session.execute(stmt)
-	return [
-		ReminderListWithCounts(
-			**ReminderListWithCounts.model_validate(row.ReminderList).model_dump(
-				exclude={"total_count", "pending_count", "completed_count"}
-			),
-			total_count=row.total_count,
-			pending_count=row.pending_count,
-			completed_count=row.completed_count,
-		)
-		for row in result.all()
-	]
 
 
 def _apply_reminder_list_filters(
 	stmt: Select,
 	filters: ReminderListFilters,
+	principal: Principal,
 ) -> Select:
 	"""apply reminder-list list/count filters."""
 	if filters.owner_id is not None:
@@ -334,7 +280,13 @@ def _apply_reminder_list_filters(
 				ReminderList.description.ilike(pattern, escape="\\"),
 			)
 		)
-	return stmt
+	return apply_resource_access_list_filters(
+		stmt,
+		principal,
+		ResourceType.REMINDER_LIST,
+		filters.access_relationship,
+		filters.resolved_access_level,
+	)
 
 
 async def get_list_counts(
@@ -371,6 +323,7 @@ async def get_reminder_list(
 	list_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
+	required_level: AccessLevel = AccessLevel.READER,
 ) -> ReminderList:
 	"""get a reminder list by id."""
 	result = await session.execute(
@@ -389,9 +342,32 @@ async def get_reminder_list(
 		session,
 		principal,
 		ResourceType.REMINDER_LIST,
+		required_level=required_level,
 		owner_id=reminder_list.owner_id,
 	)
 	return reminder_list
+
+
+async def load_reminder_lists(
+	list_ids: list[TypeID],
+	session: AsyncSession,
+	principal: Principal,
+) -> dict[TypeID, ReminderList]:
+	"""bulk-load accessible reminder lists (with projects) keyed by id.
+
+	inaccessible or unknown ids are silently absent from the result.
+	"""
+	if not list_ids:
+		return {}
+	result = await session.execute(
+		select(ReminderList)
+		.where(
+			ReminderList.id.in_([str(list_id) for list_id in list_ids]),
+			resource_access_predicate(principal, ResourceType.REMINDER_LIST),
+		)
+		.options(selectinload(ReminderList.projects))
+	)
+	return {reminder_list.id: reminder_list for reminder_list in result.scalars().all()}
 
 
 async def update_reminder_list(
@@ -402,7 +378,12 @@ async def update_reminder_list(
 	origin_session_id: str | None = None,
 ) -> ReminderList:
 	"""update a reminder list."""
-	reminder_list = await get_reminder_list(list_id, session, principal=principal)
+	reminder_list = await get_reminder_list(
+		list_id,
+		session,
+		principal=principal,
+		required_level=AccessLevel.EDITOR,
+	)
 	if "is_default" in data.model_fields_set and data.is_default is True:
 		await _clear_default_reminder_lists(
 			session,
@@ -410,7 +391,7 @@ async def update_reminder_list(
 			except_id=reminder_list.id,
 			owner_id=reminder_list.owner_id,
 		)
-	update_data = data.model_dump(exclude_unset=True, by_alias=True)
+	update_data = data.model_dump(exclude_unset=True, exclude={"metadata"})
 	new_project_ids: list[TypeID] | None = update_data.pop("project_ids", None)
 	changed_project_ids: set[TypeID] = set()
 	if new_project_ids is not None:
@@ -428,6 +409,7 @@ async def update_reminder_list(
 		changed_project_ids = old_project_ids | set(new_project_ids)
 	for key, value in update_data.items():
 		setattr(reminder_list, key, value)
+	apply_metadata_write(reminder_list, data.metadata)
 	await session.flush()
 	await session.refresh(reminder_list, attribute_names=["updated_at"])
 
@@ -440,19 +422,36 @@ async def update_reminder_list(
 		]
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.REMINDER_LIST_UPDATED,
 		data=event_data,
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 		reminder_list_id=reminder_list.id,
 	)
-	await event_service.persist_and_fanout_event(
-		session, event=event, origin_session_id=origin_session_id
+	event_recipients = (
+		await list_accessible_user_ids_for_resources(
+			[
+				(ResourceType.REMINDER_LIST, list_id),
+				*(
+					(ResourceType.PROJECT, project_id)
+					for project_id in changed_project_ids
+				),
+			],
+			session,
+		)
+		if changed_project_ids
+		else None
+	)
+	await persist_and_fanout_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+		recipient_ids=event_recipients,
 	)
 	await invalidate_reminder_list_scheduled_items(reminder_list.id)
 	if changed_project_ids:
 		await invalidate_accessible_users_for_resource(
-			ResourceType.REMINDER_LIST, list_id, session
+			ResourceType.REMINDER_LIST, list_id
 		)
 	await invalidate_project_payload_caches(changed_project_ids)
 
@@ -470,10 +469,15 @@ async def delete_reminder_list(
 	origin_session_id: str | None = None,
 ) -> None:
 	"""delete a reminder list and all its reminders."""
-	reminder_list = await get_reminder_list(list_id, session, principal=principal)
+	reminder_list = await get_reminder_list(
+		list_id,
+		session,
+		principal=principal,
+		required_level=AccessLevel.ADMIN,
+	)
 	if reminder_list.is_default:
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="default reminder list cannot be deleted",
 		)
 	project_ids = {project.id for project in reminder_list.projects}
@@ -492,23 +496,31 @@ async def delete_reminder_list(
 
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.REMINDER_LIST_DELETED,
 		data={
 			"id": list_id_str,
 			"project_ids": [str(project_id) for project_id in project_ids],
 			"affected_project_ids": [str(project_id) for project_id in project_ids],
 		},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 		reminder_list_id=reminder_list.id,
 	)
-	await event_service.persist_and_fanout_event(
-		session, event=event, origin_session_id=origin_session_id
+	delete_recipients = await list_accessible_user_ids_for_resources(
+		[
+			(ResourceType.REMINDER_LIST, list_id),
+			*((ResourceType.PROJECT, project_id) for project_id in project_ids),
+		],
+		session,
+	)
+	await persist_and_fanout_event(
+		session,
+		event=event,
+		origin_session_id=origin_session_id,
+		recipient_ids=delete_recipients,
 	)
 	await invalidate_reminder_list_scheduled_items(reminder_list.id)
-	await invalidate_accessible_users_for_resource(
-		ResourceType.REMINDER_LIST, list_id, session
-	)
+	await invalidate_accessible_users_for_resource(ResourceType.REMINDER_LIST, list_id)
 	await invalidate_project_payload_caches(project_ids)
 	await session.delete(reminder_list)
 	await session.flush()

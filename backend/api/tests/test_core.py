@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import logging
-import types
 from unittest.mock import MagicMock
 
 import pytest
 
-from api import runtime as config_module
-from api import runtime as runtime_module
 from api.boot_settings import BootSettings
 from api.database import main as database_module
 from api.settings.settings import SecuritySettings
@@ -19,6 +16,7 @@ class _DummySession:
 	"""Lightweight async session stand-in for exercising get_db."""
 
 	def __init__(self) -> None:
+		self.info: dict[str, object] = {}
 		self.committed = False
 		self.rolled_back = False
 		self.closed = False
@@ -45,6 +43,7 @@ class _DummySessionContext:
 
 	async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
 		self.exited = True
+		await self._session.close()
 
 
 class _DummyConnection:
@@ -89,29 +88,6 @@ def test_settings_validate_database_url_scheme() -> None:
 def test_settings_accepts_supported_database_url() -> None:
 	settings = BootSettings(DATABASE_URL="postgresql://user@localhost/db")
 	assert settings.DATABASE_URL.startswith("postgresql://")
-
-
-def test_psycopg_event_loop_policy_noop_off_windows(
-	monkeypatch: pytest.MonkeyPatch,
-) -> None:
-	"""Policy helper should be a no-op when not on Windows."""
-
-	called = False
-
-	def _mark_called(_policy: object) -> None:
-		nonlocal called
-		called = True
-
-	# Create a fake sys module with linux platform
-	fake_sys = types.ModuleType("fake_sys")
-	fake_sys.platform = "linux"  # type: ignore[attr-defined]
-
-	monkeypatch.setattr(runtime_module, "sys", fake_sys)
-	monkeypatch.setattr(runtime_module, "asyncio", database_module.asyncio)
-	monkeypatch.setattr(runtime_module.asyncio, "set_event_loop_policy", _mark_called)
-	# Call helper again under a non-windows platform
-	config_module.configure_psycopg_asyncio_event_loop_policy()
-	assert called is False
 
 
 @pytest.mark.asyncio

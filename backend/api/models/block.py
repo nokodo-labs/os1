@@ -1,7 +1,5 @@
 """block model - user-level blocks, independent of friendships."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, String, UniqueConstraint
@@ -9,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base
 from api.models.mixins import TimestampMixin, TypeIDPrimaryKeyMixin
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -29,12 +28,12 @@ class Block(TypeIDPrimaryKeyMixin, TimestampMixin, Base):
 		UniqueConstraint("blocker_id", "blocked_id", name="uq_block_pair"),
 	)
 
-	blocker_id: Mapped[str] = mapped_column(
+	blocker_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id", ondelete="CASCADE"),
 		index=True,
 	)
-	blocked_id: Mapped[str] = mapped_column(
+	blocked_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id", ondelete="CASCADE"),
 		index=True,

@@ -1,7 +1,5 @@
 """service helpers for notifications."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
@@ -14,6 +12,7 @@ from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.notification import Notification, NotificationPushSubscription
 from api.models.user_client import UserClient
+from api.permissions import ActionPermission
 from api.schemas.notification import (
 	NotificationAction,
 	NotificationListFilters,
@@ -29,7 +28,8 @@ from api.service.web_assets import (
 )
 from api.settings import settings
 from api.settings.settings import ManifestAssetSettings
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
+from api.v1.service.authorization import require_self_or_permission
 from api.v1.service.events import fanout_event
 from api.v1.service.web_push import schedule_notification_push
 from nokodo_ai.types.json import JSONArray, JSONObject
@@ -140,7 +140,7 @@ async def _get_notification(
 		.where(Notification.id == notification_id)
 		.where(_not_expired_filter(datetime.now(tz=UTC)))
 	)
-	if not principal.is_admin:
+	if not principal.has_permission(ActionPermission.NOTIFICATIONS_MANAGE):
 		stmt = stmt.where(Notification.user_id == principal.user.id)
 	result = await session.execute(stmt)
 	notification = result.scalars().one_or_none()
@@ -159,8 +159,9 @@ async def list_user_notifications(
 	filters: NotificationListFilters | None = None,
 ) -> list[Notification]:
 	"""return visible notifications for a user."""
-	if not principal.is_admin and user_id != principal.user_id:
-		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+	require_self_or_permission(
+		user_id, principal, ActionPermission.NOTIFICATIONS_MANAGE
+	)
 	notification_filters = filters or NotificationListFilters()
 
 	stmt = (
@@ -262,6 +263,58 @@ async def create_notifications(
 	return notifications
 
 
+async def stage_notifications(
+	session: AsyncSession,
+	payload: NotificationPayload,
+	user_ids: list[TypeID],
+	event_type: str = EventType.NOTIFICATION_CUSTOM,
+	agent_id: TypeID | None = None,
+) -> list[Notification]:
+	"""stage durable notifications and events without committing or delivering."""
+	action_items = _action_data(payload.actions)
+	now = datetime.now(tz=UTC)
+	expires_at = _notification_expires_at(now)
+	notifications: list[Notification] = []
+	for uid in dict.fromkeys(user_ids):
+		notification_id = new_typeid("notif")
+		event = Event(
+			id=new_typeid("event"),
+			scope=EventScope.USER,
+			scope_id=uid,
+			type=event_type,
+			data=_event_data(
+				payload,
+				action_items,
+				expires_at,
+				notification_id,
+				agent_id,
+			),
+			user_id=uid,
+		)
+		notification = Notification(
+			id=notification_id,
+			user_id=uid,
+			event=event,
+			title=payload.title,
+			body=payload.body,
+			icon_url=payload.icon_url,
+			image_url=payload.image_url,
+			badge_url=payload.badge_url,
+			action_url=payload.action_url,
+			tag=payload.tag,
+			data=payload.data,
+			actions=action_items,
+			require_interaction=payload.require_interaction,
+			silent=payload.silent,
+			renotify=payload.renotify,
+			expires_at=expires_at,
+		)
+		session.add(notification)
+		notifications.append(notification)
+	await session.flush()
+	return notifications
+
+
 async def deliver_notification(notification: Notification) -> None:
 	"""deliver one durable notification to live and background channels."""
 	if _is_expired(notification):
@@ -303,8 +356,9 @@ async def mark_all_notifications_read(
 	user_id: str,
 ) -> int:
 	"""mark all unread notifications as read for a user. returns count updated."""
-	if not principal.is_admin and str(user_id) != str(principal.user.id):
-		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+	require_self_or_permission(
+		TypeID(user_id), principal, ActionPermission.NOTIFICATIONS_MANAGE
+	)
 
 	to_update = await session.scalar(
 		select(func.count(Notification.id)).where(
@@ -458,8 +512,9 @@ async def _get_push_client(
 	client_id: TypeID,
 ) -> UserClient:
 	"""return the user client that owns push subscriptions for a route."""
-	if not principal.is_admin and user_id != principal.user_id:
-		raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
+	require_self_or_permission(
+		user_id, principal, ActionPermission.NOTIFICATIONS_MANAGE
+	)
 	stmt = select(UserClient).where(
 		UserClient.id == client_id,
 		UserClient.user_id == user_id,

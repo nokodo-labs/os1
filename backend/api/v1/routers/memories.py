@@ -1,14 +1,11 @@
 """Memory routers."""
 
-from __future__ import annotations
-
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
-from api.models.memory import Memory
 from api.permissions import ResourceType
 from api.schemas.memory import Memory as MemorySchema
 from api.schemas.memory import (
@@ -21,10 +18,37 @@ from api.schemas.memory import (
 from api.schemas.search import Page, SearchMode, SearchParams
 from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
-from api.v1.service import memories as memory_service
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authentication import Principal, get_current_principal
 from api.v1.service.authorization import require_admin
 from api.v1.service.events import SessionId
+from api.v1.service.memories import (
+	count_memories as count_memories_service,
+)
+from api.v1.service.memories import (
+	create_memory as create_memory_service,
+)
+from api.v1.service.memories import (
+	delete_all_memories as delete_all_memories_service,
+)
+from api.v1.service.memories import (
+	delete_memory as delete_memory_service,
+)
+from api.v1.service.memories import (
+	get_memory as get_memory_service,
+)
+from api.v1.service.memories import (
+	list_memories as list_memories_service,
+)
+from api.v1.service.memories import (
+	memory_payloads,
+	vectorize_memories,
+)
+from api.v1.service.memories import (
+	search_memories as search_memories_service,
+)
+from api.v1.service.memories import (
+	update_memory as update_memory_service,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -47,7 +71,7 @@ async def search_memories(
 	memories are only searchable via this dedicated endpoint and are NOT
 	included in the global /search results.
 	"""
-	scored = await memory_service.search_memories(
+	scored = await search_memories_service(
 		q,
 		db,
 		principal=principal,
@@ -57,7 +81,7 @@ async def search_memories(
 		filters=filters,
 	)
 	return Page(
-		items=[MemorySchema.model_validate(hit.item) for hit in scored[:limit]],
+		items=memory_payloads([hit.item for hit in scored[:limit]], principal),
 		has_more=len(scored) > limit,
 	)
 
@@ -68,14 +92,15 @@ async def create_memory(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
-) -> Memory:
+) -> MemorySchema:
 	"""capture a new memory."""
-	return await memory_service.create_memory(
+	memory = await create_memory_service(
 		memory_in,
 		db,
 		principal=principal,
 		origin_session_id=x_session_id,
 	)
+	return memory_payloads([memory], principal)[0]
 
 
 @router.get("", response_model=list[MemorySchema])
@@ -89,7 +114,7 @@ async def list_memories(
 	db: AsyncSession = Depends(get_db),
 ) -> list[MemorySchema]:
 	"""list memories for a user."""
-	items = await memory_service.list_memories(
+	items = await list_memories_service(
 		db,
 		principal=principal,
 		filters=filters,
@@ -98,7 +123,7 @@ async def list_memories(
 		sort_by=sort_by,
 		sort_dir=sort_dir,
 	)
-	return [MemorySchema.model_validate(m) for m in items]
+	return memory_payloads(items, principal)
 
 
 @router.get("/count", response_model=int)
@@ -108,7 +133,7 @@ async def count_memories(
 	db: AsyncSession = Depends(get_db),
 ) -> int:
 	"""count memories matching the list filters."""
-	return await memory_service.count_memories(
+	return await count_memories_service(
 		db,
 		principal=principal,
 		filters=filters,
@@ -120,9 +145,10 @@ async def get_memory(
 	memory_id: TypeID,
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
-) -> Memory:
+) -> MemorySchema:
 	"""fetch a single memory."""
-	return await memory_service.get_memory(memory_id, db, principal=principal)
+	memory = await get_memory_service(memory_id, db, principal=principal)
+	return memory_payloads([memory], principal)[0]
 
 
 @router.put("/{memory_id}", response_model=MemorySchema)
@@ -132,15 +158,16 @@ async def update_memory(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 	x_session_id: SessionId = None,
-) -> Memory:
+) -> MemorySchema:
 	"""update a memory."""
-	return await memory_service.update_memory(
+	memory = await update_memory_service(
 		memory_id,
 		memory_in,
 		db,
 		principal=principal,
 		origin_session_id=x_session_id,
 	)
+	return memory_payloads([memory], principal)[0]
 
 
 @router.delete("/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -151,7 +178,7 @@ async def delete_memory(
 	x_session_id: SessionId = None,
 ) -> None:
 	"""delete a memory."""
-	await memory_service.delete_memory(
+	await delete_memory_service(
 		memory_id,
 		db,
 		principal=principal,
@@ -166,7 +193,7 @@ async def delete_all_memories(
 	x_session_id: SessionId = None,
 ) -> None:
 	"""delete all memories for the current user."""
-	await memory_service.delete_all_memories(
+	await delete_all_memories_service(
 		db,
 		principal=principal,
 		origin_session_id=x_session_id,
@@ -180,5 +207,5 @@ async def revectorize_memories(
 ) -> dict[str, int]:
 	"""vectorize all memories. admin only."""
 	require_admin(principal)
-	count = await memory_service.vectorize_all_memories(db)
+	count = await vectorize_memories(db)
 	return {"vectorized": count}

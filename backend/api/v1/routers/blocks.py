@@ -8,8 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_db
 from api.models.block import Block
 from api.schemas.block import BlockCreate, BlockDetail
-from api.v1.service import blocks as blocks_service
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authentication import Principal, get_current_principal
+from api.v1.service.blocks import (
+	block_user as block_user_service,
+)
+from api.v1.service.blocks import (
+	list_blocks as list_blocks_service,
+)
+from api.v1.service.blocks import (
+	unblock_user as unblock_user_service,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -23,7 +31,7 @@ async def list_blocks(
 	db: AsyncSession = Depends(get_db),
 ) -> list[Block]:
 	"""list users blocked by the path user."""
-	return await blocks_service.list_blocks(
+	return await list_blocks_service(
 		db,
 		principal=principal,
 		subject_user_id=user_id,
@@ -38,7 +46,7 @@ async def block_user(
 	db: AsyncSession = Depends(get_db),
 ) -> Block:
 	"""block another user for the path user."""
-	return await blocks_service.block_user(
+	return await block_user_service(
 		db,
 		principal=principal,
 		subject_user_id=user_id,
@@ -54,7 +62,7 @@ async def unblock_user(
 	db: AsyncSession = Depends(get_db),
 ) -> None:
 	"""unblock a user for the path user."""
-	await blocks_service.unblock_user(
+	await unblock_user_service(
 		db,
 		principal=principal,
 		subject_user_id=user_id,

@@ -5,8 +5,6 @@ throughout the platform. event types follow a hierarchical naming convention:
 <domain>.<action> (e.g., thread.created, notification.custom)
 """
 
-from __future__ import annotations
-
 from enum import StrEnum
 
 
@@ -21,7 +19,15 @@ class EventType(StrEnum):
 	THREAD_CREATED = "thread.created"
 	THREAD_UPDATED = "thread.updated"
 	THREAD_DELETED = "thread.deleted"
-	THREAD_READ = "thread.read"
+
+	# thread_participants row lifecycle
+	THREAD_PARTICIPANT_ADDED = "thread.participants.added"
+	THREAD_PARTICIPANT_REMOVED = "thread.participants.removed"
+	THREAD_PARTICIPANT_UPDATED = "thread.participants.updated"
+
+	# access-control changes
+	ACCESS_UPDATED = "access.updated"
+	ACCESS_DEFAULTS_CHANGED = "access.defaults_changed"
 
 	# message events
 	MESSAGE_CREATED = "message.created"
@@ -122,6 +128,9 @@ class EventType(StrEnum):
 	# user events
 	USER_PREFERENCES_UPDATED = "user.preferences_updated"
 	USER_CLIENT_PREFERENCES_UPDATED = "user_client.preferences_updated"
+	USER_PASSWORD_CHANGED = "user.password_changed"
+	USER_EMAIL_CHANGED = "user.email_changed"
+	USER_SESSIONS_REVOKED = "user.sessions_revoked"
 
 	# role events
 	ROLE_UPDATED = "role.updated"
@@ -141,7 +150,19 @@ THREAD_EVENTS = {
 	EventType.THREAD_CREATED,
 	EventType.THREAD_UPDATED,
 	EventType.THREAD_DELETED,
-	EventType.THREAD_READ,
+}
+
+THREAD_PARTICIPANT_EVENTS = {
+	EventType.THREAD_PARTICIPANT_ADDED,
+	EventType.THREAD_PARTICIPANT_REMOVED,
+	EventType.THREAD_PARTICIPANT_UPDATED,
+}
+
+# thread activity types that CAN render inline
+THREAD_INLINE_ACTIVITY_EVENTS = {
+	EventType.ACCESS_UPDATED,
+	EventType.THREAD_PARTICIPANT_ADDED,
+	EventType.THREAD_PARTICIPANT_REMOVED,
 }
 
 MESSAGE_EVENTS = {
@@ -174,6 +195,9 @@ SETTINGS_EVENTS = {
 USER_EVENTS = {
 	EventType.USER_PREFERENCES_UPDATED,
 	EventType.USER_CLIENT_PREFERENCES_UPDATED,
+	EventType.USER_PASSWORD_CHANGED,
+	EventType.USER_EMAIL_CHANGED,
+	EventType.USER_SESSIONS_REVOKED,
 }
 
 NOTIFICATION_EVENTS = {

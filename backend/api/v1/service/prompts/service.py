@@ -1,22 +1,24 @@
 """prompt CRUD service operations."""
 
-from __future__ import annotations
-
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
 from api.models.prompt import PROMPT_TYPEID_PREFIX, Prompt
-from api.permissions import ResourceType
+from api.permissions import ActionPermission, ResourceType
 from api.schemas.prompt import Prompt as PromptOut
 from api.schemas.prompt import (
 	PromptCreate,
 	PromptListFilters,
 	PromptUpdate,
 )
-from api.v1.service.auth import Principal
-from api.v1.service.authorization import require_permission
+from api.v1.service.authentication import Principal
+from api.v1.service.authorization import (
+	apply_metadata_write,
+	apply_resource_access_list_filters,
+	require_permission,
+)
 from api.v1.service.listing import SortDir, apply_sort, exact_typeid_filter
 from api.v1.service.prompts.cache import invalidate_prompt_template_cache
 from api.v1.service.prompts.external import (
@@ -34,6 +36,7 @@ from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
 	invalidate_resource_payload_cache,
 )
+from nokodo_ai.types.sentinels import MISSING
 from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
 
@@ -174,8 +177,8 @@ async def create_prompt(
 	principal: Principal,
 ) -> Prompt:
 	"""create a prompt after validating command uniqueness and references."""
-	require_permission(principal, "prompts:manage")
-	data = prompt_in.model_dump(by_alias=True)
+	require_permission(principal, ActionPermission.PROMPTS_MANAGE)
+	data = prompt_in.model_dump(exclude={"metadata"})
 	await _ensure_unique_command(session, command=data["command"])
 	await _validate_prompt_template(
 		session,
@@ -185,6 +188,7 @@ async def create_prompt(
 	)
 
 	prompt = Prompt(**data)
+	apply_metadata_write(prompt, prompt_in.metadata)
 	session.add(prompt)
 	await session.commit()
 	await session.refresh(prompt)
@@ -202,10 +206,11 @@ async def list_prompts(
 	filters: PromptListFilters | None = None,
 ) -> list[PromptOut]:
 	"""list prompts visible to a principal."""
-	require_permission(principal, "prompts:read")
+	require_permission(principal, ActionPermission.PROMPTS_READ)
 	prompt_filters = filters or PromptListFilters()
 	prompts = await _list_prompt_catalog(
 		session,
+		principal,
 		filters=prompt_filters,
 		sort_by=sort_by,
 		sort_dir=sort_dir,
@@ -215,6 +220,7 @@ async def list_prompts(
 
 async def _list_custom_prompts(
 	session: AsyncSession,
+	principal: Principal,
 	filters: PromptListFilters,
 	sort_by: str,
 	sort_dir: SortDir,
@@ -224,6 +230,13 @@ async def _list_custom_prompts(
 		return []
 
 	stmt = _apply_prompt_filters(select(Prompt), filters)
+	stmt = apply_resource_access_list_filters(
+		stmt,
+		principal,
+		ResourceType.PROMPT,
+		filters.access_relationship,
+		filters.resolved_access_level,
+	)
 	stmt = apply_sort(
 		stmt,
 		sort_by=sort_by,
@@ -241,14 +254,21 @@ async def _list_custom_prompts(
 
 async def _list_prompt_catalog(
 	session: AsyncSession,
+	principal: Principal,
 	filters: PromptListFilters,
 	sort_by: str,
 	sort_dir: SortDir,
 ) -> list[PromptOut]:
 	"""list prompt catalog items from requested sources."""
 	prompts: list[PromptOut] = []
-	prompts.extend(await _list_custom_prompts(session, filters, sort_by, sort_dir))
-	if filters.source in (None, "external"):
+	prompts.extend(
+		await _list_custom_prompts(session, principal, filters, sort_by, sort_dir)
+	)
+	acl_filtered = (
+		filters.access_relationship is not None
+		or filters.resolved_access_level is not None
+	)
+	if filters.source in (None, "external") and not acl_filtered:
 		prompts.extend(await list_external_prompts(session))
 	return _sort_prompt_catalog(
 		_apply_prompt_catalog_filters(prompts, filters), sort_by, sort_dir
@@ -261,16 +281,27 @@ async def count_prompts(
 	filters: PromptListFilters | None = None,
 ) -> int:
 	"""count prompts visible to a principal."""
-	require_permission(principal, "prompts:read")
+	require_permission(principal, ActionPermission.PROMPTS_READ)
 	prompt_filters = filters or PromptListFilters()
 	custom_count = 0
 	if prompt_filters.source in (None, "custom"):
 		stmt = _apply_prompt_filters(
 			select(func.count()).select_from(Prompt), prompt_filters
 		)
+		stmt = apply_resource_access_list_filters(
+			stmt,
+			principal,
+			ResourceType.PROMPT,
+			prompt_filters.access_relationship,
+			prompt_filters.resolved_access_level,
+		)
 		custom_count = await session.scalar(stmt) or 0
 	external_count = 0
-	if prompt_filters.source in (None, "external"):
+	acl_filtered = (
+		prompt_filters.access_relationship is not None
+		or prompt_filters.resolved_access_level is not None
+	)
+	if prompt_filters.source in (None, "external") and not acl_filtered:
 		external_prompts = await list_external_prompts(session)
 		external_count = len(
 			_apply_prompt_catalog_filters(external_prompts, prompt_filters)
@@ -285,7 +316,7 @@ async def get_prompt(
 	use_cache: bool = True,
 ) -> PromptOut:
 	"""return one prompt API payload, optionally using resource payload cache."""
-	require_permission(principal, "prompts:read")
+	require_permission(principal, ActionPermission.PROMPTS_READ)
 	prompt_id_str = str(prompt_id)
 	external_prompt = await get_external_prompt(prompt_id_str, session)
 	if external_prompt is not None:
@@ -319,10 +350,10 @@ async def update_prompt(
 	principal: Principal,
 ) -> Prompt:
 	"""update a prompt after validating references and command changes."""
-	require_permission(principal, "prompts:manage")
+	require_permission(principal, ActionPermission.PROMPTS_MANAGE)
 	prompt = await _get_prompt(prompt_id, session)
-	updates = prompt_in.model_dump(exclude_unset=True, by_alias=True)
-	if not updates:
+	updates = prompt_in.model_dump(exclude_unset=True, exclude={"metadata"})
+	if not updates and prompt_in.metadata is MISSING:
 		return prompt
 
 	new_command = str(updates.get("command", prompt.command))
@@ -364,7 +395,7 @@ async def delete_prompt(
 	principal: Principal,
 ) -> None:
 	"""delete a prompt and invalidate prompt caches."""
-	require_permission(principal, "prompts:manage")
+	require_permission(principal, ActionPermission.PROMPTS_MANAGE)
 	prompt = await _get_prompt(prompt_id, session)
 	await session.delete(prompt)
 	await session.commit()

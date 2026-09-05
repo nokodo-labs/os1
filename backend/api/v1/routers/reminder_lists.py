@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.models.reminder import Reminder, ReminderList
-from api.permissions import ResourceType
+from api.permissions import ActionPermission, ResourceType
 from api.schemas.reminder import (
 	Reminder as ReminderSchema,
 )
@@ -37,10 +37,56 @@ from api.schemas.scheduled_item import (
 from api.schemas.search import Page, SearchMode, SearchParams
 from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
-from api.v1.service import reminders as reminder_service
-from api.v1.service.auth import Principal, get_current_principal
-from api.v1.service.authorization import require_admin
+from api.v1.service.authentication import Principal, get_current_principal
+from api.v1.service.authorization import require_permission
 from api.v1.service.events import SessionId
+from api.v1.service.reminders import (
+	complete_reminder as complete_reminder_service,
+)
+from api.v1.service.reminders import (
+	complete_reminder_occurrence as complete_reminder_occurrence_service,
+)
+from api.v1.service.reminders import (
+	count_reminder_lists as count_reminder_lists_service,
+)
+from api.v1.service.reminders import (
+	create_reminder as create_reminder_service,
+)
+from api.v1.service.reminders import (
+	create_reminder_list as create_reminder_list_service,
+)
+from api.v1.service.reminders import (
+	delete_reminder as delete_reminder_service,
+)
+from api.v1.service.reminders import (
+	delete_reminder_list as delete_reminder_list_service,
+)
+from api.v1.service.reminders import (
+	edit_reminder_series as edit_reminder_series_service,
+)
+from api.v1.service.reminders import (
+	get_list_counts,
+	search_reminders,
+	vectorize_reminders,
+)
+from api.v1.service.reminders import (
+	get_reminder as get_reminder_service,
+)
+from api.v1.service.reminders import (
+	get_reminder_list as get_reminder_list_service,
+)
+from api.v1.service.reminders import (
+	list_reminder_lists as list_reminder_lists_service,
+)
+from api.v1.service.reminders import (
+	list_reminders as list_reminders_service,
+)
+from api.v1.service.reminders import (
+	update_reminder as update_reminder_service,
+)
+from api.v1.service.reminders import (
+	update_reminder_list as update_reminder_list_service,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -63,7 +109,7 @@ async def list_reminder_lists(
 	db: AsyncSession = Depends(get_db),
 ) -> list[ReminderListWithCounts]:
 	"""list reminder lists accessible to the current user."""
-	return await reminder_service.list_reminder_lists(
+	return await list_reminder_lists_service(
 		db,
 		principal=principal,
 		include_counts=include_counts,
@@ -82,9 +128,7 @@ async def count_reminder_lists(
 	db: AsyncSession = Depends(get_db),
 ) -> int:
 	"""count reminder lists accessible to the current user."""
-	return await reminder_service.count_reminder_lists(
-		db, principal=principal, filters=filters
-	)
+	return await count_reminder_lists_service(db, principal=principal, filters=filters)
 
 
 @router.post("", response_model=ReminderListSchema, status_code=status.HTTP_201_CREATED)
@@ -95,7 +139,7 @@ async def create_reminder_list(
 	x_session_id: SessionId = None,
 ) -> ReminderList:
 	"""create a reminder list."""
-	return await reminder_service.create_reminder_list(
+	return await create_reminder_list_service(
 		data,
 		db,
 		principal=principal,
@@ -114,7 +158,7 @@ async def search_reminder_lists(
 	db: AsyncSession = Depends(get_db),
 ) -> Page[ReminderSchema]:
 	"""search reminders, returning relevance-ordered reminders."""
-	scored = await reminder_service.search_reminders(
+	scored = await search_reminders(
 		q,
 		db,
 		principal=principal,
@@ -134,9 +178,9 @@ async def revectorize_reminders(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
-	"""vectorize all reminders into qdrant. admin only."""
-	require_admin(principal)
-	count = await reminder_service.vectorize_all_reminders(db)
+	"""vectorize all reminders into qdrant. reminders operators only."""
+	require_permission(principal, ActionPermission.REMINDERS_MANAGE)
+	count = await vectorize_reminders(db)
 	return {"vectorized": count}
 
 
@@ -147,7 +191,7 @@ async def get_reminder_list(
 	db: AsyncSession = Depends(get_db),
 ) -> ReminderList:
 	"""get a reminder list."""
-	return await reminder_service.get_reminder_list(list_id, db, principal=principal)
+	return await get_reminder_list_service(list_id, db, principal=principal)
 
 
 @router.patch("/{list_id}", response_model=ReminderListSchema)
@@ -159,7 +203,7 @@ async def update_reminder_list(
 	x_session_id: SessionId = None,
 ) -> ReminderList:
 	"""update a reminder list."""
-	return await reminder_service.update_reminder_list(
+	return await update_reminder_list_service(
 		list_id,
 		data,
 		db,
@@ -176,7 +220,7 @@ async def delete_reminder_list(
 	x_session_id: SessionId = None,
 ) -> None:
 	"""delete a reminder list."""
-	await reminder_service.delete_reminder_list(
+	await delete_reminder_list_service(
 		list_id,
 		db,
 		principal=principal,
@@ -191,7 +235,7 @@ async def get_reminder_list_counts(
 	db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
 	"""get reminder counts for a list."""
-	return await reminder_service.get_list_counts(
+	return await get_list_counts(
 		db,
 		principal=principal,
 		list_id=list_id,
@@ -211,7 +255,7 @@ async def list_reminders(
 	db: AsyncSession = Depends(get_db),
 ) -> list[ReminderWithSubtasks]:
 	"""list reminders in a reminder list."""
-	return await reminder_service.list_reminders(
+	return await list_reminders_service(
 		db,
 		principal=principal,
 		list_id=list_id,
@@ -242,7 +286,7 @@ async def create_reminder(
 			status_code=status.HTTP_400_BAD_REQUEST,
 			detail="list id does not match route",
 		)
-	return await reminder_service.create_reminder(
+	return await create_reminder_service(
 		data.model_copy(update={"list_id": list_id}),
 		db,
 		principal=principal,
@@ -258,7 +302,7 @@ async def get_reminder(
 	db: AsyncSession = Depends(get_db),
 ) -> Reminder:
 	"""get a reminder in a reminder list."""
-	reminder = await reminder_service.get_reminder(
+	reminder = await get_reminder_service(
 		reminder_id,
 		db,
 		principal=principal,
@@ -278,9 +322,9 @@ async def update_reminder(
 	x_session_id: SessionId = None,
 ) -> Reminder:
 	"""update a reminder in a reminder list."""
-	reminder = await reminder_service.get_reminder(reminder_id, db, principal=principal)
+	reminder = await get_reminder_service(reminder_id, db, principal=principal)
 	_ensure_reminder_in_list(reminder, list_id)
-	return await reminder_service.update_reminder(
+	return await update_reminder_service(
 		reminder_id,
 		data,
 		db,
@@ -302,9 +346,9 @@ async def complete_reminder(
 	x_session_id: SessionId = None,
 ) -> Reminder:
 	"""complete a non-recurring reminder in a reminder list."""
-	reminder = await reminder_service.get_reminder(reminder_id, db, principal=principal)
+	reminder = await get_reminder_service(reminder_id, db, principal=principal)
 	_ensure_reminder_in_list(reminder, list_id)
-	return await reminder_service.complete_reminder(
+	return await complete_reminder_service(
 		reminder_id,
 		db,
 		principal=principal,
@@ -326,9 +370,9 @@ async def complete_reminder_occurrence(
 	x_session_id: SessionId = None,
 ) -> ScheduledItem:
 	"""complete one recurring reminder occurrence."""
-	reminder = await reminder_service.get_reminder(reminder_id, db, principal=principal)
+	reminder = await get_reminder_service(reminder_id, db, principal=principal)
 	_ensure_reminder_in_list(reminder, list_id)
-	return await reminder_service.complete_reminder_occurrence(
+	return await complete_reminder_occurrence_service(
 		reminder_id,
 		data.original_occurrence_at,
 		db,
@@ -350,9 +394,9 @@ async def edit_reminder_series(
 	x_session_id: SessionId = None,
 ) -> Reminder:
 	"""split and edit this/following reminder occurrences."""
-	reminder = await reminder_service.get_reminder(reminder_id, db, principal=principal)
+	reminder = await get_reminder_service(reminder_id, db, principal=principal)
 	_ensure_reminder_in_list(reminder, list_id)
-	return await reminder_service.edit_reminder_series(
+	return await edit_reminder_series_service(
 		reminder_id,
 		data,
 		db,
@@ -373,9 +417,9 @@ async def delete_reminder(
 	x_session_id: SessionId = None,
 ) -> None:
 	"""delete a reminder series in a reminder list."""
-	reminder = await reminder_service.get_reminder(reminder_id, db, principal=principal)
+	reminder = await get_reminder_service(reminder_id, db, principal=principal)
 	_ensure_reminder_in_list(reminder, list_id)
-	await reminder_service.delete_reminder(
+	await delete_reminder_service(
 		reminder_id,
 		db,
 		principal=principal,

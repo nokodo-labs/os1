@@ -1,7 +1,5 @@
 """reminder models."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -14,6 +12,7 @@ from api.models.base import TYPEID_LENGTH, Base, StringEnum
 from api.models.many_to_many import reminder_list_project_association
 from api.models.mixins import (
 	MetadataJSONMixin,
+	OriginMessageMixin,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
@@ -25,7 +24,6 @@ if TYPE_CHECKING:
 	from api.models.access_rule import AccessRule
 	from api.models.event import Event
 	from api.models.project import Project
-	from api.models.thread import Thread
 	from api.models.user import User
 
 
@@ -40,6 +38,7 @@ class ReminderList(
 	TypeIDPrimaryKeyMixin,
 	TimestampMixin,
 	MetadataJSONMixin,
+	OriginMessageMixin,
 	Base,
 ):
 	"""reminder list model for grouping reminders."""
@@ -99,6 +98,7 @@ class Reminder(
 	TypeIDPrimaryKeyMixin,
 	TimestampMixin,
 	MetadataJSONMixin,
+	OriginMessageMixin,
 	Base,
 ):
 	"""reminder model."""
@@ -132,11 +132,6 @@ class Reminder(
 		String(TYPEID_LENGTH),
 		ForeignKey("reminders.id", ondelete="CASCADE"),
 	)
-	source_thread_id: Mapped[TypeID | None] = mapped_column(
-		String(TYPEID_LENGTH),
-		ForeignKey("threads.id"),
-	)
-
 	title: Mapped[str] = mapped_column(String(200))
 	description: Mapped[str | None] = mapped_column(Text)
 	due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -167,7 +162,6 @@ class Reminder(
 		remote_side="Reminder.id",
 		foreign_keys=[series_origin_id],
 	)
-	thread: Mapped[Thread | None] = relationship("Thread")
 	parent: Mapped[Reminder | None] = relationship(
 		"Reminder",
 		back_populates="subtasks",

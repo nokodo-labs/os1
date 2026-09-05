@@ -1,7 +1,5 @@
 """resource-scoped API payload cache helpers."""
 
-from __future__ import annotations
-
 from collections.abc import Awaitable, Callable
 
 from pydantic import BaseModel, ValidationError

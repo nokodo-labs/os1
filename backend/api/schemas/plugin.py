@@ -1,14 +1,14 @@
 """plugin schemas."""
 
-from __future__ import annotations
-
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from api.models.plugin import PluginType
+from api.schemas.access_rule import ResourceAccessListFilters
 from api.schemas.common import (
 	MISSING,
+	ForbidExtraModel,
 	MetadataModel,
 	MetadataUpdateModel,
 	MissingType,
@@ -24,7 +24,7 @@ type PluginTypeFilter = PluginTypeStr | None
 type PluginSourceFilter = PluginSourceStr | None
 
 
-class PluginListFilters(BaseModel):
+class PluginListFilters(ResourceAccessListFilters):
 	"""filters for listing plugins."""
 
 	plugin_type: PluginTypeFilter = None
@@ -44,7 +44,7 @@ class PluginBase(MetadataModel):
 	)
 
 
-class PluginCreate(PluginBase):
+class PluginCreate(PluginBase, ForbidExtraModel):
 	"""payload for plugin creation."""
 
 	pass

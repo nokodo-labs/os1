@@ -17,8 +17,28 @@ from api.schemas.access_rule import (
 	AccessRuleResponse,
 	AccessRuleUpdate,
 )
-from api.v1.service import access_rules as access_rules_service
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.access_rules import (
+	create_access_rule as create_access_rule_service,
+)
+from api.v1.service.access_rules import (
+	delete_access_rule as delete_access_rule_service,
+)
+from api.v1.service.access_rules import (
+	get_access_rule as get_access_rule_service,
+)
+from api.v1.service.access_rules import (
+	list_access_rules as list_access_rules_service,
+)
+from api.v1.service.access_rules import (
+	resolve_access_levels as resolve_access_levels_service,
+)
+from api.v1.service.access_rules import (
+	set_access_rules as set_access_rules_service,
+)
+from api.v1.service.access_rules import (
+	update_access_rule as update_access_rule_service,
+)
+from api.v1.service.authentication import Principal, get_current_principal
 from nokodo_ai.utils.typeid import TypeID, assert_typeid
 
 
@@ -57,7 +77,7 @@ def create_resource_access_router(
 		db: AsyncSession = Depends(get_db),
 	) -> list[AccessRule]:
 		"""list access rules for a resource."""
-		return await access_rules_service.list_access_rules(
+		return await list_access_rules_service(
 			resource_type, resource_id, db, principal=principal
 		)
 
@@ -69,7 +89,7 @@ def create_resource_access_router(
 		db: AsyncSession = Depends(get_db),
 	) -> list[AccessRule]:
 		"""replace access rules for a resource."""
-		return await access_rules_service.set_access_rules(
+		return await set_access_rules_service(
 			resource_type,
 			resource_id,
 			rules,
@@ -89,7 +109,7 @@ def create_resource_access_router(
 		db: AsyncSession = Depends(get_db),
 	) -> AccessRule:
 		"""create one access rule for a resource."""
-		return await access_rules_service.create_access_rule(
+		return await create_access_rule_service(
 			resource_type,
 			resource_id,
 			rule,
@@ -108,12 +128,13 @@ def create_resource_access_router(
 		db: AsyncSession = Depends(get_db),
 	) -> list[AccessLevelResolution]:
 		"""resolve effective access levels for explicit users on a resource."""
-		return await access_rules_service.resolve_access_levels(
+		return await resolve_access_levels_service(
 			resource_type,
 			resource_id,
 			request.subject_user_ids,
 			db,
 			principal=principal,
+			include_link=request.link,
 		)
 
 	@router.get("/rules/{rule_id}", response_model=AccessRuleResponse)
@@ -124,7 +145,7 @@ def create_resource_access_router(
 		db: AsyncSession = Depends(get_db),
 	) -> AccessRule:
 		"""get one access rule for a resource."""
-		return await access_rules_service.get_access_rule(
+		return await get_access_rule_service(
 			resource_type,
 			resource_id,
 			rule_id,
@@ -141,7 +162,7 @@ def create_resource_access_router(
 		db: AsyncSession = Depends(get_db),
 	) -> AccessRule:
 		"""update one access rule for a resource."""
-		return await access_rules_service.update_access_rule(
+		return await update_access_rule_service(
 			resource_type,
 			resource_id,
 			rule_id,
@@ -158,7 +179,7 @@ def create_resource_access_router(
 		db: AsyncSession = Depends(get_db),
 	) -> None:
 		"""delete one access rule for a resource."""
-		await access_rules_service.delete_access_rule(
+		await delete_access_rule_service(
 			resource_type,
 			resource_id,
 			rule_id,

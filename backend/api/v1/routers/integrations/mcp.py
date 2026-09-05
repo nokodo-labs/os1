@@ -16,8 +16,31 @@ from api.schemas.mcp import (
 	MCPServerUpdate,
 )
 from api.schemas.mcp import MCPServer as MCPServerSchema
-from api.v1.service.auth import Principal, get_current_principal
-from api.v1.service.integrations import mcp as mcp_service
+from api.v1.service.authentication import Principal, get_current_principal
+from api.v1.service.integrations.mcp import (
+	create_server as create_server_service,
+)
+from api.v1.service.integrations.mcp import (
+	delete_server as delete_server_service,
+)
+from api.v1.service.integrations.mcp import (
+	discover_server as discover_server_service,
+)
+from api.v1.service.integrations.mcp import (
+	get_server as get_server_service,
+)
+from api.v1.service.integrations.mcp import (
+	list_capabilities as list_capabilities_service,
+)
+from api.v1.service.integrations.mcp import (
+	list_servers as list_servers_service,
+)
+from api.v1.service.integrations.mcp import (
+	update_capability as update_capability_service,
+)
+from api.v1.service.integrations.mcp import (
+	update_server as update_server_service,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -30,7 +53,7 @@ async def list_servers(
 	db: AsyncSession = Depends(get_db),
 ) -> list[MCPServer]:
 	"""list global MCP servers."""
-	return await mcp_service.list_servers(db, principal=principal)
+	return await list_servers_service(db, principal=principal)
 
 
 @router.post(
@@ -42,7 +65,7 @@ async def create_server(
 	db: AsyncSession = Depends(get_db),
 ) -> MCPServer:
 	"""create a global MCP server."""
-	return await mcp_service.create_server(server_in, db, principal=principal)
+	return await create_server_service(server_in, db, principal=principal)
 
 
 @router.get("/servers/{server_id}", response_model=MCPServerSchema)
@@ -52,7 +75,7 @@ async def get_server(
 	db: AsyncSession = Depends(get_db),
 ) -> MCPServer:
 	"""get a global MCP server."""
-	return await mcp_service.get_server(server_id, db, principal=principal)
+	return await get_server_service(server_id, db, principal=principal)
 
 
 @router.patch("/servers/{server_id}", response_model=MCPServerSchema)
@@ -63,9 +86,7 @@ async def update_server(
 	db: AsyncSession = Depends(get_db),
 ) -> MCPServer:
 	"""update a global MCP server."""
-	return await mcp_service.update_server(
-		server_id, server_in, db, principal=principal
-	)
+	return await update_server_service(server_id, server_in, db, principal=principal)
 
 
 @router.delete("/servers/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -75,7 +96,7 @@ async def delete_server(
 	db: AsyncSession = Depends(get_db),
 ) -> None:
 	"""delete a global MCP server."""
-	await mcp_service.delete_server(server_id, db, principal=principal)
+	await delete_server_service(server_id, db, principal=principal)
 
 
 @router.post("/servers/{server_id}/discover", response_model=MCPDiscoveryResult)
@@ -85,7 +106,7 @@ async def discover_server(
 	db: AsyncSession = Depends(get_db),
 ) -> MCPDiscoveryResult:
 	"""refresh cached capabilities for a global MCP server."""
-	return await mcp_service.discover_server(server_id, db, principal=principal)
+	return await discover_server_service(server_id, db, principal=principal)
 
 
 @router.get(
@@ -98,7 +119,7 @@ async def list_capabilities(
 	db: AsyncSession = Depends(get_db),
 ) -> MCPDiscoveredCapabilities:
 	"""list cached capabilities for a global MCP server."""
-	return await mcp_service.list_capabilities(server_id, db, principal=principal)
+	return await list_capabilities_service(server_id, db, principal=principal)
 
 
 @router.patch(
@@ -114,7 +135,7 @@ async def update_capability(
 	db: AsyncSession = Depends(get_db),
 ) -> MCPServer:
 	"""update a discovered MCP capability snapshot."""
-	return await mcp_service.update_capability(
+	return await update_capability_service(
 		server_id,
 		capability_type,
 		capability_id,

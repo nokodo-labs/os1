@@ -36,8 +36,9 @@ from api.schemas.mcp import (
 )
 from api.schemas.plugin import PluginListFilters
 from api.settings import settings
+from api.tests.factories import make_principal
 from api.v1.service import plugins as plugin_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.chat.context import AppContext
 from api.v1.service.integrations.mcp import lifecycle as mcp_lifecycle
 from api.v1.service.integrations.mcp import listeners as mcp_listeners
@@ -79,7 +80,7 @@ async def _principal(
 	session.add(user)
 	await session.flush()
 	await session.refresh(user)
-	return Principal(user=user, group_ids=(), permissions=permissions)
+	return Principal.for_user(user=user, group_ids=(), permissions=permissions)
 
 
 def _auth_headers(auth: dict[str, object]) -> dict[str, str]:
@@ -111,16 +112,9 @@ async def _noop_event_emitter(event: object) -> None:
 
 def _app_context(session: AsyncSession) -> AppContext:
 	"""create an app context backed by the active API test session."""
-	user = User(
-		id=new_typeid("user"),
-		email="mcp-endpoint@example.com",
-		username="mcp_endpoint_user",
-		hashed_password="x",
-		is_superuser=True,
-	)
 	return AppContext(
 		session=session,
-		principal=Principal(user=user, group_ids=(), permissions=frozenset()),
+		principal=make_principal(slug="mcp_endpoint_user", is_superuser=True),
 		event_emitter=_noop_event_emitter,
 	)
 
@@ -627,7 +621,7 @@ async def test_user_mcp_permission_sees_only_owned_mcp_tool_plugins(
 	assert global_plugin_id in admin_plugin_ids
 	assert owned_plugin_id not in admin_plugin_ids
 	assert other_plugin_id not in admin_plugin_ids
-	assert other_server.owner_user_id == str(other.user_id)
+	assert other_server.owner_user_id == str(other.user.id)
 
 
 @pytest.mark.asyncio

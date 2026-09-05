@@ -1,14 +1,14 @@
 """prompt schemas."""
 
-from __future__ import annotations
-
 import re
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
 
+from api.schemas.access_rule import ResourceAccessListFilters
 from api.schemas.common import (
 	MISSING,
+	ForbidExtraModel,
 	MetadataModel,
 	MetadataUpdateModel,
 	MissingType,
@@ -22,7 +22,7 @@ PromptSourceStr = Literal["native", "external", "custom"]
 type PromptSourceFilter = PromptSourceStr | None
 
 
-class PromptListFilters(BaseModel):
+class PromptListFilters(ResourceAccessListFilters):
 	"""filters for listing prompts."""
 
 	q: str | None = Field(default=None, min_length=1, max_length=500)
@@ -62,7 +62,7 @@ class PromptBase(MetadataModel):
 		return normalized
 
 
-class PromptCreate(PromptBase):
+class PromptCreate(PromptBase, ForbidExtraModel):
 	"""payload for prompt creation."""
 
 	pass

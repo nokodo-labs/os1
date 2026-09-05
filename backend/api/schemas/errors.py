@@ -3,8 +3,6 @@
 these schemas follow RFC 9457 (problem details for HTTP APIs).
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field

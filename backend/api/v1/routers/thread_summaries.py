@@ -9,8 +9,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_db
 from api.models.thread_summary import SummaryPurpose, ThreadSummary
 from api.schemas.thread import ThreadSummaryRecord, ThreadSummaryUpdate
-from api.v1.service.auth import Principal, get_current_principal
-from api.v1.service.threads import summaries as thread_summary_service
+from api.v1.service.authentication import Principal, get_current_principal
+from api.v1.service.threads.summaries import (
+	delete_thread_summary as delete_thread_summary_service,
+)
+from api.v1.service.threads.summaries import (
+	get_thread_summary as get_thread_summary_service,
+)
+from api.v1.service.threads.summaries import (
+	list_thread_summaries as list_thread_summaries_service,
+)
+from api.v1.service.threads.summaries import (
+	update_thread_summary as update_thread_summary_service,
+)
 from nokodo_ai.utils.typeid import TypeID, assert_typeid
 
 
@@ -47,7 +58,7 @@ def create_thread_summaries_router(
 		db: AsyncSession = Depends(get_db),
 	) -> list[ThreadSummary]:
 		"""list stored summary records for a thread."""
-		return await thread_summary_service.list_thread_summaries(
+		return await list_thread_summaries_service(
 			thread_id,
 			db,
 			principal=principal,
@@ -66,7 +77,7 @@ def create_thread_summaries_router(
 		db: AsyncSession = Depends(get_db),
 	) -> ThreadSummary:
 		"""fetch one stored summary record."""
-		return await thread_summary_service.get_thread_summary(
+		return await get_thread_summary_service(
 			thread_id,
 			summary_id,
 			db,
@@ -85,7 +96,7 @@ def create_thread_summaries_router(
 		db: AsyncSession = Depends(get_db),
 	) -> ThreadSummary:
 		"""update a stored summary record. admin only."""
-		return await thread_summary_service.update_thread_summary(
+		return await update_thread_summary_service(
 			thread_id,
 			summary_id,
 			summary_in,
@@ -104,7 +115,7 @@ def create_thread_summaries_router(
 		db: AsyncSession = Depends(get_db),
 	) -> None:
 		"""delete a stored summary record. admin only."""
-		await thread_summary_service.delete_thread_summary(
+		await delete_thread_summary_service(
 			thread_id,
 			summary_id,
 			db,

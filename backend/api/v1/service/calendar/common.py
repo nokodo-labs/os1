@@ -1,7 +1,5 @@
 """shared calendar service helpers."""
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from datetime import datetime
 
@@ -18,17 +16,18 @@ from api.models.project import Project
 from api.permissions import ActionPermission, ResourceType
 from api.schemas.calendar import Calendar as CalendarOut
 from api.schemas.calendar import CalendarEvent as CalendarEventOut
-from api.v1.service import events as event_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.authorization import (
+	list_accessible_user_ids_for_resources,
 	require_project_access,
 	resource_access_predicate,
 )
+from api.v1.service.events import persist_and_fanout_event
 from api.v1.service.projects import load_projects
 from nokodo_ai.utils.typeid import TypeID
 
 
-CALENDAR_CREATE_PERMISSION = ActionPermission.CALENDAR_CREATE.value
+CALENDAR_CREATE_PERMISSION = ActionPermission.CALENDAR_CREATE
 
 
 def _calendar_payload(
@@ -54,7 +53,7 @@ def _event_payload(calendar_event: CalendarEvent) -> dict[str, object]:
 def validate_calendar_event_range(start_at: datetime, end_at: datetime) -> None:
 	if end_at <= start_at:
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="end time must be after start time",
 		)
 
@@ -73,7 +72,7 @@ async def publish_calendar_event(
 		user_id=calendar_event.owner_id,
 		calendar_event_id=calendar_event.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -86,6 +85,7 @@ async def publish_calendar(
 	event_type: EventType,
 	origin_session_id: str | None,
 	extra_data: Mapping[str, object] | None = None,
+	affected_project_ids: set[TypeID] | None = None,
 ) -> None:
 	event = Event(
 		scope=EventScope.USER,
@@ -95,10 +95,25 @@ async def publish_calendar(
 		user_id=calendar.owner_id,
 		calendar_id=calendar.id,
 	)
-	await event_service.persist_and_fanout_event(
+	recipient_ids = (
+		await list_accessible_user_ids_for_resources(
+			[
+				(ResourceType.CALENDAR, calendar.id),
+				*(
+					(ResourceType.PROJECT, project_id)
+					for project_id in affected_project_ids
+				),
+			],
+			session,
+		)
+		if affected_project_ids
+		else None
+	)
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
+		recipient_ids=recipient_ids,
 	)
 
 
@@ -108,7 +123,7 @@ async def clear_default_calendars(
 	except_id: TypeID | None = None,
 	owner_id: TypeID | None = None,
 ) -> None:
-	target_owner_id = owner_id if owner_id is not None else principal.user_id
+	target_owner_id = owner_id if owner_id is not None else principal.user.id
 	stmt = select(Calendar).where(
 		Calendar.owner_id == target_owner_id,
 		Calendar.is_default.is_(True),
@@ -135,6 +150,7 @@ async def get_accessible_calendar(
 				principal,
 				ResourceType.CALENDAR,
 				required_level=required_level,
+				include_link_access=True,
 			),
 		)
 	)
@@ -170,7 +186,7 @@ async def get_or_create_default_calendar(
 	stmt = (
 		select(Calendar)
 		.where(
-			Calendar.owner_id == principal.user_id,
+			Calendar.owner_id == principal.user.id,
 			Calendar.is_default.is_(True),
 		)
 		.order_by(Calendar.created_at.asc())
@@ -181,7 +197,7 @@ async def get_or_create_default_calendar(
 		return calendar
 
 	calendar = Calendar(
-		owner_id=principal.user_id,
+		owner_id=principal.user.id,
 		name="personal",
 		description=None,
 		color="#d45446",
@@ -194,24 +210,21 @@ async def get_or_create_default_calendar(
 	return calendar
 
 
-async def get_accessible_calendar_event(
+async def get_calendar_event(
 	event_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
 	required_level: AccessLevel = AccessLevel.READER,
 	calendar_id: TypeID | None = None,
 ) -> CalendarEvent:
-	stmt = (
-		select(CalendarEvent)
-		.join(Calendar, CalendarEvent.calendar_id == Calendar.id)
-		.where(
-			CalendarEvent.id == event_id,
-			resource_access_predicate(
-				principal,
-				ResourceType.CALENDAR,
-				required_level=required_level,
-			),
-		)
+	stmt = select(CalendarEvent).where(
+		CalendarEvent.id == event_id,
+		resource_access_predicate(
+			principal,
+			ResourceType.CALENDAR_EVENT,
+			required_level=required_level,
+			include_link_access=True,
+		),
 	)
 	if calendar_id is not None:
 		stmt = stmt.where(CalendarEvent.calendar_id == calendar_id)

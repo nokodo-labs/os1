@@ -1,14 +1,14 @@
 """Note schemas."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from api.schemas.access_rule import ResourceAccessListFilters
 from api.schemas.common import (
 	MISSING,
+	ForbidExtraModel,
 	MetadataModel,
 	MetadataUpdateModel,
 	MissingType,
@@ -21,7 +21,7 @@ from nokodo_ai.utils.typeid import TypeID
 type NoteSortBy = CommonSortBy | Literal["title"]
 
 
-class NoteListFilters(BaseModel):
+class NoteListFilters(ResourceAccessListFilters):
 	"""filters for listing notes."""
 
 	owner_id: TypeID | None = None
@@ -34,6 +34,7 @@ class NoteSearchFilters(BaseModel):
 	"""structured filters applied to note search (vector + autocomplete)."""
 
 	owner_id: TypeID | None = None
+	project_id: TypeID | None = None
 	labels: list[str] | None = None
 	include_deleted: bool = False
 
@@ -47,7 +48,7 @@ class NoteBase(MetadataModel):
 	project_ids: list[TypeID] = []
 
 
-class NoteCreate(NoteBase):
+class NoteCreate(NoteBase, ForbidExtraModel):
 	"""payload to create a note."""
 
 	user_id: TypeID | None = None
@@ -67,4 +68,5 @@ class Note(NoteBase, TimestampedModel):
 
 	id: TypeID
 	user_id: TypeID
+	origin_message_id: TypeID | None = None
 	deleted_at: datetime | None = None

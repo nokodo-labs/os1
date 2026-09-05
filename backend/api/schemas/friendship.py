@@ -1,11 +1,9 @@
 """friendship schemas."""
 
-from __future__ import annotations
-
 from datetime import datetime
 
 from api.models.friendship import FriendshipStatus
-from api.schemas.common import ORMModel, TimestampedModel
+from api.schemas.common import ForbidExtraModel, ORMModel, TimestampedModel
 from api.schemas.user import User as UserSchema
 from nokodo_ai.utils.typeid import TypeID
 
@@ -28,7 +26,7 @@ class FriendshipDetail(FriendshipResponse):
 	addressee: UserSchema | None = None
 
 
-class FriendRequestCreate(ORMModel):
+class FriendRequestCreate(ForbidExtraModel):
 	"""send a friend request to another user."""
 
 	addressee_id: TypeID

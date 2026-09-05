@@ -1,7 +1,5 @@
 """Service helpers and execution runtime for tasks."""
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable, Collection
@@ -17,13 +15,19 @@ from api.database import async_session_local
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.task import Task, TaskStatus, TaskType
+from api.permissions import ActionPermission, ResourceType
+from api.redis import SseFrameBus, make_task_channel
 from api.schemas.task import Task as TaskSchema
 from api.schemas.task import TaskCreate, TaskListFilters, TaskUpdate
 from api.taskiq import broker
-from api.v1.service import events as event_service
-from api.v1.service import task_bus
-from api.v1.service.auth import Principal
-from api.v1.service.authorization import require_permission
+from api.v1.service.authentication import Principal
+from api.v1.service.authorization import (
+	apply_metadata_write,
+	apply_resource_access_list_filters,
+	require_permission,
+	resource_access_predicate,
+)
+from api.v1.service.events import persist_and_fanout_event
 from api.v1.service.listing import SortDir, apply_sort
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.sse import sse_encode
@@ -39,6 +43,25 @@ _TERMINAL_STATUSES = {
 	TaskStatus.FAILED,
 	TaskStatus.CANCELLED,
 }
+
+_bus = SseFrameBus(
+	key_prefix="nokodo-ai:task:",
+	end_marker=b"nokodo-ai:task-end",
+	channel_factory=make_task_channel,
+	# a task can run for hours and its progress is worth reading afterwards,
+	# so the catchup log outlives the stream by a day. it is never shortened
+	# on completion (unlike a run's): a client that was not watching should
+	# still be able to see how it went.
+	log_ttl_seconds=60 * 60 * 24,
+	# progress updates, not token deltas.
+	max_frames=2048,
+	cleanup_grace_seconds=0,
+)
+"""cross-worker mirror for task progress frames.
+
+the producing taskiq worker is not the api process the client subscribes on,
+so every frame is mirrored through redis; see ``api.redis.sse_bus``.
+"""
 
 
 class UnknownTaskError(Exception):
@@ -184,8 +207,8 @@ async def _publish_task_event(
 		user_id=task.user_id,
 		task_id=task.id,
 	)
-	await event_service.persist_and_fanout_event(session, event=event)
-	await task_bus.mirror_frame(TypeID(task.id), _task_frame(task, event_type, data))
+	await persist_and_fanout_event(session, event=event)
+	await _bus.mirror_frame(task.id, _task_frame(task, event_type, data))
 
 
 def _event_type_for_status(status_value: TaskStatus) -> EventType:
@@ -216,16 +239,15 @@ def _merge_metadata(task: Task, metadata_update: JSONObject | None) -> None:
 	"""merge an update into a task's metadata without dropping existing keys."""
 	if metadata_update is None:
 		return
-	merged = dict(task.metadata_ or {})
-	merged.update(metadata_update)
-	task.metadata_ = merged
+	task.set_metadata(public={**task.public_metadata, **metadata_update})
 
 
 def _apply_public_update(task: Task, task_in: TaskUpdate) -> None:
 	"""apply user-supplied fields from a TaskUpdate onto a task row."""
-	update_data = task_in.model_dump(exclude_unset=True, by_alias=True)
+	update_data = task_in.model_dump(exclude_unset=True, exclude={"metadata"})
 	for key, value in update_data.items():
 		setattr(task, key, value)
+	apply_metadata_write(task, task_in.metadata)
 
 
 def _apply_execution_update(
@@ -262,9 +284,9 @@ def _apply_execution_update(
 
 
 async def get_task(task_id: str, session: AsyncSession, principal: Principal) -> Task:
-	"""fetch a task by id, scoped to the principal unless they are admin."""
+	"""fetch a task by id, scoped to the principal unless they can manage tasks."""
 	stmt = select(Task).where(Task.id == task_id)
-	if not principal.is_admin:
+	if not principal.has_permission(ActionPermission.TASKS_MANAGE):
 		stmt = stmt.where(Task.user_id == principal.user.id)
 	task = (await session.execute(stmt)).scalar_one_or_none()
 	if task is None:
@@ -281,8 +303,8 @@ async def create_task(
 	principal: Principal,
 ) -> Task:
 	"""create a task row from an explicit TaskCreate request."""
-	require_permission(principal, "tasks:create")
-	user_id = task_in.user_id if principal.is_admin else principal.user.id
+	require_permission(principal, ActionPermission.TASKS_CREATE)
+	user_id = task_in.user_id if principal.user.is_superuser else principal.user.id
 	now = datetime.now(tz=UTC)
 	task = Task(
 		user_id=user_id,
@@ -317,7 +339,7 @@ async def start_task(
 ) -> Task:
 	"""start a Task row and enqueue its registered runner through TaskIQ."""
 	if require_create_permission:
-		require_permission(principal, "tasks:create")
+		require_permission(principal, ActionPermission.TASKS_CREATE)
 	metadata_payload = dict(metadata or {})
 	metadata_payload[TASK_NAME_METADATA_KEY] = task_name
 	now = datetime.now(tz=UTC)
@@ -344,11 +366,11 @@ async def start_task(
 	)
 
 	try:
-		await enqueue_started_task(TypeID(task.id), runtime_payload=runtime or {})
+		await enqueue_started_task(task.id, runtime_payload=runtime or {})
 	except Exception as exc:
 		logger.exception("failed to enqueue task %s", task.id)
 		await update_task_execution(
-			TypeID(task.id),
+			task.id,
 			status_value=TaskStatus.FAILED,
 			stage="failed to enqueue",
 			result={"error": type(exc).__name__, "message": str(exc)[:500]},
@@ -437,16 +459,9 @@ def _apply_task_filters(
 	principal: Principal,
 ) -> Select:
 	"""apply task list filters."""
-	if principal.is_admin:
-		if filters.owner_id is not None:
-			stmt = stmt.where(Task.user_id == filters.owner_id)
-	else:
-		if filters.owner_id is not None and filters.owner_id != principal.user.id:
-			raise HTTPException(
-				status_code=status.HTTP_403_FORBIDDEN,
-				detail="forbidden",
-			)
-		stmt = stmt.where(Task.user_id == principal.user.id)
+	stmt = stmt.where(resource_access_predicate(principal, ResourceType.TASK))
+	if filters.owner_id is not None:
+		stmt = stmt.where(Task.user_id == filters.owner_id)
 	if filters.spawned_thread_id is not None:
 		stmt = stmt.where(Task.spawned_thread_id == str(filters.spawned_thread_id))
 	if filters.status_filter is not None:
@@ -455,7 +470,13 @@ def _apply_task_filters(
 		stmt = stmt.where(Task.status.in_((TaskStatus.PENDING, TaskStatus.RUNNING)))
 	elif filters.state_filter == "ended":
 		stmt = stmt.where(Task.status.in_(tuple(_TERMINAL_STATUSES)))
-	return stmt
+	return apply_resource_access_list_filters(
+		stmt,
+		principal,
+		ResourceType.TASK,
+		filters.access_relationship,
+		filters.resolved_access_level,
+	)
 
 
 async def update_task(
@@ -509,7 +530,7 @@ async def update_task_execution(
 		await session.commit()
 		await session.refresh(task)
 		if _is_terminal(task.status):
-			await task_bus.mark_task_end(TypeID(task.id))
+			await _bus.mark_end(task.id)
 		return task
 
 
@@ -556,7 +577,7 @@ async def fail_stale_active_tasks(
 			)
 		await session.commit()
 		for task in stale_tasks:
-			await task_bus.mark_task_end(TypeID(task.id))
+			await _bus.mark_end(task.id)
 		return len(stale_tasks)
 
 
@@ -589,7 +610,7 @@ async def cancel_task(
 	)
 	await session.commit()
 	await session.refresh(task)
-	await task_bus.mark_task_end(TypeID(task.id))
+	await _bus.mark_end(task.id)
 	return task
 
 
@@ -625,8 +646,8 @@ async def execute_started_task(
 			)
 			raise RuntimeError(failure_message)
 		context = TaskContext(
-			task_id=TypeID(task.id),
-			user_id=TypeID(task.user_id),
+			task_id=task.id,
+			user_id=task.user_id,
 			metadata=task.metadata_ or {},
 			runtime=runtime_payload or {},
 		)
@@ -704,8 +725,8 @@ async def enqueue_started_task(
 
 async def subscribe_task_stream(task_id: TypeID) -> AsyncGenerator[bytes]:
 	"""subscribe to a task SSE stream with Redis catchup."""
-	if await task_bus.task_log_known(task_id):
-		async for frame in task_bus.subscribe_task_stream(task_id):
+	if await _bus.log_known(task_id):
+		async for frame in _bus.subscribe(task_id):
 			yield frame
 		yield sse_encode(event="done", data={})
 		return
@@ -719,6 +740,6 @@ async def subscribe_task_stream(task_id: TypeID) -> AsyncGenerator[bytes]:
 			yield sse_encode(event="done", data={})
 			return
 
-	async for frame in task_bus.subscribe_task_stream(task_id):
+	async for frame in _bus.subscribe(task_id):
 		yield frame
 	yield sse_encode(event="done", data={})

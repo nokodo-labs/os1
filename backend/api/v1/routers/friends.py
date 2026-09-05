@@ -13,9 +13,35 @@ from api.schemas.friendship import (
 	FriendshipDetail,
 	FriendshipResponse,
 )
-from api.v1.service import friends as friends_service
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authentication import Principal, get_current_principal
 from api.v1.service.events import SessionId
+from api.v1.service.friends import (
+	accept_friend_request as accept_friend_request_service,
+)
+from api.v1.service.friends import (
+	build_friend_response,
+)
+from api.v1.service.friends import (
+	cancel_friend_request as cancel_friend_request_service,
+)
+from api.v1.service.friends import (
+	decline_friend_request as decline_friend_request_service,
+)
+from api.v1.service.friends import (
+	list_friends as list_friends_service,
+)
+from api.v1.service.friends import (
+	list_incoming_requests as list_incoming_requests_service,
+)
+from api.v1.service.friends import (
+	list_outgoing_requests as list_outgoing_requests_service,
+)
+from api.v1.service.friends import (
+	remove_friend as remove_friend_service,
+)
+from api.v1.service.friends import (
+	send_friend_request as send_friend_request_service,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -29,11 +55,9 @@ async def list_friends(
 	db: AsyncSession = Depends(get_db),
 ) -> list[FriendResponse]:
 	"""list all accepted friends."""
-	pairs = await friends_service.list_friends(
-		db, principal=principal, target_user_id=user_id
-	)
+	pairs = await list_friends_service(db, principal=principal, target_user_id=user_id)
 	return [
-		await friends_service.build_friend_response(
+		await build_friend_response(
 			friend,
 			friendship_id,
 			db,
@@ -51,7 +75,7 @@ async def list_incoming_requests(
 	db: AsyncSession = Depends(get_db),
 ) -> list[Friendship]:
 	"""list pending friend requests received by the current user."""
-	return await friends_service.list_incoming_requests(
+	return await list_incoming_requests_service(
 		db, principal=principal, target_user_id=user_id
 	)
 
@@ -63,7 +87,7 @@ async def list_outgoing_requests(
 	db: AsyncSession = Depends(get_db),
 ) -> list[Friendship]:
 	"""list pending friend requests sent by the current user."""
-	return await friends_service.list_outgoing_requests(
+	return await list_outgoing_requests_service(
 		db, principal=principal, target_user_id=user_id
 	)
 
@@ -81,7 +105,7 @@ async def send_friend_request(
 	x_session_id: SessionId = None,
 ) -> Friendship:
 	"""send a friend request to another user."""
-	return await friends_service.send_friend_request(
+	return await send_friend_request_service(
 		user_id,
 		body.addressee_id,
 		db,
@@ -102,7 +126,7 @@ async def accept_friend_request(
 	x_session_id: SessionId = None,
 ) -> Friendship:
 	"""accept an incoming friend request."""
-	return await friends_service.accept_friend_request(
+	return await accept_friend_request_service(
 		str(friendship_id),
 		user_id,
 		db,
@@ -123,7 +147,7 @@ async def decline_friend_request(
 	x_session_id: SessionId = None,
 ) -> Friendship:
 	"""decline an incoming friend request."""
-	return await friends_service.decline_friend_request(
+	return await decline_friend_request_service(
 		str(friendship_id),
 		user_id,
 		db,
@@ -141,7 +165,7 @@ async def cancel_friend_request(
 	x_session_id: SessionId = None,
 ) -> None:
 	"""cancel an outgoing friend request."""
-	await friends_service.cancel_friend_request(
+	await cancel_friend_request_service(
 		str(friendship_id),
 		user_id,
 		db,
@@ -159,7 +183,7 @@ async def remove_friend(
 	x_session_id: SessionId = None,
 ) -> None:
 	"""remove an existing friend."""
-	await friends_service.remove_friend(
+	await remove_friend_service(
 		user_id,
 		friend_user_id,
 		db,

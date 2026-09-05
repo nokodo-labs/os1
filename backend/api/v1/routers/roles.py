@@ -1,7 +1,5 @@
 """role management routers."""
 
-from __future__ import annotations
-
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
@@ -14,8 +12,27 @@ from api.schemas.role import Role as RoleSchema
 from api.schemas.role import RoleCreate, RoleListFilters, RoleSortBy, RoleUpdate
 from api.schemas.sorting import SortDir
 from api.schemas.user import User as UserSchema
-from api.v1.service import roles as roles_service
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authentication import Principal, get_current_principal
+from api.v1.service.roles import (
+	count_roles as count_roles_service,
+)
+from api.v1.service.roles import (
+	create_role as create_role_service,
+)
+from api.v1.service.roles import (
+	delete_role as delete_role_service,
+)
+from api.v1.service.roles import (
+	get_role,
+	list_role_members,
+	list_roles,
+)
+from api.v1.service.roles import (
+	set_role_members as set_role_members_service,
+)
+from api.v1.service.roles import (
+	update_role as update_role_service,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -33,7 +50,7 @@ async def read_roles(
 	db: AsyncSession = Depends(get_db),
 ) -> list[Role]:
 	"""list all roles. optionally filter by user_id."""
-	return await roles_service.list_roles(
+	return await list_roles(
 		db,
 		principal=principal,
 		skip=skip,
@@ -51,7 +68,7 @@ async def count_roles(
 	db: AsyncSession = Depends(get_db),
 ) -> int:
 	"""count roles matching the list filters."""
-	return await roles_service.count_roles(
+	return await count_roles_service(
 		db,
 		principal=principal,
 		filters=filters,
@@ -65,7 +82,7 @@ async def read_role(
 	db: AsyncSession = Depends(get_db),
 ) -> Role:
 	"""get a role by id."""
-	return await roles_service.get_role(role_id, db, principal=principal)
+	return await get_role(role_id, db, principal=principal)
 
 
 @router.post("", response_model=RoleSchema, status_code=status.HTTP_201_CREATED)
@@ -75,7 +92,7 @@ async def create_role(
 	db: AsyncSession = Depends(get_db),
 ) -> Role:
 	"""create a new role."""
-	return await roles_service.create_role(role_in, db, principal=principal)
+	return await create_role_service(role_in, db, principal=principal)
 
 
 @router.patch("/{role_id}", response_model=RoleSchema)
@@ -86,7 +103,7 @@ async def update_role(
 	db: AsyncSession = Depends(get_db),
 ) -> Role:
 	"""update an existing role."""
-	return await roles_service.update_role(role_id, body, db, principal=principal)
+	return await update_role_service(role_id, body, db, principal=principal)
 
 
 @router.delete("/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -96,7 +113,7 @@ async def delete_role(
 	db: AsyncSession = Depends(get_db),
 ) -> None:
 	"""delete a role."""
-	await roles_service.delete_role(role_id, db, principal=principal)
+	await delete_role_service(role_id, db, principal=principal)
 
 
 # role members
@@ -111,7 +128,7 @@ async def read_role_members(
 	db: AsyncSession = Depends(get_db),
 ) -> list[User]:
 	"""list users assigned to a role."""
-	return await roles_service.list_role_members(
+	return await list_role_members(
 		role_id, db, principal=principal, skip=skip, limit=limit
 	)
 
@@ -124,4 +141,4 @@ async def set_role_members(
 	db: AsyncSession = Depends(get_db),
 ) -> list[User]:
 	"""replace the entire member list for a role with the given user IDs."""
-	return await roles_service.set_role_members(role_id, body, db, principal=principal)
+	return await set_role_members_service(role_id, body, db, principal=principal)

@@ -140,24 +140,27 @@ def test_child_resource_filter_matches_many_parents() -> None:
 	assert set(parent_ids.values) == {"file-1", "file-2"}
 
 
-# -- acl_filter - admin path -------------------------------------------------
+# -- acl_filter - unfiltered path --------------------------------------------
 
 
-def test_acl_filter_admin_returns_type_only_filter() -> None:
-	f = acl_filter([VectorChunkResourceType.NOTE], is_admin=True, user_id="admin-user")
+def test_acl_filter_skip_returns_type_only_filter() -> None:
+	f = acl_filter(
+		[VectorChunkResourceType.NOTE],
+		skip_principal_filter=True,
+		user_id="admin-user",
+	)
 	assert isinstance(f, ChunkFilter)
 	assert len(f.all_of) == 1
 	assert isinstance(f.all_of[0], FieldMatch)
 	assert f.all_of[0].key == "resource_type"
 	assert f.all_of[0].value == "note"
-	# admin sees everything - no any_of restrictions
 	assert f.any_of == []
 
 
-def test_acl_filter_admin_ignores_groups_and_roles() -> None:
+def test_acl_filter_skip_ignores_groups_and_roles() -> None:
 	f = acl_filter(
 		[VectorChunkResourceType.THREAD],
-		is_admin=True,
+		skip_principal_filter=True,
 		user_id="u1",
 		group_ids=["g1", "g2"],
 		role_ids=["r1"],
@@ -169,7 +172,11 @@ def test_acl_filter_admin_ignores_groups_and_roles() -> None:
 
 
 def test_acl_filter_regular_user_includes_resource_type_in_all_of() -> None:
-	f = acl_filter([VectorChunkResourceType.NOTE], is_admin=False, user_id="u1")
+	f = acl_filter(
+		[VectorChunkResourceType.NOTE],
+		skip_principal_filter=False,
+		user_id="u1",
+	)
 	assert any(
 		isinstance(m, FieldMatch) and m.key == "resource_type" and m.value == "note"
 		for m in f.all_of
@@ -177,7 +184,11 @@ def test_acl_filter_regular_user_includes_resource_type_in_all_of() -> None:
 
 
 def test_acl_filter_regular_user_any_of_has_owner_and_user_checks() -> None:
-	f = acl_filter([VectorChunkResourceType.NOTE], is_admin=False, user_id="uid-42")
+	f = acl_filter(
+		[VectorChunkResourceType.NOTE],
+		skip_principal_filter=False,
+		user_id="uid-42",
+	)
 	# must contain owner_id == uid-42 and allowed_user_ids == uid-42
 	any_of_by_key = {m.key: m for m in f.any_of if isinstance(m, FieldMatch)}
 	assert "owner_id" in any_of_by_key
@@ -189,7 +200,7 @@ def test_acl_filter_regular_user_any_of_has_owner_and_user_checks() -> None:
 def test_acl_filter_adds_group_ids_as_match_any() -> None:
 	f = acl_filter(
 		[VectorChunkResourceType.NOTE],
-		is_admin=False,
+		skip_principal_filter=False,
 		user_id="u1",
 		group_ids=["g1", "g2"],
 	)
@@ -202,7 +213,7 @@ def test_acl_filter_adds_group_ids_as_match_any() -> None:
 def test_acl_filter_adds_role_ids_as_match_any() -> None:
 	f = acl_filter(
 		[VectorChunkResourceType.THREAD],
-		is_admin=False,
+		skip_principal_filter=False,
 		user_id="u1",
 		role_ids=["r1", "r2"],
 	)
@@ -215,7 +226,7 @@ def test_acl_filter_adds_role_ids_as_match_any() -> None:
 def test_acl_filter_adds_both_group_and_role_ids() -> None:
 	f = acl_filter(
 		[VectorChunkResourceType.NOTE],
-		is_admin=False,
+		skip_principal_filter=False,
 		user_id="u1",
 		group_ids=["g1"],
 		role_ids=["r1"],
@@ -228,7 +239,7 @@ def test_acl_filter_adds_both_group_and_role_ids() -> None:
 def test_acl_filter_empty_groups_and_roles_no_match_any() -> None:
 	f = acl_filter(
 		[VectorChunkResourceType.NOTE],
-		is_admin=False,
+		skip_principal_filter=False,
 		user_id="u1",
 		group_ids=[],
 		role_ids=(),
@@ -238,10 +249,16 @@ def test_acl_filter_empty_groups_and_roles_no_match_any() -> None:
 
 def test_acl_filter_tuple_and_list_group_ids_equivalent() -> None:
 	f_list = acl_filter(
-		[VectorChunkResourceType.NOTE], is_admin=False, user_id="u1", group_ids=["g1"]
+		[VectorChunkResourceType.NOTE],
+		skip_principal_filter=False,
+		user_id="u1",
+		group_ids=["g1"],
 	)
 	f_tuple = acl_filter(
-		[VectorChunkResourceType.NOTE], is_admin=False, user_id="u1", group_ids=("g1",)
+		[VectorChunkResourceType.NOTE],
+		skip_principal_filter=False,
+		user_id="u1",
+		group_ids=("g1",),
 	)
 	list_entries = match_any_entries(f_list.any_of)
 	tuple_entries = match_any_entries(f_tuple.any_of)

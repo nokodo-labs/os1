@@ -14,7 +14,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from api.models.user import User
 from api.v1.routers import events as events_router
-from api.v1.service import auth as auth_service
+from api.v1.service.authentication import web as auth_service
 from api.v1.service.events import ConnectionManager
 from nokodo_ai.utils.security import hash_password
 from nokodo_ai.utils.typeid import new_typeid
@@ -72,7 +72,7 @@ def test_events_stream_unauthorized(monkeypatch: pytest.MonkeyPatch) -> None:
 		return None
 
 	monkeypatch.setattr(
-		events_router.auth_service,
+		events_router,
 		"authenticate_websocket_refresh_cookie",
 		_nope,
 	)
@@ -81,9 +81,7 @@ def test_events_stream_unauthorized(monkeypatch: pytest.MonkeyPatch) -> None:
 	def _origin_ok(_websocket: WebSocket) -> bool:
 		return True
 
-	monkeypatch.setattr(
-		events_router.auth_service, "is_websocket_origin_allowed", _origin_ok
-	)
+	monkeypatch.setattr(events_router, "is_websocket_origin_allowed", _origin_ok)
 
 	with TestClient(app) as client:
 		with pytest.raises(WebSocketDisconnect) as exc:
@@ -103,14 +101,12 @@ def test_events_stream_ping(monkeypatch: pytest.MonkeyPatch) -> None:
 
 	manager = ConnectionManager()
 	monkeypatch.setattr(
-		events_router.auth_service,
+		events_router,
 		"authenticate_websocket_refresh_cookie",
 		_ok,
 	)
-	monkeypatch.setattr(
-		events_router.auth_service, "is_websocket_origin_allowed", _origin_ok
-	)
-	monkeypatch.setattr(events_router.event_service, "event_connections", manager)
+	monkeypatch.setattr(events_router, "is_websocket_origin_allowed", _origin_ok)
+	monkeypatch.setattr(events_router, "event_connections", manager)
 
 	with TestClient(app) as client:
 		with client.websocket_connect("/v1/events/stream") as ws:
@@ -140,11 +136,11 @@ async def test_events_stream_loop_disconnect_and_finally(
 			calls.append(("disconnect", user_id))
 
 	monkeypatch.setattr(
-		events_router.auth_service,
+		events_router,
 		"authenticate_websocket_refresh_cookie",
 		_ok,
 	)
-	monkeypatch.setattr(events_router.event_service, "event_connections", _Mgr())
+	monkeypatch.setattr(events_router, "event_connections", _Mgr())
 
 	ws = _FakeWebSocket(
 		[
@@ -182,7 +178,7 @@ async def test_events_stream_unauthorized_closes_and_returns(
 		return None
 
 	monkeypatch.setattr(
-		events_router.auth_service,
+		events_router,
 		"authenticate_websocket_refresh_cookie",
 		_nope,
 	)
@@ -209,11 +205,11 @@ async def test_events_stream_exception_path_still_disconnects(
 			calls.append(("disconnect", user_id))
 
 	monkeypatch.setattr(
-		events_router.auth_service,
+		events_router,
 		"authenticate_websocket_refresh_cookie",
 		_ok,
 	)
-	monkeypatch.setattr(events_router.event_service, "event_connections", _Mgr())
+	monkeypatch.setattr(events_router, "event_connections", _Mgr())
 
 	ws = _FakeWebSocket([ValueError("boom")], cookies={REFRESH_COOKIE_NAME: "valid"})
 	await events_router.events_stream(cast(WebSocket, ws))
@@ -335,17 +331,46 @@ async def test_authenticate_websocket_cookie_inactive_user_returns_none(
 
 
 @pytest.mark.asyncio
+async def test_authenticate_websocket_cookie_missing_session_claims_returns_none(
+	test_user: dict,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""pre-session refresh tokens (no sid/jti) are rejected."""
+
+	def _decode(*_args: object, **_kwargs: object) -> dict[str, object]:
+		return {"sub": str(test_user["id"]), "typ": "refresh"}
+
+	monkeypatch.setattr(auth_service, "decode_jwt_token", _decode)
+	ws = _FakeWebSocket([], cookies={REFRESH_COOKIE_NAME: "token"})
+	assert (
+		await auth_service.authenticate_websocket_refresh_cookie(cast(WebSocket, ws))
+	) is None
+
+
+@pytest.mark.asyncio
 async def test_authenticate_websocket_cookie_active_user_is_returned(
 	test_user: dict,
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+	from api.v1.service.authentication import sessions as session_service
+	from nokodo_ai.utils.typeid import TypeID
+
+	row = await session_service.create_session(
+		db_session, user_id=TypeID(str(test_user["id"]))
+	)
+
 	monkeypatch.setattr(
 		auth_service, "async_session_local", _AsyncSessionFactory(db_session)
 	)
 
 	def _decode(*_args: object, **_kwargs: object) -> dict[str, object]:
-		return {"sub": str(test_user["id"]), "typ": "refresh"}
+		return {
+			"sub": str(test_user["id"]),
+			"typ": "refresh",
+			"sid": str(row.id),
+			"jti": row.current_jti,
+		}
 
 	monkeypatch.setattr(auth_service, "decode_jwt_token", _decode)
 	ws = _FakeWebSocket([], cookies={REFRESH_COOKIE_NAME: "token"})

@@ -4,13 +4,12 @@ typed schema for user-level preferences stored as JSONB.
 this provides validation and schema generation for the frontend.
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.schemas.common import MISSING, MissingType
+from nokodo_ai.utils.typeid import TypeID
 
 
 # shared literal type for background options
@@ -111,7 +110,7 @@ class AccountPreferences(_PreferencesSection):
 class AIPreferences(_PreferencesSection):
 	"""user AI preferences."""
 
-	default_agent_id: str | None | MissingType = Field(
+	default_agent_id: TypeID | None | MissingType = Field(
 		default=MISSING,
 		alias="defaultAgentId",
 		description="preferred default agent id",

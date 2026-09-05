@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Self
 from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from taskiq.scheduler.scheduled_task import ScheduledTask
 
 from api.boot_settings import boot_settings
 from api.models.calendar import Calendar, CalendarEvent, CalendarEventOverride
@@ -24,40 +24,40 @@ from api.schemas.scheduled_item import (
 	ScheduledItemListFilters,
 )
 from api.v1.routers.scheduled_items import list_scheduled_items
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.calendar import events as calendar_events_service
+from api.v1.service.calendar import notifications as calendar_notifications
 from api.v1.service.calendar.cache import (
 	get_cached_calendar_event_items,
 	invalidate_calendar_event_scheduled_items,
 	invalidate_calendar_scheduled_items,
 	set_cached_calendar_event_items,
 )
+from api.v1.service.calendar.notifications import (
+	_calendar_event_occurrence_starts,
+	dispatch_calendar_event_notification,
+)
 from api.v1.service.chat.tools.calendar import CalendarEventWriteInput
 from api.v1.service.chat.tools.reminders import ReminderWriteInput
 from api.v1.service.reminders import core as reminder_core_service
+from api.v1.service.reminders import notifications as reminder_notifications
 from api.v1.service.reminders.cache import (
 	get_cached_reminder_items,
 	invalidate_reminder_list_scheduled_items,
 	invalidate_reminder_scheduled_items,
 	set_cached_reminder_items,
 )
+from api.v1.service.reminders.notifications import (
+	_reminder_notification_occurrences,
+	_reminder_occurrence_due_at,
+	dispatch_reminder_notification,
+)
 from api.v1.service.scheduling.recurrence import (
 	expand_occurrence_starts,
 	occurrence_exists,
 )
-from api.v1.tasks import calendar as calendar_tasks
-from api.v1.tasks import reminders as reminder_tasks
-from api.v1.tasks.calendar import (
-	_calendar_event_occurrence_starts,
-	dispatch_calendar_event_notification,
-	dispatch_due_calendar_notifications,
-)
-from api.v1.tasks.reminders import (
-	_reminder_notification_occurrences,
-	_reminder_occurrence_due_at,
-	dispatch_due_reminder_notifications,
-	dispatch_reminder_notification,
-)
+from api.v1.tasks.calendar import dispatch_due_calendar_notifications
+from api.v1.tasks.reminders import dispatch_due_reminder_notifications
 from nokodo_ai.utils.security import hash_password
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
@@ -125,38 +125,17 @@ def find_item(
 class FakeScheduleSource:
 	def __init__(self) -> None:
 		self.deleted: list[str] = []
+		self.scheduled: list[tuple[str, datetime, list[object]]] = []
 
 	async def delete_schedule(self, schedule_id: str) -> None:
 		self.deleted.append(schedule_id)
 
-
-class FakeKicker:
-	def __init__(self) -> None:
-		self.schedule_id: str | None = None
-		self.scheduled: list[tuple[str, datetime, TypeID]] = []
-
-	def with_schedule_id(self, schedule_id: str) -> Self:
-		self.schedule_id = schedule_id
-		return self
-
-	async def schedule_by_time(
-		self,
-		source: object,
-		schedule_at: datetime,
-		resource_id: TypeID,
-	) -> None:
-		_ = source
-		if self.schedule_id is None:
-			raise AssertionError("schedule id was not set")
-		self.scheduled.append((self.schedule_id, schedule_at, resource_id))
-
-
-class FakeTask:
-	def __init__(self) -> None:
-		self.kicker_instance = FakeKicker()
-
-	def kicker(self) -> FakeKicker:
-		return self.kicker_instance
+	async def add_schedule(self, schedule: ScheduledTask) -> None:
+		if schedule.time is None:
+			raise AssertionError("expected a time-based schedule")
+		self.scheduled.append(
+			(schedule.schedule_id, schedule.time, list(schedule.args))
+		)
 
 
 def test_recurrence_expands_daily_weekly_monthly_and_exdates() -> None:
@@ -478,19 +457,11 @@ async def test_dynamic_notification_schedules_use_resource_schedule_ids(
 	monkeypatch.setattr(boot_settings, "TESTING", False)
 	reminder_source = FakeScheduleSource()
 	calendar_source = FakeScheduleSource()
-	reminder_task = FakeTask()
-	calendar_task = FakeTask()
-	monkeypatch.setattr(reminder_tasks, "redis_schedule_source", reminder_source)
-	monkeypatch.setattr(calendar_tasks, "redis_schedule_source", calendar_source)
 	monkeypatch.setattr(
-		reminder_tasks,
-		"dispatch_reminder_notification",
-		reminder_task,
+		calendar_notifications, "redis_schedule_source", calendar_source
 	)
 	monkeypatch.setattr(
-		calendar_tasks,
-		"dispatch_calendar_event_notification",
-		calendar_task,
+		reminder_notifications, "redis_schedule_source", reminder_source
 	)
 
 	owner = build_user("dynamic-alert-owner@example.com", "dynamic_alert_owner")
@@ -552,26 +523,26 @@ async def test_dynamic_notification_schedules_use_resource_schedule_ids(
 	db_session.add_all([calendar, calendar_event, reminder_list, reminder])
 	await db_session.flush()
 
-	await reminder_tasks.schedule_reminder_notifications(
+	await reminder_notifications.schedule_reminder_notifications(
 		reminder.id,
 		session=db_session,
 	)
-	await calendar_tasks.schedule_calendar_event_notifications(
+	await calendar_notifications.schedule_calendar_event_notifications(
 		calendar_event.id,
 		session=db_session,
 	)
-	await reminder_tasks.cancel_reminder_notifications(reminder.id)
-	await calendar_tasks.cancel_calendar_event_notifications(calendar_event.id)
+	await reminder_notifications.cancel_reminder_notifications(reminder.id)
+	await calendar_notifications.cancel_calendar_event_notifications(calendar_event.id)
 
 	reminder_schedule_id = f"notifications:reminder:{reminder.id}"
 	calendar_schedule_id = f"notifications:calendar-event:{calendar_event.id}"
 	assert reminder_source.deleted == [reminder_schedule_id, reminder_schedule_id]
 	assert calendar_source.deleted == [calendar_schedule_id, calendar_schedule_id]
-	assert reminder_task.kicker_instance.scheduled == [
-		(reminder_schedule_id, ceil_to_minute(remind_at), reminder.id)
+	assert reminder_source.scheduled == [
+		(reminder_schedule_id, ceil_to_minute(remind_at), [reminder.id])
 	]
-	assert calendar_task.kicker_instance.scheduled == [
-		(calendar_schedule_id, ceil_to_minute(notify_at), calendar_event.id)
+	assert calendar_source.scheduled == [
+		(calendar_schedule_id, ceil_to_minute(notify_at), [calendar_event.id])
 	]
 
 
@@ -884,7 +855,7 @@ async def test_scheduled_projection_cache_is_queried_after_access_filtering(
 		"set_cached_reminder_items",
 		fake_reminder_cache_set,
 	)
-	principal = Principal(user=owner, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=owner, group_ids=(), permissions=frozenset())
 	items = await list_scheduled_items(
 		filters=ScheduledItemListFilters(
 			start_at=now - timedelta(hours=1),

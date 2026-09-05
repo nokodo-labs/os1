@@ -1,32 +1,55 @@
 """SQL predicates for social user visibility and discovery."""
 
-from __future__ import annotations
-
 from sqlalchemy import and_, func, or_, true
 from sqlalchemy.sql import ColumnElement
 
 from api.models.user import User
+from api.permissions import ActionPermission
 from api.schemas.privacy import PrivacyField, Visibility, privacy_field_default
-from api.v1.service.auth import Principal
-from api.v1.service.social.friendship import accepted_friendship_exists, block_exists
+from api.v1.service.authentication import Principal
+from api.v1.service.social.friendship import (
+	accepted_friendship_exists,
+	block_exists,
+	shared_thread_exists,
+)
 
 
 def user_unblocked_predicate(principal: Principal) -> ColumnElement[bool]:
 	"""return a predicate excluding users blocked in either direction."""
-	if principal.is_admin:
+	if principal.has_permission(ActionPermission.USERS_READ):
 		return true()
-	return ~block_exists(principal.user_id, User.id)
+	return ~block_exists(principal.user.id, User.id)
 
 
 def user_search_candidate_predicate(
 	principal: Principal,
 	include_inactive: bool = False,
 ) -> ColumnElement[bool]:
-	"""return users that may appear in social search candidates."""
-	if principal.is_admin:
+	"""predicate matching the users who may appear in social search results."""
+	if principal.user.is_superuser:
 		return true()
 	active = true() if include_inactive else User.is_active.is_(True)
 	return and_(active, user_unblocked_predicate(principal))
+
+
+def user_addressable_predicate(principal: Principal) -> ColumnElement[bool]:
+	"""predicate matching the users a principal may address by name.
+
+	the single resolution for "does this person exist, to me": themselves,
+	their friends, and anyone they already share a conversation with. every
+	surface that names a user (mentions included) resolves through this, so
+	reachability never depends on which endpoint asked.
+	"""
+	if principal.has_permission(ActionPermission.USERS_READ):
+		return true()
+	return and_(
+		user_search_candidate_predicate(principal),
+		or_(
+			User.id == principal.user.id,
+			accepted_friendship_exists(principal.user.id, User.id),
+			shared_thread_exists(principal.user.id, User.id),
+		),
+	)
 
 
 def _user_privacy_value(field: PrivacyField) -> ColumnElement[str]:
@@ -41,17 +64,17 @@ def user_privacy_visibility_predicate(
 	field: PrivacyField,
 ) -> ColumnElement[bool]:
 	"""return whether a candidate user's privacy field is visible."""
-	if principal.is_admin:
+	if principal.has_permission(ActionPermission.USERS_READ):
 		return true()
 	value = _user_privacy_value(field)
 	return and_(
 		user_unblocked_predicate(principal),
 		or_(
-			User.id == principal.user_id,
+			User.id == principal.user.id,
 			value == Visibility.EVERYONE.value,
 			and_(
 				value == Visibility.FRIENDS.value,
-				accepted_friendship_exists(principal.user_id, User.id),
+				accepted_friendship_exists(principal.user.id, User.id),
 			),
 		),
 	)
@@ -91,7 +114,7 @@ def user_bio_filter_predicate(principal: Principal) -> ColumnElement[bool]:
 
 def user_email_filter_predicate(principal: Principal) -> ColumnElement[bool]:
 	"""return whether email may be queried for a user."""
-	if principal.is_admin:
+	if principal.has_permission(ActionPermission.USERS_READ):
 		return true()
 	return and_(
 		user_search_candidate_predicate(principal),

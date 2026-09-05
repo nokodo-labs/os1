@@ -1,7 +1,5 @@
 """Model configuration."""
 
-from __future__ import annotations
-
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -15,6 +13,7 @@ from api.models.mixins import (
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+from nokodo_ai.utils.typeid import TypeID
 
 
 MODEL_TYPEID_PREFIX = "model"
@@ -40,6 +39,8 @@ class ModelType(StrEnum):
 
 	CHAT_MODEL = "chat_model"
 	EMBEDDING = "embedding"
+	CONTEXTUALIZED_EMBEDDING = "contextualized_embedding"
+	RERANKER = "reranker"
 	IMAGE = "image"
 	AUDIO = "audio"
 	VIDEO = "video"
@@ -51,7 +52,7 @@ class Model(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	__tablename__ = "models"
 	__typeid_prefix__ = MODEL_TYPEID_PREFIX
 
-	provider_id: Mapped[str] = mapped_column(
+	provider_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("providers.id", ondelete="CASCADE"),
 		index=True,

@@ -8,28 +8,33 @@ from typing import Any, cast
 import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
-from sqlalchemy import select, text
+from sqlalchemy import insert, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel, AccessRule
-from api.models.message import Message, MessageType
+from api.models.event import Event, EventScope
+from api.models.message import AssistantMessage, MessageType, UserMessage
 from api.models.project import Project
 from api.models.thread import Thread
+from api.models.thread_passage import ThreadPassage
 from api.models.thread_summary import SummaryPurpose, ThreadSummary
 from api.models.user import User
-from api.schemas.message import MessageCreate, TextContent
+from api.schemas.message import (
+	TextContent,
+)
 from api.schemas.thread import ThreadCreate, ThreadListFilters, ThreadUpdate
 from api.settings import settings
 from api.v1.service import threads as thread_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.threads import core as thread_core_service
 from api.v1.service.threads import summaries as summary_service
-from api.v1.service.threads.core import _load_thread, _message_event_data
+from api.v1.service.threads.common import load_thread, message_event_data
+from api.v1.service.threads.drafts import MessageDraft
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 def _principal(user: User) -> Principal:
-	return Principal(
+	return Principal.for_user(
 		user=user,
 		group_ids=(),
 		permissions=frozenset(),
@@ -39,11 +44,11 @@ def _principal(user: User) -> Principal:
 	)
 
 
-def test_message_event_data_uses_public_metadata_alias() -> None:
+def test_message_event_data_is_the_public_view() -> None:
 	"""message WS payloads must match the OpenAPI message shape."""
 	now = datetime.now(UTC)
 	run_id = str(new_typeid("run"))
-	message = Message(
+	message = AssistantMessage(
 		id=TypeID(new_typeid("msg")),
 		thread_id=TypeID(new_typeid("thread")),
 		parent_id=None,
@@ -56,18 +61,17 @@ def test_message_event_data_uses_public_metadata_alias() -> None:
 		is_error=None,
 		tool_calls=[],
 		usage=None,
-		read_by=[],
 		citations=[],
-		attachments=[],
 		metadata_={"run_id": run_id},
 		created_at=now,
 		updated_at=now,
 	)
 
-	data = _message_event_data(message)
+	data = message_event_data(message)
 
-	assert data["metadata_"] == {"run_id": run_id}
-	assert "metadata" not in data
+	assert data["metadata"] == {"run_id": run_id}
+	assert data["private"] is None
+	assert "metadata_" not in data
 
 
 @pytest.mark.asyncio
@@ -108,6 +112,79 @@ async def test_thread_project_association(
 	assert update_resp.status_code == 200
 	updated_thread = update_resp.json()
 	assert set(updated_thread["project_ids"]) == {project_b.id}
+
+
+@pytest.mark.asyncio
+async def test_wire_cannot_forge_private_message_metadata(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
+	"""a thread EDITOR cannot post backend-owned private metadata.
+
+	regression: the route used to bind a type that carries ``private``, so any
+	editor could forge provider payloads / citation state that the citation
+	and compaction pipelines then trust. the wire binds ``MessageCreate``
+	(no ``private``, extra="forbid"), so this is a 422; only the internal
+	``InternalMessageCreate`` subtype carries the facet.
+	"""
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+
+	thread_resp = await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "forge attempt"},
+		headers=headers,
+	)
+	assert thread_resp.status_code == 201
+	thread_id = thread_resp.json()["id"]
+
+	forged = await client.post(
+		f"/v1/threads/{thread_id}/messages",
+		json={
+			"content": "hi",
+			"private": {"metadata": {"provider_data": {"forged": True}}},
+		},
+		headers=headers,
+	)
+	assert forged.status_code == 422
+
+	# the same message without the facet is accepted, and comes back public.
+	ok = await client.post(
+		f"/v1/threads/{thread_id}/messages",
+		json={"content": "hi"},
+		headers=headers,
+	)
+	assert ok.status_code == 201
+	assert ok.json()["private"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_message_rejects_invisible_payload_text(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+	thread_resp = await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "input validation"},
+		headers=headers,
+	)
+	assert thread_resp.status_code == 201
+
+	response = await client.post(
+		f"/v1/threads/{thread_resp.json()['id']}/messages",
+		json={"content": "please explain " + ("\u200b" * 300)},
+		headers=headers,
+	)
+	assert response.status_code == 422
+	assert response.json()["detail"] == (
+		"input text contains too many invisible unicode characters"
+	)
 
 
 @pytest.mark.asyncio
@@ -162,6 +239,58 @@ async def test_list_threads(client: AsyncClient, user_auth: dict[str, object]) -
 
 
 @pytest.mark.asyncio
+async def test_list_threads_include_last_message(
+	client: AsyncClient, user_auth: dict[str, object]
+) -> None:
+	"""the opt-in param carries the canon leaf message, projected, per row."""
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+
+	thread_resp = await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "with a message"},
+		headers=headers,
+	)
+	thread_id = thread_resp.json()["id"]
+	empty_resp = await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "no messages"},
+		headers=headers,
+	)
+	empty_id = empty_resp.json()["id"]
+
+	msg_resp = await client.post(
+		f"/v1/threads/{thread_id}/messages",
+		json={"content": "latest", "type": "user", "sender_user_id": user["id"]},
+		headers=headers,
+	)
+	assert msg_resp.status_code == 201
+	message_id = msg_resp.json()["id"]
+
+	off_resp = await client.get(f"/v1/threads?owner_id={user['id']}", headers=headers)
+	assert all(t["last_message"] is None for t in off_resp.json())
+
+	on_resp = await client.get(
+		"/v1/threads",
+		params={"owner_id": user["id"], "include_last_message": True},
+		headers=headers,
+	)
+	assert on_resp.status_code == 200
+	by_id = {t["id"]: t for t in on_resp.json()}
+	last_message = by_id[thread_id]["last_message"]
+	assert last_message["id"] == message_id
+	assert last_message["content"] == [
+		{"type": "text", "text": "latest", "metadata": None}
+	]
+	assert last_message["sender_user_id"] == user["id"]
+	# a non-operator never receives the nested message's private facet.
+	assert last_message["private"] is None
+	assert by_id[empty_id]["last_message"] is None
+
+
+@pytest.mark.asyncio
 async def test_list_threads_sorting(
 	client: AsyncClient, user_auth: dict[str, object]
 ) -> None:
@@ -197,12 +326,12 @@ async def test_list_threads_sorting(
 
 
 @pytest.mark.asyncio
-async def test_temporary_threads_hidden_from_listing_but_accessible(
+async def test_temporary_threads_hidden_without_operator_flag(
 	client: AsyncClient,
 	user_auth: dict[str, object],
 	admin_auth: dict[str, object],
 ) -> None:
-	"""Temporary threads are hidden from listings but accessible by direct GET."""
+	"""temporary threads are concealed unless an operator requests hidden rows."""
 	user_headers = user_auth["headers"]
 	assert isinstance(user_headers, dict)
 	user = user_auth["user"]
@@ -224,10 +353,9 @@ async def test_temporary_threads_hidden_from_listing_but_accessible(
 	assert user_list.status_code == 200
 	assert temp_thread_id not in {t["id"] for t in user_list.json()}
 
-	# direct GET by owner is allowed (is_temporary is just a flag)
+	# direct lookup stays concealed from the ordinary owner.
 	user_get = await client.get(f"/v1/threads/{temp_thread_id}", headers=user_headers)
-	assert user_get.status_code == 200
-	assert user_get.json()["is_temporary"] is True
+	assert user_get.status_code == 404
 
 	admin_headers = admin_auth["headers"]
 	assert isinstance(admin_headers, dict)
@@ -245,6 +373,13 @@ async def test_temporary_threads_hidden_from_listing_but_accessible(
 	)
 	assert admin_hidden_list.status_code == 200
 	assert temp_thread_id in {t["id"] for t in admin_hidden_list.json()}
+	admin_hidden_get = await client.get(
+		f"/v1/threads/{temp_thread_id}",
+		headers=admin_headers,
+		params={"include_hidden": True},
+	)
+	assert admin_hidden_get.status_code == 200
+	assert admin_hidden_get.json()["is_temporary"] is True
 
 
 @pytest.mark.asyncio
@@ -313,7 +448,7 @@ async def test_soft_deleted_threads_hidden(
 	admin_hidden_list = await client.get(
 		"/v1/threads",
 		headers=admin_headers,
-		params={"include_hidden": True},
+		params={"include_deleted": True},
 	)
 	assert admin_hidden_list.status_code == 200
 	admin_user = await db_session.get(User, admin_auth["user"]["id"])  # type: ignore[index]
@@ -330,7 +465,7 @@ async def test_soft_deleted_threads_hidden(
 	service_threads = await thread_service.list_threads(
 		db_session,
 		principal=admin_principal,
-		filters=ThreadListFilters(include_hidden=True),
+		filters=ThreadListFilters(include_deleted=True),
 	)
 	service_ids = {str(t.id) for t in service_threads}
 	assert thread_id in service_ids
@@ -344,7 +479,7 @@ async def test_soft_deleted_threads_hidden(
 	admin_get_hidden = await client.get(
 		f"/v1/threads/{thread_id}",
 		headers=admin_headers,
-		params={"include_hidden": True},
+		params={"include_deleted": True},
 	)
 	assert admin_get_hidden.status_code == 200
 	assert admin_get_hidden.json()["id"] == thread_id
@@ -396,6 +531,7 @@ async def test_thread_messages(
 @pytest.mark.asyncio
 async def test_thread_messages_group_task_runs(
 	client: AsyncClient,
+	db_session: AsyncSession,
 	user_auth: dict[str, object],
 ) -> None:
 	headers = user_auth["headers"]
@@ -403,64 +539,70 @@ async def test_thread_messages_group_task_runs(
 	user = user_auth["user"]
 	assert isinstance(user, dict)
 
+	user_orm = await db_session.get(User, user["id"])
+	assert user_orm is not None
+	principal = _principal(user_orm)
+
 	thread_resp = await client.post(
 		"/v1/threads",
 		json={"owner_id": user["id"], "title": "group runs"},
 		headers=headers,
 	)
 	assert thread_resp.status_code == 201
-	thread_id = thread_resp.json()["id"]
+	thread_id = TypeID(thread_resp.json()["id"])
 
-	run_id = "run-test-1"
+	run_id = str(new_typeid("run"))
 	tool_call_id_1 = "tool_call_test_1"
 	tool_call_id_2 = "tool_call_test_2"
 
-	assistant_payload = {
-		"content": "calling tools",
-		"type": "assistant",
-		"metadata_": {"run_id": run_id},
-		"tool_calls": [
-			{"id": tool_call_id_1, "name": "t1", "arguments": {}},
-			{"id": tool_call_id_2, "name": "t2", "arguments": {}},
-		],
-	}
-	assistant_resp = await client.post(
-		f"/v1/threads/{thread_id}/messages",
-		json=assistant_payload,
-		headers=headers,
-	)
-	assert assistant_resp.status_code == 201
-	assistant_msg = assistant_resp.json()
+	# run metadata is server-owned, so these go in through the service the run
+	# itself writes with rather than over the wire.
+	assistant_msg = (
+		await thread_service.create_message(
+			thread_id,
+			MessageDraft(
+				content=[TextContent(text="calling tools")],
+				type=MessageType.ASSISTANT,
+				metadata={"run_id": run_id},
+				tool_calls=[
+					{"id": tool_call_id_1, "name": "t1", "arguments": {}},
+					{"id": tool_call_id_2, "name": "t2", "arguments": {}},
+				],
+			),
+			db_session,
+			principal=principal,
+		)
+	).message
 
-	tool_payload_1 = {
-		"content": "tool out 1",
-		"type": "tool",
-		"tool_call_id": tool_call_id_1,
-		"is_error": False,
-		"metadata_": {"run_id": run_id},
-	}
-	tool_payload_2 = {
-		"content": "tool out 2",
-		"type": "tool",
-		"tool_call_id": tool_call_id_2,
-		"is_error": False,
-		"metadata_": {"run_id": run_id},
-	}
-	tool_resp_1 = await client.post(
-		f"/v1/threads/{thread_id}/messages",
-		json=tool_payload_1,
-		headers=headers,
-	)
-	assert tool_resp_1.status_code == 201
-	tool_msg_1 = tool_resp_1.json()
+	tool_msg_1 = (
+		await thread_service.create_message(
+			thread_id,
+			MessageDraft(
+				content=[TextContent(text="tool out 1")],
+				type=MessageType.TOOL,
+				tool_call_id=tool_call_id_1,
+				is_error=False,
+				metadata={"run_id": run_id},
+			),
+			db_session,
+			principal=principal,
+		)
+	).message
 
-	tool_resp_2 = await client.post(
-		f"/v1/threads/{thread_id}/messages",
-		json=tool_payload_2,
-		headers=headers,
-	)
-	assert tool_resp_2.status_code == 201
-	tool_msg_2 = tool_resp_2.json()
+	tool_msg_2 = (
+		await thread_service.create_message(
+			thread_id,
+			MessageDraft(
+				content=[TextContent(text="tool out 2")],
+				type=MessageType.TOOL,
+				tool_call_id=tool_call_id_2,
+				is_error=False,
+				metadata={"run_id": run_id},
+			),
+			db_session,
+			principal=principal,
+		)
+	).message
 
 	# With grouping enabled, requesting a small page that lands on tool messages
 	# should stitch in the initiating assistant message (but not the entire run).
@@ -472,8 +614,8 @@ async def test_thread_messages_group_task_runs(
 	assert list_resp.status_code == 200
 	items = list_resp.json()
 	assert len(items) == 2
-	assert items[0]["id"] in {tool_msg_1["id"], tool_msg_2["id"]}
-	assert items[1]["id"] == assistant_msg["id"]
+	assert items[0]["id"] in {str(tool_msg_1.id), str(tool_msg_2.id)}
+	assert items[1]["id"] == str(assistant_msg.id)
 	assert items[1]["type"] == "assistant"
 
 	list_resp_no_group = await client.get(
@@ -485,6 +627,103 @@ async def test_thread_messages_group_task_runs(
 	items_no_group = list_resp_no_group.json()
 	assert len(items_no_group) == 1
 	assert items_no_group[0]["type"] == "tool"
+
+
+@pytest.mark.asyncio
+async def test_events_by_message_ids_pages_instead_of_truncating(
+	client: AsyncClient,
+	db_session: AsyncSession,
+	user_auth: dict[str, object],
+) -> None:
+	"""one message can hold unboundedly many events, so the read path pages.
+
+	events drive rendering of joins, leaves and edits, so dropping an arbitrary
+	tail would render a subtly wrong thread with no signal to the client. the
+	client instead follows next_cursor and knows when it has everything.
+	"""
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+
+	thread_resp = await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "Event Thread"},
+		headers=headers,
+	)
+	assert thread_resp.status_code == 201
+	thread_id = thread_resp.json()["id"]
+
+	msg_resp = await client.post(
+		f"/v1/threads/{thread_id}/messages",
+		json={"content": "Hello", "type": "user", "sender_user_id": user["id"]},
+		headers=headers,
+	)
+	assert msg_resp.status_code == 201
+	message_id = msg_resp.json()["id"]
+
+	event_count = 2100
+	await db_session.execute(
+		insert(Event),
+		[
+			{
+				"id": TypeID(new_typeid("event")),
+				"scope": EventScope.MESSAGE,
+				"scope_id": message_id,
+				"type": "test.bulk",
+				"data": {"index": index},
+				"thread_id": thread_id,
+				"message_id": message_id,
+			}
+			for index in range(event_count)
+		],
+	)
+	await db_session.commit()
+
+	# walk every page; no single response may exceed the requested limit.
+	seen: list[str] = []
+	cursor: str | None = None
+	for _ in range(20):
+		body: dict[str, object] = {"message_ids": [message_id], "limit": 500}
+		if cursor is not None:
+			body["cursor"] = cursor
+		resp = await client.post(
+			f"/v1/threads/{thread_id}/events/by-message-ids",
+			json=body,
+			headers=headers,
+		)
+		assert resp.status_code == 200
+		page = resp.json()
+		assert len(page["items"]) <= 500
+		seen.extend(item["id"] for item in page["items"])
+		if not page["has_more"]:
+			assert page["next_cursor"] is None
+			break
+		cursor = page["next_cursor"]
+		assert cursor is not None
+	else:
+		pytest.fail("pagination did not terminate")
+
+	# every event is reachable exactly once, and rows sharing a transaction
+	# timestamp stay ordered by the id tie-breaker rather than arbitrarily.
+	assert len(seen) == len(set(seen))
+	assert seen == sorted(seen)
+	assert len([eid for eid in seen if eid.startswith("event_")]) == len(seen)
+	assert len(seen) >= event_count
+
+	oversized = await client.post(
+		f"/v1/threads/{thread_id}/events/by-message-ids",
+		json={"message_ids": [str(new_typeid("msg")) for _ in range(501)]},
+		headers=headers,
+	)
+	assert oversized.status_code == 422
+
+	bad_cursor = await client.post(
+		f"/v1/threads/{thread_id}/events/by-message-ids",
+		json={"message_ids": [message_id], "cursor": "not-a-cursor"},
+		headers=headers,
+	)
+	assert bad_cursor.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -666,6 +905,129 @@ async def test_admin_updates_and_deletes_thread_summary(
 
 
 @pytest.mark.asyncio
+async def test_thread_passage_management_requires_thread_admin(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+	admin_auth: dict[str, object],
+	db_session: AsyncSession,
+) -> None:
+	"""passage reads and enrichment edits are scoped to thread managers."""
+	user_headers = user_auth["headers"]
+	assert isinstance(user_headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+	admin_headers = admin_auth["headers"]
+	assert isinstance(admin_headers, dict)
+
+	thread_resp = await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "passage admin"},
+		headers=user_headers,
+	)
+	assert thread_resp.status_code == 201
+	thread_id = TypeID(thread_resp.json()["id"])
+
+	message = UserMessage(
+		thread_id=thread_id,
+		type=MessageType.USER,
+		content=[{"type": "text", "text": "passage source message"}],
+	)
+	db_session.add(message)
+	await db_session.flush()
+	passage = ThreadPassage(
+		first_message_id=message.id,
+		last_message_id=message.id,
+		anchor_message_id=message.id,
+		part_index=0,
+		content_hash="a" * 64,
+		content="user: passage source message",
+	)
+	db_session.add(passage)
+	await db_session.commit()
+	await db_session.refresh(passage)
+
+	owner_list = await client.get(
+		f"/v1/threads/{thread_id}/passages",
+		headers=user_headers,
+	)
+	assert owner_list.status_code == 200
+	assert [item["id"] for item in owner_list.json()] == [passage.id]
+
+	owner_get = await client.get(
+		f"/v1/threads/{thread_id}/passages/{passage.id}",
+		headers=user_headers,
+	)
+	assert owner_get.status_code == 200
+	assert owner_get.json()["content"] == "user: passage source message"
+	assert owner_get.json()["enrichment"] is None
+
+	admin_patch = await client.patch(
+		f"/v1/threads/{thread_id}/passages/{passage.id}",
+		json={"enrichment": "manual search context"},
+		headers=admin_headers,
+	)
+	assert admin_patch.status_code == 200
+	assert admin_patch.json()["enrichment"] == "manual search context"
+
+	cleared = await client.patch(
+		f"/v1/threads/{thread_id}/passages/{passage.id}",
+		json={"enrichment": None},
+		headers=user_headers,
+	)
+	assert cleared.status_code == 200
+	assert cleared.json()["enrichment"] is None
+
+	other_thread_resp = await client.post(
+		"/v1/threads",
+		json={"owner_id": user["id"], "title": "other passage thread"},
+		headers=user_headers,
+	)
+	assert other_thread_resp.status_code == 201
+	other_thread_id = TypeID(other_thread_resp.json()["id"])
+
+	cross_thread = await client.get(
+		f"/v1/threads/{other_thread_id}/passages/{passage.id}",
+		headers=user_headers,
+	)
+	assert cross_thread.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_thread_passage_management_forbidden_without_access(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+	admin_auth: dict[str, object],
+	db_session: AsyncSession,
+) -> None:
+	"""a principal without thread access cannot read passages.
+
+	the thread itself is hidden, so the surface answers 404 rather than
+	confirming the thread exists.
+	"""
+	admin_headers = admin_auth["headers"]
+	assert isinstance(admin_headers, dict)
+	admin_user = admin_auth["user"]
+	assert isinstance(admin_user, dict)
+	outsider_headers = user_auth["headers"]
+	assert isinstance(outsider_headers, dict)
+
+	thread_resp = await client.post(
+		"/v1/threads",
+		json={"owner_id": admin_user["id"], "title": "private passages"},
+		headers=admin_headers,
+	)
+	assert thread_resp.status_code == 201
+	thread_id = TypeID(thread_resp.json()["id"])
+	await db_session.commit()
+
+	forbidden = await client.get(
+		f"/v1/threads/{thread_id}/passages",
+		headers=outsider_headers,
+	)
+	assert forbidden.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_summary_invalidation_only_deletes_overlapping_ranges(
 	db_session: AsyncSession,
 	user_auth: dict[str, object],
@@ -681,7 +1043,7 @@ async def test_summary_invalidation_only_deletes_overlapping_ranges(
 	)
 	db_session.add(thread)
 	await db_session.flush()
-	message_1 = Message(
+	message_1 = UserMessage(
 		id=TypeID(new_typeid("msg")),
 		thread_id=thread.id,
 		parent_id=None,
@@ -694,7 +1056,6 @@ async def test_summary_invalidation_only_deletes_overlapping_ranges(
 		is_error=None,
 		tool_calls=[],
 		usage=None,
-		read_by=[],
 		citations=[],
 		metadata_={},
 		created_at=now,
@@ -702,7 +1063,7 @@ async def test_summary_invalidation_only_deletes_overlapping_ranges(
 	)
 	db_session.add(message_1)
 	await db_session.flush()
-	message_2 = Message(
+	message_2 = UserMessage(
 		id=TypeID(new_typeid("msg")),
 		thread_id=thread.id,
 		parent_id=message_1.id,
@@ -715,7 +1076,6 @@ async def test_summary_invalidation_only_deletes_overlapping_ranges(
 		is_error=None,
 		tool_calls=[],
 		usage=None,
-		read_by=[],
 		citations=[],
 		metadata_={},
 		created_at=now,
@@ -723,7 +1083,7 @@ async def test_summary_invalidation_only_deletes_overlapping_ranges(
 	)
 	db_session.add(message_2)
 	await db_session.flush()
-	message_3 = Message(
+	message_3 = UserMessage(
 		id=TypeID(new_typeid("msg")),
 		thread_id=thread.id,
 		parent_id=message_2.id,
@@ -736,7 +1096,6 @@ async def test_summary_invalidation_only_deletes_overlapping_ranges(
 		is_error=None,
 		tool_calls=[],
 		usage=None,
-		read_by=[],
 		citations=[],
 		metadata_={},
 		created_at=now,
@@ -794,7 +1153,7 @@ async def test_stale_invalidation_uses_summary_coverage_metadata(
 	)
 	db_session.add(thread)
 	await db_session.flush()
-	message_1 = Message(
+	message_1 = UserMessage(
 		thread_id=thread.id,
 		parent_id=None,
 		task_id=None,
@@ -806,7 +1165,6 @@ async def test_stale_invalidation_uses_summary_coverage_metadata(
 		is_error=None,
 		tool_calls=[],
 		usage=None,
-		read_by=[],
 		citations=[],
 		metadata_={},
 		created_at=now,
@@ -814,7 +1172,7 @@ async def test_stale_invalidation_uses_summary_coverage_metadata(
 	)
 	db_session.add(message_1)
 	await db_session.flush()
-	message_2 = Message(
+	message_2 = UserMessage(
 		thread_id=thread.id,
 		parent_id=message_1.id,
 		task_id=None,
@@ -826,7 +1184,6 @@ async def test_stale_invalidation_uses_summary_coverage_metadata(
 		is_error=None,
 		tool_calls=[],
 		usage=None,
-		read_by=[],
 		citations=[],
 		metadata_={},
 		created_at=now,
@@ -872,7 +1229,7 @@ async def test_active_end_invalidation_deletes_null_ended_summaries(
 	)
 	db_session.add(thread)
 	await db_session.flush()
-	message_1 = Message(
+	message_1 = UserMessage(
 		id=TypeID(new_typeid("msg")),
 		thread_id=thread.id,
 		parent_id=None,
@@ -885,7 +1242,6 @@ async def test_active_end_invalidation_deletes_null_ended_summaries(
 		is_error=None,
 		tool_calls=[],
 		usage=None,
-		read_by=[],
 		citations=[],
 		metadata_={},
 		created_at=now,
@@ -893,7 +1249,7 @@ async def test_active_end_invalidation_deletes_null_ended_summaries(
 	)
 	db_session.add(message_1)
 	await db_session.flush()
-	message_2 = Message(
+	message_2 = UserMessage(
 		id=TypeID(new_typeid("msg")),
 		thread_id=thread.id,
 		parent_id=message_1.id,
@@ -906,7 +1262,6 @@ async def test_active_end_invalidation_deletes_null_ended_summaries(
 		is_error=None,
 		tool_calls=[],
 		usage=None,
-		read_by=[],
 		citations=[],
 		metadata_={},
 		created_at=now,
@@ -1018,23 +1373,27 @@ async def test_unread_counts_include_tool_messages_but_ignore_own_user_messages(
 		db_session,
 		principal=principal,
 	)
-	assistant_message = await thread_service.create_message(
-		thread.id,
-		MessageCreate(content="done", type=MessageType.ASSISTANT),
-		db_session,
-		principal=principal,
-	)
+	assistant_message = (
+		await thread_service.create_message(
+			thread.id,
+			MessageDraft(
+				content=[TextContent(text="done")], type=MessageType.ASSISTANT
+			),
+			db_session,
+			principal=principal,
+		)
+	).message
 	participant = await thread_service.ensure_participant(
 		thread.id,
-		user.id,
 		db_session,
+		user_id=user.id,
 	)
 	participant.last_read_message_id = assistant_message.id
 	await db_session.flush()
 	await thread_service.create_message(
 		thread.id,
-		MessageCreate(
-			content="tool output",
+		MessageDraft(
+			content=[TextContent(text="tool output")],
 			type=MessageType.TOOL,
 			tool_call_id="tool_1",
 			is_error=False,
@@ -1044,12 +1403,14 @@ async def test_unread_counts_include_tool_messages_but_ignore_own_user_messages(
 	)
 	await thread_service.create_message(
 		thread.id,
-		MessageCreate(content="my follow-up", type=MessageType.USER),
+		MessageDraft(content=[TextContent(text="my follow-up")], type=MessageType.USER),
 		db_session,
 		principal=principal,
 	)
 
-	counts = await thread_service.get_unread_counts(db_session, principal)
+	counts = await thread_service.get_unread_counts(
+		db_session, principal, user_id=principal.user.id
+	)
 
 	assert counts == {thread.id: 1}
 
@@ -1078,27 +1439,31 @@ async def test_unread_counts_include_assistant_messages_after_read_marker(
 		db_session,
 		principal=principal,
 	)
-	user_message = await thread_service.create_message(
-		thread.id,
-		MessageCreate(content="hello", type=MessageType.USER),
-		db_session,
-		principal=principal,
-	)
+	user_message = (
+		await thread_service.create_message(
+			thread.id,
+			MessageDraft(content=[TextContent(text="hello")], type=MessageType.USER),
+			db_session,
+			principal=principal,
+		)
+	).message
 	participant = await thread_service.ensure_participant(
 		thread.id,
-		user.id,
 		db_session,
+		user_id=user.id,
 	)
 	participant.last_read_message_id = user_message.id
 	await db_session.flush()
 	await thread_service.create_message(
 		thread.id,
-		MessageCreate(content="reply", type=MessageType.ASSISTANT),
+		MessageDraft(content=[TextContent(text="reply")], type=MessageType.ASSISTANT),
 		db_session,
 		principal=principal,
 	)
 
-	counts = await thread_service.get_unread_counts(db_session, principal)
+	counts = await thread_service.get_unread_counts(
+		db_session, principal, user_id=principal.user.id
+	)
 
 	assert counts == {thread.id: 1}
 
@@ -1193,7 +1558,6 @@ async def test_create_message_types(
 	asst_msg = {
 		"type": "assistant",
 		"content": "Hello",
-		"sender_agent_id": None,  # Optional
 	}
 	resp = await client.post(
 		f"/v1/threads/{thread_id}/messages",
@@ -1335,7 +1699,7 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 		principal=principal,
 	)
 
-	orig = thread_core_service._load_thread
+	orig = thread_core_service.load_thread
 	called = False
 	seen_principal: Principal | None = None
 
@@ -1345,6 +1709,7 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 		principal: Principal | None = None,
 		required_level: AccessLevel = AccessLevel.READER,
 		include_hidden: bool = False,
+		include_deleted: bool = False,
 	) -> thread_service.Thread:
 		nonlocal called
 		nonlocal seen_principal
@@ -1357,6 +1722,7 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 				None,
 				required_level,
 				include_hidden,
+				include_deleted,
 			)
 		return await orig(
 			thread_id,
@@ -1364,9 +1730,10 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 			principal,
 			required_level,
 			include_hidden,
+			include_deleted,
 		)
 
-	thread_core_service._load_thread = _tracking
+	thread_core_service.load_thread = _tracking
 	try:
 		updated = await thread_service.update_thread(
 			thread.id,
@@ -1375,7 +1742,7 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 			principal=principal,
 		)
 	finally:
-		thread_core_service._load_thread = orig
+		thread_core_service.load_thread = orig
 	assert called
 	assert seen_principal is None
 	assert updated.owner_id == new_owner.id
@@ -1384,7 +1751,7 @@ async def test_update_thread_owner_handoff_returns_unrestricted(
 @pytest.mark.asyncio
 async def test_load_thread_unrestricted_missing(db_session: AsyncSession) -> None:
 	with pytest.raises(HTTPException):
-		await _load_thread(
+		await load_thread(
 			TypeID(new_typeid("thread")),
 			db_session,
 			None,
@@ -1418,8 +1785,8 @@ async def test_create_message_sender_guard(db_session: AsyncSession) -> None:
 	with pytest.raises(HTTPException):
 		await thread_service.create_message(
 			thread.id,
-			MessageCreate(
-				content="forbidden",
+			MessageDraft(
+				content=[TextContent(text="forbidden")],
 				type=MessageType.USER,
 				sender_user_id=other.id,
 			),
@@ -1618,13 +1985,12 @@ async def test_update_thread_fields_service(
 
 	updated = await thread_service.update_thread(
 		thread.id,
-		ThreadUpdate(title="updated", tags=["t2"], is_archived=True),
+		ThreadUpdate(title="updated", tags=["t2"]),
 		db_session,
 		principal=principal,
 	)
 	assert updated.title == "updated"
 	assert updated.tags == ["t2"]
-	assert updated.is_archived is True
 
 
 @pytest.mark.asyncio
@@ -1685,12 +2051,16 @@ async def test_admin_update_owner_and_create_message(
 	)
 	assert updated.owner_id == new_owner.id
 
-	msg = await thread_service.create_message(
-		thread.id,
-		MessageCreate(content="admin msg", type=MessageType.USER),
-		db_session,
-		principal=admin_principal,
-	)
+	msg = (
+		await thread_service.create_message(
+			thread.id,
+			MessageDraft(
+				content=[TextContent(text="admin msg")], type=MessageType.USER
+			),
+			db_session,
+			principal=admin_principal,
+		)
+	).message
 	assert msg.thread_id == thread.id
 
 
@@ -1719,36 +2089,50 @@ async def test_create_message_types_service(
 	)
 
 	# Assistant
-	msg_asst = await thread_service.create_message(
-		thread.id,
-		MessageCreate(content="A", type=MessageType.ASSISTANT, sender_user_id=user.id),
-		db_session,
-		principal=principal,
-	)
+	msg_asst = (
+		await thread_service.create_message(
+			thread.id,
+			MessageDraft(
+				content=[TextContent(text="A")],
+				type=MessageType.ASSISTANT,
+				sender_user_id=user.id,
+			),
+			db_session,
+			principal=principal,
+		)
+	).message
 	assert msg_asst.type == MessageType.ASSISTANT
 
 	# Tool
-	msg_tool = await thread_service.create_message(
-		thread.id,
-		MessageCreate(
-			content="T",
-			type=MessageType.TOOL,
-			tool_call_id=TypeID(new_typeid("tool_call")),
-			is_error=False,
-			sender_user_id=user.id,
-		),
-		db_session,
-		principal=principal,
-	)
+	msg_tool = (
+		await thread_service.create_message(
+			thread.id,
+			MessageDraft(
+				content=[TextContent(text="T")],
+				type=MessageType.TOOL,
+				tool_call_id=TypeID(new_typeid("tool_call")),
+				is_error=False,
+				sender_user_id=user.id,
+			),
+			db_session,
+			principal=principal,
+		)
+	).message
 	assert msg_tool.type == MessageType.TOOL
 
 	# System
-	msg_sys = await thread_service.create_message(
-		thread.id,
-		MessageCreate(content="S", type=MessageType.SYSTEM, sender_user_id=user.id),
-		db_session,
-		principal=principal,
-	)
+	msg_sys = (
+		await thread_service.create_message(
+			thread.id,
+			MessageDraft(
+				content=[TextContent(text="S")],
+				type=MessageType.SYSTEM,
+				sender_user_id=user.id,
+			),
+			db_session,
+			principal=principal,
+		)
+	).message
 	assert msg_sys.type == MessageType.SYSTEM
 
 
@@ -1756,7 +2140,11 @@ async def test_create_message_types_service(
 async def test_create_message_unknown_type_service(
 	db_session: AsyncSession,
 ) -> None:
-	"""Ensure unexpected message types fall back to user messages."""
+	"""A type with no mapped row class is a bug, not a message to coerce.
+
+	silently storing it as a user message would attribute machine output to a
+	person and make the row indistinguishable from one the user wrote.
+	"""
 
 	user = User(
 		email="svc_unknown_type@example.com",
@@ -1777,18 +2165,18 @@ async def test_create_message_unknown_type_service(
 		db_session,
 		principal=principal,
 	)
-	message_in = MessageCreate.model_construct(
+	draft = MessageDraft(
 		content=[TextContent(text="Fallback")],
 		sender_user_id=user.id,
 		type=cast(Any, "custom"),
 	)
-	message = await thread_service.create_message(
-		thread.id,
-		message_in,
-		db_session,
-		principal=principal,
-	)
-	assert message.type == MessageType.USER
+	with pytest.raises(RuntimeError, match="unmapped message type: custom"):
+		await thread_service.create_message(
+			thread.id,
+			draft,
+			db_session,
+			principal=principal,
+		)
 
 
 @pytest.mark.asyncio
@@ -1817,13 +2205,13 @@ async def test_list_messages_service(
 
 	await thread_service.create_message(
 		thread.id,
-		MessageCreate(content="1", sender_user_id=user.id),
+		MessageDraft(content=[TextContent(text="1")], sender_user_id=user.id),
 		db_session,
 		principal=principal,
 	)
 	await thread_service.create_message(
 		thread.id,
-		MessageCreate(content="2", sender_user_id=user.id),
+		MessageDraft(content=[TextContent(text="2")], sender_user_id=user.id),
 		db_session,
 		principal=principal,
 	)
@@ -1909,3 +2297,88 @@ async def test_update_thread_projects(
 	)
 	assert len(updated.projects) == 1
 	assert updated.projects[0].id == project.id
+
+
+@pytest.mark.asyncio
+async def test_create_message_preserves_private_metadata(
+	db_session: AsyncSession,
+) -> None:
+	"""private metadata submitted on create survives persistence.
+
+	regression: the public-api metadata sanitizer ran on the internal
+	persistence dump, dropping provider tool_call ids (``provider_data``) from
+	tool messages. replayed threads then failed tool_use/tool_result pairing at
+	the provider boundary and the whole tool history vanished from the prompt.
+	"""
+	user = User(
+		email="private_metadata@example.com",
+		username="private_metadata",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add(user)
+	await db_session.commit()
+	await db_session.refresh(user)
+	principal = _principal(user)
+	thread = await thread_service.create_thread(
+		ThreadCreate(owner_id=user.id, title="private metadata"),
+		db_session,
+		principal=principal,
+	)
+
+	provider_data = {"anthropic.messages": {"tool_call_id": "toolu_abc123"}}
+	message = (
+		await thread_service.create_message(
+			thread.id,
+			MessageDraft(
+				content=[TextContent(text="fetched content")],
+				type=MessageType.TOOL,
+				tool_call_id="tool_call_sdk_1",
+				is_error=False,
+				metadata={"run_id": "run_1"},
+				private_metadata={"provider_data": provider_data},
+			),
+			db_session,
+			principal=principal,
+		)
+	).message
+
+	assert message.public_metadata == {"run_id": "run_1"}
+	assert message.private_metadata == {"provider_data": provider_data}
+
+
+@pytest.mark.asyncio
+async def test_create_thread_preserves_private_metadata(
+	db_session: AsyncSession,
+) -> None:
+	"""public thread metadata submitted on create survives persistence."""
+	user = User(
+		email="thread_private_metadata@example.com",
+		username="thread_private_metadata",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add(user)
+	await db_session.commit()
+	await db_session.refresh(user)
+	principal = _principal(user)
+
+	thread = await thread_service.create_thread(
+		ThreadCreate(
+			owner_id=user.id,
+			title="private thread metadata",
+			metadata={"topic": "x"},
+		),
+		db_session,
+		principal=principal,
+	)
+
+	assert thread.public_metadata == {"topic": "x"}

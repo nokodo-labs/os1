@@ -1,7 +1,5 @@
 """calendar CRUD service helpers."""
 
-from __future__ import annotations
-
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,8 +11,10 @@ from api.models.calendar import Calendar, CalendarEvent
 from api.models.event_types import EventType
 from api.permissions import ResourceType
 from api.schemas.calendar import CalendarCreate, CalendarListFilters, CalendarUpdate
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.authorization import (
+	apply_metadata_write,
+	apply_resource_access_list_filters,
 	invalidate_accessible_users_for_resource,
 	require_permission,
 	resource_access_predicate,
@@ -29,11 +29,11 @@ from api.v1.service.calendar.common import (
 	publish_calendar,
 	publish_calendar_event,
 )
+from api.v1.service.calendar.notifications import cancel_calendar_event_notifications
 from api.v1.service.calendar.search import CALENDAR_EVENT_SPEC
 from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.projects import invalidate_project_payload_caches
 from api.v1.service.vectorize import remove_vectorized_resource
-from api.v1.tasks.calendar import cancel_calendar_event_notifications
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -62,7 +62,7 @@ async def list_calendars(
 		.where(resource_access_predicate(principal, ResourceType.CALENDAR))
 		.options(selectinload(Calendar.projects))
 	)
-	stmt = _apply_calendar_filters(stmt, calendar_filters)
+	stmt = _apply_calendar_filters(stmt, calendar_filters, principal)
 	stmt = apply_sort(
 		stmt,
 		sort_by=sort_by,
@@ -89,15 +89,25 @@ async def count_calendars(
 			resource_access_predicate(principal, ResourceType.CALENDAR),
 		)
 	)
-	stmt = _apply_calendar_filters(stmt, calendar_filters)
+	stmt = _apply_calendar_filters(stmt, calendar_filters, principal)
 	return await session.scalar(stmt) or 0
 
 
-def _apply_calendar_filters(stmt: Select, filters: CalendarListFilters) -> Select:
+def _apply_calendar_filters(
+	stmt: Select,
+	filters: CalendarListFilters,
+	principal: Principal,
+) -> Select:
 	"""apply calendar list/count filters."""
 	if filters.owner_id is not None:
 		stmt = stmt.where(Calendar.owner_id == filters.owner_id)
-	return stmt
+	return apply_resource_access_list_filters(
+		stmt,
+		principal,
+		ResourceType.CALENDAR,
+		filters.access_relationship,
+		filters.resolved_access_level,
+	)
 
 
 async def create_calendar(
@@ -112,14 +122,14 @@ async def create_calendar(
 	if data.is_default:
 		await clear_default_calendars(session, principal)
 	calendar = Calendar(
-		owner_id=principal.user_id,
+		owner_id=principal.user.id,
 		**data.model_dump(
 			exclude_unset=True,
-			by_alias=True,
-			exclude={"project_ids"},
+			exclude={"project_ids", "metadata"},
 		),
 		projects=projects,
 	)
+	apply_metadata_write(calendar, data.metadata)
 	session.add(calendar)
 	await session.flush()
 	await session.refresh(calendar)
@@ -143,6 +153,26 @@ async def get_calendar(
 	return await get_accessible_calendar(calendar_id, session, principal)
 
 
+async def load_calendars(
+	calendar_ids: list[TypeID],
+	session: AsyncSession,
+	principal: Principal,
+) -> dict[TypeID, Calendar]:
+	"""bulk-load accessible calendars keyed by id.
+
+	inaccessible or unknown ids are silently absent from the result.
+	"""
+	if not calendar_ids:
+		return {}
+	result = await session.execute(
+		select(Calendar).where(
+			Calendar.id.in_([str(calendar_id) for calendar_id in calendar_ids]),
+			resource_access_predicate(principal, ResourceType.CALENDAR),
+		)
+	)
+	return {calendar.id: calendar for calendar in result.scalars().all()}
+
+
 async def update_calendar(
 	calendar_id: TypeID,
 	data: CalendarUpdate,
@@ -158,9 +188,9 @@ async def update_calendar(
 		required_level=AccessLevel.EDITOR,
 	)
 	changed = data.model_fields_set
-	update_data = data.model_dump(exclude_unset=True, by_alias=True)
+	update_data = data.model_dump(exclude_unset=True, exclude={"metadata"})
 	if "is_default" in changed and data.is_default is True:
-		if calendar.owner_id != principal.user_id and not principal.is_admin:
+		if calendar.owner_id != principal.user.id and not principal.user.is_superuser:
 			raise HTTPException(
 				status_code=status.HTTP_403_FORBIDDEN,
 				detail="forbidden",
@@ -183,6 +213,7 @@ async def update_calendar(
 		changed_project_ids = old_project_ids | set(new_project_ids)
 	for key, value in update_data.items():
 		setattr(calendar, key, value)
+	apply_metadata_write(calendar, data.metadata)
 	await session.flush()
 	await session.refresh(calendar)
 	await session.refresh(calendar, attribute_names=["projects"])
@@ -198,11 +229,12 @@ async def update_calendar(
 		}
 		if changed_project_ids
 		else None,
+		affected_project_ids=changed_project_ids or None,
 	)
 	await invalidate_calendar_scheduled_items(calendar.id)
 	if changed_project_ids:
 		await invalidate_accessible_users_for_resource(
-			ResourceType.CALENDAR, calendar_id, session
+			ResourceType.CALENDAR, calendar_id
 		)
 	await invalidate_project_payload_caches(changed_project_ids)
 	return calendar
@@ -223,7 +255,7 @@ async def delete_calendar(
 	)
 	if calendar.is_default:
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="default calendar cannot be deleted",
 		)
 	project_ids = {project.id for project in calendar.projects}
@@ -253,9 +285,7 @@ async def delete_calendar(
 		origin_session_id=origin_session_id,
 	)
 	await invalidate_calendar_scheduled_items(calendar.id)
-	await invalidate_accessible_users_for_resource(
-		ResourceType.CALENDAR, calendar_id, session
-	)
+	await invalidate_accessible_users_for_resource(ResourceType.CALENDAR, calendar_id)
 	await invalidate_project_payload_caches(project_ids)
 	await session.delete(calendar)
 	await session.flush()

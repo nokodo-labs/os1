@@ -1,7 +1,5 @@
 """MCP server and discovered capability models."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -17,6 +15,7 @@ from api.models.mixins import (
 	TypeIDPrimaryKeyMixin,
 )
 from nokodo_ai.types.json import JSONObject
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -77,7 +76,7 @@ class MCPServer(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		default=MCPServerScope.GLOBAL,
 		index=True,
 	)
-	owner_user_id: Mapped[str | None] = mapped_column(
+	owner_user_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id", ondelete="CASCADE"),
 		index=True,

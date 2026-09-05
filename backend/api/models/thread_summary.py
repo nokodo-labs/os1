@@ -1,7 +1,5 @@
 """thread summary model - stores condensed summaries of conversation segments."""
 
-from __future__ import annotations
-
 from enum import StrEnum
 from typing import TYPE_CHECKING
 

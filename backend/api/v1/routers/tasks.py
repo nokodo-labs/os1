@@ -1,7 +1,5 @@
 """task routers."""
 
-from __future__ import annotations
-
 from collections.abc import AsyncIterator
 from typing import Annotated
 
@@ -20,8 +18,29 @@ from api.schemas.task import (
 	TaskSortBy,
 	TaskUpdate,
 )
-from api.v1.service import tasks as task_service
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authentication import Principal, get_current_principal
+from api.v1.service.tasks import (
+	UnknownTaskError,
+	subscribe_task_stream,
+)
+from api.v1.service.tasks import (
+	cancel_task as cancel_task_service,
+)
+from api.v1.service.tasks import (
+	count_tasks as count_tasks_service,
+)
+from api.v1.service.tasks import (
+	create_task as create_task_service,
+)
+from api.v1.service.tasks import (
+	get_task as get_task_service,
+)
+from api.v1.service.tasks import (
+	list_tasks as list_tasks_service,
+)
+from api.v1.service.tasks import (
+	update_task as update_task_service,
+)
 from nokodo_ai.utils.sse import sse_response
 from nokodo_ai.utils.typeid import TypeID
 
@@ -36,7 +55,7 @@ async def create_task(
 	db: AsyncSession = Depends(get_db),
 ) -> Task:
 	"""create a new task."""
-	return await task_service.create_task(task_in, db, principal=principal)
+	return await create_task_service(task_in, db, principal=principal)
 
 
 @router.get("", response_model=list[TaskSchema])
@@ -50,7 +69,7 @@ async def list_tasks(
 	db: AsyncSession = Depends(get_db),
 ) -> list[Task]:
 	"""list tasks with optional filters."""
-	return await task_service.list_tasks(
+	return await list_tasks_service(
 		db,
 		principal=principal,
 		filters=filters,
@@ -68,7 +87,7 @@ async def count_tasks(
 	db: AsyncSession = Depends(get_db),
 ) -> int:
 	"""count tasks with optional filters."""
-	return await task_service.count_tasks(db, principal=principal, filters=filters)
+	return await count_tasks_service(db, principal=principal, filters=filters)
 
 
 @router.get("/{task_id}", response_model=TaskSchema)
@@ -78,7 +97,7 @@ async def get_task(
 	db: AsyncSession = Depends(get_db),
 ) -> Task:
 	"""get a task by id."""
-	return await task_service.get_task(task_id, db, principal=principal)
+	return await get_task_service(task_id, db, principal=principal)
 
 
 @router.patch("/{task_id}", response_model=TaskSchema)
@@ -89,7 +108,7 @@ async def update_task(
 	db: AsyncSession = Depends(get_db),
 ) -> Task:
 	"""update mutable task fields."""
-	return await task_service.update_task(task_id, task_in, db, principal=principal)
+	return await update_task_service(task_id, task_in, db, principal=principal)
 
 
 @router.get("/{task_id}/stream")
@@ -99,15 +118,15 @@ async def stream_task(
 	db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
 	"""stream task lifecycle events with Redis-backed catchup."""
-	await task_service.get_task(task_id, db, principal=principal)
+	await get_task_service(task_id, db, principal=principal)
 	return sse_response(_stream_task(task_id))
 
 
 async def _stream_task(task_id: TypeID) -> AsyncIterator[bytes]:
 	try:
-		async for chunk in task_service.subscribe_task_stream(task_id):
+		async for chunk in subscribe_task_stream(task_id):
 			yield chunk
-	except task_service.UnknownTaskError as exc:
+	except UnknownTaskError as exc:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,
 			detail="Task not found",
@@ -123,7 +142,7 @@ async def cancel_task(
 ) -> Task:
 	"""request cancellation for an active or queued task."""
 	reason = body.reason if body is not None else None
-	return await task_service.cancel_task(
+	return await cancel_task_service(
 		task_id,
 		db,
 		principal=principal,

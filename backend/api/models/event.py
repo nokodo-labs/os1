@@ -1,12 +1,10 @@
 """event model."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -57,6 +55,8 @@ class Event(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 	expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 	version: Mapped[int] = mapped_column(Integer(), default=1)
+	resource_revision: Mapped[int | None] = mapped_column(Integer)
+	"""resolved-access revision used to replay access.updated events."""
 	user_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id", ondelete="SET NULL"),
@@ -138,4 +138,17 @@ class Event(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		"Notification",
 		back_populates="event",
 		cascade="all, delete-orphan",
+	)
+
+	__table_args__ = (
+		Index(
+			"ix_events_access_revision",
+			"type",
+			"scope_id",
+			"resource_revision",
+			unique=True,
+			postgresql_where=text(
+				"type = 'access.updated' AND resource_revision IS NOT NULL"
+			),
+		),
 	)

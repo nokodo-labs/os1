@@ -3,8 +3,6 @@
 These types are used by list endpoints across API versions.
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 

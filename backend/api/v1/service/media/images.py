@@ -11,8 +11,6 @@ usage:
     )
 """
 
-from __future__ import annotations
-
 import base64
 import logging
 from dataclasses import dataclass
@@ -146,19 +144,20 @@ async def generate_image(
 				owner_id=owner_id,
 				filename=f"generated-{i + 1}.{img.mime_type.split('/')[-1]}",
 				content_type=img.mime_type,
-				source=FileSource.GENERATED,
+				source=FileSource.AGENT_GENERATED,
 				project_ids=project_ids,
 				message_id=message_id,
 				origin_session_id=origin_session_id,
 			)
-			# store generation metadata on the file record
-			gen_meta: dict[str, str] = {
-				"prompt": prompt,
-				"_model_id": str(effective_model_id),
-			}
+			# store generation metadata on the file record. the model id is
+			# backend-owned; the prompt and agent are shown to the user.
+			gen_meta: dict[str, str] = {"prompt": prompt}
 			if agent_id:
 				gen_meta["agent_id"] = str(agent_id)
-			file.metadata_ = {**file.metadata_, **gen_meta}
+			file.set_metadata(
+				public={**file.public_metadata, **gen_meta},
+				private={**file.private_metadata, "model_id": str(effective_model_id)},
+			)
 			await session.flush()
 
 			file_id = file.id

@@ -12,12 +12,19 @@ from dataclasses import dataclass
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.settings import settings
 from api.v1.service import vectorize
 from api.v1.service.vectorize import (
+	CONFIG_FP_KEY,
+	PIPELINE_VERSION_KEY,
+	VECTORIZATION_PIPELINE_VERSION,
+	StaleBy,
 	VectorSpec,
+	chunk_stamps_stale,
 	chunks_match_fingerprint,
 	filter_unvectorized,
 	resource_fingerprint,
+	vectorization_config_fp,
 )
 from api.v1.service.vectorstores import VectorChunkResourceType
 from nokodo_ai.adapters.base.vectorstores import Chunk
@@ -67,6 +74,118 @@ def _chunk(
 
 
 # resource_fingerprint
+
+
+def test_vectorization_config_fp_tracks_chunking_settings(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	base = vectorization_config_fp()
+	assert base == vectorization_config_fp()
+	monkeypatch.setattr(settings.assets.content_vectorization, "target_tokens", 999)
+	assert vectorization_config_fp() != base
+
+
+def test_chunk_stamps_stale_gated_by_triggers(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""provenance staleness only counts when the pipeline's triggers enable it."""
+	old = Chunk(
+		id="c1",
+		content="body",
+		embedding=[0.0],
+		metadata={
+			"resource_id": "m1",
+			PIPELINE_VERSION_KEY: VECTORIZATION_PIPELINE_VERSION - 1,
+			CONFIG_FP_KEY: "other-config",
+		},
+	)
+	assert chunk_stamps_stale([old]) is False
+	monkeypatch.setattr(
+		settings.assets.revectorize.resources, "on_pipeline_version", True
+	)
+	assert chunk_stamps_stale([old]) is True
+
+
+def test_chunk_stamps_stale_detects_config_mismatch() -> None:
+	"""a config-stale chunk matches by={CONFIG} and NOT by={PIPELINE_VERSION}."""
+	config_stale = Chunk(
+		id="c1",
+		content="body",
+		embedding=[0.0],
+		metadata={
+			"resource_id": "m1",
+			PIPELINE_VERSION_KEY: VECTORIZATION_PIPELINE_VERSION,
+			CONFIG_FP_KEY: "other-config",
+		},
+	)
+	assert chunk_stamps_stale([config_stale], by={StaleBy.CONFIG}) is True
+	assert chunk_stamps_stale([config_stale], by={StaleBy.PIPELINE_VERSION}) is False
+
+
+def test_chunk_stamps_stale_config_trigger_knob(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""the on_config_change knob gates config staleness in trigger mode."""
+	config_stale = Chunk(
+		id="c1",
+		content="body",
+		embedding=[0.0],
+		metadata={
+			"resource_id": "m1",
+			PIPELINE_VERSION_KEY: VECTORIZATION_PIPELINE_VERSION,
+			CONFIG_FP_KEY: "other-config",
+		},
+	)
+	assert chunk_stamps_stale([config_stale]) is False
+	monkeypatch.setattr(settings.assets.revectorize.resources, "on_config_change", True)
+	assert chunk_stamps_stale([config_stale]) is True
+
+
+def test_build_chunk_stamps_provenance() -> None:
+	"""built chunks carry the current pipeline version and config fingerprint."""
+	spec = _doc_spec()
+	doc = _Doc(id="m1", text="hello", tag="a")
+	chunk = vectorize.build_chunk(spec, doc, embedding=[0.0, 0.0])
+	assert chunk.metadata[PIPELINE_VERSION_KEY] == VECTORIZATION_PIPELINE_VERSION
+	assert chunk.metadata[CONFIG_FP_KEY] == vectorization_config_fp()
+	# a freshly built chunk is provenance-current for every cause.
+	assert (
+		chunk_stamps_stale([chunk], by={StaleBy.PIPELINE_VERSION, StaleBy.CONFIG})
+		is False
+	)
+
+
+def test_chunk_stamps_stale_explicit_cause_bypasses_triggers() -> None:
+	"""explicit by= targets one cause regardless of the trigger knobs."""
+	current_config = vectorization_config_fp()
+	old_version = Chunk(
+		id="c1",
+		content="body",
+		embedding=[0.0],
+		metadata={
+			"resource_id": "m1",
+			PIPELINE_VERSION_KEY: VECTORIZATION_PIPELINE_VERSION - 1,
+			CONFIG_FP_KEY: current_config,
+		},
+	)
+	assert chunk_stamps_stale([old_version], by={StaleBy.PIPELINE_VERSION}) is True
+	assert chunk_stamps_stale([old_version], by={StaleBy.CONFIG}) is False
+	assert (
+		chunk_stamps_stale([old_version], by={StaleBy.PIPELINE_VERSION, StaleBy.CONFIG})
+		is True
+	)
+	current = Chunk(
+		id="c2",
+		content="body",
+		embedding=[0.0],
+		metadata={
+			"resource_id": "m1",
+			PIPELINE_VERSION_KEY: VECTORIZATION_PIPELINE_VERSION,
+			CONFIG_FP_KEY: current_config,
+		},
+	)
+	assert chunk_stamps_stale([current], by={StaleBy.PIPELINE_VERSION}) is False
+	assert chunk_stamps_stale([current], by={StaleBy.CONFIG}) is False
 
 
 def test_resource_fingerprint_is_stable() -> None:
@@ -181,7 +300,7 @@ async def test_filter_unvectorized_drops_current_keeps_stale(
 		return [c for c in stored if c.metadata["resource_id"] in set(resource_ids)]
 
 	monkeypatch.setattr(
-		vectorize.vectorstore_service,
+		vectorize,
 		"scroll_resource_chunks",
 		_fake_scroll,
 	)

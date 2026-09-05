@@ -60,7 +60,9 @@ def test_append_header_adds_to_message() -> None:
 def test_append_header_creates_headers_list_if_missing() -> None:
 	message: dict[str, object] = {"type": "http.response.start"}
 	append_header(message, b"x-test", "abc")
-	assert (b"x-test", b"abc") in message["headers"]  # type: ignore[operator]
+	headers = message["headers"]
+	assert isinstance(headers, list)
+	assert (b"x-test", b"abc") in headers
 
 
 # -- rate limiter tests --
@@ -87,12 +89,9 @@ async def test_rate_limiter_exempt_paths() -> None:
 			transport=ASGITransport(app=app),
 			base_url="http://test",
 		) as c:
-			# health is exempt
-			resp = await c.get("/health")
-			assert resp.status_code == 200
-			# root is exempt
-			resp = await c.get("/")
-			assert resp.status_code == 200
+			for path in ("/health", "/", "/docs", "/redoc", "/openapi.json"):
+				resp = await c.get(path)
+				assert resp.status_code == 200
 	finally:
 		boot_settings.TESTING = prev
 

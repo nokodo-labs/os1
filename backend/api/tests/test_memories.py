@@ -13,7 +13,7 @@ from api.schemas.user import UserCreate
 from api.settings import settings
 from api.v1.service import memories as memory_service
 from api.v1.service import users as user_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -32,7 +32,9 @@ async def memory_user(db_session: AsyncSession) -> Any:
 @pytest.mark.asyncio
 async def test_create_memory(db_session: AsyncSession, memory_user: Any) -> None:
 	"""Test creating a memory."""
-	principal = Principal(user=memory_user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(
+		user=memory_user, group_ids=(), permissions=frozenset()
+	)
 	memory_in = MemoryCreate(
 		user_id=memory_user.id,
 		content="Test memory content",
@@ -50,7 +52,9 @@ async def test_create_memory(db_session: AsyncSession, memory_user: Any) -> None
 @pytest.mark.asyncio
 async def test_list_memories(db_session: AsyncSession, memory_user: Any) -> None:
 	"""Test listing memories."""
-	principal = Principal(user=memory_user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(
+		user=memory_user, group_ids=(), permissions=frozenset()
+	)
 	# Create memories
 	for i in range(3):
 		memory_in = MemoryCreate(
@@ -70,7 +74,9 @@ async def test_list_memories(db_session: AsyncSession, memory_user: Any) -> None
 @pytest.mark.asyncio
 async def test_get_memory(db_session: AsyncSession, memory_user: Any) -> None:
 	"""Test getting a memory."""
-	principal = Principal(user=memory_user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(
+		user=memory_user, group_ids=(), permissions=frozenset()
+	)
 	memory_in = MemoryCreate(
 		user_id=memory_user.id,
 		content="Get memory test",
@@ -101,7 +107,7 @@ async def test_get_memory_not_found(db_session: AsyncSession) -> None:
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	with pytest.raises(HTTPException) as exc:
 		await memory_service.get_memory(
 			TypeID(new_typeid("mem")),
@@ -133,6 +139,38 @@ async def test_get_memory_endpoint(
 	fetched = await client.get(f"/v1/memories/{memory_id}", headers=headers)
 	assert fetched.status_code == 200
 	assert fetched.json()["id"] == memory_id
+
+
+@pytest.mark.asyncio
+async def test_memory_response_never_carries_the_embedding(
+	client: AsyncClient,
+	user_auth: dict[str, object],
+) -> None:
+	"""the embedding is operator data: it lives in the private facet.
+
+	regression: the response used to serve the whole `embedding` column
+	base64-encoded, top-level, to anyone who could read the memory. it moved
+	into `MemoryPrivate`, so a non-operator gets `private: null` and no
+	embedding key anywhere in the payload.
+	"""
+	headers = user_auth["headers"]
+	assert isinstance(headers, dict)
+	user = user_auth["user"]
+	assert isinstance(user, dict)
+
+	created = await client.post(
+		"/v1/memories",
+		json={"user_id": user["id"], "content": "embedding stays server side"},
+		headers=headers,
+	)
+	assert created.status_code == 201
+	assert "embedding" not in created.json()
+	assert created.json()["private"] is None
+
+	fetched = await client.get(f"/v1/memories/{created.json()['id']}", headers=headers)
+	assert fetched.status_code == 200
+	assert "embedding" not in fetched.json()
+	assert fetched.json()["private"] is None
 
 
 @pytest.mark.asyncio
@@ -194,9 +232,9 @@ async def test_admin_list_memories_for_other_user(db_session: AsyncSession) -> N
 			password="pw",
 		),
 		db_session,
-		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+		principal=Principal.for_user(user=admin, group_ids=(), permissions=frozenset()),
 	)
-	principal = Principal(user=admin, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=admin, group_ids=(), permissions=frozenset())
 	memory = await memory_service.create_memory(
 		MemoryCreate(user_id=other.id, content="c"),
 		db_session,
@@ -205,7 +243,7 @@ async def test_admin_list_memories_for_other_user(db_session: AsyncSession) -> N
 	listed = await memory_service.list_memories(
 		db_session,
 		principal=principal,
-		filters=MemoryListFilters(owner_id=TypeID(other.id)),
+		filters=MemoryListFilters(owner_id=other.id),
 	)
 	assert listed and listed[0].id == memory.id
 
@@ -231,7 +269,7 @@ async def test_non_admin_list_memories_scopes_to_own_owner(
 			password="pw",
 		),
 		db_session,
-		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+		principal=Principal.for_user(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	other = await user_service.create_user(
 		UserCreate(
@@ -240,9 +278,9 @@ async def test_non_admin_list_memories_scopes_to_own_owner(
 			password="pw",
 		),
 		db_session,
-		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+		principal=Principal.for_user(user=admin, group_ids=(), permissions=frozenset()),
 	)
-	principal = Principal(
+	principal = Principal.for_user(
 		user=owner,
 		group_ids=(),
 		permissions=frozenset(),
@@ -250,7 +288,7 @@ async def test_non_admin_list_memories_scopes_to_own_owner(
 			settings.default_permissions.action_permissions
 		),
 	)
-	admin_principal = Principal(
+	admin_principal = Principal.for_user(
 		user=admin,
 		group_ids=(),
 		permissions=frozenset(),
@@ -273,6 +311,6 @@ async def test_non_admin_list_memories_scopes_to_own_owner(
 	memories = await memory_service.list_memories(
 		db_session,
 		principal=principal,
-		filters=MemoryListFilters(owner_id=TypeID(other.id)),
+		filters=MemoryListFilters(owner_id=other.id),
 	)
 	assert memories == []

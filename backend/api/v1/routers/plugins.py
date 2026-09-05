@@ -15,8 +15,22 @@ from api.database import get_db
 from api.models.plugin import Plugin
 from api.schemas.plugin import Plugin as PluginSchema
 from api.schemas.plugin import PluginCreate, PluginInfo, PluginListFilters, PluginUpdate
-from api.v1.service import plugins as plugin_service
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authentication import Principal, get_current_principal
+from api.v1.service.plugins import (
+	create_plugin as create_plugin_service,
+)
+from api.v1.service.plugins import (
+	delete_plugin as delete_plugin_service,
+)
+from api.v1.service.plugins import (
+	get_plugin as get_plugin_service,
+)
+from api.v1.service.plugins import (
+	list_plugins as list_plugins_service,
+)
+from api.v1.service.plugins import (
+	update_plugin as update_plugin_service,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -35,7 +49,7 @@ async def list_plugins(
 	db: AsyncSession = Depends(get_db),
 ) -> list[PluginInfo]:
 	"""list plugin catalog items."""
-	return await plugin_service.list_plugins(
+	return await list_plugins_service(
 		db,
 		principal=principal,
 		include_native=True,
@@ -52,7 +66,7 @@ async def get_plugin(
 	db: AsyncSession = Depends(get_db),
 ) -> PluginInfo:
 	"""get details about a plugin catalog item."""
-	return await plugin_service.get_plugin(
+	return await get_plugin_service(
 		plugin_id, db, principal=principal, include_native=True
 	)
 
@@ -64,7 +78,7 @@ async def create_plugin(
 	db: AsyncSession = Depends(get_db),
 ) -> Plugin:
 	"""create a plugin record."""
-	return await plugin_service.create_plugin(plugin_in, db, principal=principal)
+	return await create_plugin_service(plugin_in, db, principal=principal)
 
 
 @router.patch("/{plugin_id}", response_model=PluginSchema)
@@ -75,9 +89,7 @@ async def update_plugin(
 	db: AsyncSession = Depends(get_db),
 ) -> Plugin:
 	"""update plugin fields."""
-	return await plugin_service.update_plugin(
-		plugin_id, plugin_in, db, principal=principal
-	)
+	return await update_plugin_service(plugin_id, plugin_in, db, principal=principal)
 
 
 @router.delete("/{plugin_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -87,4 +99,4 @@ async def delete_plugin(
 	db: AsyncSession = Depends(get_db),
 ) -> None:
 	"""delete a plugin record."""
-	await plugin_service.delete_plugin(plugin_id, db, principal=principal)
+	await delete_plugin_service(plugin_id, db, principal=principal)

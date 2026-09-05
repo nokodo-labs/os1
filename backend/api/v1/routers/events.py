@@ -14,11 +14,12 @@ from api.models.event import Event
 from api.models.user import User
 from api.schemas.event import Event as EventSchema
 from api.schemas.event import EventCreate, EventListFilters
-from api.v1.service import auth as auth_service
-from api.v1.service import events as event_service
-from api.v1.service import threads as thread_service
-from api.v1.service.auth import Principal, get_current_principal
-from api.v1.service.chat.run_status import get_active_runs_signal
+from api.v1.service.authentication import (
+	Principal,
+	authenticate_websocket_refresh_cookie,
+	get_current_principal,
+	is_websocket_origin_allowed,
+)
 from api.v1.service.collaborative_documents import (
 	DocError,
 	handle_awareness,
@@ -27,7 +28,21 @@ from api.v1.service.collaborative_documents import (
 	handle_leave,
 	handle_update,
 )
-from api.v1.service.user_activity import user_activity_store
+from api.v1.service.events import (
+	create_event_from_request,
+	event_connections,
+)
+from api.v1.service.events import (
+	list_events as list_events_service,
+)
+from api.v1.service.runs import get_active_runs_signal
+from api.v1.service.threads import handle_typing_event
+from api.v1.service.users import (
+	is_user_active,
+	mark_user_active,
+	mark_user_inactive,
+	touch_user_activity,
+)
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -43,7 +58,7 @@ async def create_event(
 	db: AsyncSession = Depends(get_db),
 ) -> Event:
 	"""Persist and broadcast an event."""
-	return await event_service.create_event_from_request(
+	return await create_event_from_request(
 		event_in,
 		db,
 		principal=principal,
@@ -57,7 +72,7 @@ async def list_events(
 	db: AsyncSession = Depends(get_db),
 ) -> list[Event]:
 	"""Query events with flexible filters."""
-	return await event_service.list_events(
+	return await list_events_service(
 		db,
 		principal=principal,
 		filters=filters,
@@ -71,11 +86,11 @@ async def events_stream(websocket: WebSocket) -> None:
 	authentication: uses httpOnly refresh_token cookie (auto-sent by browser).
 	csrf protection: validates Origin header against allowed origins.
 	"""
-	if not auth_service.is_websocket_origin_allowed(websocket):
+	if not is_websocket_origin_allowed(websocket):
 		await websocket.close(code=4003, reason="origin not allowed")
 		return
 
-	user = await auth_service.authenticate_websocket_refresh_cookie(websocket)
+	user = await authenticate_websocket_refresh_cookie(websocket)
 	if user is None:
 		await websocket.close(code=4001, reason="unauthorized")
 		return
@@ -88,8 +103,8 @@ async def events_stream(websocket: WebSocket) -> None:
 	client_sid = websocket.query_params.get("session_id")
 	ws_session_id = client_sid if client_sid else str(new_typeid("ws"))
 
-	await event_service.event_connections.connect(user_id, websocket)
-	await user_activity_store.mark_active(user_id)
+	await event_connections.connect(user_id, websocket)
+	await mark_user_active(user_id)
 	await websocket.send_json(
 		{
 			"type": "stream.connected",
@@ -110,7 +125,7 @@ async def events_stream(websocket: WebSocket) -> None:
 			data = await websocket.receive_json()
 			msg_type = data.get("type")
 			if msg_type == "ping":
-				await user_activity_store.touch(user_id)
+				await touch_user_activity(user_id)
 				await websocket.send_json({"type": "stream.pong"})
 			elif msg_type in ("typing.start", "typing.stop"):
 				thread_id_raw = data.get("thread_id")
@@ -118,7 +133,7 @@ async def events_stream(websocket: WebSocket) -> None:
 					continue
 				# delegate to threads service (participant-scoped broadcast)
 				async with async_session_local() as db_session:
-					await thread_service.handle_typing_event(
+					await handle_typing_event(
 						session=db_session,
 						user_id=user_id,
 						thread_id=TypeID(str(thread_id_raw)),
@@ -178,10 +193,10 @@ async def events_stream(websocket: WebSocket) -> None:
 	finally:
 		# clean up document sessions
 		await handle_disconnect(user_id, ws_session_id)
-		await event_service.event_connections.disconnect(user_id, websocket)
-		last_seen = await user_activity_store.mark_inactive(user_id)
+		await event_connections.disconnect(user_id, websocket)
+		last_seen = await mark_user_inactive(user_id)
 		# persist last_active_at to DB when user fully disconnects
-		if not await user_activity_store.is_active(user_id):
+		if not await is_user_active(user_id):
 			try:
 				async with async_session_local() as db_session:
 					await db_session.execute(

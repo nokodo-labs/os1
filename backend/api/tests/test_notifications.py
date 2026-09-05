@@ -19,8 +19,8 @@ from api.schemas.user import UserCreate
 from api.settings import settings
 from api.v1.service import notifications as notification_service
 from api.v1.service import users as user_service
-from api.v1.service.auth import Principal
-from api.v1.service.authorization import list_accessible_user_ids
+from api.v1.service.authentication import Principal
+from api.v1.service.authorization import list_accessible_user_ids_for_resources
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -65,7 +65,7 @@ async def test_list_user_notifications(
 ) -> None:
 	"""Test listing notifications."""
 	user = notification_fixture["user"]
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	notifications = await notification_service.list_user_notifications(
 		db_session,
 		user_id=user.id,
@@ -84,7 +84,7 @@ async def test_list_user_notifications_omits_expired(
 	notification = notification_fixture["notification"]
 	notification.expires_at = datetime.now(tz=UTC) - timedelta(seconds=1)
 	await db_session.commit()
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 
 	notifications = await notification_service.list_user_notifications(
 		db_session,
@@ -101,7 +101,7 @@ async def test_mark_notification_read(
 	"""Test marking notification as read."""
 	notification = notification_fixture["notification"]
 	user = notification_fixture["user"]
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	assert notification.read_at is None
 
 	updated = await notification_service.mark_notification_read(
@@ -119,7 +119,7 @@ async def test_dismiss_notification(
 	"""Test dismissing notification."""
 	notification = notification_fixture["notification"]
 	user = notification_fixture["user"]
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	assert notification.dismissed is False
 
 	updated = await notification_service.dismiss_notification(
@@ -139,7 +139,7 @@ async def test_list_unread_notifications(
 	"""Test listing only unread notifications."""
 	user = notification_fixture["user"]
 	notification = notification_fixture["notification"]
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 
 	# Should be in list
 	notifications = await notification_service.list_user_notifications(
@@ -179,7 +179,7 @@ async def test_get_notification_not_found(db_session: AsyncSession) -> None:
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	with pytest.raises(HTTPException) as exc:
 		await notification_service.mark_notification_read(
 			"nonexistent",
@@ -208,7 +208,7 @@ async def test_notification_access_guard(db_session: AsyncSession) -> None:
 			password="pw",
 		),
 		db_session,
-		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+		principal=Principal.for_user(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	user_b = await user_service.create_user(
 		UserCreate(
@@ -217,7 +217,7 @@ async def test_notification_access_guard(db_session: AsyncSession) -> None:
 			password="pw",
 		),
 		db_session,
-		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+		principal=Principal.for_user(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	event = Event(scope=EventScope.USER, type="guard", data={}, user_id=user_a.id)
 	db_session.add(event)
@@ -231,7 +231,7 @@ async def test_notification_access_guard(db_session: AsyncSession) -> None:
 	db_session.add(note)
 	await db_session.commit()
 
-	principal_b = Principal(user=user_b, group_ids=(), permissions=frozenset())
+	principal_b = Principal.for_user(user=user_b, group_ids=(), permissions=frozenset())
 	with pytest.raises(HTTPException):
 		await notification_service.mark_notification_read(
 			note.id,
@@ -344,7 +344,7 @@ async def test_create_notification_endpoint_requires_admin(
 			password="password123",
 		),
 		db_session,
-		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+		principal=Principal.for_user(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	login_resp = await client.post(
 		"/v1/auth/login/access-token",
@@ -509,7 +509,7 @@ async def test_list_notifications_forbidden_other_user(
 			password="pw",
 		),
 		db_session,
-		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+		principal=Principal.for_user(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	user_b = await user_service.create_user(
 		UserCreate(
@@ -518,7 +518,7 @@ async def test_list_notifications_forbidden_other_user(
 			password="pw",
 		),
 		db_session,
-		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+		principal=Principal.for_user(user=admin, group_ids=(), permissions=frozenset()),
 	)
 	event = Event(scope=EventScope.USER, type="list-guard", data={}, user_id=user_a.id)
 	db_session.add(event)
@@ -531,7 +531,7 @@ async def test_list_notifications_forbidden_other_user(
 	db_session.add(note)
 	await db_session.commit()
 
-	principal_b = Principal(user=user_b, group_ids=(), permissions=frozenset())
+	principal_b = Principal.for_user(user=user_b, group_ids=(), permissions=frozenset())
 	with pytest.raises(HTTPException):
 		await notification_service.list_user_notifications(
 			db_session,
@@ -558,10 +558,8 @@ async def test_create_agent_notification_thread_includes_owner_when_no_participa
 	await db_session.commit()
 	await db_session.refresh(thread)
 
-	user_ids = await list_accessible_user_ids(
-		ResourceType.THREAD,
-		thread.id,
-		db_session,
+	user_ids = await list_accessible_user_ids_for_resources(
+		[(ResourceType.THREAD, thread.id)], db_session
 	)
 
 	notifications = await notification_service.create_notifications(

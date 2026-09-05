@@ -1,4 +1,4 @@
-"""Tests ensuring the API can generate and serve OpenAPI specs."""
+"""tests ensuring the API can generate and serve OpenAPI specs."""
 
 import json
 
@@ -24,10 +24,13 @@ async def test_openapi_schema_can_be_generated() -> None:
 
 @pytest.mark.asyncio
 async def test_openapi_json_endpoint_returns_schema(client: AsyncClient) -> None:
-	"""Ensure the v1 OpenAPI endpoint returns a valid schema."""
-	response = await client.get("/v1/openapi.json")
+	"""ensure the API-wide OpenAPI endpoint returns all application routes."""
+	response = await client.get("/openapi.json")
 	assert response.status_code == 200
 	assert response.headers.get("content-type", "").startswith("application/json")
 
 	schema = response.json()
 	_assert_openapi_schema_shape(schema)
+	assert "/health" in schema["paths"]
+	assert "/system/status" in schema["paths"]
+	assert "/v1/settings" in schema["paths"]

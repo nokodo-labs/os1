@@ -14,11 +14,13 @@ from api.models.notification import Notification
 from api.models.task import Task, TaskStatus, TaskType
 from api.models.thread import Thread
 from api.models.user import User
+from api.permissions import ActionPermission, PermissionWildcard
 from api.schemas.agent import AgentConfig, AgentCreate
 from api.schemas.memory import MemoryListFilters
-from api.schemas.message import MessageCreate
+from api.schemas.message import TextContent
 from api.schemas.task import TaskListFilters, TaskUpdate
 from api.schemas.user import UserCreate
+from api.tests.factories import make_principal
 from api.v1.service import (
 	agents,
 	memories,
@@ -27,11 +29,16 @@ from api.v1.service import (
 	threads,
 	users,
 )
-from api.v1.service.auth import Principal, authenticate_user, get_current_active_user
+from api.v1.service.authentication import (
+	Principal,
+	authenticate_user,
+	get_current_active_user,
+)
 from api.v1.service.authorization import (
 	require_project_access,
 	require_thread_access,
 )
+from api.v1.service.threads.drafts import MessageDraft
 from nokodo_ai.utils.security import hash_password
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
@@ -54,7 +61,7 @@ async def _principal(
 	if session is not None and user.id is None:
 		session.add(user)
 		await session.flush()
-	return Principal(user=user, group_ids=(), permissions=frozenset())
+	return Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 
 
 @pytest.mark.asyncio
@@ -71,15 +78,16 @@ async def test_authenticate_user_paths(db_session: AsyncSession) -> None:
 
 @pytest.mark.asyncio
 async def test_principal_permission_checks() -> None:
-	user = _user()
-	principal = Principal(
-		user=user, group_ids=(), permissions=frozenset({"foo:read", "bar:*"})
+	principal = make_principal(
+		permissions=frozenset(
+			{ActionPermission.NOTES_CREATE, PermissionWildcard("agents:*")}
+		)
 	)
-	assert principal.has_permission("foo:read")
-	assert principal.has_permission("bar:write")
-	assert not principal.has_permission("baz:read")
-	admin = Principal(user=_user(is_admin=True), group_ids=(), permissions=frozenset())
-	assert admin.has_permission("anything")
+	assert principal.has_permission(ActionPermission.NOTES_CREATE)
+	assert principal.has_permission(ActionPermission.AGENTS_MANAGE)
+	assert not principal.has_permission(ActionPermission.MODELS_READ)
+	admin = make_principal(is_superuser=True)
+	assert admin.has_permission(ActionPermission.SETTINGS_MANAGE)
 
 
 @pytest.mark.asyncio
@@ -253,7 +261,9 @@ async def test_users_guards(db_session: AsyncSession) -> None:
 				email="y@example.com", username="y_test_sb", password="pw"
 			),
 			session=db_session,
-			principal=Principal(user=user, group_ids=(), permissions=frozenset()),
+			principal=Principal.for_user(
+				user=user, group_ids=(), permissions=frozenset()
+			),
 		)
 
 	user.is_active = False
@@ -266,7 +276,9 @@ async def test_users_guards(db_session: AsyncSession) -> None:
 				is_active=True,
 			),
 			session=db_session,
-			principal=Principal(user=user, group_ids=(), permissions=frozenset()),
+			principal=Principal.for_user(
+				user=user, group_ids=(), permissions=frozenset()
+			),
 		)
 
 
@@ -294,8 +306,8 @@ async def test_thread_update_owner_and_create_message(db_session: AsyncSession) 
 
 	msg = await threads.create_message(
 		thread.id,
-		MessageCreate(content="c", type=MessageType.USER),
+		MessageDraft(content=[TextContent(text="c")], type=MessageType.USER),
 		db_session,
 		principal=admin,
 	)
-	assert msg.thread_id == thread.id
+	assert msg.message.thread_id == thread.id

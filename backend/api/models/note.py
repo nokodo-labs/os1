@@ -1,7 +1,5 @@
 """Note model."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ARRAY, ForeignKey, Index, String, Text
@@ -11,6 +9,7 @@ from api.models.base import TYPEID_LENGTH, Base
 from api.models.many_to_many import note_project_association
 from api.models.mixins import (
 	MetadataJSONMixin,
+	OriginMessageMixin,
 	SoftDeleteMixin,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
@@ -25,7 +24,12 @@ if TYPE_CHECKING:
 
 
 class Note(
-	TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, SoftDeleteMixin, Base
+	TypeIDPrimaryKeyMixin,
+	TimestampMixin,
+	MetadataJSONMixin,
+	OriginMessageMixin,
+	SoftDeleteMixin,
+	Base,
 ):
 	"""Simple markdown notes with labels."""
 

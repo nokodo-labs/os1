@@ -1,7 +1,5 @@
 """End-to-end test covering the first ORM POC."""
 
-from __future__ import annotations
-
 import pytest
 from httpx import AsyncClient
 
@@ -84,6 +82,7 @@ async def test_async_agentic_flow(
 			"name": "text-embedding-3-small",
 			"display_name": "Embedding Small",
 			"model_type": "embedding",
+			"context_window": 8192,
 		},
 		headers=headers,
 	)

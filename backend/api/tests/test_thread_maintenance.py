@@ -8,14 +8,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.message import MessageType
 from api.models.thread_summary import SummaryPurpose
-from api.schemas.message import MessageCreate, MessageUpdate
+from api.schemas.message import MessageUpdate, TextContent
 from api.schemas.thread import ThreadCreate
 from api.schemas.user import UserCreate
+from api.settings import settings
 from api.v1.service import threads as thread_service
 from api.v1.service import users as user_service
-from api.v1.service.auth import Principal
-from api.v1.service.threads import maintenance as thread_maintenance_service
+from api.v1.service.authentication import Principal
+from api.v1.service.chat import thread_maintenance as thread_maintenance_service
 from api.v1.service.threads import summaries as summary_service
+from api.v1.service.threads.drafts import MessageDraft
+from nokodo_ai.messages import SystemMessage
+from nokodo_ai.threads import Thread as SDKThread
 
 
 async def _create_user_principal(
@@ -32,7 +36,7 @@ async def _create_user_principal(
 		),
 		db_session,
 	)
-	return Principal(user=user, group_ids=(), permissions=frozenset())
+	return Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 
 
 @pytest.mark.asyncio
@@ -53,12 +57,13 @@ async def test_thread_maintenance_noops_when_summary_is_current(
 		db_session,
 		principal=principal,
 	)
-	message = await thread_service.create_message(
+	written = await thread_service.create_message(
 		thread.id,
-		MessageCreate(content="hello", type=MessageType.USER),
+		MessageDraft(content=[TextContent(text="hello")], type=MessageType.USER),
 		db_session,
 		principal=principal,
 	)
+	message = written.message
 	await db_session.refresh(thread)
 	await summary_service.create_summary(
 		thread_id=thread.id,
@@ -70,8 +75,11 @@ async def test_thread_maintenance_noops_when_summary_is_current(
 		session=db_session,
 	)
 
-	assert await thread_service.thread_needs_maintenance(thread, db_session) is False
-	result = await thread_service.maintain_thread_metadata(
+	assert (
+		await thread_maintenance_service.thread_needs_maintenance(thread, db_session)
+		is False
+	)
+	result = await thread_maintenance_service.maintain_thread_metadata(
 		thread.id,
 		db_session,
 		principal=principal,
@@ -88,6 +96,9 @@ async def test_thread_maintenance_generates_metadata_and_summary_once(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+	monkeypatch.setattr(
+		settings.ai.tasks, "thread_maintenance_prompt", "custom maintenance prompt"
+	)
 	principal = await _create_user_principal(
 		db_session,
 		"maintenance_generate@example.com",
@@ -100,14 +111,15 @@ async def test_thread_maintenance_generates_metadata_and_summary_once(
 	)
 	await thread_service.create_message(
 		thread.id,
-		MessageCreate(
-			content="we decided to ship task maintenance", type=MessageType.USER
+		MessageDraft(
+			content=[TextContent(text="we decided to ship task maintenance")],
+			type=MessageType.USER,
 		),
 		db_session,
 		principal=principal,
 	)
 	await db_session.refresh(thread)
-	calls: list[object] = []
+	calls: list[SDKThread] = []
 
 	async def _resolve_model(
 		session: AsyncSession,
@@ -118,7 +130,7 @@ async def test_thread_maintenance_generates_metadata_and_summary_once(
 
 	async def _run_structured(
 		chat_model: object,
-		thread: object,
+		thread: SDKThread,
 		json_schema: dict[str, Any],
 		purpose: str = "structured_output",
 	) -> dict[str, object]:
@@ -139,15 +151,17 @@ async def test_thread_maintenance_generates_metadata_and_summary_once(
 	)
 	vectorize_calls: list[object] = []
 
-	async def _fetch_acl_metadata(*args: object) -> dict[str, object]:
-		return {}
+	async def _fetch_acl_metadata(*args: object) -> dict[str, dict[str, object]]:
+		resource_ids = args[0]
+		assert isinstance(resource_ids, list)
+		return {str(resource_id): {} for resource_id in resource_ids}
 
 	async def _vectorize_resource(**kwargs: object) -> None:
 		vectorize_calls.append(kwargs)
 
 	monkeypatch.setattr(
 		thread_maintenance_service,
-		"fetch_acl_metadata",
+		"fetch_bulk_acl_metadata",
 		_fetch_acl_metadata,
 	)
 	monkeypatch.setattr(
@@ -156,7 +170,7 @@ async def test_thread_maintenance_generates_metadata_and_summary_once(
 		_vectorize_resource,
 	)
 
-	result = await thread_service.maintain_thread_metadata(
+	result = await thread_maintenance_service.maintain_thread_metadata(
 		thread.id,
 		db_session,
 		principal=principal,
@@ -169,6 +183,10 @@ async def test_thread_maintenance_generates_metadata_and_summary_once(
 	)
 
 	assert len(calls) == 1
+	sdk_thread = calls[0]
+	system_message = sdk_thread.messages[0]
+	assert isinstance(system_message, SystemMessage)
+	assert system_message.text == "custom maintenance prompt"
 	assert result["metadata_updated"] is True
 	assert result["summary_updated"] is True
 	assert thread.title == "📝 project status"
@@ -195,12 +213,13 @@ async def test_thread_maintenance_regenerates_summary_after_message_edit(
 		db_session,
 		principal=principal,
 	)
-	message = await thread_service.create_message(
+	written = await thread_service.create_message(
 		thread.id,
-		MessageCreate(content="old text", type=MessageType.USER),
+		MessageDraft(content=[TextContent(text="old text")], type=MessageType.USER),
 		db_session,
 		principal=principal,
 	)
+	message = written.message
 	await db_session.refresh(thread)
 	old_summary = await summary_service.create_summary(
 		thread_id=thread.id,
@@ -250,15 +269,17 @@ async def test_thread_maintenance_regenerates_summary_after_message_edit(
 	)
 	vectorize_calls: list[object] = []
 
-	async def _fetch_acl_metadata(*args: object) -> dict[str, object]:
-		return {}
+	async def _fetch_acl_metadata(*args: object) -> dict[str, dict[str, object]]:
+		resource_ids = args[0]
+		assert isinstance(resource_ids, list)
+		return {str(resource_id): {} for resource_id in resource_ids}
 
 	async def _vectorize_resource(**kwargs: object) -> None:
 		vectorize_calls.append(kwargs)
 
 	monkeypatch.setattr(
 		thread_maintenance_service,
-		"fetch_acl_metadata",
+		"fetch_bulk_acl_metadata",
 		_fetch_acl_metadata,
 	)
 	monkeypatch.setattr(
@@ -267,8 +288,11 @@ async def test_thread_maintenance_regenerates_summary_after_message_edit(
 		_vectorize_resource,
 	)
 
-	assert await thread_service.thread_needs_maintenance(thread, db_session) is True
-	result = await thread_service.maintain_thread_metadata(
+	assert (
+		await thread_maintenance_service.thread_needs_maintenance(thread, db_session)
+		is True
+	)
+	result = await thread_maintenance_service.maintain_thread_metadata(
 		thread.id,
 		db_session,
 		principal=principal,

@@ -8,23 +8,26 @@ from api.v1.service.calendar.calendars import (
 	delete_calendar,
 	get_calendar,
 	list_calendars,
+	load_calendars,
 	update_calendar,
 )
+from api.v1.service.calendar.common import get_calendar_event
 from api.v1.service.calendar.events import (
 	cancel_calendar_event_occurrence,
 	create_calendar_event,
 	delete_calendar_event,
 	edit_calendar_event_occurrence,
 	edit_calendar_event_series,
-	get_calendar_event,
 	list_calendar_events,
 	update_calendar_event,
 )
 from api.v1.service.calendar.search import (
 	CALENDAR_EVENT_SPEC,
 	calendar_event_to_search_item,
+	calendar_or_event_to_search_item,
 	search_calendar_events,
-	vectorize_all_calendar_events,
+	search_calendars,
+	vectorize_calendar_events,
 	vectorize_calendar_events_for_calendar,
 )
 
@@ -45,13 +48,16 @@ __all__ = [
 	"edit_calendar_event_occurrence",
 	"edit_calendar_event_series",
 	"get_calendar",
+	"load_calendars",
 	"get_calendar_event",
 	"list_calendar_events",
 	"list_calendars",
 	"calendar_event_to_search_item",
+	"calendar_or_event_to_search_item",
 	"search_calendar_events",
+	"search_calendars",
+	"vectorize_calendar_events",
 	"update_calendar",
 	"update_calendar_event",
-	"vectorize_all_calendar_events",
 	"vectorize_calendar_events_for_calendar",
 ]

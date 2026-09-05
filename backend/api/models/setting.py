@@ -1,7 +1,5 @@
 """settings document model."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import ForeignKey, Index, Integer, String
@@ -14,6 +12,7 @@ from api.models.mixins import (
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -44,7 +43,7 @@ class SettingsDocument(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin,
 		default=1,
 		doc="optimistic locking version, incremented on each update",
 	)
-	updated_by_id: Mapped[str | None] = mapped_column(
+	updated_by_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id", ondelete="SET NULL"),
 		nullable=True,

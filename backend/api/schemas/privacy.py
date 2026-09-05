@@ -4,8 +4,6 @@ privacy = access control for who can see/interact with a user.
 this is separate from preferences (which are UI/UX settings).
 """
 
-from __future__ import annotations
-
 from enum import StrEnum
 from typing import Literal
 

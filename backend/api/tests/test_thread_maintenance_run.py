@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from api.v1.service.threads import maintenance as thread_maintenance_service
+from api.v1.service.chat import thread_maintenance as thread_maintenance_service
 
 
 def _headers(user_auth: dict[str, object]) -> dict[str, str]:

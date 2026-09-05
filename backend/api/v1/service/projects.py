@@ -1,7 +1,5 @@
 """service layer for project operations."""
 
-from __future__ import annotations
-
 from typing import TypedDict
 
 from fastapi import HTTPException, status
@@ -25,7 +23,7 @@ from api.models.many_to_many import (
 from api.models.note import Note
 from api.models.project import Project
 from api.models.thread import Thread
-from api.permissions import ResourceType
+from api.permissions import ActionPermission, ResourceType
 from api.schemas.project import Project as ProjectSchema
 from api.schemas.project import (
 	ProjectCreate,
@@ -38,15 +36,17 @@ from api.schemas.search import (
 	SearchResultItem,
 	SearchResultType,
 )
-from api.v1.service import events as event_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.authorization import (
+	apply_metadata_write,
+	apply_resource_access_list_filters,
 	invalidate_accessible_users_for_resource,
-	list_accessible_user_ids,
+	list_accessible_user_ids_for_resources,
 	require_permission,
 	require_resource_access,
 	resource_access_predicate,
 )
+from api.v1.service.events import persist_and_fanout_event
 from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.resource_payload_cache import (
 	get_or_set_resource_payload_cache,
@@ -329,26 +329,27 @@ async def create_project(
 	origin_session_id: str | None = None,
 ) -> ProjectSchema:
 	"""create a new project. the caller becomes the owner."""
-	require_permission(principal, "projects:create")
-	data = project_in.model_dump(by_alias=True)
-	data["owner_id"] = principal.user_id
+	require_permission(principal, ActionPermission.PROJECTS_CREATE)
+	data = project_in.model_dump(exclude={"metadata"})
+	data["owner_id"] = principal.user.id
 	project = Project(**data)
+	apply_metadata_write(project, project_in.metadata)
 	session.add(project)
 	await session.flush()
 	await session.refresh(project)
 	project_id = project.id
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.PROJECT_CREATED,
 		data={
 			"id": str(project_id),
 			"name": project.name,
 		},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 		project_id=project_id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -373,7 +374,7 @@ async def list_projects(
 	)
 	project_filters = filters or ProjectListFilters()
 	base_stmt = _apply_project_filters(
-		select(Project).where(predicate), project_filters
+		select(Project).where(predicate), project_filters, principal
 	)
 	stmt = apply_sort(
 		base_stmt.options(selectinload(Project.threads)),
@@ -409,11 +410,15 @@ async def count_projects(
 			)
 		)
 	)
-	stmt = _apply_project_filters(stmt, project_filters)
+	stmt = _apply_project_filters(stmt, project_filters, principal)
 	return await session.scalar(stmt) or 0
 
 
-def _apply_project_filters(stmt: Select, filters: ProjectListFilters) -> Select:
+def _apply_project_filters(
+	stmt: Select,
+	filters: ProjectListFilters,
+	principal: Principal,
+) -> Select:
 	"""apply project list/count filters."""
 	if filters.owner_id is not None:
 		stmt = stmt.where(Project.owner_id == filters.owner_id)
@@ -425,7 +430,13 @@ def _apply_project_filters(stmt: Select, filters: ProjectListFilters) -> Select:
 				Project.description.ilike(pattern, escape="\\"),
 			)
 		)
-	return stmt
+	return apply_resource_access_list_filters(
+		stmt,
+		principal,
+		ResourceType.PROJECT,
+		filters.access_relationship,
+		filters.resolved_access_level,
+	)
 
 
 def _apply_project_search_filters(
@@ -445,7 +456,7 @@ def project_to_search_item(
 	"""projection from a project (and optional score) to a SearchResultItem."""
 	return SearchResultItem(
 		type=SearchResultType.PROJECT,
-		id=TypeID(project.id),
+		id=project.id,
 		title=project.name,
 		preview=project.description[:100] if project.description else None,
 		score=score,
@@ -468,7 +479,7 @@ async def search_projects(
 	description_text = func.coalesce(Project.description, "")
 	search_score = func.greatest(
 		func.similarity(Project.name, query_text),
-		func.similarity(description_text, query_text),
+		func.word_similarity(query_text, description_text),
 	)
 	predicate = resource_access_predicate(
 		principal,
@@ -577,23 +588,24 @@ async def update_project(
 	)
 	project = await _get_project(project_id, session)
 	thread_ids = {thread.id for thread in project.threads}
-	updates = project_in.model_dump(exclude_unset=True, by_alias=True)
+	updates = project_in.model_dump(exclude_unset=True, exclude={"metadata"})
 	for field, value in updates.items():
 		setattr(project, field, value)
+	apply_metadata_write(project, project_in.metadata)
 	await session.flush()
 	await session.refresh(project)
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.PROJECT_UPDATED,
 		data={
 			"id": str(project_id),
 			"name": project.name,
 		},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 		project_id=str(project_id),
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -622,29 +634,25 @@ async def delete_project(
 		project_id,
 		session,
 	)
-	if not principal.is_admin and project.owner_id != principal.user_id:
+	if not principal.user.is_superuser and project.owner_id != principal.user.id:
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="forbidden",
 		)
-	delete_recipients = await list_accessible_user_ids(
-		ResourceType.PROJECT,
-		project_id,
-		session,
+	delete_recipients = await list_accessible_user_ids_for_resources(
+		[(ResourceType.PROJECT, project_id)], session
 	)
-	await invalidate_accessible_users_for_resource(
-		ResourceType.PROJECT, project_id, session
-	)
+	await invalidate_accessible_users_for_resource(ResourceType.PROJECT, project_id)
 	await session.delete(project)
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.PROJECT_DELETED,
 		data={"id": str(project_id)},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 		project_id=project_id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,

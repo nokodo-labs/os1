@@ -4,8 +4,6 @@ This represents a user-defined plugin module uploaded by an admin.
 Plugins can be tools, filters, or hooks that extend agent capabilities.
 """
 
-from __future__ import annotations
-
 from enum import StrEnum
 from typing import TYPE_CHECKING
 

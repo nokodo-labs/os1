@@ -1,7 +1,5 @@
 """calendar models."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -25,6 +23,7 @@ from api.models.base import TYPEID_LENGTH, Base
 from api.models.many_to_many import calendar_project_association
 from api.models.mixins import (
 	MetadataJSONMixin,
+	OriginMessageMixin,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
@@ -43,6 +42,7 @@ class Calendar(
 	TypeIDPrimaryKeyMixin,
 	TimestampMixin,
 	MetadataJSONMixin,
+	OriginMessageMixin,
 	Base,
 ):
 	"""user-owned calendar grouping for events."""
@@ -106,6 +106,7 @@ class CalendarEvent(
 	TypeIDPrimaryKeyMixin,
 	TimestampMixin,
 	MetadataJSONMixin,
+	OriginMessageMixin,
 	Base,
 ):
 	"""user-owned calendar event."""

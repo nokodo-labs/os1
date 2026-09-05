@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.models.user import User
-from api.service import pwa_manifest
+from api.service.pwa_manifest import get_manifest_response
 from api.settings import settings
 
 
@@ -43,7 +43,7 @@ async def get_system_status(db: AsyncSession = Depends(get_db)) -> dict[str, boo
 @router.get("/manifest.json", response_class=Response)
 async def get_manifest(request: Request) -> Response:
 	"""serve a compiled PWA manifest derived from settings."""
-	body, etag = pwa_manifest.get_manifest_response(str(request.base_url))
+	body, etag = get_manifest_response(str(request.base_url))
 	return Response(
 		content=body,
 		media_type="application/manifest+json",

@@ -1,30 +1,40 @@
 """service helpers for role operations."""
 
-from __future__ import annotations
-
 from fastapi import HTTPException, status
 from sqlalchemy import delete, func, insert, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
+from api.database.post_commit import run_post_commit_actions_safely
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.many_to_many import user_role_association
 from api.models.role import ROLE_TYPEID_PREFIX, Role
 from api.models.user import User
 from api.permissions import (
-	DEFAULT_ACCESS_RESOURCE_TYPES,
+	ActionPermission,
 	DefaultPermissions,
 	ResourceType,
 )
 from api.schemas.role import RoleCreate, RoleListFilters, RoleUpdate
-from api.v1.service import events as event_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
+from api.v1.service.authentication.cache import (
+	invalidate_principals,
+	invalidate_principals_for_role,
+)
 from api.v1.service.authorization import (
+	build_access_change_events,
+	capture_access_change,
 	changed_default_access_resource_types,
+	default_access_resource_types,
+	enqueue_accessible_users_invalidation_for_subject,
 	invalidate_accessible_users_for_resource_types,
-	invalidate_accessible_users_for_subject,
 	require_permission,
+	resource_refs_for_subject,
+)
+from api.v1.service.events import (
+	fanout_event,
+	persist_and_fanout_event,
 )
 from api.v1.service.listing import SortDir, apply_sort, exact_typeid_filter
 from nokodo_ai.utils.search import contains_pattern
@@ -55,23 +65,37 @@ async def _notify_role_members(
 		scope=EventScope.SYSTEM,
 		type=event_type,
 		data={"role_id": role_id},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		recipient_ids=member_ids,
 	)
 
 
-def _role_default_resource_types(role: Role) -> list[ResourceType]:
-	"""return resource types touched by a role's default access."""
-	defaults = role.get_default_permissions().resource_access
-	return [
-		resource_type
-		for resource_type in DEFAULT_ACCESS_RESOURCE_TYPES
-		if defaults.get(resource_type) is not None
-	]
+def _role_access_types(defaults: DefaultPermissions) -> list[ResourceType]:
+	resource_types = default_access_resource_types(defaults.resource_access)
+	return list(ResourceType) if defaults.action_permissions else resource_types
+
+
+async def _emit_access_defaults_changed(
+	session: AsyncSession,
+	resource_types: list[ResourceType],
+	principal: Principal,
+) -> None:
+	if not resource_types:
+		return
+	await invalidate_accessible_users_for_resource_types(resource_types)
+	await persist_and_fanout_event(
+		session,
+		Event(
+			scope=EventScope.SYSTEM,
+			type=EventType.ACCESS_DEFAULTS_CHANGED,
+			data={"resource_types": [value.value for value in resource_types]},
+			user_id=principal.user.id,
+		),
+	)
 
 
 def _apply_role_filters(stmt: Select, role_filters: RoleListFilters) -> Select:
@@ -103,7 +127,7 @@ async def list_roles(
 	sort_dir: SortDir = "desc",
 ) -> list[Role]:
 	"""list all roles (requires roles:read permission)."""
-	require_permission(principal, "roles:read")
+	require_permission(principal, ActionPermission.ROLES_READ)
 	role_filters = filters or RoleListFilters()
 	stmt = _apply_role_filters(select(Role), role_filters)
 	stmt = (
@@ -132,7 +156,7 @@ async def count_roles(
 	filters: RoleListFilters | None = None,
 ) -> int:
 	"""count roles matching the list filters."""
-	require_permission(principal, "roles:read")
+	require_permission(principal, ActionPermission.ROLES_READ)
 	role_filters = filters or RoleListFilters()
 	stmt = _apply_role_filters(select(func.count()).select_from(Role), role_filters)
 	return await session.scalar(stmt) or 0
@@ -144,7 +168,7 @@ async def get_role(
 	principal: Principal,
 ) -> Role:
 	"""get a single role by id (requires roles:read permission)."""
-	require_permission(principal, "roles:read")
+	require_permission(principal, ActionPermission.ROLES_READ)
 	role = await session.get(Role, role_id)
 	if role is None:
 		raise HTTPException(
@@ -160,7 +184,7 @@ async def create_role(
 	principal: Principal,
 ) -> Role:
 	"""create a new role (requires roles:manage permission)."""
-	require_permission(principal, "roles:manage")
+	require_permission(principal, ActionPermission.ROLES_MANAGE)
 	priority = role_in.priority
 	if priority is None:
 		max_priority = await session.scalar(select(func.max(Role.priority)))
@@ -189,7 +213,7 @@ async def update_role(
 	principal: Principal,
 ) -> Role:
 	"""update an existing role (requires roles:manage permission)."""
-	require_permission(principal, "roles:manage")
+	require_permission(principal, ActionPermission.ROLES_MANAGE)
 	role = await session.get(Role, role_id)
 	if role is None:
 		raise HTTPException(
@@ -201,8 +225,7 @@ async def update_role(
 	changed_default_resource_types: list[ResourceType] = []
 	update_data = role_in.model_dump(
 		exclude_unset=True,
-		by_alias=True,
-		exclude={"default_permissions"},
+		exclude={"default_permissions", "metadata"},
 	)
 	default_permissions_changed = False
 	for key, value in update_data.items():
@@ -212,19 +235,47 @@ async def update_role(
 		default_permissions = role_in.default_permissions
 		if not isinstance(default_permissions, DefaultPermissions):
 			raise ValueError("invalid default permissions")
-		role.set_default_permissions(default_permissions)
 		changed_default_resource_types = changed_default_access_resource_types(
 			previous_default_permissions.resource_access,
 			default_permissions.resource_access,
 		)
-		default_permissions_changed = True
+		default_permissions_changed = (
+			previous_default_permissions != default_permissions
+		)
+	access_change = None
+	if default_permissions_changed:
+		access_change = await capture_access_change(
+			await resource_refs_for_subject("role", role_id, session),
+			session,
+		)
+		role.set_default_permissions(default_permissions)
+		await session.flush()
+		prepared_access_events = await build_access_change_events(
+			access_change,
+			session,
+			actor_user_id=principal.user.id,
+		)
+		await enqueue_accessible_users_invalidation_for_subject(
+			"role", role_id, session
+		)
 	await session.commit()
+	await run_post_commit_actions_safely(session)
 	await session.refresh(role)
 	if default_permissions_changed:
+		for prepared in prepared_access_events:
+			await fanout_event(
+				prepared.event,
+				recipient_ids=prepared.recipient_ids,
+			)
 		# role defaults changed.
-		await invalidate_accessible_users_for_subject("role", role_id, session)
-		await invalidate_accessible_users_for_resource_types(
-			changed_default_resource_types, session
+		await invalidate_principals_for_role(role_id)
+		await _emit_access_defaults_changed(
+			session,
+			list(ResourceType)
+			if previous_default_permissions.action_permissions
+			!= default_permissions.action_permissions
+			else changed_default_resource_types,
+			principal,
 		)
 		await _notify_role_members(role_id, member_ids, session, principal)
 	# priority only affects role ordering in admin views. resource defaults merge by
@@ -238,7 +289,7 @@ async def delete_role(
 	principal: Principal,
 ) -> None:
 	"""delete a role (requires roles:manage permission)."""
-	require_permission(principal, "roles:manage")
+	require_permission(principal, ActionPermission.ROLES_MANAGE)
 	role = await session.get(Role, role_id)
 	if role is None:
 		raise HTTPException(
@@ -247,16 +298,32 @@ async def delete_role(
 		)
 	# resolve affected users before deletion
 	member_ids = await _role_member_ids(role_id, session)
-	changed_default_resource_types = changed_default_access_resource_types(
-		role.get_default_permissions().resource_access,
-		DefaultPermissions().resource_access,
+	defaults = role.get_default_permissions()
+	access_change = await capture_access_change(
+		await resource_refs_for_subject("role", role_id, session),
+		session,
 	)
-	await invalidate_accessible_users_for_subject("role", role_id, session)
-	await invalidate_accessible_users_for_resource_types(
-		changed_default_resource_types, session
-	)
+	await invalidate_principals_for_role(role_id)
+	await enqueue_accessible_users_invalidation_for_subject("role", role_id, session)
 	await session.delete(role)
+	await session.flush()
+	prepared_access_events = await build_access_change_events(
+		access_change,
+		session,
+		actor_user_id=principal.user.id,
+	)
 	await session.commit()
+	await run_post_commit_actions_safely(session)
+	for prepared in prepared_access_events:
+		await fanout_event(
+			prepared.event,
+			recipient_ids=prepared.recipient_ids,
+		)
+	await _emit_access_defaults_changed(
+		session,
+		_role_access_types(defaults),
+		principal,
+	)
 
 	await _notify_role_members(
 		role_id,
@@ -278,7 +345,7 @@ async def list_role_members(
 	limit: int = 100,
 ) -> list[User]:
 	"""list users assigned to a role (requires roles:read)."""
-	require_permission(principal, "roles:read")
+	require_permission(principal, ActionPermission.ROLES_READ)
 	role = await session.get(Role, role_id)
 	if role is None:
 		raise HTTPException(
@@ -307,7 +374,7 @@ async def set_role_members(
 	principal: Principal,
 ) -> list[User]:
 	"""replace the entire member list for a role (requires roles:manage)."""
-	require_permission(principal, "roles:manage")
+	require_permission(principal, ActionPermission.ROLES_MANAGE)
 	role = await session.get(Role, role_id)
 	if role is None:
 		raise HTTPException(
@@ -316,6 +383,11 @@ async def set_role_members(
 		)
 	# capture old members before clearing
 	old_member_ids = await _role_member_ids(role_id, session)
+	defaults = role.get_default_permissions()
+	access_change = await capture_access_change(
+		await resource_refs_for_subject("role", role_id, session),
+		session,
+	)
 	# clear existing members
 	await session.execute(
 		delete(user_role_association).where(
@@ -328,15 +400,29 @@ async def set_role_members(
 			insert(user_role_association),
 			[{"role_id": role_id, "user_id": uid} for uid in user_ids],
 		)
-	default_resource_types = _role_default_resource_types(role)
+	await session.flush()
+	prepared_access_events = await build_access_change_events(
+		access_change,
+		session,
+		actor_user_id=principal.user.id,
+	)
+	await enqueue_accessible_users_invalidation_for_subject("role", role_id, session)
 	await session.commit()
-	await invalidate_accessible_users_for_subject("role", role_id, session)
-	await invalidate_accessible_users_for_resource_types(
-		default_resource_types, session
+	await run_post_commit_actions_safely(session)
+	for prepared in prepared_access_events:
+		await fanout_event(
+			prepared.event,
+			recipient_ids=prepared.recipient_ids,
+		)
+	await _emit_access_defaults_changed(
+		session,
+		_role_access_types(defaults),
+		principal,
 	)
 
 	# notify all affected users (old + new members) so frontends refresh
 	all_affected = set(old_member_ids) | set(user_ids)
+	await invalidate_principals(list(all_affected))
 	await _notify_role_members(role_id, list(all_affected), session, principal)
 
 	# return updated member list

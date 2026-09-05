@@ -1,7 +1,5 @@
 """Access level resolver API tests."""
 
-from __future__ import annotations
-
 import pytest
 from httpx import AsyncClient
 
@@ -81,11 +79,13 @@ async def test_resolve_access_levels_gates_self_by_read_access(
 		{
 			"resource_type": "project",
 			"resource_id": project_id,
+			"subject": "user",
 			"user_id": editor["id"],
 			"level": "editor",
 		}
 	]
 
+	# no access at all: the resource is concealed rather than refused
 	outsider_resp = await client.post(
 		f"/v1/projects/{project_id}/access/resolve",
 		headers=outsider_headers,
@@ -97,11 +97,12 @@ async def test_resolve_access_levels_gates_self_by_read_access(
 
 
 @pytest.mark.asyncio
-async def test_resolve_access_levels_requires_admin_for_other_subjects(
+async def test_resolve_access_levels_requires_a_named_grant_for_other_subjects(
 	client: AsyncClient,
 	admin_auth: dict[str, object],
 	user_auth: dict[str, object],
 ) -> None:
+	"""naming users needs a NAMED grant - any level, but never link-only."""
 	owner = user_auth["user"]
 	owner_headers = user_auth["headers"]
 	admin_headers = admin_auth["headers"]
@@ -118,7 +119,7 @@ async def test_resolve_access_levels_requires_admin_for_other_subjects(
 	project_id = project_resp.json()["id"]
 
 	editor, editor_headers = await _create_user(client, admin_headers, "editor")
-	outsider, _ = await _create_user(client, admin_headers, "outsider")
+	outsider, outsider_headers = await _create_user(client, admin_headers, "outsider")
 
 	acl_resp = await client.put(
 		f"/v1/projects/{project_id}/access/rules",
@@ -127,14 +128,34 @@ async def test_resolve_access_levels_requires_admin_for_other_subjects(
 	)
 	assert acl_resp.status_code == 200
 
-	forbidden_resp = await client.post(
+	# a named grant of any level resolves other subjects
+	named_resp = await client.post(
 		f"/v1/projects/{project_id}/access/resolve",
 		headers=editor_headers,
 		json={
 			"subject_user_ids": [owner["id"]],
 		},
 	)
-	assert forbidden_resp.status_code == 403
+	assert named_resp.status_code == 200
+	assert named_resp.json() == [
+		{
+			"resource_type": "project",
+			"resource_id": project_id,
+			"subject": "user",
+			"user_id": owner["id"],
+			"level": "admin",
+		}
+	]
+
+	# no grant at all: concealed, not refused (there is no link either)
+	forbidden_resp = await client.post(
+		f"/v1/projects/{project_id}/access/resolve",
+		headers=outsider_headers,
+		json={
+			"subject_user_ids": [owner["id"]],
+		},
+	)
+	assert forbidden_resp.status_code == 404
 
 	owner_resp = await client.post(
 		f"/v1/projects/{project_id}/access/resolve",
@@ -148,22 +169,211 @@ async def test_resolve_access_levels_requires_admin_for_other_subjects(
 		{
 			"resource_type": "project",
 			"resource_id": project_id,
+			"subject": "user",
 			"user_id": owner["id"],
 			"level": "admin",
 		},
 		{
 			"resource_type": "project",
 			"resource_id": project_id,
+			"subject": "user",
 			"user_id": editor["id"],
 			"level": "editor",
 		},
 		{
 			"resource_type": "project",
 			"resource_id": project_id,
+			"subject": "user",
 			"user_id": outsider["id"],
 			"level": None,
 		},
 	]
+
+	unknown_id = new_typeid("user")
+	unknown_resp = await client.post(
+		f"/v1/projects/{project_id}/access/resolve",
+		headers=owner_headers,
+		json={"subject_user_ids": [unknown_id]},
+	)
+	assert unknown_resp.status_code == 200
+	assert unknown_resp.json() == [
+		{
+			"resource_type": "project",
+			"resource_id": project_id,
+			"subject": "user",
+			"user_id": unknown_id,
+			"level": None,
+		}
+	]
+
+
+@pytest.mark.asyncio
+async def test_link_visitor_cannot_list_thread_rules(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""THREAD's acl_list_visibility is READER, so only the link exclusion gates.
+
+	on PROJECT the ADMIN visibility masks the link arm; a thread is where a
+	link visitor would otherwise enumerate every named subject.
+	"""
+	owner = user_auth["user"]
+	owner_headers = user_auth["headers"]
+	admin_headers = admin_auth["headers"]
+	assert isinstance(owner, dict)
+	assert isinstance(owner_headers, dict)
+	assert isinstance(admin_headers, dict)
+
+	thread_resp = await client.post(
+		"/v1/threads",
+		headers=owner_headers,
+		json={"owner_id": owner["id"], "title": "link visibility thread"},
+	)
+	assert thread_resp.status_code == 201
+	thread_id = thread_resp.json()["id"]
+
+	named, _ = await _create_user(client, admin_headers, "namedmember")
+	visitor, visitor_headers = await _create_user(client, admin_headers, "threadlink")
+
+	acl_resp = await client.put(
+		f"/v1/threads/{thread_id}/access/rules",
+		headers=owner_headers,
+		json=[
+			{"subject_user_id": named["id"], "level": "reader"},
+			{"level": "reader"},
+		],
+	)
+	assert acl_resp.status_code == 200
+
+	# the link admits the visitor to the thread itself
+	read_resp = await client.get(f"/v1/threads/{thread_id}", headers=visitor_headers)
+	assert read_resp.status_code == 200
+
+	# but never to the list of named subjects
+	rules_resp = await client.get(
+		f"/v1/threads/{thread_id}/access/rules",
+		headers=visitor_headers,
+	)
+	assert rules_resp.status_code == 404
+
+	# nor to any single rule
+	owner_rules = await client.get(
+		f"/v1/threads/{thread_id}/access/rules",
+		headers=owner_headers,
+	)
+	assert owner_rules.status_code == 200
+	rule_id = owner_rules.json()[0]["id"]
+	single_resp = await client.get(
+		f"/v1/threads/{thread_id}/access/rules/{rule_id}",
+		headers=visitor_headers,
+	)
+	assert single_resp.status_code == 404
+	assert visitor["id"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_conceals_from_strangers_and_refuses_link_visitors(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""two tracks: 404 conceals, 403 refuses a capability.
+
+	a caller with no access at all must not learn the resource exists; a link
+	visitor already knows, so refusing them a capability is the honest answer.
+	"""
+	owner = user_auth["user"]
+	owner_headers = user_auth["headers"]
+	admin_headers = admin_auth["headers"]
+	assert isinstance(owner, dict)
+	assert isinstance(owner_headers, dict)
+	assert isinstance(admin_headers, dict)
+
+	project_resp = await client.post(
+		"/v1/projects",
+		headers=owner_headers,
+		json={"name": "two track project"},
+	)
+	assert project_resp.status_code == 201
+	project_id = project_resp.json()["id"]
+
+	_, stranger_headers = await _create_user(client, admin_headers, "stranger")
+
+	# no access at all: concealment
+	stranger_resp = await client.post(
+		f"/v1/projects/{project_id}/access/resolve",
+		headers=stranger_headers,
+		json={"subject_user_ids": [owner["id"]]},
+	)
+	assert stranger_resp.status_code == 404
+
+	# publishing a link makes the same caller a link visitor
+	acl_resp = await client.put(
+		f"/v1/projects/{project_id}/access/rules",
+		headers=owner_headers,
+		json=[{"level": "reader"}],
+	)
+	assert acl_resp.status_code == 200
+
+	link_resp = await client.post(
+		f"/v1/projects/{project_id}/access/resolve",
+		headers=stranger_headers,
+		json={"subject_user_ids": [owner["id"]]},
+	)
+	assert link_resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_link_only_access_resolves_link_but_not_users_or_rules(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	owner_headers = user_auth["headers"]
+	admin_headers = admin_auth["headers"]
+	assert isinstance(owner_headers, dict)
+	assert isinstance(admin_headers, dict)
+	project_resp = await client.post(
+		"/v1/projects",
+		headers=owner_headers,
+		json={"name": "link resolver project"},
+	)
+	project_id = project_resp.json()["id"]
+	visitor, visitor_headers = await _create_user(client, admin_headers, "linkvisitor")
+	acl_resp = await client.put(
+		f"/v1/projects/{project_id}/access/rules",
+		headers=owner_headers,
+		json=[{"level": "reader"}],
+	)
+	assert acl_resp.status_code == 200
+
+	link_resp = await client.post(
+		f"/v1/projects/{project_id}/access/resolve",
+		headers=visitor_headers,
+		json={"link": True},
+	)
+	assert link_resp.status_code == 200
+	assert link_resp.json() == [
+		{
+			"resource_type": "project",
+			"resource_id": project_id,
+			"subject": "link",
+			"user_id": None,
+			"level": "reader",
+		}
+	]
+	users_resp = await client.post(
+		f"/v1/projects/{project_id}/access/resolve",
+		headers=visitor_headers,
+		json={"subject_user_ids": [visitor["id"]], "link": True},
+	)
+	assert users_resp.status_code == 403
+	rules_resp = await client.get(
+		f"/v1/projects/{project_id}/access/rules",
+		headers=visitor_headers,
+	)
+	assert rules_resp.status_code == 404
 
 
 @pytest.mark.asyncio

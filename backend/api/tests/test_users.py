@@ -14,7 +14,7 @@ from api.permissions import ActionPermission
 from api.schemas.user import UserCreate
 from api.settings import settings
 from api.v1.service import users as user_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from nokodo_ai.utils.typeid import new_typeid
 
 
@@ -850,7 +850,6 @@ async def test_user_search_respects_bio_privacy(
 		json={
 			"email": f"bio-search-{unique}@example.com",
 			"username": f"biosearch{unique}",
-			"bio": f"needle biography {unique}",
 			"password": "password",
 			"is_superuser": False,
 		},
@@ -1173,7 +1172,9 @@ async def test_service_get_user(db_session: AsyncSession) -> None:
 		),
 		db_session,
 	)
-	admin_principal = Principal(user=admin, group_ids=(), permissions=frozenset())
+	admin_principal = Principal.for_user(
+		user=admin, group_ids=(), permissions=frozenset()
+	)
 
 	user_in = UserCreate(
 		email="service_get@example.com", username="service_get", password="password123"
@@ -1206,7 +1207,9 @@ async def test_service_list_users(db_session: AsyncSession) -> None:
 		),
 		db_session,
 	)
-	admin_principal = Principal(user=admin, group_ids=(), permissions=frozenset())
+	admin_principal = Principal.for_user(
+		user=admin, group_ids=(), permissions=frozenset()
+	)
 
 	for i in range(2):
 		user_in = UserCreate(
@@ -1217,11 +1220,216 @@ async def test_service_list_users(db_session: AsyncSession) -> None:
 		await user_service.create_user(
 			user_in,
 			db_session,
-			principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+			principal=Principal.for_user(
+				user=admin, group_ids=(), permissions=frozenset()
+			),
 		)
 
 	users = await user_service.list_users(db_session, principal=admin_principal)
 	assert len(users) >= 3
+
+
+async def login_status(client: AsyncClient, identifier: str, password: str) -> int:
+	resp = await client.post(
+		"/v1/auth/login/access-token",
+		data={"username": identifier, "password": password},
+	)
+	return resp.status_code
+
+
+@pytest.mark.asyncio
+async def test_change_own_password(
+	client: AsyncClient, user_auth: dict[str, object]
+) -> None:
+	"""self password change requires and verifies the current password."""
+	user = auth_user(user_auth)
+	email = user_auth["email"]
+	assert isinstance(email, str)
+
+	resp = await client.post(
+		f"/v1/users/{user['id']}/change-password",
+		headers=auth_headers(user_auth),
+		json={"current_password": "password", "new_password": "newpassword123"},
+	)
+	assert resp.status_code == 204
+	assert await login_status(client, email, "password") == 400
+	assert await login_status(client, email, "newpassword123") == 200
+
+
+@pytest.mark.asyncio
+async def test_change_own_password_rejects_bad_current(
+	client: AsyncClient, user_auth: dict[str, object]
+) -> None:
+	"""self password change fails without a valid current password."""
+	user = auth_user(user_auth)
+	headers = auth_headers(user_auth)
+
+	wrong = await client.post(
+		f"/v1/users/{user['id']}/change-password",
+		headers=headers,
+		json={"current_password": "not-the-password", "new_password": "newpassword123"},
+	)
+	assert wrong.status_code == 400
+	assert wrong.json()["detail"] == "current password is incorrect"
+
+	missing = await client.post(
+		f"/v1/users/{user['id']}/change-password",
+		headers=headers,
+		json={"new_password": "newpassword123"},
+	)
+	assert missing.status_code == 400
+	assert missing.json()["detail"] == "current password is required"
+
+
+@pytest.mark.asyncio
+async def test_admin_changing_own_password_requires_current(
+	client: AsyncClient, admin_auth: dict[str, object]
+) -> None:
+	"""admins get no current-password bypass on their own account."""
+	admin = auth_user(admin_auth)
+	resp = await client.post(
+		f"/v1/users/{admin['id']}/change-password",
+		headers=auth_headers(admin_auth),
+		json={"new_password": "newpassword123"},
+	)
+	assert resp.status_code == 400
+	assert resp.json()["detail"] == "current password is required"
+
+
+@pytest.mark.asyncio
+async def test_admin_resets_other_user_password(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""admins can reset another user's password without the current one."""
+	target = auth_user(user_auth)
+	email = user_auth["email"]
+	assert isinstance(email, str)
+
+	resp = await client.post(
+		f"/v1/users/{target['id']}/change-password",
+		headers=auth_headers(admin_auth),
+		json={"new_password": "adminreset123"},
+	)
+	assert resp.status_code == 204
+	assert await login_status(client, email, "password") == 400
+	assert await login_status(client, email, "adminreset123") == 200
+
+
+@pytest.mark.asyncio
+async def test_change_password_forbidden_for_other_user(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""non-admins cannot change another user's password."""
+	other = await create_test_user(client, auth_headers(admin_auth), "pwtarget")
+	resp = await client.post(
+		f"/v1/users/{other['id']}/change-password",
+		headers=auth_headers(user_auth),
+		json={"current_password": "password", "new_password": "newpassword123"},
+	)
+	assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_self_email_change_gated_to_admins(
+	client: AsyncClient, user_auth: dict[str, object]
+) -> None:
+	"""non-admins cannot change their own email while the temporary gate holds."""
+	user = auth_user(user_auth)
+	resp = await client.post(
+		f"/v1/users/{user['id']}/change-email",
+		headers=auth_headers(user_auth),
+		json={"current_password": "password", "new_email": "self@example.com"},
+	)
+	assert resp.status_code == 403
+	assert (
+		resp.json()["detail"] == "email change is temporarily limited to administrators"
+	)
+
+
+@pytest.mark.asyncio
+async def test_admin_changing_own_email_requires_current_password(
+	client: AsyncClient, admin_auth: dict[str, object]
+) -> None:
+	"""admins changing their own email still need current-password proof."""
+	admin = auth_user(admin_auth)
+	headers = auth_headers(admin_auth)
+	new_email = f"adminself-{uuid4().hex[:10]}@example.com"
+
+	missing = await client.post(
+		f"/v1/users/{admin['id']}/change-email",
+		headers=headers,
+		json={"new_email": new_email},
+	)
+	assert missing.status_code == 400
+	assert missing.json()["detail"] == "current password is required"
+
+	resp = await client.post(
+		f"/v1/users/{admin['id']}/change-email",
+		headers=headers,
+		json={"current_password": "password", "new_email": new_email},
+	)
+	assert resp.status_code == 200
+	assert resp.json()["email"] == new_email
+	assert await login_status(client, new_email, "password") == 200
+
+
+@pytest.mark.asyncio
+async def test_admin_changes_other_user_email(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""admins can change another user's email without the current password."""
+	target = auth_user(user_auth)
+	new_email = f"adminset-{uuid4().hex[:10]}@example.com"
+	resp = await client.post(
+		f"/v1/users/{target['id']}/change-email",
+		headers=auth_headers(admin_auth),
+		json={"new_email": new_email},
+	)
+	assert resp.status_code == 200
+	assert resp.json()["email"] == new_email
+
+
+@pytest.mark.asyncio
+async def test_change_email_rejects_taken_address(
+	client: AsyncClient,
+	admin_auth: dict[str, object],
+	user_auth: dict[str, object],
+) -> None:
+	"""email change enforces uniqueness."""
+	target = auth_user(user_auth)
+	admin_email = admin_auth["email"]
+	assert isinstance(admin_email, str)
+	resp = await client.post(
+		f"/v1/users/{target['id']}/change-email",
+		headers=auth_headers(admin_auth),
+		json={"new_email": admin_email},
+	)
+	assert resp.status_code == 400
+	assert resp.json()["detail"] == "email already registered"
+
+
+@pytest.mark.asyncio
+async def test_update_user_rejects_credential_fields(
+	client: AsyncClient, user_auth: dict[str, object]
+) -> None:
+	"""email and password are not updatable through the generic patch.
+
+	they have dedicated change-email / change-password endpoints, so sending
+	them here is a client bug and must not look like it succeeded.
+	"""
+	user = auth_user(user_auth)
+	resp = await client.patch(
+		f"/v1/users/{user['id']}",
+		headers=auth_headers(user_auth),
+		json={"email": "sneaky@example.com", "password": "sneakypass123"},
+	)
+	assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -1236,7 +1444,9 @@ async def test_service_get_user_not_found(db_session: AsyncSession) -> None:
 		),
 		db_session,
 	)
-	admin_principal = Principal(user=admin, group_ids=(), permissions=frozenset())
+	admin_principal = Principal.for_user(
+		user=admin, group_ids=(), permissions=frozenset()
+	)
 	with pytest.raises(HTTPException) as exc:
 		await user_service.get_user(
 			new_typeid("user"),
@@ -1266,14 +1476,16 @@ async def test_service_create_duplicate_user(db_session: AsyncSession) -> None:
 	await user_service.create_user(
 		user_in,
 		db_session,
-		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+		principal=Principal.for_user(user=admin, group_ids=(), permissions=frozenset()),
 	)
 
 	with pytest.raises(HTTPException) as exc:
 		await user_service.create_user(
 			user_in,
 			db_session,
-			principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+			principal=Principal.for_user(
+				user=admin, group_ids=(), permissions=frozenset()
+			),
 		)
 	assert exc.value.status_code == 400
 	assert exc.value.detail == "email already registered"
@@ -1286,7 +1498,9 @@ async def test_service_create_duplicate_user(db_session: AsyncSession) -> None:
 				password="password123",
 			),
 			db_session,
-			principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+			principal=Principal.for_user(
+				user=admin, group_ids=(), permissions=frozenset()
+			),
 		)
 	assert exc.value.status_code == 400
 	assert exc.value.detail == "username already taken"
@@ -1307,9 +1521,11 @@ async def test_user_service_guards(db_session: AsyncSession) -> None:
 	normal_user = await user_service.create_user(
 		UserCreate(email="guard@example.com", username="guard_test", password="pw"),
 		db_session,
-		principal=Principal(user=admin, group_ids=(), permissions=frozenset()),
+		principal=Principal.for_user(user=admin, group_ids=(), permissions=frozenset()),
 	)
-	principal = Principal(user=normal_user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(
+		user=normal_user, group_ids=(), permissions=frozenset()
+	)
 
 	with pytest.raises(HTTPException):
 		await user_service.list_users(db_session, principal=principal)
@@ -1372,6 +1588,8 @@ async def test_unauthenticated_create_never_superuser(db_session: AsyncSession) 
 			is_superuser=True,
 		),
 		db_session,
-		principal=Principal(user=bootstrap, group_ids=(), permissions=frozenset()),
+		principal=Principal.for_user(
+			user=bootstrap, group_ids=(), permissions=frozenset()
+		),
 	)
 	assert new_admin.is_superuser is True

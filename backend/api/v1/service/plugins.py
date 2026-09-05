@@ -1,7 +1,5 @@
 """service layer for plugin operations."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Literal, overload
 
@@ -11,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
 from api.models.plugin import Plugin
-from api.permissions import ActionPermission
+from api.permissions import ActionPermission, ResourceType
 from api.schemas.agent import AgentConfig
 from api.schemas.plugin import (
 	PluginCreate,
@@ -20,8 +18,12 @@ from api.schemas.plugin import (
 	PluginTypeStr,
 	PluginUpdate,
 )
-from api.v1.service.auth import Principal
-from api.v1.service.authorization import require_permission
+from api.v1.service.authentication import Principal
+from api.v1.service.authorization import (
+	apply_metadata_write,
+	apply_resource_access_list_filters,
+	require_permission,
+)
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters import (
 	FILTER_REGISTRY,
@@ -188,7 +190,7 @@ async def create_plugin(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Plugin:
-	require_permission(principal, "plugins:manage")
+	require_permission(principal, ActionPermission.PLUGINS_MANAGE)
 	await _ensure_name_available(plugin_in.name, session)
 
 	plugin = Plugin(
@@ -243,6 +245,10 @@ async def list_plugins(
 	when include_native is True, returns PluginInfo catalog items from all sources.
 	"""
 	plugin_filters = filters or PluginListFilters()
+	acl_filtered = (
+		plugin_filters.access_relationship is not None
+		or plugin_filters.resolved_access_level is not None
+	)
 	can_read_full_catalog = principal.has_permission(ActionPermission.PLUGINS_READ)
 	can_read_user_mcp = principal.has_permission(ActionPermission.USER_MCP_MANAGE)
 	if not can_read_full_catalog and not can_read_user_mcp:
@@ -265,19 +271,33 @@ async def list_plugins(
 		stmt = _apply_plugin_filters(
 			select(Plugin).order_by(Plugin.created_at.desc()), plugin_filters
 		)
+		stmt = apply_resource_access_list_filters(
+			stmt,
+			principal,
+			ResourceType.PLUGIN,
+			plugin_filters.access_relationship,
+			plugin_filters.resolved_access_level,
+		)
 		result = await session.execute(stmt.offset(skip).limit(limit))
 		return list(result.scalars().all())
 
 	# Catalog mode: native + external runtime + database as PluginInfo.
 	plugins: list[PluginInfo] = []
-	if plugin_filters.source in (None, "native"):
+	if plugin_filters.source in (None, "native") and not acl_filtered:
 		plugins.extend(_list_native())
-	if plugin_filters.source in (None, "external"):
+	if plugin_filters.source in (None, "external") and not acl_filtered:
 		plugins.extend(await list_external_tool_plugins(session, principal, None))
 
 	if plugin_filters.source in (None, "custom"):
 		stmt = _apply_plugin_filters(
 			select(Plugin).order_by(Plugin.created_at.desc()), plugin_filters
+		)
+		stmt = apply_resource_access_list_filters(
+			stmt,
+			principal,
+			ResourceType.PLUGIN,
+			plugin_filters.access_relationship,
+			plugin_filters.resolved_access_level,
 		)
 		result = await session.execute(stmt)
 
@@ -356,10 +376,10 @@ async def update_plugin(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Plugin:
-	require_permission(principal, "plugins:manage")
+	require_permission(principal, ActionPermission.PLUGINS_MANAGE)
 	plugin = await _get_db_plugin(plugin_id, session)
 
-	update_data = plugin_in.model_dump(exclude_unset=True, by_alias=True)
+	update_data = plugin_in.model_dump(exclude_unset=True, exclude={"metadata"})
 
 	if "name" in plugin_in.model_fields_set:
 		name = plugin_in.name
@@ -373,6 +393,7 @@ async def update_plugin(
 
 	for field, value in update_data.items():
 		setattr(plugin, field, value)
+	apply_metadata_write(plugin, plugin_in.metadata)
 
 	await session.commit()
 	await session.refresh(plugin)
@@ -384,7 +405,7 @@ async def delete_plugin(
 	session: AsyncSession,
 	principal: Principal,
 ) -> None:
-	require_permission(principal, "plugins:manage")
+	require_permission(principal, ActionPermission.PLUGINS_MANAGE)
 	plugin = await _get_db_plugin(plugin_id, session)
 	await session.delete(plugin)
 	await session.commit()

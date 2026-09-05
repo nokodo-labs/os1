@@ -24,10 +24,11 @@ from api.models.user import User
 from api.open_webui import OpenWebUIClient
 from api.permissions import ActionPermission, DefaultResourceAccess
 from api.settings import OpenWebUIDeployment, settings
+from api.tests.factories import make_principal
+from api.tests.mocks import patch_vectorstore_ops
 from api.v1.routers.integrations import open_webui as owui_router
 from api.v1.service import tasks as task_service
-from api.v1.service import vectorstores as vectorstores_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.integrations import open_webui
 from api.v1.service.integrations.open_webui import files as owui_files
 from api.v1.service.integrations.open_webui import imports as owui_imports
@@ -47,18 +48,9 @@ def _owui_meta(metadata: Mapping[str, object]) -> dict[str, object]:
 
 
 def _principal(*permissions: ActionPermission) -> Principal:
-	user = User(
-		email="open-webui-integration@example.com",
-		username="open_webui_integration",
-		hashed_password="pw",
-		is_active=True,
-	)
-	return Principal(
-		user=user,
-		group_ids=(),
-		role_ids=(),
+	return make_principal(
+		slug="open_webui_integration",
 		permissions=frozenset(permission.value for permission in permissions),
-		role_resource_defaults=DefaultResourceAccess(),
 	)
 
 
@@ -78,7 +70,7 @@ async def _persisted_principal(
 	)
 	session.add(user)
 	await session.flush()
-	return Principal(
+	return Principal.for_user(
 		user=user,
 		group_ids=(),
 		role_ids=(),
@@ -607,7 +599,7 @@ async def test_open_webui_import_maps_message_models_to_agents(
 		assert metadata["model_id"] == "gpt-4.1"
 		assert metadata["model_name"] == "GPT Helper"
 		assert metadata["agent_id"] == str(agent.id)
-	assert messages[0].sender_user_id == principal.user_id
+	assert messages[0].sender_user_id == principal.user.id
 	assert messages[0].sender_agent_id is None
 	assert messages[1].sender_agent_id == agent.id
 
@@ -651,7 +643,16 @@ async def test_open_webui_import_skips_archived_chats_by_default(
 	assert summary.chats_imported == 1
 	assert len(threads) == 1
 	assert _owui_meta(threads[0].metadata_)["chat_id"] == "chat_active"
-	assert threads[0].is_archived is False
+	# archived is per-user state on the owner's participant row now.
+	participant = (
+		await db_session.scalars(
+			select(ThreadParticipant).where(
+				ThreadParticipant.thread_id == threads[0].id,
+				ThreadParticipant.user_id.is_not(None),
+			)
+		)
+	).one()
+	assert participant.archived is False
 
 
 @pytest.mark.asyncio
@@ -686,7 +687,16 @@ async def test_open_webui_import_archived_chats_when_enabled(
 	thread = (await db_session.scalars(select(Thread))).one()
 	assert summary.chats_imported == 1
 	assert _owui_meta(thread.metadata_)["chat_id"] == "chat_archived"
-	assert thread.is_archived is True
+	# archived is per-user state on the owner's participant row now.
+	participant = (
+		await db_session.scalars(
+			select(ThreadParticipant).where(
+				ThreadParticipant.thread_id == thread.id,
+				ThreadParticipant.user_id.is_not(None),
+			)
+		)
+	).one()
+	assert participant.archived is True
 
 
 @pytest.mark.asyncio
@@ -808,7 +818,7 @@ async def test_open_webui_import_task_enqueues_taskiq_job(
 	assert task.metadata_["include_notes"] is True
 	assert task.metadata_["include_archived_chats"] is True
 	assert task.metadata_["chat_import_mode"] == "batched"
-	assert task.metadata_["started_by_user_id"] == principal.user_id
+	assert task.metadata_["started_by_user_id"] == principal.user.id
 	assert enqueued == [(str(task.id), {"credential": "token"})]
 
 
@@ -847,11 +857,11 @@ async def test_open_webui_import_task_can_be_started_for_target_user(
 		include_chats=True,
 		include_memories=True,
 		chat_import_mode="bulk",
-		started_by_user_id=admin.user_id,
+		started_by_user_id=admin.user.id,
 	)
 
-	assert task.user_id == target.user_id
-	assert task.metadata_["started_by_user_id"] == admin.user_id
+	assert task.user_id == target.user.id
+	assert task.metadata_["started_by_user_id"] == admin.user.id
 	assert task.metadata_["include_notes"] is False
 	assert task.metadata_["chat_import_mode"] == "bulk"
 	assert enqueued == [(str(task.id), {"credential": "token"})]
@@ -876,13 +886,13 @@ async def test_open_webui_import_request_resolves_admin_target_user(
 		{
 			"deployment_origin": "https://open-webui.example.com",
 			"jwt": "token",
-			"user_id": target.user_id,
+			"user_id": target.user.id,
 		}
 	)
 
 	resolved = await owui_router._resolve_import_principal(body, admin, db_session)
 
-	assert resolved.user_id == target.user_id
+	assert resolved.user.id == target.user.id
 
 
 @pytest.mark.asyncio
@@ -903,7 +913,7 @@ async def test_open_webui_import_request_rejects_non_admin_target_user(
 		{
 			"deployment_origin": "https://open-webui.example.com",
 			"jwt": "token",
-			"user_id": target.user_id,
+			"user_id": target.user.id,
 		}
 	)
 
@@ -1026,10 +1036,10 @@ async def test_open_webui_import_downloads_chat_files_as_attachments(
 	project = (await db_session.scalars(select(Project))).one()
 	file_part = next(part for part in message.content if part.get("type") == "file")
 	assert summary.files_imported == 1
-	assert file.source == FileSource.IMPORT
+	assert file.source == FileSource.USER_IMPORTED
 	assert file.filename == "notes.txt"
 	assert file.mime_type == "text/plain"
-	assert file.message_id == message.id
+	assert file.origin_message_id == message.id
 	assert file.projects == [project]
 	assert file_part["metadata"]["file_id"] == str(file.id)
 	assert _owui_meta(file_part["metadata"])["file_id"] == "file_1"
@@ -1153,7 +1163,7 @@ async def test_open_webui_import_downloads_generated_image_files(
 	file_part = next(part for part in assistant.content if part.get("type") == "image")
 	assert file.filename == "generated-image.png"
 	assert file.mime_type == "image/png"
-	assert file.message_id == assistant.id
+	assert file.origin_message_id == assistant.id
 	assert file_part["filename"] == "generated-image.png"
 	assert file_part["metadata"]["file_id"] == str(file.id)
 
@@ -1458,7 +1468,7 @@ async def test_open_webui_reimport_repairs_broken_file_filename_and_message_link
 	# separate per-chat worker session observes the broken row.
 	imported = (await db_session.scalars(select(File))).one()
 	imported.filename = None
-	imported.message_id = None
+	imported.origin_message_id = None
 	await db_session.commit()
 
 	await open_webui.import_from_open_webui(
@@ -1478,7 +1488,7 @@ async def test_open_webui_reimport_repairs_broken_file_filename_and_message_link
 	assert len(files) == 1
 	repaired = files[0]
 	assert repaired.filename == "notes.txt"
-	assert repaired.message_id == messages[0].id
+	assert repaired.origin_message_id == messages[0].id
 
 
 @pytest.mark.asyncio
@@ -1539,7 +1549,7 @@ async def test_open_webui_reimport_collapses_duplicate_rows_and_heals_part(
 	duplicate = File(
 		id=TypeID(new_typeid("file")),
 		owner_id=canonical.owner_id,
-		source=FileSource.IMPORT,
+		source=FileSource.USER_IMPORTED,
 		storage_backend=canonical.storage_backend,
 		storage_key=f"tests/{new_typeid('file')}",
 		filename="notes.txt",
@@ -1547,13 +1557,13 @@ async def test_open_webui_reimport_collapses_duplicate_rows_and_heals_part(
 		size_bytes=canonical.size_bytes,
 		checksum_sha256=canonical.checksum_sha256,
 		status=FileStatus.AVAILABLE,
-		message_id=message.id,
+		origin_message_id=message.id,
 		metadata_=_owui_metadata(deployment, "file", "file_1", file_id="file_1"),
 	)
 	db_session.add(duplicate)
 	await db_session.flush()
 	stale_part = _file_content_part(
-		file_id=TypeID(duplicate.id),
+		file_id=duplicate.id,
 		url=None,
 		filename="notes.txt",
 		media_type="text/plain",
@@ -1716,11 +1726,10 @@ async def test_open_webui_reimport_skips_already_vectorized(
 			and chunk.metadata.get("resource_id") in wanted
 		]
 
-	monkeypatch.setattr(vectorstores_service, "upsert_chunks", _fake_upsert)
-	monkeypatch.setattr(
-		vectorstores_service,
-		"scroll_resource_chunks",
-		_fake_scroll_resource_chunks,
+	patch_vectorstore_ops(monkeypatch, upsert_chunks=_fake_upsert)
+	patch_vectorstore_ops(
+		monkeypatch,
+		scroll_resource_chunks=_fake_scroll_resource_chunks,
 	)
 
 	_install_fake_open_webui_client(

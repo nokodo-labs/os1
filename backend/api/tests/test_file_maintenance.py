@@ -19,13 +19,23 @@ from api.settings import settings
 from api.taskiq import broker
 from api.v1.service import tasks as task_service
 from api.v1.service import users as user_service
+from api.v1.service import vectorstores as vectorstore_service
 from api.v1.service.files import (
 	list_files_due_for_processing,
 )
-from api.v1.service.files.content_vectorization import (
-	CONTENT_VECTOR_FINGERPRINT_KEY,
+from api.v1.service.files.text_contents.extraction import (
 	_is_permanent_extraction_error,
 )
+from api.v1.service.files.text_contents.vectors import (
+	CONTENT_VECTOR_COLLECTION_KEY,
+	CONTENT_VECTOR_CONFIG_KEY,
+	CONTENT_VECTOR_FINGERPRINT_KEY,
+	CONTENT_VECTOR_PIPELINE_KEY,
+	FILE_CONTENT_PIPELINE_VERSION,
+	file_content_config_fp,
+	file_content_stale_predicate,
+)
+from api.v1.service.vectorize import StaleBy
 from api.v1.tasks import files as file_tasks
 from api.v1.tasks.files import (
 	FILE_MAINTENANCE_BACKFILL_SCHEDULE_ID,
@@ -63,9 +73,10 @@ async def _create_import_file(
 	owner_id: str,
 	description: str | None = None,
 	status: FileStatus = FileStatus.AVAILABLE,
-	source: FileSource = FileSource.IMPORT,
+	source: FileSource = FileSource.USER_IMPORTED,
 	deleted: bool = False,
 	metadata: JSONObject | None = None,
+	with_extracted_text: bool = False,
 ) -> File:
 	file = File(
 		id=TypeID(new_typeid("file")),
@@ -79,13 +90,92 @@ async def _create_import_file(
 		checksum_sha256=None,
 		description=description,
 		status=status,
-		metadata_=metadata,
 	)
+	# the content-vector provenance stamps these fixtures set are private.
+	file.set_metadata(private=metadata or {})
 	if deleted:
 		file.deleted_at = datetime.now(tz=UTC)
 	db_session.add(file)
 	await db_session.flush()
+	if with_extracted_text:
+		# a derived extracted-text file marks that extraction has run.
+		db_session.add(
+			File(
+				id=TypeID(new_typeid("file")),
+				owner_id=owner_id,
+				source=FileSource.TEXT_EXTRACTION,
+				storage_backend="local",
+				storage_key=f"tests/{new_typeid('file')}",
+				filename="imported.txt",
+				mime_type="text/plain",
+				size_bytes=4,
+				status=FileStatus.AVAILABLE,
+				parent_file_id=str(file.id),
+			)
+		)
+		await db_session.flush()
 	return file
+
+
+# file_content_stale_predicate
+
+
+@pytest.mark.asyncio
+async def test_file_content_stale_predicate_by_cause(
+	db_session: AsyncSession,
+) -> None:
+	"""each staleness cause matches exactly its provenance mismatch."""
+	user = await _create_user(db_session, "files_stale_pred")
+	owner_id = str(user.id)
+	config_fp = await file_content_config_fp(db_session)
+	current = await _create_import_file(
+		db_session,
+		owner_id,
+		metadata={
+			CONTENT_VECTOR_FINGERPRINT_KEY: "fp",
+			CONTENT_VECTOR_PIPELINE_KEY: FILE_CONTENT_PIPELINE_VERSION,
+			CONTENT_VECTOR_CONFIG_KEY: config_fp,
+		},
+	)
+	old_pipeline = await _create_import_file(
+		db_session,
+		owner_id,
+		metadata={
+			CONTENT_VECTOR_FINGERPRINT_KEY: "fp",
+			CONTENT_VECTOR_PIPELINE_KEY: FILE_CONTENT_PIPELINE_VERSION - 1,
+			CONTENT_VECTOR_CONFIG_KEY: config_fp,
+		},
+	)
+	unstamped = await _create_import_file(
+		db_session,
+		owner_id,
+		metadata={CONTENT_VECTOR_FINGERPRINT_KEY: "fp"},
+	)
+	bad_config = await _create_import_file(
+		db_session,
+		owner_id,
+		metadata={
+			CONTENT_VECTOR_FINGERPRINT_KEY: "fp",
+			CONTENT_VECTOR_PIPELINE_KEY: FILE_CONTENT_PIPELINE_VERSION,
+			CONTENT_VECTOR_CONFIG_KEY: "other-config",
+		},
+	)
+	unvectorized = await _create_import_file(db_session, owner_id)
+	await db_session.flush()
+
+	async def _matching(cause: StaleBy, fp: str | None = None) -> set[str]:
+		stmt = select(File.id).where(
+			File.owner_id == owner_id,
+			file_content_stale_predicate(cause, config_fp=fp),
+		)
+		return {str(row[0]) for row in (await db_session.execute(stmt))}
+
+	by_version = await _matching(StaleBy.PIPELINE_VERSION)
+	assert by_version == {str(old_pipeline.id), str(unstamped.id)}
+	by_config = await _matching(StaleBy.CONFIG, fp=config_fp)
+	assert by_config == {str(bad_config.id), str(unstamped.id)}
+	assert str(unvectorized.id) not in by_version | by_config
+	assert str(current.id) not in by_version | by_config
 
 
 # list_files_due_for_processing
@@ -95,26 +185,43 @@ async def _create_import_file(
 async def test_list_files_due_for_processing_filters(
 	db_session: AsyncSession,
 ) -> None:
-	"""files missing a fingerprint or a description are due; fully done excluded."""
+	"""files missing a fingerprint, description, or extracted text are due."""
 	user = await _create_user(db_session, "files_due_filter")
 	owner_id = str(user.id)
+	collection = await vectorstore_service.get_collection(db_session)
 
-	# due: missing both fingerprint and description.
+	# due: missing fingerprint, description, and extracted text.
 	missing_both = await _create_import_file(db_session, owner_id)
 	# due: has a description but never recorded a fingerprint.
-	missing_fp = await _create_import_file(db_session, owner_id, description="done")
+	missing_fp = await _create_import_file(
+		db_session, owner_id, description="done", with_extracted_text=True
+	)
 	# due: vectorized but never described.
 	missing_desc = await _create_import_file(
-		db_session, owner_id, metadata={CONTENT_VECTOR_FINGERPRINT_KEY: "fp"}
+		db_session,
+		owner_id,
+		metadata={CONTENT_VECTOR_FINGERPRINT_KEY: "fp"},
+		with_extracted_text=True,
 	)
-	# due: pending files (e.g. stranded by a failed run) are picked back up.
-	pending = await _create_import_file(db_session, owner_id, status=FileStatus.PENDING)
-	# excluded: both a fingerprint and a description recorded.
-	await _create_import_file(
+	# due: vectorized and described but never stored its extracted text.
+	missing_text = await _create_import_file(
 		db_session,
 		owner_id,
 		description="done",
 		metadata={CONTENT_VECTOR_FINGERPRINT_KEY: "fp"},
+	)
+	# due: pending files (e.g. stranded by a failed run) are picked back up.
+	pending = await _create_import_file(db_session, owner_id, status=FileStatus.PENDING)
+	# excluded: a fingerprint, a description, and stored extracted text.
+	await _create_import_file(
+		db_session,
+		owner_id,
+		description="done",
+		metadata={
+			CONTENT_VECTOR_FINGERPRINT_KEY: "fp",
+			CONTENT_VECTOR_COLLECTION_KEY: collection,
+		},
+		with_extracted_text=True,
 	)
 	# excluded: soft deleted.
 	await _create_import_file(db_session, owner_id, deleted=True)
@@ -126,6 +233,7 @@ async def test_list_files_due_for_processing_filters(
 		str(missing_both.id),
 		str(missing_fp.id),
 		str(missing_desc.id),
+		str(missing_text.id),
 		str(pending.id),
 	}
 

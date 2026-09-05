@@ -1,7 +1,5 @@
 """service helpers for user blocks."""
 
-from __future__ import annotations
-
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from api.models.block import Block
 from api.models.user import User
 from api.permissions import ActionPermission
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.authorization import require_permission
 from nokodo_ai.utils.typeid import TypeID
 
@@ -21,9 +19,9 @@ def _ensure_block_read_access(target_user_id: TypeID, principal: Principal) -> N
 	self: always allowed.
 	manage permission: allows cross-user read access (admin/moderator).
 	"""
-	if str(target_user_id) == principal.user_id:
+	if str(target_user_id) == principal.user.id:
 		return
-	if principal.has_permission(ActionPermission.USER_BLOCKS_MANAGE.value):
+	if principal.has_permission(ActionPermission.USER_BLOCKS_MANAGE):
 		return
 	raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 
@@ -34,9 +32,9 @@ def _ensure_block_write_access(subject_user_id: TypeID, principal: Principal) ->
 	self: always allowed (still requires create permission for creation).
 	manage permission: allows cross-user writes (admin/moderator).
 	"""
-	if str(subject_user_id) == principal.user_id:
+	if str(subject_user_id) == principal.user.id:
 		return
-	if principal.has_permission(ActionPermission.USER_BLOCKS_MANAGE.value):
+	if principal.has_permission(ActionPermission.USER_BLOCKS_MANAGE):
 		return
 	raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 

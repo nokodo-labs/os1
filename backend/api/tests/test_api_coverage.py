@@ -1,7 +1,5 @@
 """Targeted coverage for API modules."""
 
-from __future__ import annotations
-
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -30,22 +28,26 @@ from api.models.message import (
 )
 from api.models.model import Model as ModelORM
 from api.models.provider import Provider as ProviderORM
+from api.models.thread import Thread as ThreadORM
 from api.schemas.message import MessageCreate
 from api.schemas.prompt import PromptListFilters
+from api.schemas.runs import RunRequest
+from api.schemas.thread import Thread as ThreadSchema
 from api.schemas.thread import ThreadListFilters
 from api.v1.routers import openai as openai_router
 from api.v1.routers import prompts as prompts_router
 from api.v1.routers import runs as runs_router
 from api.v1.routers import threads as threads_router
+from api.v1.service.agents import runtime as agent_runtime
 from api.v1.service.authorization import require_thread_access
-from api.v1.service.chat import agents as chat_runner
 from api.v1.service.chat import models as chat_service
 from api.v1.service.chat.tools import external as external_tools
 from api.v1.service.plugins import ResolvedPlugins
 from api.v1.service.prompts import external as prompt_external
 from api.v1.service.prompts import runtime as prompt_runtime
 from api.v1.service.prompts import service as prompt_service
-from api.v1.service.threads.core import _ensure_admin_for_hidden
+from api.v1.service.threads.common import ensure_admin_for_hidden_or_deleted
+from api.v1.service.threads.drafts import MessageDraft
 from nokodo_ai.messages import (
 	AssistantMessage,
 	SystemMessage,
@@ -63,22 +65,25 @@ class _FakePrincipal:
 		user_id: str = "user",
 		groups: list[str] | None = None,
 	) -> None:
-		self.is_admin = is_admin
-		self.user = SimpleNamespace(id=user_id)
+		self.subject = SimpleNamespace(id=user_id, is_superuser=is_admin)
+		self.user = self.subject
 		self.group_ids = groups or []
 		self.role_ids = ()
 		self.role_resource_defaults: dict[str, str] = {}
 		self.global_action_permissions: frozenset[str] = frozenset()
 
 	def has_permission(self, permission: str) -> bool:
-		if self.is_admin:
+		if self.user.is_superuser:
 			return True
 		return permission == "any"
 
 	def has_default_access(
 		self, resource_type: object, required_level: object = None
 	) -> bool:
-		return self.is_admin
+		return self.user.is_superuser
+
+	def is_resource_operator(self, resource_type: object) -> bool:
+		return self.user.is_superuser
 
 
 class _FakeResult:
@@ -261,11 +266,11 @@ async def test_prompts_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 	async def fake_delete(prompt_id: object, db: object, principal: object) -> None:
 		fake_delete.called = prompt_id  # type: ignore[attr-defined]
 
-	monkeypatch.setattr(prompts_router.prompt_service, "create_prompt", fake_create)
-	monkeypatch.setattr(prompts_router.prompt_service, "list_prompts", fake_list)
-	monkeypatch.setattr(prompts_router.prompt_service, "get_prompt", fake_get)
-	monkeypatch.setattr(prompts_router.prompt_service, "update_prompt", fake_update)  # type: ignore[arg-type]
-	monkeypatch.setattr(prompts_router.prompt_service, "delete_prompt", fake_delete)
+	monkeypatch.setattr(prompts_router, "create_prompt_service", fake_create)
+	monkeypatch.setattr(prompts_router, "list_prompts_service", fake_list)
+	monkeypatch.setattr(prompts_router, "get_prompt_service", fake_get)
+	monkeypatch.setattr(prompts_router, "update_prompt_service", fake_update)  # type: ignore[arg-type]
+	monkeypatch.setattr(prompts_router, "delete_prompt_service", fake_delete)
 
 	out_create = await prompts_router.create_prompt(
 		fake_prompt,  # type: ignore[arg-type]
@@ -294,7 +299,21 @@ async def test_prompts_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 @pytest.mark.asyncio
 async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
 	principal = _FakePrincipal()
-	fake_thread = SimpleNamespace(id=new_typeid("thread"))
+	_now = datetime.now(UTC)
+	fake_thread = ThreadORM(
+		id=new_typeid("thread"),
+		owner_id=new_typeid("user"),
+		title="t",
+		tags=[],
+		is_temporary=False,
+		current_message_id=None,
+		last_activity_at=_now,
+		created_at=_now,
+		updated_at=_now,
+		metadata_={},
+	)
+	fake_thread.projects = []
+	fake_thread.participants = []
 	fake_message = SimpleNamespace(
 		id=new_typeid("message"),
 		thread_id=new_typeid("thread"),
@@ -303,7 +322,6 @@ async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 		content=[],
 		tool_calls=[],
 		usage=None,
-		read_by=[],
 		metadata_={},
 		parent_id=None,
 		task_id=None,
@@ -329,27 +347,37 @@ async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 	async def _switch(*_args: object, **_kwargs: object) -> object:
 		return SimpleNamespace(current_message_id=new_typeid("message"))
 
-	monkeypatch.setattr(threads_router.thread_service, "create_thread", _return_thread)
+	async def _return_payload_list(*_args: object, **_kwargs: object) -> list[object]:
+		return [ThreadSchema.model_validate(fake_thread)]
+
+	monkeypatch.setattr(threads_router, "create_thread_service", _return_thread)
+	monkeypatch.setattr(threads_router, "thread_payloads", _return_payload_list)
+	monkeypatch.setattr(threads_router, "list_threads_service", _return_thread_list)
+	monkeypatch.setattr(threads_router, "get_thread_payload", _return_thread)
+	monkeypatch.setattr(threads_router, "update_thread_service", _return_thread)
+	monkeypatch.setattr(threads_router, "list_messages_service", _return_message_list)
+
+	async def _return_branch_page(*_args: object, **_kwargs: object) -> object:
+		return SimpleNamespace(
+			messages=[fake_message],
+			total=1,
+			skip=0,
+			has_toward_root=False,
+			has_toward_leaf=False,
+			siblings=[],
+			sibling_counts=[],
+			cursor_toward_root=None,
+			cursor_toward_leaf=None,
+		)
+
+	monkeypatch.setattr(threads_router, "get_branch_page_service", _return_branch_page)
+	monkeypatch.setattr(threads_router, "list_message_tree", _return_message_list)
 	monkeypatch.setattr(
-		threads_router.thread_service, "list_threads", _return_thread_list
+		threads_router,
+		"create_message_and_dispatch_invocations",
+		_return_message,
 	)
-	monkeypatch.setattr(
-		threads_router.thread_service, "get_thread_payload", _return_thread
-	)
-	monkeypatch.setattr(threads_router.thread_service, "update_thread", _return_thread)
-	monkeypatch.setattr(
-		threads_router.thread_service, "list_messages", _return_message_list
-	)
-	monkeypatch.setattr(
-		threads_router.thread_service, "get_current_branch", _return_message_list
-	)
-	monkeypatch.setattr(
-		threads_router.thread_service, "list_message_tree", _return_message_list
-	)
-	monkeypatch.setattr(
-		threads_router.thread_service, "create_message", _return_message
-	)
-	monkeypatch.setattr(threads_router.thread_service, "switch_branch", _switch)
+	monkeypatch.setattr(threads_router, "switch_branch_service", _switch)
 	created = await threads_router.create_thread(
 		SimpleNamespace(owner_id="u"),  # type: ignore[arg-type]
 		principal=principal,  # type: ignore[arg-type]
@@ -368,11 +396,15 @@ async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 		db=None,  # type: ignore[arg-type]
 	)  # type: ignore[arg-type]
 	messages = await threads_router.list_messages("t", principal=principal, db=None)  # type: ignore[arg-type]
-	branch = await threads_router.get_current_branch("t", principal=principal, db=None)  # type: ignore[arg-type]
-	tree = await threads_router.get_message_tree("t", principal=principal, db=None)  # type: ignore[arg-type]
+	branch = await threads_router.get_branch_page("t", principal=principal, db=None)  # type: ignore[arg-type]
+	tree = await threads_router.get_message_tree(
+		"t",  # type: ignore[arg-type]
+		principal=_FakePrincipal(is_admin=True),  # type: ignore[arg-type]
+		db=None,  # type: ignore[arg-type]
+	)
 	posted = await threads_router.create_message(  # type: ignore[arg-type]
 		"t",  # type: ignore[arg-type]
-		SimpleNamespace(type=None),  # type: ignore[arg-type]
+		MessageCreate(content="x"),
 		principal=principal,  # type: ignore[arg-type]
 		db=None,  # type: ignore[arg-type]
 	)  # type: ignore[arg-type]
@@ -382,14 +414,20 @@ async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 		principal=principal,  # type: ignore[arg-type]
 		db=None,  # type: ignore[arg-type]
 	)  # type: ignore[arg-type]
-	assert created is fake_thread
-	assert listed == [fake_thread]
+	# create + list embed participants via build_thread_payload, and every
+	# message route projects its private facet, so these are schema payloads
+	# rather than the raw ORM objects the service returned.
+	assert isinstance(created, ThreadSchema)
+	assert created.id == fake_thread.id
+	assert [t.id for t in listed] == [fake_thread.id]
+	assert all(isinstance(t, ThreadSchema) for t in listed)
 	assert fetched is fake_thread
-	assert updated is fake_thread
-	assert messages == [fake_message]
-	assert branch == [fake_message]
-	assert tree == [fake_message]
-	assert posted is fake_message
+	assert updated.id == fake_thread.id
+	assert [m.id for m in messages] == [fake_message.id]
+	assert [m.id for m in branch.messages] == [fake_message.id]
+	assert branch.total == 1
+	assert [m.id for m in tree] == [fake_message.id]
+	assert posted.id == fake_message.id
 	assert switched.current_message_id is not None
 
 
@@ -401,27 +439,24 @@ async def test_runs_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
 		if False:
 			yield b""
 
-	async def _fake_start_thread_run(
-		*_args: object, **_kwargs: object
-	) -> AsyncGenerator[bytes]:
-		return _fake_stream()
-		# type: ignore[arg-type]
+	async def _fake_launch_thread_run(*_args: object, **_kwargs: object) -> TypeID:
+		return TypeID(new_typeid("run"))
 
 	monkeypatch.setattr(
-		runs_router.runs_service, "start_thread_run", _fake_start_thread_run
+		runs_router,
+		"launch_thread_run",
+		_fake_launch_thread_run,
+	)
+	monkeypatch.setattr(
+		runs_router,
+		"subscribe_run_stream",
+		lambda _run_id, _subscriber_id: _fake_stream(),
 	)
 
 	run_resp = await runs_router.create_run(
-		SimpleNamespace(
+		RunRequest(
 			agent_id=new_typeid("agent"),
 			thread_id=new_typeid("thread"),
-			input=None,  # type: ignore[arg-type]
-			parent_id=None,  # type: ignore[arg-type]
-			client_context=None,
-			stream=True,
-			persist=True,
-			tool_choice=None,
-			extra_plugins=[],
 		),
 		principal=principal,  # type: ignore[arg-type]
 		db=None,  # type: ignore[arg-type]
@@ -439,7 +474,7 @@ async def test_authorization_require_thread_access() -> None:  # type: ignore[ar
 		"thread",  # type: ignore[arg-type]
 		fake_session,  # type: ignore[arg-type]
 		principal,  # type: ignore[arg-type]
-		include_hidden=True,
+		include_deleted=True,
 	)
 
 	assert fake_session.last_stmt._execution_options.get("include_deleted") is True  # type: ignore[attr-defined]
@@ -659,19 +694,16 @@ async def test_chat_service_conversions() -> None:
 	assistant_sdk = AssistantMessage.from_text("hey")
 	assistant_sdk.usage = Usage(input_tokens=1, output_tokens=2, total_tokens=3)
 	tool_sdk = ToolMessage(tool_call_id="t", tool_output="o", is_error=False)
-	# type: ignore[index]
-	user_create = MessageCreate.from_sdk_message(
-		user_sdk,
-		sender_user_id=new_typeid("user"),
-	)
-	system_create = MessageCreate.from_sdk_message(system_sdk)
-	assistant_create = MessageCreate.from_sdk_message(
+	user_create = MessageDraft.from_sdk_message(user_sdk)
+	system_create = MessageDraft.from_sdk_message(system_sdk)
+	assistant_create = MessageDraft.from_sdk_message(
 		assistant_sdk,
 		sender_agent_id=new_typeid("agent"),
 	)
-	tool_create = MessageCreate.from_sdk_message(tool_sdk)
+	tool_create = MessageDraft.from_sdk_message(tool_sdk)
 
-	assert str(user_create.sender_user_id).startswith("user_")
+	assert user_create.type.name == "USER"
+	assert user_create.sender_user_id is None
 	assert system_create.type.name == "SYSTEM"
 	assert assistant_create.usage["total_tokens"] == 3  # type: ignore[index]
 	assert tool_create.tool_call_id == "t"
@@ -798,9 +830,9 @@ async def test_build_agent_from_orm_uses_chat_model_config(
 		assert plugin_ids == []
 		return ResolvedPlugins(tools=[], filters=[], hooks=[])
 
-	monkeypatch.setattr(chat_runner, "resolve_plugins", _resolve_plugins)
+	monkeypatch.setattr(agent_runtime, "resolve_plugins", _resolve_plugins)
 
-	sdk_agent = await chat_runner.build_agent_from_orm(
+	sdk_agent = await agent_runtime.build_agent_from_orm(
 		agent_orm,
 		context=MagicMock(),
 	)
@@ -821,20 +853,24 @@ def test_chat_service_orm_to_sdk_variants() -> None:
 	user_orm.type = MessageTypeORM.USER
 	user_orm.content = [{"type": "text", "text": "u"}]
 	user_orm.metadata_ = {"meta": True}
+	user_orm._sdk_metadata = lambda: MessageORM._sdk_metadata(user_orm)
 	user_orm.to_sdk = lambda: UserMessageORM.to_sdk(user_orm)
 
 	system_orm = MagicMock(spec=SystemMessageORM)
 	system_orm.type = MessageTypeORM.SYSTEM
 	system_orm.content = [{"type": "text", "text": "s"}]
 	system_orm.metadata_ = {}
+	system_orm._sdk_metadata = lambda: MessageORM._sdk_metadata(system_orm)
 	system_orm.to_sdk = lambda: SystemMessageORM.to_sdk(system_orm)
 
 	assistant_orm = MagicMock(spec=AssistantMessageORM)
 	assistant_orm.type = MessageTypeORM.ASSISTANT
 	assistant_orm.content = [{"type": "text", "text": "a"}]
 	assistant_orm.tool_calls = [{"id": "t", "name": "fn", "arguments": {}}]
+	assistant_orm.finish_reason = "tool_calls"
 	assistant_orm.usage = {"input_tokens": 1, "output_tokens": 2, "total_tokens": 3}
 	assistant_orm.metadata_ = {}
+	assistant_orm._sdk_metadata = lambda: MessageORM._sdk_metadata(assistant_orm)
 	assistant_orm.to_sdk = lambda: AssistantMessageORM.to_sdk(assistant_orm)
 
 	tool_orm = MagicMock(spec=ToolMessageORM)
@@ -843,6 +879,7 @@ def test_chat_service_orm_to_sdk_variants() -> None:
 	tool_orm.tool_call_id = "tc"
 	tool_orm.is_error = True
 	tool_orm.metadata_ = {}
+	tool_orm._sdk_metadata = lambda: MessageORM._sdk_metadata(tool_orm)
 	tool_orm.to_sdk = lambda: ToolMessageORM.to_sdk(tool_orm)
 
 	tool_orm_empty = MagicMock(spec=ToolMessageORM)
@@ -851,13 +888,8 @@ def test_chat_service_orm_to_sdk_variants() -> None:
 	tool_orm_empty.tool_call_id = "tc_empty"
 	tool_orm_empty.is_error = False
 	tool_orm_empty.metadata_ = {}
+	tool_orm_empty._sdk_metadata = lambda: MessageORM._sdk_metadata(tool_orm_empty)
 	tool_orm_empty.to_sdk = lambda: ToolMessageORM.to_sdk(tool_orm_empty)
-
-	unknown_orm = MagicMock(spec=MessageORM)
-	unknown_orm.type = "other"
-	unknown_orm.content = []
-	unknown_orm.metadata_ = {}
-	unknown_orm.to_sdk = lambda: MessageORM.to_sdk(unknown_orm)
 
 	user_sdk = user_orm.to_sdk()
 	system_sdk = system_orm.to_sdk()
@@ -868,14 +900,12 @@ def test_chat_service_orm_to_sdk_variants() -> None:
 	assert user_sdk.role == "user"
 	assert system_sdk.role == "system"
 	assert assistant_sdk.usage.total_tokens == 3
+	assert assistant_sdk.finish_reason == "tool_calls"
 	assert tool_sdk.is_error is True
 	assert tool_sdk.tool_output == "out"
 	assert tool_sdk_empty.tool_output == ""
 	assert tool_sdk_empty.tool_call_id == "tc_empty"
 	assert tool_sdk_empty.is_error is False
-	with pytest.raises(ValueError, match="unsupported message type"):
-		unknown_orm.to_sdk()
-
 	# test converting branch messages using to_sdk method
 	branch_msgs = [user_orm.to_sdk(), system_orm.to_sdk()]
 	assert [m.role for m in branch_msgs] == ["user", "system"]
@@ -883,7 +913,7 @@ def test_chat_service_orm_to_sdk_variants() -> None:
 	sys_prompt = SystemMessage.from_text("hi")  # type: ignore[arg-type]
 	assert sys_prompt.role == "system"
 
-	assistant_create = MessageCreate.from_sdk_message(
+	assistant_create = MessageDraft.from_sdk_message(
 		AssistantMessage.from_text("assistant"),
 		sender_agent_id=new_typeid("agent"),
 	)
@@ -892,9 +922,10 @@ def test_chat_service_orm_to_sdk_variants() -> None:
 	class _BadMessage:
 		role = "bad"
 		content: list[object] = []
+		metadata: dict[str, object] = {}
 
 	with pytest.raises(ValueError):
-		MessageCreate.from_sdk_message(_BadMessage())  # type: ignore[arg-type]
+		MessageDraft.from_sdk_message(_BadMessage())  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
@@ -949,9 +980,7 @@ async def test_chat_service_agent_resolution_paths() -> None:
 
 
 @pytest.mark.asyncio
-async def test_chat_runner_load_agent_not_found(
-	monkeypatch: pytest.MonkeyPatch,
-) -> None:  # type: ignore[arg-type]
+async def test_agent_runtime_load_agent_not_found() -> None:  # type: ignore[arg-type]
 	"""Test that _load_agent raises HTTPException when agent not found."""
 
 	class FakeResult:
@@ -967,13 +996,15 @@ async def test_chat_runner_load_agent_not_found(
 
 	principal = _FakePrincipal()  # type: ignore[arg-type]
 	with pytest.raises(HTTPException) as exc_info:
-		await chat_runner._load_agent(new_typeid("agent"), FakeSession(), principal)  # type: ignore[arg-type]
+		await agent_runtime.load_agent_for_run(
+			new_typeid("agent"), FakeSession(), principal
+		)  # type: ignore[arg-type]
 
 	assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_chat_runner_load_agent_no_model(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_agent_runtime_load_agent_no_model() -> None:
 	"""Test that _load_agent raises HTTPException when agent has no model."""
 
 	class FakeAgent:  # type: ignore[arg-type]
@@ -994,7 +1025,9 @@ async def test_chat_runner_load_agent_no_model(monkeypatch: pytest.MonkeyPatch) 
 
 	principal = _FakePrincipal()  # type: ignore[arg-type]
 	with pytest.raises(HTTPException) as exc_info:
-		await chat_runner._load_agent(new_typeid("agent"), FakeSession(), principal)  # type: ignore[arg-type]
+		await agent_runtime.load_agent_for_run(
+			new_typeid("agent"), FakeSession(), principal
+		)  # type: ignore[arg-type]
 
 	assert exc_info.value.status_code == 400
 	# type: ignore[arg-type]
@@ -1002,7 +1035,11 @@ async def test_chat_runner_load_agent_no_model(monkeypatch: pytest.MonkeyPatch) 
 
 def test_threads_helper_admin_guard() -> None:
 	with pytest.raises(HTTPException):
-		_ensure_admin_for_hidden(True, _FakePrincipal(is_admin=False))  # type: ignore[arg-type]
+		ensure_admin_for_hidden_or_deleted(
+			True,
+			False,
+			_FakePrincipal(is_admin=False),  # type: ignore[arg-type]
+		)
 
 
 @pytest.mark.asyncio

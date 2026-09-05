@@ -1,13 +1,11 @@
 """scheduled item and recurrence schemas."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from typing import Literal, Self
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil.rrule import rrulestr
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from api.models.reminder import ReminderStatus
 from api.schemas.common import MISSING, MissingType
@@ -20,6 +18,8 @@ type ScheduledEventStatus = Literal["scheduled", "cancelled"]
 
 class Recurrence(BaseModel):
 	"""structured recurrence value for schedule-capable masters."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	rrule: list[str] = Field(
 		default_factory=list,
@@ -106,17 +106,23 @@ class ScheduledItemListFilters(BaseModel):
 class ReminderOccurrenceComplete(BaseModel):
 	"""payload to complete one reminder occurrence."""
 
+	model_config = ConfigDict(extra="forbid")
+
 	original_occurrence_at: datetime
 
 
 class CalendarOccurrenceCancel(BaseModel):
 	"""payload to cancel one event occurrence."""
 
+	model_config = ConfigDict(extra="forbid")
+
 	original_occurrence_at: datetime
 
 
 class CalendarOccurrenceEdit(BaseModel):
 	"""payload to edit one event occurrence."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	original_occurrence_at: datetime
 	new_start_at: datetime | None | MissingType = MISSING
@@ -154,6 +160,8 @@ class CalendarSeriesEdit(CalendarOccurrenceEdit):
 
 class ReminderSeriesEdit(BaseModel):
 	"""payload to split and edit this and following reminder occurrences."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	original_occurrence_at: datetime
 	title: str | MissingType = Field(default=MISSING, max_length=200)

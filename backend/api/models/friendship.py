@@ -8,8 +8,6 @@ equality scan. the service layer already encapsulates all queries through
 _find_friendship / list_friends, so the migration is a single refactor point.
 """
 
-from __future__ import annotations
-
 from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -19,6 +17,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.models.base import TYPEID_LENGTH, Base, StringEnum
 from api.models.mixins import TimestampMixin, TypeIDPrimaryKeyMixin
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -52,12 +51,12 @@ class Friendship(TypeIDPrimaryKeyMixin, TimestampMixin, Base):
 		),
 	)
 
-	requester_id: Mapped[str] = mapped_column(
+	requester_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id", ondelete="CASCADE"),
 		index=True,
 	)
-	addressee_id: Mapped[str] = mapped_column(
+	addressee_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id", ondelete="CASCADE"),
 		index=True,
@@ -97,7 +96,7 @@ class FriendshipEvent(TypeIDPrimaryKeyMixin, TimestampMixin, Base):
 	__tablename__ = "friendship_events"
 	__typeid_prefix__ = "frev"
 
-	friendship_id: Mapped[str] = mapped_column(
+	friendship_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("friendships.id", ondelete="CASCADE"),
 		index=True,
@@ -105,7 +104,7 @@ class FriendshipEvent(TypeIDPrimaryKeyMixin, TimestampMixin, Base):
 	status: Mapped[FriendshipStatus] = mapped_column(
 		StringEnum(FriendshipStatus),
 	)
-	actor_id: Mapped[str] = mapped_column(
+	actor_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id", ondelete="CASCADE"),
 	)

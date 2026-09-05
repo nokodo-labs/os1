@@ -6,8 +6,6 @@ the current OR-query lookup to a dual-row table (one row per direction)
 only requires touching _find_friendship and list_friends.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -22,11 +20,19 @@ from api.models.friendship import Friendship, FriendshipEvent, FriendshipStatus
 from api.models.user import User
 from api.permissions import ActionPermission
 from api.schemas.friendship import FriendResponse, UserSearchResult
-from api.v1.service import events as event_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.authorization import require_permission
-from api.v1.service.social import friendship as relationship_service
-from api.v1.service.social import privacy as privacy_service
+from api.v1.service.events import persist_and_fanout_event
+from api.v1.service.social.friendship import (
+	blocked_user_ids,
+	is_blocked,
+)
+from api.v1.service.social.privacy import (
+	RedactedUser,
+	can_send_friend_request,
+	redact_user,
+	redact_users,
+)
 from api.v1.service.social.visibility import (
 	user_bio_filter_predicate,
 	user_display_name_filter_predicate,
@@ -46,7 +52,7 @@ def _apply_user_search_filters(
 	"""apply privacy-aware user search filters."""
 	pattern = contains_pattern(query.strip())
 	return stmt.where(
-		User.id != principal.user_id,
+		User.id != principal.user.id,
 		user_search_candidate_predicate(principal),
 		or_(
 			and_(
@@ -77,7 +83,7 @@ async def build_friend_response(
 	is_friend: bool | None = None,
 ) -> FriendResponse:
 	"""build a sanitized accepted-friend response."""
-	redacted = await privacy_service.redact_user(
+	redacted = await redact_user(
 		user,
 		session,
 		principal,
@@ -94,7 +100,7 @@ async def build_friend_response(
 
 
 def _build_user_search_result(
-	redacted: privacy_service.RedactedUser,
+	redacted: RedactedUser,
 ) -> UserSearchResult:
 	"""build a sanitized user search result."""
 	return UserSearchResult(
@@ -114,9 +120,9 @@ def _ensure_social_graph_read_access(
 	self: always allowed.
 	manage permission: allows cross-user read access (admin/moderator).
 	"""
-	if str(target_user_id) == principal.user_id:
+	if str(target_user_id) == principal.user.id:
 		return
-	if principal.has_permission(ActionPermission.USER_FRIENDSHIPS_MANAGE.value):
+	if principal.has_permission(ActionPermission.USER_FRIENDSHIPS_MANAGE):
 		return
 	raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 
@@ -129,9 +135,9 @@ def _ensure_social_graph_write_access(
 	self: always allowed (still requires create permission for creation).
 	manage permission: allows cross-user writes (admin/moderator).
 	"""
-	if str(subject_user_id) == principal.user_id:
+	if str(subject_user_id) == principal.user.id:
 		return
-	if principal.has_permission(ActionPermission.USER_FRIENDSHIPS_MANAGE.value):
+	if principal.has_permission(ActionPermission.USER_FRIENDSHIPS_MANAGE):
 		return
 	raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden")
 
@@ -146,8 +152,8 @@ async def send_friend_request(
 	"""send a friend request to another user."""
 	require_permission(principal, ActionPermission.USER_FRIENDSHIPS_CREATE)
 	_ensure_social_graph_write_access(requester_id, principal)
-	actor_id = str(requester_id)
-	target_id = str(addressee_id)
+	actor_id = requester_id
+	target_id = addressee_id
 
 	if actor_id == target_id:
 		raise HTTPException(
@@ -163,7 +169,7 @@ async def send_friend_request(
 		)
 
 	# block check - prevent requests when either party has blocked the other
-	if await relationship_service.is_blocked(actor_id, target_id, session):
+	if await is_blocked(actor_id, target_id, session):
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="cannot send friend request",
@@ -185,7 +191,7 @@ async def send_friend_request(
 				detail="friend request already pending",
 			)
 
-	if not await privacy_service.can_send_friend_request(target, session, principal):
+	if not await can_send_friend_request(target, session, principal):
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail="cannot send friend request",
@@ -273,11 +279,11 @@ async def decline_friend_request(
 		type=EventType.FRIEND_REQUEST_DECLINED,
 		data={
 			"friendship_id": str(friendship.id),
-			"declined_by": principal.user_id,
+			"declined_by": principal.user.id,
 		},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	return friendship
@@ -317,11 +323,11 @@ async def cancel_friend_request(
 				"friendship_id": str(friendship.id),
 				"requester_id": friendship.requester_id,
 				"addressee_id": friendship.addressee_id,
-				"cancelled_by": principal.user_id,
+				"cancelled_by": principal.user.id,
 			},
-			user_id=principal.user_id,
+			user_id=principal.user.id,
 		)
-		await event_service.persist_and_fanout_event(
+		await persist_and_fanout_event(
 			session, event=event, origin_session_id=origin_session_id
 		)
 
@@ -360,12 +366,12 @@ async def remove_friend(
 		scope_id=other_user_id,
 		type=EventType.FRIEND_REMOVED,
 		data={
-			"removed_by": principal.user_id,
+			"removed_by": principal.user.id,
 			"friend_id": other_user_id,
 		},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 
@@ -400,7 +406,7 @@ async def list_friends(
 	result = await session.execute(stmt)
 	friendships = result.scalars().all()
 	friends: list[tuple[User, TypeID]] = []
-	blocked_ids = await relationship_service.blocked_user_ids(
+	blocked_ids = await blocked_user_ids(
 		user_id,
 		[
 			f.addressee_id if f.requester_id == user_id else f.requester_id
@@ -476,7 +482,7 @@ async def search_users(
 	stmt = _apply_user_search_filters(select(User), query, principal).limit(limit)
 	result = await session.execute(stmt)
 	users = list(result.scalars().all())
-	redacted = await privacy_service.redact_users(users, session, principal)
+	redacted = await redact_users(users, session, principal)
 	return [_build_user_search_result(redacted[user.id]) for user in users]
 
 
@@ -532,7 +538,7 @@ async def _record_event(
 	event = FriendshipEvent(
 		friendship_id=str(friendship.id),
 		status=new_status,
-		actor_id=principal.user_id,
+		actor_id=principal.user.id,
 	)
 	session.add(event)
 	await session.flush()
@@ -561,9 +567,9 @@ async def _accept(
 				"requester_id": friendship.requester_id,
 				"addressee_id": friendship.addressee_id,
 			},
-			user_id=principal.user_id,
+			user_id=principal.user.id,
 		)
-		await event_service.persist_and_fanout_event(
+		await persist_and_fanout_event(
 			session, event=event, origin_session_id=origin_session_id
 		)
 	return friendship
@@ -584,8 +590,8 @@ async def _publish_request_event(
 			"friendship_id": str(friendship.id),
 			"requester_id": friendship.requester_id,
 		},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)

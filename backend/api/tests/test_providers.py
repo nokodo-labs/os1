@@ -11,23 +11,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.model import Model
 from api.models.provider import Provider, ProviderStatus, ProviderType
-from api.models.user import User
 from api.schemas.provider import Provider as ProviderSchema
 from api.schemas.provider import ProviderCreate, ProviderUpdate
 from api.settings import settings
+from api.tests.factories import make_principal
 from api.v1.service import providers as provider_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from nokodo_ai.utils.security import decrypt_string
+from nokodo_ai.utils.typeid import new_typeid
 
 
 def _admin_principal() -> Principal:
-	user = User(
-		email="admin@example.com",
-		username="admin_providers",
-		hashed_password="x",
-		is_superuser=True,
-	)
-	return Principal(user=user, group_ids=(), permissions=frozenset())
+	return make_principal(slug="admin_providers", is_superuser=True)
 
 
 @pytest.mark.asyncio
@@ -258,7 +253,7 @@ def test_response_schema_coerces_empty_name() -> None:
 	"""Legacy providers with empty name should serialize without error."""
 	schema = ProviderSchema.model_validate(
 		{
-			"id": "prov_test123",
+			"id": new_typeid("prov"),
 			"name": "",
 			"adapter_type": "openai",
 			"created_at": "2026-01-01T00:00:00Z",

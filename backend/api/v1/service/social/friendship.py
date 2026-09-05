@@ -1,7 +1,5 @@
 """friendship and block relationship helpers."""
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 
 from sqlalchemy import and_, or_, select
@@ -11,6 +9,9 @@ from sqlalchemy.sql import ColumnElement
 
 from api.models.block import Block
 from api.models.friendship import Friendship, FriendshipStatus
+from api.models.thread import Thread
+from api.permissions import ResourceType
+from api.v1.service.authorization import resource_access_predicate
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -33,6 +34,25 @@ def accepted_friendship_exists(
 					Friendship.addressee_id == user_a_id,
 				),
 			),
+		)
+		.exists()
+	)
+
+
+def shared_thread_exists(
+	user_a_id: TypeID | str,
+	user_b_id: ColumnElement[TypeID] | InstrumentedAttribute[TypeID] | TypeID | str,
+) -> ColumnElement[bool]:
+	"""return whether two users are in the same conversation.
+
+	being in a thread together is itself a relationship: people who already
+	read each other's messages are not strangers to one another.
+	"""
+	return (
+		select(Thread.id)
+		.where(
+			resource_access_predicate(user_a_id, ResourceType.THREAD),
+			resource_access_predicate(user_b_id, ResourceType.THREAD),
 		)
 		.exists()
 	)

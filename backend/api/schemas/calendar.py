@@ -1,14 +1,14 @@
 """calendar schemas."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from api.schemas.access_rule import ResourceAccessListFilters
 from api.schemas.common import (
 	MISSING,
+	ForbidExtraModel,
 	MetadataModel,
 	MetadataUpdateModel,
 	MissingType,
@@ -24,7 +24,7 @@ type CalendarEventSortBy = CommonSortBy | Literal["start_at", "end_at", "title"]
 type CalendarNotificationOffset = Annotated[int, Field(ge=0, le=525600)]
 
 
-class CalendarListFilters(BaseModel):
+class CalendarListFilters(ResourceAccessListFilters):
 	"""filters for listing calendars."""
 
 	owner_id: TypeID | None = None
@@ -57,7 +57,7 @@ class CalendarBase(MetadataModel):
 	project_ids: list[TypeID] = Field(default_factory=list, max_length=100)
 
 
-class CalendarCreate(CalendarBase):
+class CalendarCreate(CalendarBase, ForbidExtraModel):
 	"""payload to create a calendar."""
 
 	pass
@@ -83,6 +83,7 @@ class Calendar(CalendarBase, TimestampedModel):
 
 	id: TypeID
 	owner_id: TypeID
+	origin_message_id: TypeID | None = None
 
 
 class CalendarEventBase(MetadataModel):
@@ -117,7 +118,7 @@ class CalendarEventBase(MetadataModel):
 		return self
 
 
-class CalendarEventCreate(CalendarEventBase):
+class CalendarEventCreate(CalendarEventBase, ForbidExtraModel):
 	"""payload to create a calendar event."""
 
 	pass
@@ -168,5 +169,6 @@ class CalendarEvent(CalendarEventBase, TimestampedModel):
 	id: TypeID
 	owner_id: TypeID
 	calendar_id: TypeID = Field(...)
+	origin_message_id: TypeID | None = None
 	recurrence_until: datetime | None = None
 	series_origin_id: TypeID | None = None

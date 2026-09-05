@@ -1,7 +1,5 @@
 """Note routers."""
 
-from __future__ import annotations
-
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
@@ -9,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.models.note import Note
-from api.permissions import ResourceType
+from api.permissions import ActionPermission, ResourceType
 from api.schemas.note import Note as NoteSchema
 from api.schemas.note import (
 	NoteCreate,
@@ -21,10 +19,34 @@ from api.schemas.note import (
 from api.schemas.search import Page, SearchMode, SearchParams
 from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
-from api.v1.service import notes as note_service
-from api.v1.service.auth import Principal, get_current_principal
-from api.v1.service.authorization import require_admin
+from api.v1.service.authentication import Principal, get_current_principal
+from api.v1.service.authorization import require_permission
 from api.v1.service.events import SessionId
+from api.v1.service.notes import (
+	count_notes as count_notes_service,
+)
+from api.v1.service.notes import (
+	create_note as create_note_service,
+)
+from api.v1.service.notes import (
+	delete_note as delete_note_service,
+)
+from api.v1.service.notes import (
+	get_note_payload,
+	vectorize_notes,
+)
+from api.v1.service.notes import (
+	list_notes as list_notes_service,
+)
+from api.v1.service.notes import (
+	restore_note as restore_note_service,
+)
+from api.v1.service.notes import (
+	search_notes as search_notes_service,
+)
+from api.v1.service.notes import (
+	update_note as update_note_service,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -40,7 +62,7 @@ async def create_note(
 	x_session_id: SessionId = None,
 ) -> Note:
 	"""create a new note."""
-	return await note_service.create_note(
+	return await create_note_service(
 		note_in,
 		db,
 		principal=principal,
@@ -59,7 +81,7 @@ async def list_notes(
 	db: AsyncSession = Depends(get_db),
 ) -> list[Note]:
 	"""list notes for a user."""
-	return await note_service.list_notes(
+	return await list_notes_service(
 		db,
 		principal=principal,
 		filters=filters,
@@ -77,7 +99,7 @@ async def count_notes(
 	db: AsyncSession = Depends(get_db),
 ) -> int:
 	"""count notes matching the list filters."""
-	return await note_service.count_notes(db, principal=principal, filters=filters)
+	return await count_notes_service(db, principal=principal, filters=filters)
 
 
 @router.get("/search", response_model=Page[NoteSchema])
@@ -91,7 +113,7 @@ async def search_notes(
 	db: AsyncSession = Depends(get_db),
 ) -> Page[NoteSchema]:
 	"""search notes returning ranked note objects."""
-	scored = await note_service.search_notes(
+	scored = await search_notes_service(
 		q,
 		db,
 		principal=principal,
@@ -111,9 +133,9 @@ async def revectorize_notes(
 	principal: Principal = Depends(get_current_principal),
 	db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
-	"""vectorize all notes into qdrant. admin only."""
-	require_admin(principal)
-	count = await note_service.vectorize_all_notes(db)
+	"""vectorize all notes into qdrant. notes operators only."""
+	require_permission(principal, ActionPermission.NOTES_MANAGE)
+	count = await vectorize_notes(db)
 	return {"vectorized": count}
 
 
@@ -124,7 +146,7 @@ async def get_note(
 	db: AsyncSession = Depends(get_db),
 ) -> NoteSchema:
 	"""fetch a single note."""
-	return await note_service.get_note_payload(note_id, db, principal=principal)
+	return await get_note_payload(note_id, db, principal=principal)
 
 
 @router.put("/{note_id}", response_model=NoteSchema)
@@ -136,7 +158,7 @@ async def update_note(
 	x_session_id: SessionId = None,
 ) -> Note:
 	"""update a note."""
-	return await note_service.update_note(
+	return await update_note_service(
 		note_id,
 		note_in,
 		db,
@@ -154,7 +176,7 @@ async def delete_note(
 	x_session_id: SessionId = None,
 ) -> None:
 	"""delete a note."""
-	await note_service.delete_note(
+	await delete_note_service(
 		note_id,
 		db,
 		principal=principal,
@@ -171,7 +193,7 @@ async def restore_note(
 	x_session_id: SessionId = None,
 ) -> Note:
 	"""restore a soft-deleted note. admin only."""
-	return await note_service.restore_note(
+	return await restore_note_service(
 		note_id,
 		db,
 		principal=principal,
@@ -186,4 +208,4 @@ async def enhance_note(
 	db: AsyncSession = Depends(get_db),
 ) -> NoteSchema:
 	"""enhance a note using AI. stub - returns the note unchanged until implemented."""
-	return await note_service.get_note_payload(note_id, db, principal=principal)
+	return await get_note_payload(note_id, db, principal=principal)

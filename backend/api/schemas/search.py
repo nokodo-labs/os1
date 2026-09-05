@@ -1,7 +1,5 @@
 """search result schemas."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from enum import StrEnum
 
@@ -13,9 +11,11 @@ from nokodo_ai.utils.typeid import TypeID
 
 
 class SearchResultType(StrEnum):
+	"""routable containers a search result can be."""
+
 	THREAD = "thread"
-	REMINDER = "reminder"
-	CALENDAR_EVENT = "calendar_event"
+	REMINDER_LIST = "reminder_list"
+	CALENDAR = "calendar"
 	NOTE = "note"
 	MEMORY = "memory"
 	PROJECT = "project"
@@ -33,6 +33,7 @@ class SearchResourceReferenceType(StrEnum):
 	FILE = "file"
 	CALENDAR_EVENT = "calendar_event"
 	CALENDAR = "calendar"
+	MESSAGE = "message"
 
 
 class SearchMode(StrEnum):
@@ -86,22 +87,22 @@ class SearchParams(ORMModel):
 	)
 
 
-class SearchResultParent(ORMModel):
-	"""immediate parent resource needed to display or route a nested result."""
+class SearchResultAnchor(ORMModel):
+	"""resource to focus (scroll to, highlight) after routing to the result"""
 
 	type: SearchResourceReferenceType
 	id: TypeID
 
 
 class SearchResultItem(ORMModel):
-	"""a single search result across any searchable entity."""
+	"""a single search result; always a routable container."""
 
 	type: SearchResultType
 	id: TypeID
 	title: str
 	preview: str | None = None
 	score: float | None = None
-	parent: SearchResultParent | None = None
+	anchor: SearchResultAnchor | None = None
 	metadata: JSONObject = Field(default_factory=dict)
 	created_at: datetime
 	updated_at: datetime

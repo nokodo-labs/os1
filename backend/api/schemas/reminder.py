@@ -1,15 +1,15 @@
 """reminder schemas."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from api.models.reminder import ReminderStatus
+from api.schemas.access_rule import ResourceAccessListFilters
 from api.schemas.common import (
 	MISSING,
+	ForbidExtraModel,
 	MetadataModel,
 	MetadataUpdateModel,
 	MissingType,
@@ -45,7 +45,7 @@ class ScheduledReminderListFilters(BaseModel):
 	status_filter: ReminderStatus | None = ReminderStatus.PENDING
 
 
-class ReminderListFilters(BaseModel):
+class ReminderListFilters(ResourceAccessListFilters):
 	"""filters for listing reminder lists."""
 
 	owner_id: TypeID | None = None
@@ -79,7 +79,7 @@ class ReminderListBase(MetadataModel):
 	project_ids: list[TypeID] = Field(default_factory=list)
 
 
-class ReminderListCreate(ReminderListBase):
+class ReminderListCreate(ReminderListBase, ForbidExtraModel):
 	"""schema for creating a reminder list."""
 
 	pass
@@ -102,6 +102,7 @@ class ReminderList(ReminderListBase, TimestampedModel):
 
 	id: TypeID
 	owner_id: TypeID
+	origin_message_id: TypeID | None = None
 
 
 class ReminderListWithCounts(ReminderList):
@@ -125,11 +126,10 @@ class ReminderBase(MetadataModel):
 	recurrence: Recurrence | None = None
 	status: ReminderStatus = ReminderStatus.PENDING
 	parent_id: TypeID | None = None
-	source_thread_id: TypeID | None = None
 	position: float = 0.0
 
 
-class ReminderCreate(ReminderBase):
+class ReminderCreate(ReminderBase, ForbidExtraModel):
 	"""schema for creating a reminder."""
 
 	list_id: TypeID | None = None
@@ -156,6 +156,7 @@ class Reminder(ReminderBase, TimestampedModel):
 	id: TypeID
 	owner_id: TypeID
 	list_id: TypeID
+	origin_message_id: TypeID | None = None
 	completed_at: datetime | None = None
 	recurrence_until: datetime | None = None
 	series_origin_id: TypeID | None = None

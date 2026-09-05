@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import TypedDict
@@ -8,31 +8,42 @@ from typing import TypedDict
 import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from taskiq.brokers.inmemory_broker import InMemoryBroker
 from taskiq.schedule_sources import LabelScheduleSource
+from taskiq.scheduler.scheduled_task import ScheduledTask
 
 from api.boot_settings import boot_settings
-from api.models.message import Message, MessageType
+from api.models.access_rule import AccessLevel
+from api.models.message import AssistantMessage, Message, MessageType, UserMessage
 from api.models.task import Task, TaskStatus, TaskType
 from api.models.thread import Thread
 from api.models.thread_summary import SummaryPurpose
+from api.permissions import MentionableSubjectType, ResourceType
 from api.schemas.agent import AgentConfig, AgentCreate
-from api.schemas.runs import RunInput
+from api.schemas.message import (
+	BranchLeaf,
+	Citation,
+	CitationSource,
+	ImageContent,
+	MessageCreate,
+	MessageMention,
+	MessageSplice,
+	RunBlockRef,
+	TextContent,
+)
 from api.schemas.task import TaskCreate, TaskListFilters, TaskUpdate
 from api.schemas.user import UserCreate
 from api.settings import settings
 from api.taskiq import broker
+from api.v1.service import access_rules
 from api.v1.service import agents as agent_service
 from api.v1.service import tasks as task_service
 from api.v1.service import users as user_service
-from api.v1.service.auth import Principal
-from api.v1.service.chat import agents as chat_agents
-from api.v1.service.threads import maintenance as thread_maintenance_service
-from api.v1.service.threads import summaries as summary_service
-from api.v1.tasks import threads as thread_tasks
-from api.v1.tasks.threads import (
+from api.v1.service.authentication import Principal
+from api.v1.service.chat import thread_maintenance as thread_maintenance_service
+from api.v1.service.chat.thread_maintenance import (
 	THREAD_INACTIVITY_DISPATCH_TASK,
 	THREAD_MAINTENANCE_BACKFILL_SCHEDULE_ID,
 	THREAD_MAINTENANCE_BACKFILL_TASK,
@@ -40,10 +51,15 @@ from api.v1.tasks.threads import (
 	clear_disabled_thread_maintenance_backfill_schedule,
 	fail_stale_thread_related_tasks,
 	run_thread_maintenance_backfill_sweep,
-	run_thread_maintenance_task,
 	schedule_thread_inactivity_maintenance,
 	start_thread_maintenance_task,
 )
+from api.v1.service.runs import execution as run_execution
+from api.v1.service.runs.contracts import PersistedRunInput
+from api.v1.service.runs.launch import _capture_run_input
+from api.v1.service.threads import MessageDraft, create_message
+from api.v1.service.threads import summaries as summary_service
+from api.v1.tasks.threads import run_thread_maintenance_task
 from nokodo_ai.adapters.chat import GenerationBadRequestError
 from nokodo_ai.deltas import AgentDelta, ChatModelDelta
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
@@ -60,41 +76,27 @@ class _TaskAuth(TypedDict):
 class _FakeThreadScheduleSource:
 	def __init__(self) -> None:
 		self.deleted: list[str] = []
+		self.scheduled: list[tuple[str, datetime, str, str]] = []
 
 	async def delete_schedule(self, schedule_id: str) -> None:
 		self.deleted.append(schedule_id)
 
-
-class _FakeThreadMaintenanceKicker:
-	def __init__(self) -> None:
-		self.schedule_id: str | None = None
-		self.scheduled: list[tuple[str, datetime, str, str]] = []
-
-	def with_schedule_id(self, schedule_id: str) -> _FakeThreadMaintenanceKicker:
-		self.schedule_id = schedule_id
-		return self
-
-	async def schedule_by_time(
-		self,
-		source: object,
-		schedule_at: datetime,
-		thread_id: str,
-		observed_last_activity_at: str,
-	) -> None:
-		_ = source
-		if self.schedule_id is None:
-			raise AssertionError("schedule id was not set")
+	async def add_schedule(self, schedule: ScheduledTask) -> None:
+		if (
+			schedule.task_name != THREAD_INACTIVITY_DISPATCH_TASK
+			or schedule.time is None
+			or len(schedule.args) != 2
+		):
+			raise AssertionError("unexpected thread maintenance dispatch")
+		thread_id, observed_last_activity_at = schedule.args
 		self.scheduled.append(
-			(self.schedule_id, schedule_at, thread_id, observed_last_activity_at)
+			(
+				schedule.schedule_id,
+				schedule.time,
+				str(thread_id),
+				str(observed_last_activity_at),
+			)
 		)
-
-
-class _FakeThreadMaintenanceTask:
-	def __init__(self) -> None:
-		self.kicker_instance = _FakeThreadMaintenanceKicker()
-
-	def kicker(self) -> _FakeThreadMaintenanceKicker:
-		return self.kicker_instance
 
 
 def _task_auth(user_auth: dict[str, object]) -> _TaskAuth:
@@ -124,12 +126,41 @@ class _FakeCompletedRunAgent:
 		async def stream() -> AsyncIterator[AgentDelta]:
 			yield AgentDelta(
 				chat=ChatModelDelta(
-					message=SDKAssistantMessage.from_text("hello from the agent"),
+					message=SDKAssistantMessage.from_text(
+						"hello from the agent"
+					).model_copy(update={"finish_reason": "stop"}),
 					done=True,
 				),
 				chunk_index=0,
 			)
 			yield AgentDelta.done_sentinel(chunk_index=1)
+
+		return stream()
+
+
+class _FakeMultiDeltaRunAgent:
+	async def run(
+		self,
+		*_args: object,
+		**_kwargs: object,
+	) -> AsyncIterator[AgentDelta]:
+		async def stream() -> AsyncIterator[AgentDelta]:
+			yield AgentDelta(
+				chat=ChatModelDelta(
+					message=SDKAssistantMessage.from_text("hello "),
+				),
+				chunk_index=0,
+			)
+			yield AgentDelta(
+				chat=ChatModelDelta(
+					message=SDKAssistantMessage.from_text("from the agent").model_copy(
+						update={"finish_reason": "stop"}
+					),
+					done=True,
+				),
+				chunk_index=1,
+			)
+			yield AgentDelta.done_sentinel(chunk_index=2)
 
 		return stream()
 
@@ -177,6 +208,40 @@ class _FakePartialBadRequestRunAgent:
 		return stream()
 
 
+class _FakeCompletedThenPartialBadRequestRunAgent:
+	async def run(
+		self,
+		*_args: object,
+		**_kwargs: object,
+	) -> AsyncIterator[AgentDelta]:
+		async def stream() -> AsyncIterator[AgentDelta]:
+			yield AgentDelta(
+				chat=ChatModelDelta(
+					message=SDKAssistantMessage.from_text(
+						"complete replacement"
+					).model_copy(update={"finish_reason": "stop"}),
+					done=True,
+				),
+				chunk_index=0,
+			)
+			yield AgentDelta(
+				chat=ChatModelDelta(
+					message=SDKAssistantMessage.from_text("partial continuation"),
+					done=False,
+				),
+				chunk_index=1,
+			)
+			raise GenerationBadRequestError(
+				"maximum context length exceeded",
+				provider="openai.chat_completions",
+				status_code=400,
+				code="context_length_exceeded",
+			)
+			yield AgentDelta.done_sentinel(chunk_index=2)
+
+		return stream()
+
+
 async def _create_thread_with_current_message(
 	db_session: AsyncSession,
 	user_id: TypeID,
@@ -196,7 +261,7 @@ async def _create_thread_with_current_message(
 	db_session.add(thread)
 	await db_session.flush()
 	db_session.add(
-		Message(
+		UserMessage(
 			id=message_id,
 			thread_id=thread_id,
 			type=MessageType.USER,
@@ -214,6 +279,26 @@ async def _create_thread_with_current_message(
 	await db_session.flush()
 	await db_session.refresh(thread)
 	return thread
+
+
+async def _persist_run_input(
+	db_session: AsyncSession,
+	thread_id: TypeID,
+	message_input: MessageCreate,
+	principal: Principal,
+	splice: MessageSplice | None = None,
+) -> PersistedRunInput:
+	"""write a run's input the way the launcher does, and capture it."""
+	draft = MessageDraft.from_request(message_input)
+	if splice is not None:
+		draft.splice = splice
+	written = await create_message(
+		thread_id,
+		draft,
+		db_session,
+		principal=principal,
+	)
+	return _capture_run_input(written)
 
 
 @pytest.mark.asyncio
@@ -411,7 +496,7 @@ async def test_service_create_task(db_session: AsyncSession) -> None:
 		is_superuser=True,
 	)
 	user = await user_service.create_user(user_in, db_session)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 
 	task_in = TaskCreate(
 		user_id=user.id,
@@ -438,7 +523,7 @@ async def test_start_task_executes_registered_runner_through_taskiq(
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	runner_name = "tests.taskiq.execution"
 	original_runners = dict(task_service._task_runners)
 	in_memory_broker = InMemoryBroker(await_inplace=True)
@@ -488,7 +573,7 @@ async def test_start_thread_maintenance_task_reuses_fresh_active_task(
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	thread_id = TypeID(new_typeid("thread"))
 	thread = Thread(id=thread_id, owner_id=user.id, tags=[])
 	db_session.add(thread)
@@ -546,7 +631,7 @@ async def test_start_thread_maintenance_task_supersedes_stale_active_task(
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	thread_id = TypeID(new_typeid("thread"))
 	thread = Thread(id=thread_id, owner_id=user.id, tags=[])
 	db_session.add(thread)
@@ -610,10 +695,8 @@ async def test_thread_inactivity_schedule_resets_future_timer(
 	"""thread inactivity scheduling creates a resettable future timer."""
 	monkeypatch.setattr(boot_settings, "TESTING", False)
 	fake_source = _FakeThreadScheduleSource()
-	fake_task = _FakeThreadMaintenanceTask()
-	monkeypatch.setattr(thread_tasks, "redis_schedule_source", fake_source)
 	monkeypatch.setattr(
-		thread_tasks, "dispatch_thread_inactivity_maintenance", fake_task
+		thread_maintenance_service, "redis_schedule_source", fake_source
 	)
 	user = await user_service.create_user(
 		UserCreate(
@@ -627,15 +710,13 @@ async def test_thread_inactivity_schedule_resets_future_timer(
 	last_activity_at = datetime.now(tz=UTC) - timedelta(hours=1)
 	thread = await _create_thread_with_current_message(
 		db_session,
-		TypeID(user.id),
+		user.id,
 		last_activity_at,
 		"ready thread",
 		["ready"],
 	)
 
-	scheduled = await schedule_thread_inactivity_maintenance(
-		TypeID(thread.id), db_session
-	)
+	scheduled = await schedule_thread_inactivity_maintenance(thread.id, db_session)
 	expected_due_at = last_activity_at + timedelta(
 		hours=settings.tasks.thread_maintenance.inactivity_hours
 	)
@@ -646,7 +727,7 @@ async def test_thread_inactivity_schedule_resets_future_timer(
 
 	assert scheduled is True
 	assert fake_source.deleted == [f"thread:inactivity-maintenance:{thread.id}"]
-	assert fake_task.kicker_instance.scheduled == [
+	assert fake_source.scheduled == [
 		(
 			f"thread:inactivity-maintenance:{thread.id}",
 			expected_due_at,
@@ -672,12 +753,12 @@ async def test_thread_maintenance_rules_split_mandatory_and_deferred(
 	)
 	missing_metadata = await _create_thread_with_current_message(
 		db_session,
-		TypeID(user.id),
+		user.id,
 		datetime.now(tz=UTC),
 	)
 	summary_only = await _create_thread_with_current_message(
 		db_session,
-		TypeID(user.id),
+		user.id,
 		datetime.now(tz=UTC),
 		"ready thread",
 		["ready"],
@@ -716,10 +797,8 @@ async def test_thread_inactivity_schedule_starts_mandatory_metadata_now(
 	"""missing mandatory thread metadata starts maintenance immediately."""
 	monkeypatch.setattr(boot_settings, "TESTING", False)
 	fake_source = _FakeThreadScheduleSource()
-	fake_task = _FakeThreadMaintenanceTask()
-	monkeypatch.setattr(thread_tasks, "redis_schedule_source", fake_source)
 	monkeypatch.setattr(
-		thread_tasks, "dispatch_thread_inactivity_maintenance", fake_task
+		thread_maintenance_service, "redis_schedule_source", fake_source
 	)
 	user = await user_service.create_user(
 		UserCreate(
@@ -732,7 +811,7 @@ async def test_thread_inactivity_schedule_starts_mandatory_metadata_now(
 	)
 	thread = await _create_thread_with_current_message(
 		db_session,
-		TypeID(user.id),
+		user.id,
 		datetime.now(tz=UTC) - timedelta(hours=1),
 	)
 	enqueued: list[tuple[str, JSONObject]] = []
@@ -742,9 +821,7 @@ async def test_thread_inactivity_schedule_starts_mandatory_metadata_now(
 
 	monkeypatch.setattr(task_service, "enqueue_started_task", _enqueue)
 
-	scheduled = await schedule_thread_inactivity_maintenance(
-		TypeID(thread.id), db_session
-	)
+	scheduled = await schedule_thread_inactivity_maintenance(thread.id, db_session)
 	task = await task_service.find_active_task(
 		db_session,
 		THREAD_MAINTENANCE_TASK,
@@ -753,7 +830,7 @@ async def test_thread_inactivity_schedule_starts_mandatory_metadata_now(
 
 	assert scheduled is True
 	assert fake_source.deleted == [f"thread:inactivity-maintenance:{thread.id}"]
-	assert fake_task.kicker_instance.scheduled == []
+	assert fake_source.scheduled == []
 	assert task is not None
 	assert task.stage == "queued mandatory metadata"
 	assert enqueued == [(str(task.id), {})]
@@ -767,10 +844,8 @@ async def test_thread_inactivity_schedule_supersedes_stale_queued_mandatory_task
 	"""queued mandatory metadata work cannot block a thread forever."""
 	monkeypatch.setattr(boot_settings, "TESTING", False)
 	fake_source = _FakeThreadScheduleSource()
-	fake_task = _FakeThreadMaintenanceTask()
-	monkeypatch.setattr(thread_tasks, "redis_schedule_source", fake_source)
 	monkeypatch.setattr(
-		thread_tasks, "dispatch_thread_inactivity_maintenance", fake_task
+		thread_maintenance_service, "redis_schedule_source", fake_source
 	)
 	user = await user_service.create_user(
 		UserCreate(
@@ -783,7 +858,7 @@ async def test_thread_inactivity_schedule_supersedes_stale_queued_mandatory_task
 	)
 	thread = await _create_thread_with_current_message(
 		db_session,
-		TypeID(user.id),
+		user.id,
 		datetime.now(tz=UTC),
 	)
 	old_event_at = datetime.now(tz=UTC) - timedelta(
@@ -818,9 +893,7 @@ async def test_thread_inactivity_schedule_supersedes_stale_queued_mandatory_task
 
 	monkeypatch.setattr(task_service, "enqueue_started_task", _enqueue)
 
-	scheduled = await schedule_thread_inactivity_maintenance(
-		TypeID(thread.id), db_session
-	)
+	scheduled = await schedule_thread_inactivity_maintenance(thread.id, db_session)
 	new_task = await task_service.find_active_task(
 		db_session,
 		THREAD_MAINTENANCE_TASK,
@@ -830,7 +903,7 @@ async def test_thread_inactivity_schedule_supersedes_stale_queued_mandatory_task
 
 	assert scheduled is True
 	assert fake_source.deleted == [f"thread:inactivity-maintenance:{thread.id}"]
-	assert fake_task.kicker_instance.scheduled == []
+	assert fake_source.scheduled == []
 	assert active_task.status == TaskStatus.FAILED
 	assert active_task.stage == "queued task superseded"
 	assert active_task.result == {
@@ -852,10 +925,8 @@ async def test_thread_inactivity_schedule_skips_up_to_date_thread(
 	"""scheduling clears stale timers and skips threads that need no work."""
 	monkeypatch.setattr(boot_settings, "TESTING", False)
 	fake_source = _FakeThreadScheduleSource()
-	fake_task = _FakeThreadMaintenanceTask()
-	monkeypatch.setattr(thread_tasks, "redis_schedule_source", fake_source)
 	monkeypatch.setattr(
-		thread_tasks, "dispatch_thread_inactivity_maintenance", fake_task
+		thread_maintenance_service, "redis_schedule_source", fake_source
 	)
 
 	async def _does_not_need_deferred_maintenance(
@@ -866,7 +937,7 @@ async def test_thread_inactivity_schedule_skips_up_to_date_thread(
 		return False
 
 	monkeypatch.setattr(
-		thread_tasks.thread_service,
+		thread_maintenance_service,
 		"thread_needs_deferred_maintenance",
 		_does_not_need_deferred_maintenance,
 	)
@@ -882,19 +953,17 @@ async def test_thread_inactivity_schedule_skips_up_to_date_thread(
 	last_activity_at = datetime.now(tz=UTC) - timedelta(hours=1)
 	thread = await _create_thread_with_current_message(
 		db_session,
-		TypeID(user.id),
+		user.id,
 		last_activity_at,
 		"ready thread",
 		["ready"],
 	)
 
-	scheduled = await schedule_thread_inactivity_maintenance(
-		TypeID(thread.id), db_session
-	)
+	scheduled = await schedule_thread_inactivity_maintenance(thread.id, db_session)
 
 	assert scheduled is False
 	assert fake_source.deleted == [f"thread:inactivity-maintenance:{thread.id}"]
-	assert fake_task.kicker_instance.scheduled == []
+	assert fake_source.scheduled == []
 
 
 @pytest.mark.asyncio
@@ -911,7 +980,7 @@ async def test_run_agent_surfaces_sdk_generation_error(
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	agent_id = TypeID(new_typeid("agent"))
 	fake_agent = SimpleNamespace(model=None, parsed_config=None)
 	fake_run_agent = _FakeBadRequestRunAgent()
@@ -931,44 +1000,45 @@ async def test_run_agent_surfaces_sdk_generation_error(
 
 	async def fake_prepare_steering(
 		**_kwargs: object,
-	) -> tuple[_FakeBadRequestRunAgent, None]:
-		return fake_run_agent, None
+	) -> _FakeBadRequestRunAgent:
+		return fake_run_agent
 
-	monkeypatch.setattr(chat_agents, "_load_agent", fake_load_agent)
+	monkeypatch.setattr(run_execution, "load_agent_for_run", fake_load_agent)
 	monkeypatch.setattr(
-		chat_agents,
+		run_execution,
 		"build_agent_from_orm",
 		fake_build_agent_from_orm,
 	)
 	monkeypatch.setattr(
-		chat_agents,
-		"inject_system_instructions",
+		"api.v1.service.runs.thread_context.inject_system_instructions",
 		fake_inject_system_instructions,
 	)
-	monkeypatch.setattr(chat_agents, "prepare_steering", fake_prepare_steering)
+	monkeypatch.setattr(run_execution, "prepare_steering", fake_prepare_steering)
+	terminated: list[tuple[str, TypeID | None]] = []
+	original_terminate = run_execution.terminate_run
 
-	frames = [
-		frame
-		async for frame in chat_agents.run_agent(
-			None,
-			agent_id,
-			principal,
-			input=RunInput(text="hello"),
-			persist=False,
-		)
-	]
+	async def capture_terminate(
+		run_id: TypeID,
+		reason: str,
+		partial_message_id: TypeID | None = None,
+	) -> object | None:
+		terminated.append((reason, partial_message_id))
+		return await original_terminate(run_id, reason, partial_message_id)
 
-	joined = b"".join(frames)
-	assert b"event: error" in joined
-	assert b"generation failed" in joined
-	assert b"provider_bad_request" not in joined
-	assert b"provider rejected the generation request" not in joined
-	assert b"openai" not in joined
-	assert b"context_length_exceeded" not in joined
+	monkeypatch.setattr(run_execution, "terminate_run", capture_terminate)
+
+	await run_execution.run_agent(
+		None,
+		agent_id,
+		principal,
+		input=MessageCreate(content=[TextContent(text="hello")]),
+		persist=False,
+	)
+	assert terminated == [("provider_bad_request", None)]
 
 
 @pytest.mark.asyncio
-async def test_run_agent_marks_partial_message_on_sdk_generation_error(
+async def test_nonpersisted_partial_failure_has_no_message_id(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -981,7 +1051,7 @@ async def test_run_agent_marks_partial_message_on_sdk_generation_error(
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	agent_id = TypeID(new_typeid("agent"))
 	fake_agent = SimpleNamespace(model=None, parsed_config=None)
 	fake_run_agent = _FakePartialBadRequestRunAgent()
@@ -1001,41 +1071,41 @@ async def test_run_agent_marks_partial_message_on_sdk_generation_error(
 
 	async def fake_prepare_steering(
 		**_kwargs: object,
-	) -> tuple[_FakePartialBadRequestRunAgent, None]:
-		return fake_run_agent, None
+	) -> _FakePartialBadRequestRunAgent:
+		return fake_run_agent
 
-	monkeypatch.setattr(chat_agents, "_load_agent", fake_load_agent)
+	monkeypatch.setattr(run_execution, "load_agent_for_run", fake_load_agent)
 	monkeypatch.setattr(
-		chat_agents,
+		run_execution,
 		"build_agent_from_orm",
 		fake_build_agent_from_orm,
 	)
 	monkeypatch.setattr(
-		chat_agents,
-		"inject_system_instructions",
+		"api.v1.service.runs.thread_context.inject_system_instructions",
 		fake_inject_system_instructions,
 	)
-	monkeypatch.setattr(chat_agents, "prepare_steering", fake_prepare_steering)
+	monkeypatch.setattr(run_execution, "prepare_steering", fake_prepare_steering)
+	terminated: list[tuple[str, TypeID | None]] = []
+	original_terminate = run_execution.terminate_run
 
-	frames = [
-		frame
-		async for frame in chat_agents.run_agent(
-			None,
-			agent_id,
-			principal,
-			input=RunInput(text="hello"),
-			persist=False,
-		)
-	]
+	async def capture_terminate(
+		run_id: TypeID,
+		reason: str,
+		partial_message_id: TypeID | None = None,
+	) -> object | None:
+		terminated.append((reason, partial_message_id))
+		return await original_terminate(run_id, reason, partial_message_id)
 
-	joined = b"".join(frames)
-	assert b"partial answer" in joined
-	assert b"event: error" in joined
-	assert b'"partial":true' in joined
-	assert b'"continuation_available"' not in joined
-	assert b"provider_bad_request" not in joined
-	assert b"openai" not in joined
-	assert b"context_length_exceeded" not in joined
+	monkeypatch.setattr(run_execution, "terminate_run", capture_terminate)
+
+	await run_execution.run_agent(
+		None,
+		agent_id,
+		principal,
+		input=MessageCreate(content=[TextContent(text="hello")]),
+		persist=False,
+	)
+	assert terminated == [("provider_bad_request", None)]
 
 
 @pytest.mark.asyncio
@@ -1053,7 +1123,7 @@ async def test_run_agent_schedules_new_thread_maintenance_before_done(
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	thread_id = TypeID(new_typeid("thread"))
 	db_session.add(Thread(id=thread_id, owner_id=user.id, title=None, tags=[]))
 	agent = await agent_service.create_agent(
@@ -1085,9 +1155,9 @@ async def test_run_agent_schedules_new_thread_maintenance_before_done(
 
 	async def fake_prepare_steering(
 		**kwargs: object,
-	) -> tuple[_FakeCompletedRunAgent, None]:
+	) -> _FakeCompletedRunAgent:
 		assert kwargs["sdk_agent"] is fake_run_agent
-		return fake_run_agent, None
+		return fake_run_agent
 
 	async def fake_broadcast_run_event(
 		*_args: object,
@@ -1117,45 +1187,45 @@ async def test_run_agent_schedules_new_thread_maintenance_before_done(
 		)
 		return True
 
-	monkeypatch.setattr(chat_agents, "_load_agent", fake_load_agent)
+	monkeypatch.setattr(run_execution, "load_agent_for_run", fake_load_agent)
 	monkeypatch.setattr(
-		chat_agents,
+		run_execution,
 		"build_agent_from_orm",
 		fake_build_agent_from_orm,
 	)
-	monkeypatch.setattr(chat_agents, "prepare_steering", fake_prepare_steering)
-	monkeypatch.setattr(chat_agents, "broadcast_run_event", fake_broadcast_run_event)
+	monkeypatch.setattr(run_execution, "prepare_steering", fake_prepare_steering)
+	monkeypatch.setattr(run_execution, "broadcast_run_event", fake_broadcast_run_event)
 	monkeypatch.setattr(
-		chat_agents,
-		"schedule_thread_inactivity_maintenance",
+		run_execution,
+		"schedule_post_run_thread_upkeep",
 		capture_schedule,
 	)
 	terminal_order: list[str] = []
-	original_complete_run = chat_agents.run_status_store.complete_run
+	original_complete_run = run_execution.run_registry.complete_run
 
 	async def capture_complete_run(run_id: TypeID) -> object | None:
 		terminal_order.append("complete")
 		return await original_complete_run(run_id)
 
 	monkeypatch.setattr(
-		chat_agents.run_status_store,
+		run_execution.run_registry,
 		"complete_run",
 		capture_complete_run,
 	)
 
-	frames: list[bytes] = []
-	async for frame in chat_agents.run_agent(
+	persisted_input = await _persist_run_input(
+		db_session,
 		thread_id,
-		TypeID(agent.id),
+		MessageCreate(content=[TextContent(text="hello")]),
 		principal,
-		input=RunInput(text="hello"),
+	)
+	await run_execution.run_agent(
+		thread_id,
+		agent.id,
+		principal,
 		persist=True,
-	):
-		frames.append(frame)
-		if b"event: done" in frame:
-			break
-
-	assert any(b"event: done" in frame for frame in frames)
+		persisted_input=persisted_input,
+	)
 	assert scheduled_thread_ids == [str(thread_id)]
 	assert scheduled_threads_needed_maintenance == [True]
 	assert terminal_order == ["schedule", "complete"]
@@ -1176,7 +1246,7 @@ async def test_run_agent_resolves_final_assistant_reference_after_persist(
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	thread_id = TypeID(new_typeid("thread"))
 	thread = Thread(id=thread_id, owner_id=user.id, title=None, tags=[])
 	db_session.add(thread)
@@ -1210,9 +1280,9 @@ async def test_run_agent_resolves_final_assistant_reference_after_persist(
 
 	async def fake_prepare_steering(
 		**kwargs: object,
-	) -> tuple[_FakeCompletedRunAgent, None]:
+	) -> _FakeCompletedRunAgent:
 		assert kwargs["sdk_agent"] is fake_run_agent
-		return fake_run_agent, None
+		return fake_run_agent
 
 	async def fake_broadcast_run_event(
 		*_args: object,
@@ -1240,49 +1310,50 @@ async def test_run_agent_resolves_final_assistant_reference_after_persist(
 		terminal_order.append("maintenance")
 		return True
 
-	monkeypatch.setattr(chat_agents, "_load_agent", fake_load_agent)
+	monkeypatch.setattr(run_execution, "load_agent_for_run", fake_load_agent)
 	monkeypatch.setattr(
-		chat_agents,
+		run_execution,
 		"build_agent_from_orm",
 		fake_build_agent_from_orm,
 	)
-	monkeypatch.setattr(chat_agents, "prepare_steering", fake_prepare_steering)
-	monkeypatch.setattr(chat_agents, "broadcast_run_event", fake_broadcast_run_event)
+	monkeypatch.setattr(run_execution, "prepare_steering", fake_prepare_steering)
+	monkeypatch.setattr(run_execution, "broadcast_run_event", fake_broadcast_run_event)
 	monkeypatch.setattr(
-		chat_agents,
+		run_execution,
 		"new_message_reference",
 		lambda: "msg_ref_thread_run_memory",
 	)
 	monkeypatch.setattr(
-		chat_agents,
+		run_execution,
 		"resolve_message_reference",
 		fake_resolve_message_reference,
 	)
 	monkeypatch.setattr(
-		chat_agents,
+		run_execution,
 		"reject_message_reference",
 		fake_reject_message_reference,
 	)
 	monkeypatch.setattr(
-		chat_agents,
-		"schedule_thread_inactivity_maintenance",
+		run_execution,
+		"schedule_post_run_thread_upkeep",
 		fake_schedule_thread_inactivity,
 	)
 
-	frames: list[bytes] = []
-	async for frame in chat_agents.run_agent(
+	persisted_input = await _persist_run_input(
+		db_session,
 		thread_id,
-		TypeID(agent.id),
+		MessageCreate(content=[TextContent(text="hello")]),
 		principal,
-		input=RunInput(text="hello"),
+	)
+	await run_execution.run_agent(
+		thread_id,
+		agent.id,
+		principal,
 		persist=True,
-	):
-		frames.append(frame)
-		if b"event: done" in frame:
-			break
+		persisted_input=persisted_input,
+	)
 
 	await db_session.refresh(thread)
-	assert any(b"event: done" in frame for frame in frames)
 	assert [
 		(reference_id, str(message_id)) for reference_id, message_id in resolved_refs
 	] == [("msg_ref_thread_run_memory", str(thread.current_message_id))]
@@ -1305,10 +1376,10 @@ async def test_run_agent_schedules_regenerated_thread_maintenance(
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	thread = await _create_thread_with_current_message(
 		db_session,
-		TypeID(user.id),
+		user.id,
 		datetime.now(tz=UTC),
 	)
 	parent_id = TypeID(thread.current_message_id)
@@ -1342,9 +1413,9 @@ async def test_run_agent_schedules_regenerated_thread_maintenance(
 
 	async def fake_prepare_steering(
 		**kwargs: object,
-	) -> tuple[_FakeCompletedRunAgent, None]:
+	) -> _FakeCompletedRunAgent:
 		assert kwargs["sdk_agent"] is fake_run_agent
-		return fake_run_agent, None
+		return fake_run_agent
 
 	async def fake_broadcast_run_event(
 		*_args: object,
@@ -1376,50 +1447,992 @@ async def test_run_agent_schedules_regenerated_thread_maintenance(
 		)
 		return True
 
-	original_complete_run = chat_agents.run_status_store.complete_run
+	original_complete_run = run_execution.run_registry.complete_run
 
 	async def capture_complete_run(run_id: TypeID) -> object | None:
 		terminal_order.append("complete")
 		return await original_complete_run(run_id)
 
-	monkeypatch.setattr(chat_agents, "_load_agent", fake_load_agent)
+	monkeypatch.setattr(run_execution, "load_agent_for_run", fake_load_agent)
 	monkeypatch.setattr(
-		chat_agents,
+		run_execution,
 		"build_agent_from_orm",
 		fake_build_agent_from_orm,
 	)
-	monkeypatch.setattr(chat_agents, "prepare_steering", fake_prepare_steering)
-	monkeypatch.setattr(chat_agents, "broadcast_run_event", fake_broadcast_run_event)
+	monkeypatch.setattr(run_execution, "prepare_steering", fake_prepare_steering)
+	monkeypatch.setattr(run_execution, "broadcast_run_event", fake_broadcast_run_event)
 	monkeypatch.setattr(
-		chat_agents,
-		"schedule_thread_inactivity_maintenance",
+		run_execution,
+		"schedule_post_run_thread_upkeep",
 		capture_schedule,
 	)
 	monkeypatch.setattr(
-		chat_agents.run_status_store,
+		run_execution.run_registry,
 		"complete_run",
 		capture_complete_run,
 	)
 
-	frames: list[bytes] = []
-	async for frame in chat_agents.run_agent(
-		TypeID(thread.id),
-		TypeID(agent.id),
+	await run_execution.run_agent(
+		thread.id,
+		agent.id,
 		principal,
 		input=None,
-		parent_id=parent_id,
+		splice=MessageSplice(parent_id=parent_id),
 		persist=True,
-	):
-		frames.append(frame)
-		if b"event: done" in frame:
-			break
+	)
 
-	assert any(b"event: done" in frame for frame in frames)
 	assert len(scheduled_current_message_ids) == 1
 	assert scheduled_current_message_ids[0] is not None
 	assert scheduled_current_message_ids[0] != str(parent_id)
 	assert scheduled_threads_needed_maintenance == [True]
 	assert terminal_order == ["schedule", "complete"]
+
+
+@pytest.mark.asyncio
+async def test_run_agent_regeneration_forks_from_prior_output(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	user = await user_service.create_user(
+		UserCreate(
+			email="thread_regen_branch@example.com",
+			username="thread_regen_branch",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
+	thread = await _create_thread_with_current_message(
+		db_session,
+		user.id,
+		datetime.now(tz=UTC),
+	)
+	invocation_id = thread.current_message_id
+	assert invocation_id is not None
+	first = AssistantMessage(
+		thread_id=thread.id,
+		parent_id=invocation_id,
+		type=MessageType.ASSISTANT,
+		content=[{"type": "text", "text": "first answer"}],
+		metadata_={"run_id": str(new_typeid("run"))},
+	)
+	db_session.add(first)
+	await db_session.flush()
+	thread.current_message_id = first.id
+	agent = await agent_service.create_agent(
+		AgentCreate(
+			name=f"thread-regen-branch-{new_typeid('agent')[-12:]}",
+			plugin_ids=[],
+			config=AgentConfig(),
+		),
+		db_session,
+		principal=principal,
+	)
+	await db_session.commit()
+
+	fake_run_agent = _FakeCompletedRunAgent()
+
+	async def fake_load_agent(
+		*_args: object,
+		**_kwargs: object,
+	) -> object:
+		return agent
+
+	async def fake_build_agent_from_orm(
+		*_args: object,
+		**_kwargs: object,
+	) -> _FakeCompletedRunAgent:
+		return fake_run_agent
+
+	async def fake_prepare_steering(
+		**kwargs: object,
+	) -> _FakeCompletedRunAgent:
+		assert kwargs["sdk_agent"] is fake_run_agent
+		return fake_run_agent
+
+	async def noop(*_args: object, **_kwargs: object) -> None:
+		return None
+
+	monkeypatch.setattr(run_execution, "load_agent_for_run", fake_load_agent)
+	monkeypatch.setattr(
+		run_execution,
+		"build_agent_from_orm",
+		fake_build_agent_from_orm,
+	)
+	monkeypatch.setattr(run_execution, "prepare_steering", fake_prepare_steering)
+	monkeypatch.setattr(run_execution, "broadcast_run_event", noop)
+	monkeypatch.setattr(run_execution, "schedule_post_run_thread_upkeep", noop)
+
+	await run_execution.run_agent(
+		thread.id,
+		agent.id,
+		principal,
+		input=None,
+		splice=MessageSplice(parent_id=invocation_id),
+		persist=True,
+	)
+
+	await db_session.refresh(first)
+	await db_session.refresh(thread)
+	assert first.parent_id == invocation_id
+	assert thread.current_message_id != first.id
+	second = await db_session.get(Message, thread.current_message_id)
+	assert second is not None
+	assert second.parent_id == invocation_id
+
+
+@pytest.mark.asyncio
+async def test_run_agent_replaces_block_on_first_completed_message(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	user = await user_service.create_user(
+		UserCreate(
+			email="thread_replace_run@example.com",
+			username="thread_replace_run",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
+	thread = await _create_thread_with_current_message(
+		db_session,
+		user.id,
+		datetime.now(tz=UTC),
+	)
+	anchor_id = thread.current_message_id
+	assert anchor_id is not None
+	old_run_id = TypeID(new_typeid("run"))
+	old = AssistantMessage(
+		thread_id=thread.id,
+		parent_id=anchor_id,
+		type=MessageType.ASSISTANT,
+		content=[{"type": "text", "text": "old answer"}],
+		metadata_={"run_id": str(old_run_id)},
+	)
+	db_session.add(old)
+	await db_session.flush()
+	successor = UserMessage(
+		thread_id=thread.id,
+		parent_id=old.id,
+		type=MessageType.USER,
+		content=[{"type": "text", "text": "later message"}],
+		sender_user_id=user.id,
+	)
+	db_session.add(successor)
+	await db_session.flush()
+	thread.current_message_id = successor.id
+	agent = await agent_service.create_agent(
+		AgentCreate(
+			name=f"thread-replace-run-{new_typeid('agent')[-12:]}",
+			plugin_ids=[],
+			config=AgentConfig(),
+		),
+		db_session,
+		principal=principal,
+	)
+	await db_session.commit()
+	fake_run_agent = _FakeMultiDeltaRunAgent()
+
+	async def fake_load_agent(*_args: object, **_kwargs: object) -> object:
+		return agent
+
+	async def fake_build_agent_from_orm(
+		*_args: object,
+		**_kwargs: object,
+	) -> _FakeMultiDeltaRunAgent:
+		return fake_run_agent
+
+	async def fake_prepare_steering(**kwargs: object) -> _FakeMultiDeltaRunAgent:
+		assert kwargs["sdk_agent"] is fake_run_agent
+		return fake_run_agent
+
+	async def noop(*_args: object, **_kwargs: object) -> None:
+		return None
+
+	monkeypatch.setattr(run_execution, "load_agent_for_run", fake_load_agent)
+	monkeypatch.setattr(
+		run_execution,
+		"build_agent_from_orm",
+		fake_build_agent_from_orm,
+	)
+	monkeypatch.setattr(run_execution, "prepare_steering", fake_prepare_steering)
+	monkeypatch.setattr(run_execution, "broadcast_run_event", noop)
+	monkeypatch.setattr(run_execution, "schedule_post_run_thread_upkeep", noop)
+	published_frames: list[bytes] = []
+	original_publish = run_execution.run_streams.publish
+
+	async def capture_publish(run_id: TypeID, frame: bytes) -> None:
+		published_frames.append(frame)
+		await original_publish(run_id, frame)
+
+	monkeypatch.setattr(run_execution.run_streams, "publish", capture_publish)
+	await run_execution.run_agent(
+		thread.id,
+		agent.id,
+		principal,
+		splice=MessageSplice(
+			parent_id=anchor_id,
+			reparent_message_ids=[successor.id],
+			replaces=RunBlockRef(
+				run_id=old_run_id,
+				run_head_message_id=old.id,
+			),
+		),
+		persist=True,
+	)
+	delta_frames = [frame for frame in published_frames if b"event: delta" in frame]
+	assert sum(b'"splice"' in frame for frame in delta_frames) == 1
+	message_frames = [
+		frame for frame in published_frames if b"event: message_created" in frame
+	]
+	assert message_frames, published_frames
+	message_frame = message_frames[0]
+	assert str(old.id).encode() in message_frame
+	assert (
+		await db_session.scalar(select(Message.id).where(Message.id == old.id)) is None
+	)
+	await db_session.refresh(successor)
+	replacement = await db_session.get(Message, successor.parent_id)
+	assert replacement is not None
+	assert replacement.parent_id == anchor_id
+
+
+@pytest.mark.asyncio
+async def test_replacement_failure_before_first_complete_keeps_old_block(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	user = await user_service.create_user(
+		UserCreate(
+			email="thread_replace_failure@example.com",
+			username="thread_replace_failure",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
+	thread = await _create_thread_with_current_message(
+		db_session,
+		user.id,
+		datetime.now(tz=UTC),
+	)
+	anchor_id = thread.current_message_id
+	assert anchor_id is not None
+	old_run_id = TypeID(new_typeid("run"))
+	old = AssistantMessage(
+		thread_id=thread.id,
+		parent_id=anchor_id,
+		type=MessageType.ASSISTANT,
+		content=[{"type": "text", "text": "old answer"}],
+		metadata_={"run_id": str(old_run_id)},
+	)
+	db_session.add(old)
+	await db_session.flush()
+	successor = UserMessage(
+		thread_id=thread.id,
+		parent_id=old.id,
+		type=MessageType.USER,
+		content=[{"type": "text", "text": "later message"}],
+		sender_user_id=user.id,
+	)
+	db_session.add(successor)
+	await db_session.flush()
+	thread.current_message_id = successor.id
+	agent = await agent_service.create_agent(
+		AgentCreate(
+			name=f"thread-replace-failure-{new_typeid('agent')[-12:]}",
+			plugin_ids=[],
+			config=AgentConfig(),
+		),
+		db_session,
+		principal=principal,
+	)
+	await db_session.commit()
+	fake_run_agent = _FakePartialBadRequestRunAgent()
+	steering_readiness_checked = False
+
+	async def fake_load_agent(*_args: object, **_kwargs: object) -> object:
+		return agent
+
+	async def fake_build_agent_from_orm(
+		*_args: object,
+		**_kwargs: object,
+	) -> _FakePartialBadRequestRunAgent:
+		return fake_run_agent
+
+	async def fake_prepare_steering(
+		ready: Callable[[], bool],
+		**_kwargs: object,
+	) -> _FakePartialBadRequestRunAgent:
+		nonlocal steering_readiness_checked
+		assert ready() is False
+		steering_readiness_checked = True
+		return fake_run_agent
+
+	async def noop(*_args: object, **_kwargs: object) -> None:
+		return None
+
+	monkeypatch.setattr(run_execution, "load_agent_for_run", fake_load_agent)
+	monkeypatch.setattr(
+		run_execution, "build_agent_from_orm", fake_build_agent_from_orm
+	)
+	monkeypatch.setattr(run_execution, "prepare_steering", fake_prepare_steering)
+	monkeypatch.setattr(run_execution, "broadcast_run_event", noop)
+	monkeypatch.setattr(run_execution, "schedule_post_run_thread_upkeep", noop)
+	await run_execution.run_agent(
+		thread.id,
+		agent.id,
+		principal,
+		splice=MessageSplice(
+			parent_id=anchor_id,
+			reparent_message_ids=[successor.id],
+			replaces=RunBlockRef(
+				run_id=old_run_id,
+				run_head_message_id=old.id,
+			),
+		),
+		persist=True,
+	)
+	assert steering_readiness_checked
+	assert (
+		await db_session.scalar(select(Message.id).where(Message.id == old.id))
+		== old.id
+	)
+	await db_session.refresh(successor)
+	assert successor.parent_id == old.id
+
+
+@pytest.mark.asyncio
+async def test_replacement_failure_after_first_complete_keeps_replacement(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	user = await user_service.create_user(
+		UserCreate(
+			email="thread_replace_partial_failure@example.com",
+			username="thread_replace_partial_failure",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
+	thread = await _create_thread_with_current_message(
+		db_session, user.id, datetime.now(tz=UTC)
+	)
+	anchor_id = thread.current_message_id
+	assert anchor_id is not None
+	old_run_id = TypeID(new_typeid("run"))
+	old = AssistantMessage(
+		thread_id=thread.id,
+		parent_id=anchor_id,
+		type=MessageType.ASSISTANT,
+		content=[{"type": "text", "text": "old answer"}],
+		metadata_={"run_id": str(old_run_id)},
+	)
+	db_session.add(old)
+	await db_session.flush()
+	successor = UserMessage(
+		thread_id=thread.id,
+		parent_id=old.id,
+		type=MessageType.USER,
+		content=[{"type": "text", "text": "later message"}],
+		sender_user_id=user.id,
+	)
+	db_session.add(successor)
+	await db_session.flush()
+	thread.current_message_id = successor.id
+	agent = await agent_service.create_agent(
+		AgentCreate(
+			name=f"replace-partial-failure-{new_typeid('agent')[-12:]}",
+			plugin_ids=[],
+			config=AgentConfig(),
+		),
+		db_session,
+		principal=principal,
+	)
+	await db_session.commit()
+	fake_run_agent = _FakeCompletedThenPartialBadRequestRunAgent()
+
+	async def fake_load_agent(*_args: object, **_kwargs: object) -> object:
+		return agent
+
+	async def fake_build_agent_from_orm(
+		*_args: object,
+		**_kwargs: object,
+	) -> _FakeCompletedThenPartialBadRequestRunAgent:
+		return fake_run_agent
+
+	async def fake_prepare_steering(
+		**_kwargs: object,
+	) -> _FakeCompletedThenPartialBadRequestRunAgent:
+		return fake_run_agent
+
+	async def noop(*_args: object, **_kwargs: object) -> None:
+		return None
+
+	monkeypatch.setattr(run_execution, "load_agent_for_run", fake_load_agent)
+	monkeypatch.setattr(
+		run_execution, "build_agent_from_orm", fake_build_agent_from_orm
+	)
+	monkeypatch.setattr(run_execution, "prepare_steering", fake_prepare_steering)
+	monkeypatch.setattr(run_execution, "broadcast_run_event", noop)
+	monkeypatch.setattr(run_execution, "schedule_post_run_thread_upkeep", noop)
+	await run_execution.run_agent(
+		thread.id,
+		agent.id,
+		principal,
+		splice=MessageSplice(
+			parent_id=anchor_id,
+			reparent_message_ids=[successor.id],
+			replaces=RunBlockRef(
+				run_id=old_run_id,
+				run_head_message_id=old.id,
+			),
+		),
+		persist=True,
+	)
+	assert (
+		await db_session.scalar(select(Message.id).where(Message.id == old.id)) is None
+	)
+	await db_session.refresh(successor)
+	partial = await db_session.get(Message, successor.parent_id)
+	assert partial is not None
+	assert partial.finish_reason == "error"
+	first = await db_session.get(Message, partial.parent_id)
+	assert first is not None
+	assert first.parent_id == anchor_id
+
+
+@pytest.mark.asyncio
+async def test_run_input_explicit_null_creates_shared_root_sub_thread(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	owner = await user_service.create_user(
+		UserCreate(
+			email="shared_send_owner@example.com",
+			username="shared_send_owner",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	mate = await user_service.create_user(
+		UserCreate(
+			email="shared_send_mate@example.com",
+			username="shared_send_mate",
+			password="password123",
+		),
+		db_session,
+	)
+	principal = Principal.for_user(user=owner, group_ids=(), permissions=frozenset())
+	thread = await _create_thread_with_current_message(
+		db_session,
+		owner.id,
+		datetime.now(tz=UTC),
+	)
+	canon_head_id = thread.current_message_id
+	assert canon_head_id is not None
+	await access_rules.grant_user_access_unchecked(
+		ResourceType.THREAD,
+		thread.id,
+		mate.id,
+		db_session,
+		level=AccessLevel.EDITOR,
+	)
+	agent = await agent_service.create_agent(
+		AgentCreate(
+			name=f"shared-send-{new_typeid('agent')[-12:]}",
+			plugin_ids=[],
+			config=AgentConfig(),
+		),
+		db_session,
+		principal=principal,
+	)
+	await db_session.commit()
+	fake_run_agent = _FakeCompletedRunAgent()
+
+	async def fake_load_agent(*_args: object, **_kwargs: object) -> object:
+		return agent
+
+	async def fake_build_agent_from_orm(
+		*_args: object,
+		**_kwargs: object,
+	) -> _FakeCompletedRunAgent:
+		return fake_run_agent
+
+	async def fake_prepare_steering(**_kwargs: object) -> _FakeCompletedRunAgent:
+		return fake_run_agent
+
+	async def noop(*_args: object, **_kwargs: object) -> None:
+		return None
+
+	monkeypatch.setattr(run_execution, "load_agent_for_run", fake_load_agent)
+	monkeypatch.setattr(
+		run_execution, "build_agent_from_orm", fake_build_agent_from_orm
+	)
+	monkeypatch.setattr(run_execution, "prepare_steering", fake_prepare_steering)
+	monkeypatch.setattr(run_execution, "broadcast_run_event", noop)
+	monkeypatch.setattr(run_execution, "schedule_post_run_thread_upkeep", noop)
+	message_input = MessageCreate(content=[TextContent(text="edited root")])
+	persisted_input = await _persist_run_input(
+		db_session,
+		thread.id,
+		message_input,
+		principal,
+		splice=MessageSplice(parent_id=None),
+	)
+	await run_execution.run_agent(
+		thread.id,
+		agent.id,
+		principal,
+		persist=True,
+		persisted_input=persisted_input,
+	)
+	await db_session.refresh(thread)
+	assert thread.current_message_id == canon_head_id
+	new_messages = list(
+		(
+			await db_session.scalars(
+				select(Message).where(
+					Message.thread_id == thread.id,
+					Message.id != canon_head_id,
+				)
+			)
+		).all()
+	)
+	input_message = next(
+		message for message in new_messages if message.type == MessageType.USER
+	)
+	answer = next(
+		message for message in new_messages if message.type == MessageType.ASSISTANT
+	)
+	assert input_message.parent_id is None
+	assert input_message.branch_current_message_id == answer.id
+	assert answer.parent_id == input_message.id
+
+
+@pytest.mark.asyncio
+async def test_run_input_persists_complete_message_contract(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	owner = await user_service.create_user(
+		UserCreate(
+			email="complete_run_input@example.com",
+			username="complete_run_input",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	principal = Principal.for_user(user=owner, group_ids=(), permissions=frozenset())
+	thread = await _create_thread_with_current_message(
+		db_session, owner.id, datetime.now(tz=UTC)
+	)
+	anchor_id = thread.current_message_id
+	assert anchor_id is not None
+	agent = await agent_service.create_agent(
+		AgentCreate(
+			name=f"complete-input-{new_typeid('agent')[-12:]}",
+			plugin_ids=[],
+			config=AgentConfig(),
+		),
+		db_session,
+		principal=principal,
+	)
+	await db_session.commit()
+	fake_run_agent = _FakeCompletedRunAgent()
+
+	async def fake_load_agent(*_args: object, **_kwargs: object) -> object:
+		return agent
+
+	async def fake_build_agent_from_orm(
+		*_args: object,
+		**_kwargs: object,
+	) -> _FakeCompletedRunAgent:
+		return fake_run_agent
+
+	async def fake_prepare_steering(**_kwargs: object) -> _FakeCompletedRunAgent:
+		return fake_run_agent
+
+	async def noop(*_args: object, **_kwargs: object) -> None:
+		return None
+
+	monkeypatch.setattr(run_execution, "load_agent_for_run", fake_load_agent)
+	monkeypatch.setattr(
+		run_execution, "build_agent_from_orm", fake_build_agent_from_orm
+	)
+	monkeypatch.setattr(run_execution, "prepare_steering", fake_prepare_steering)
+	monkeypatch.setattr(run_execution, "broadcast_run_event", noop)
+	monkeypatch.setattr(run_execution, "schedule_post_run_thread_upkeep", noop)
+	message_input = MessageCreate(
+		content=[
+			TextContent(text="full input"),
+			ImageContent(url="https://example.com/image.png"),
+		],
+		metadata={"client_marker": "kept"},
+		reply_to_message_id=anchor_id,
+		mentions=[
+			MessageMention(type=MentionableSubjectType.USER, id=owner.id),
+		],
+		citations=[
+			Citation(
+				index=1,
+				source_type=CitationSource.URL,
+				source_id="https://example.com/source",
+			),
+		],
+	)
+	persisted_input = await _persist_run_input(
+		db_session,
+		thread.id,
+		message_input,
+		principal,
+	)
+	await run_execution.run_agent(
+		thread.id,
+		agent.id,
+		principal,
+		persist=True,
+		persisted_input=persisted_input,
+	)
+	stored = await db_session.scalar(
+		select(Message)
+		.where(Message.thread_id == thread.id, Message.type == MessageType.USER)
+		.order_by(Message.created_at.desc())
+	)
+	assert stored is not None
+	assert stored.content == [
+		{"metadata": None, "type": "text", "text": "full input"},
+		{
+			"metadata": None,
+			"type": "image",
+			"url": "https://example.com/image.png",
+			"base64": None,
+			"filename": None,
+			"media_type": None,
+		},
+	]
+	assert stored.public_metadata["client_marker"] == "kept"
+	assert stored.reply_to_message_id == anchor_id
+	await db_session.refresh(stored, attribute_names=["mention_links"])
+	assert stored.mentioned_agent_ids == []
+	assert stored.mentions == [{"type": "user", "id": owner.id}]
+	assert stored.citations[0]["source_id"] == "https://example.com/source"
+
+
+@pytest.mark.asyncio
+async def test_historical_run_output_roots_shared_sub_thread(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	owner = await user_service.create_user(
+		UserCreate(
+			email="historical_output_owner@example.com",
+			username="historical_output_owner",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	mate = await user_service.create_user(
+		UserCreate(
+			email="historical_output_mate@example.com",
+			username="historical_output_mate",
+			password="password123",
+		),
+		db_session,
+	)
+	principal = Principal.for_user(user=owner, group_ids=(), permissions=frozenset())
+	thread = await _create_thread_with_current_message(
+		db_session, owner.id, datetime.now(tz=UTC)
+	)
+	anchor_id = thread.current_message_id
+	assert anchor_id is not None
+	newer = UserMessage(
+		thread_id=thread.id,
+		parent_id=anchor_id,
+		type=MessageType.USER,
+		content=[{"type": "text", "text": "newer canon"}],
+		sender_user_id=owner.id,
+	)
+	db_session.add(newer)
+	await db_session.flush()
+	thread.current_message_id = newer.id
+	await access_rules.grant_user_access_unchecked(
+		ResourceType.THREAD,
+		thread.id,
+		mate.id,
+		db_session,
+		level=AccessLevel.EDITOR,
+	)
+	agent = await agent_service.create_agent(
+		AgentCreate(
+			name=f"historical-output-{new_typeid('agent')[-12:]}",
+			plugin_ids=[],
+			config=AgentConfig(),
+		),
+		db_session,
+		principal=principal,
+	)
+	await db_session.commit()
+	fake_run_agent = _FakeCompletedRunAgent()
+
+	async def fake_load_agent(*_args: object, **_kwargs: object) -> object:
+		return agent
+
+	async def fake_build_agent_from_orm(
+		*_args: object,
+		**_kwargs: object,
+	) -> _FakeCompletedRunAgent:
+		return fake_run_agent
+
+	async def fake_prepare_steering(**_kwargs: object) -> _FakeCompletedRunAgent:
+		return fake_run_agent
+
+	async def noop(*_args: object, **_kwargs: object) -> None:
+		return None
+
+	monkeypatch.setattr(run_execution, "load_agent_for_run", fake_load_agent)
+	monkeypatch.setattr(
+		run_execution, "build_agent_from_orm", fake_build_agent_from_orm
+	)
+	monkeypatch.setattr(run_execution, "prepare_steering", fake_prepare_steering)
+	monkeypatch.setattr(run_execution, "broadcast_run_event", noop)
+	monkeypatch.setattr(run_execution, "schedule_post_run_thread_upkeep", noop)
+	bound_containers: list[TypeID | None] = []
+	original_bind = run_execution.run_conversations.bind
+	original_set_container = run_execution.run_conversations.set_container
+
+	async def capture_bind(
+		run_id: TypeID,
+		container_root_id: TypeID | None,
+		invocation_message_id: TypeID | None,
+		read_through_message_id: TypeID | None = None,
+		anchor_message_id: TypeID | None = None,
+	) -> None:
+		bound_containers.append(container_root_id)
+		await original_bind(
+			run_id,
+			container_root_id,
+			invocation_message_id,
+			read_through_message_id,
+			anchor_message_id,
+		)
+
+	monkeypatch.setattr(run_execution.run_conversations, "bind", capture_bind)
+
+	async def capture_set_container(
+		run_id: TypeID,
+		container_root_id: TypeID | None,
+	) -> None:
+		bound_containers.append(container_root_id)
+		await original_set_container(run_id, container_root_id)
+
+	monkeypatch.setattr(
+		run_execution.run_conversations,
+		"set_container",
+		capture_set_container,
+	)
+	await run_execution.run_agent(
+		thread.id,
+		agent.id,
+		principal,
+		splice=MessageSplice(parent_id=anchor_id),
+		persist=True,
+	)
+	await db_session.refresh(thread)
+	assert thread.current_message_id == newer.id
+	generated = await db_session.scalar(
+		select(Message)
+		.where(
+			Message.thread_id == thread.id,
+			Message.type == MessageType.ASSISTANT,
+		)
+		.order_by(Message.created_at.desc())
+	)
+	assert generated is not None
+	assert generated.parent_id == anchor_id
+	assert generated.branch_current_message_id == generated.id
+	assert bound_containers[-1] == generated.id
+
+
+@pytest.mark.asyncio
+async def test_blocked_sub_thread_output_keeps_run_container(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	owner = await user_service.create_user(
+		UserCreate(
+			email="blocked-container-owner@example.com",
+			username="blocked_container_owner",
+			password="password123",
+			is_superuser=True,
+		),
+		db_session,
+	)
+	mate = await user_service.create_user(
+		UserCreate(
+			email="blocked-container-mate@example.com",
+			username="blocked_container_mate",
+			password="password123",
+		),
+		db_session,
+	)
+	principal = Principal.for_user(user=owner, group_ids=(), permissions=frozenset())
+	thread = await _create_thread_with_current_message(
+		db_session,
+		owner.id,
+		datetime.now(tz=UTC),
+	)
+	anchor_id = thread.current_message_id
+	assert anchor_id is not None
+	canon_tail = UserMessage(
+		thread_id=thread.id,
+		parent_id=anchor_id,
+		type=MessageType.USER,
+		content=[{"type": "text", "text": "canon tail"}],
+		sender_user_id=owner.id,
+	)
+	db_session.add(canon_tail)
+	await db_session.flush()
+	thread.current_message_id = canon_tail.id
+	await access_rules.grant_user_access_unchecked(
+		ResourceType.THREAD,
+		thread.id,
+		mate.id,
+		db_session,
+		level=AccessLevel.EDITOR,
+	)
+	sub_root = UserMessage(
+		thread_id=thread.id,
+		parent_id=anchor_id,
+		type=MessageType.USER,
+		content=[{"type": "text", "text": "sub-thread root"}],
+		sender_user_id=owner.id,
+	)
+	db_session.add(sub_root)
+	await db_session.flush()
+	sub_root.branch_current_message_id = sub_root.id
+	agent = await agent_service.create_agent(
+		AgentCreate(
+			name=f"blocked-container-{new_typeid('agent')[-12:]}",
+			plugin_ids=[],
+			config=AgentConfig(),
+		),
+		db_session,
+		principal=principal,
+	)
+	await db_session.commit()
+	first_output_persisted = asyncio.Event()
+
+	class _TwoAnswerAgent:
+		async def run(
+			self,
+			*_args: object,
+			**_kwargs: object,
+		) -> AsyncIterator[AgentDelta]:
+			async def stream() -> AsyncIterator[AgentDelta]:
+				yield AgentDelta(
+					chat=ChatModelDelta(
+						message=SDKAssistantMessage.from_text(
+							"first answer"
+						).model_copy(update={"finish_reason": "stop"}),
+						done=True,
+					),
+					chunk_index=0,
+				)
+				await first_output_persisted.wait()
+				yield AgentDelta(
+					chat=ChatModelDelta(
+						message=SDKAssistantMessage.from_text(
+							"second answer"
+						).model_copy(update={"finish_reason": "stop"}),
+						done=True,
+					),
+					chunk_index=1,
+				)
+				yield AgentDelta.done_sentinel(chunk_index=2)
+
+			return stream()
+
+	fake_run_agent = _TwoAnswerAgent()
+
+	async def fake_load_agent(*_args: object, **_kwargs: object) -> object:
+		return agent
+
+	async def fake_build_agent_from_orm(
+		*_args: object,
+		**_kwargs: object,
+	) -> _TwoAnswerAgent:
+		return fake_run_agent
+
+	async def fake_prepare_steering(**_kwargs: object) -> _TwoAnswerAgent:
+		return fake_run_agent
+
+	async def noop(*_args: object, **_kwargs: object) -> None:
+		return None
+
+	monkeypatch.setattr(run_execution, "load_agent_for_run", fake_load_agent)
+	monkeypatch.setattr(
+		run_execution, "build_agent_from_orm", fake_build_agent_from_orm
+	)
+	monkeypatch.setattr(run_execution, "prepare_steering", fake_prepare_steering)
+	monkeypatch.setattr(run_execution, "broadcast_run_event", noop)
+	monkeypatch.setattr(run_execution, "schedule_post_run_thread_upkeep", noop)
+	set_containers: list[TypeID | None] = []
+
+	async def capture_set_container(
+		_run_id: TypeID,
+		container_root_id: TypeID | None,
+	) -> None:
+		set_containers.append(container_root_id)
+		if len(set_containers) != 1:
+			return
+		first_output = await db_session.scalar(
+			select(Message)
+			.where(
+				Message.thread_id == thread.id,
+				Message.type == MessageType.ASSISTANT,
+			)
+			.order_by(Message.created_at.desc())
+		)
+		assert first_output is not None
+		unseen = UserMessage(
+			thread_id=thread.id,
+			parent_id=first_output.id,
+			type=MessageType.USER,
+			content=[{"type": "text", "text": "unseen"}],
+			sender_user_id=mate.id,
+		)
+		db_session.add(unseen)
+		await db_session.flush()
+		sub_root.branch_current_message_id = unseen.id
+		await db_session.commit()
+		first_output_persisted.set()
+
+	monkeypatch.setattr(
+		run_execution.run_conversations,
+		"set_container",
+		capture_set_container,
+	)
+	await run_execution.run_agent(
+		thread.id,
+		agent.id,
+		principal,
+		splice=MessageSplice(
+			parent_id=sub_root.id,
+			leaf=BranchLeaf(kind="branch", root_id=sub_root.id),
+		),
+		persist=True,
+	)
+	assert set_containers == [sub_root.id]
 
 
 @pytest.mark.asyncio
@@ -1430,10 +2443,8 @@ async def test_thread_inactivity_schedule_does_not_retroactively_enqueue(
 	"""past-due inactive threads are not scheduled retroactively by default."""
 	monkeypatch.setattr(boot_settings, "TESTING", False)
 	fake_source = _FakeThreadScheduleSource()
-	fake_task = _FakeThreadMaintenanceTask()
-	monkeypatch.setattr(thread_tasks, "redis_schedule_source", fake_source)
 	monkeypatch.setattr(
-		thread_tasks, "dispatch_thread_inactivity_maintenance", fake_task
+		thread_maintenance_service, "redis_schedule_source", fake_source
 	)
 	user = await user_service.create_user(
 		UserCreate(
@@ -1446,20 +2457,18 @@ async def test_thread_inactivity_schedule_does_not_retroactively_enqueue(
 	)
 	thread = await _create_thread_with_current_message(
 		db_session,
-		TypeID(user.id),
+		user.id,
 		datetime.now(tz=UTC)
 		- timedelta(hours=settings.tasks.thread_maintenance.inactivity_hours + 1),
 		"ready thread",
 		["ready"],
 	)
 
-	scheduled = await schedule_thread_inactivity_maintenance(
-		TypeID(thread.id), db_session
-	)
+	scheduled = await schedule_thread_inactivity_maintenance(thread.id, db_session)
 
 	assert scheduled is False
 	assert fake_source.deleted == [f"thread:inactivity-maintenance:{thread.id}"]
-	assert fake_task.kicker_instance.scheduled == []
+	assert fake_source.scheduled == []
 
 
 @pytest.mark.asyncio
@@ -1554,7 +2563,7 @@ async def test_task_runner_timeout_marks_task_failed(
 
 	try:
 		with pytest.raises(TimeoutError):
-			await task_service.execute_started_task(TypeID(task.id))
+			await task_service.execute_started_task(task.id)
 		await db_session.refresh(task)
 		assert task.status == TaskStatus.FAILED
 		assert task.stage == "timed out"
@@ -1586,7 +2595,7 @@ async def test_thread_maintenance_runner_commits_summary_rows(
 	)
 	thread = await _create_thread_with_current_message(
 		db_session,
-		TypeID(user.id),
+		user.id,
 		datetime.now(tz=UTC),
 	)
 	task = Task(
@@ -1636,15 +2645,17 @@ async def test_thread_maintenance_runner_commits_summary_rows(
 		thread_maintenance_service, "run_chat_model_json_schema", _run_structured
 	)
 
-	async def _fetch_acl_metadata(*args: object) -> dict[str, object]:
-		return {}
+	async def _fetch_acl_metadata(*args: object) -> dict[str, dict[str, object]]:
+		resource_ids = args[0]
+		assert isinstance(resource_ids, list)
+		return {str(resource_id): {} for resource_id in resource_ids}
 
 	async def _vectorize_resource(**kwargs: object) -> None:
 		_ = kwargs
 
 	monkeypatch.setattr(
 		thread_maintenance_service,
-		"fetch_acl_metadata",
+		"fetch_bulk_acl_metadata",
 		_fetch_acl_metadata,
 	)
 	monkeypatch.setattr(
@@ -1653,15 +2664,15 @@ async def test_thread_maintenance_runner_commits_summary_rows(
 		_vectorize_resource,
 	)
 	context = task_service.TaskContext(
-		task_id=TypeID(task.id),
-		user_id=TypeID(user.id),
+		task_id=task.id,
+		user_id=user.id,
 		metadata=task.metadata_ or {},
 		runtime={},
 	)
 
 	result = await run_thread_maintenance_task(context)
 	summaries = await summary_service.list_active_summaries(
-		TypeID(thread.id),
+		thread.id,
 		db_session,
 		purpose=SummaryPurpose.CATALOG,
 	)
@@ -1690,20 +2701,19 @@ async def test_task_registry_exposes_static_schedules() -> None:
 
 
 @pytest.mark.asyncio
-async def test_taskiq_worker_lifecycle_connects_process_redis(
+async def test_taskiq_worker_lifecycle_starts_process_runtime(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	"""worker startup connects Redis and writes a process heartbeat."""
+	"""worker startup opens the process runtime and writes a heartbeat."""
 	from api import taskiq
 
 	calls: list[str] = []
 
-	class _FakeRedisClient:
-		async def connect(self) -> None:
-			calls.append("connect")
+	async def fake_start_runtime() -> None:
+		calls.append("runtime:start")
 
-		async def aclose(self) -> None:
-			calls.append("aclose")
+	async def fake_stop_runtime() -> None:
+		calls.append("runtime:stop")
 
 	async def fake_start_process_status(role: taskiq.TaskiqProcessRole) -> None:
 		calls.append(f"start:{role}")
@@ -1711,33 +2721,31 @@ async def test_taskiq_worker_lifecycle_connects_process_redis(
 	async def fake_stop_process_status(role: taskiq.TaskiqProcessRole) -> None:
 		calls.append(f"stop:{role}")
 
-	# swap the whole client reference instead of mutating the shared singleton's
-	# methods, so the autouse redis fixture still owns and closes the real pool.
-	monkeypatch.setattr(taskiq, "redis_client", _FakeRedisClient())
+	monkeypatch.setattr(taskiq, "start_process_runtime", fake_start_runtime)
+	monkeypatch.setattr(taskiq, "stop_process_runtime", fake_stop_runtime)
 	monkeypatch.setattr(taskiq, "_start_process_status", fake_start_process_status)
 	monkeypatch.setattr(taskiq, "_stop_process_status", fake_stop_process_status)
 
 	await taskiq._start_worker_process_dependencies()
 	await taskiq._stop_worker_process_dependencies()
 
-	assert calls == ["connect", "start:worker", "stop:worker", "aclose"]
+	assert calls == ["runtime:start", "start:worker", "stop:worker", "runtime:stop"]
 
 
 @pytest.mark.asyncio
 async def test_taskiq_worker_lifecycle_failure_aborts_startup(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	"""worker startup cleans up Redis state when dependency startup fails."""
+	"""worker startup closes the process runtime when heartbeat startup fails."""
 	from api import taskiq
 
 	calls: list[str] = []
 
-	class _FakeRedisClient:
-		async def connect(self) -> None:
-			calls.append("connect")
+	async def fake_start_runtime() -> None:
+		calls.append("runtime:start")
 
-		async def aclose(self) -> None:
-			calls.append("aclose")
+	async def fake_stop_runtime() -> None:
+		calls.append("runtime:stop")
 
 	async def fake_start_process_status(role: taskiq.TaskiqProcessRole) -> None:
 		calls.append(f"start:{role}")
@@ -1746,16 +2754,15 @@ async def test_taskiq_worker_lifecycle_failure_aborts_startup(
 	async def fake_stop_process_status(role: taskiq.TaskiqProcessRole) -> None:
 		calls.append(f"stop:{role}")
 
-	# swap the whole client reference instead of mutating the shared singleton's
-	# methods, so the autouse redis fixture still owns and closes the real pool.
-	monkeypatch.setattr(taskiq, "redis_client", _FakeRedisClient())
+	monkeypatch.setattr(taskiq, "start_process_runtime", fake_start_runtime)
+	monkeypatch.setattr(taskiq, "stop_process_runtime", fake_stop_runtime)
 	monkeypatch.setattr(taskiq, "_start_process_status", fake_start_process_status)
 	monkeypatch.setattr(taskiq, "_stop_process_status", fake_stop_process_status)
 
 	with pytest.raises(RuntimeError, match="status unavailable"):
 		await taskiq._start_worker_process_dependencies()
 
-	assert calls == ["connect", "start:worker", "stop:worker", "aclose"]
+	assert calls == ["runtime:start", "start:worker", "stop:worker", "runtime:stop"]
 
 
 @pytest.mark.asyncio
@@ -1830,16 +2837,16 @@ def test_taskiq_and_bus_redis_keys_are_namespaced() -> None:
 	"""redis task/run keys stay under the shared nokodo_ai namespace."""
 	from api import taskiq
 	from api.settings.settings import TaskiqSettings
-	from api.v1.service import task_bus
-	from api.v1.service.chat import run_bus
+	from api.v1.service import tasks as task_service
+	from api.v1.service.runs import bus as run_bus
 
 	taskiq_defaults = TaskiqSettings()
 
 	assert taskiq_defaults.queue_name.startswith("nokodo-ai:")
 	assert taskiq_defaults.schedule_prefix.startswith("nokodo-ai:")
 	assert taskiq._status_key("worker").startswith("nokodo-ai:taskiq:status:worker:")
-	assert run_bus._log_key(TypeID("run_1")).startswith("nokodo-ai:run:")
-	assert task_bus._log_key(TypeID("task_1")).startswith("nokodo-ai:task:")
+	assert run_bus._bus._log_key("run_1").startswith("nokodo-ai:run:")
+	assert task_service._bus._log_key("task_1").startswith("nokodo-ai:task:")
 
 
 @pytest.mark.asyncio
@@ -1853,7 +2860,7 @@ async def test_service_list_tasks(db_session: AsyncSession) -> None:
 		is_superuser=True,
 	)
 	user = await user_service.create_user(user_in, db_session)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 
 	# Create tasks
 	for i in range(3):
@@ -1891,7 +2898,7 @@ async def test_task_update_no_changes_does_not_touch_last_event(
 		is_superuser=True,
 	)
 	user = await user_service.create_user(user_in, db_session)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 
 	task = await task_service.create_task(
 		TaskCreate(user_id=user.id, task_type=TaskType.CUSTOM),
@@ -1927,7 +2934,7 @@ async def test_service_update_task(db_session: AsyncSession) -> None:
 		is_superuser=True,
 	)
 	user = await user_service.create_user(user_in, db_session)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 
 	task_in = TaskCreate(
 		user_id=user.id,
@@ -1958,7 +2965,7 @@ async def test_service_get_task_not_found(db_session: AsyncSession) -> None:
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	with pytest.raises(HTTPException) as exc:
 		await task_service.update_task(
 			"nonexistent",
@@ -1980,7 +2987,7 @@ async def test_service_update_task_no_changes(db_session: AsyncSession) -> None:
 		is_superuser=True,
 	)
 	user = await user_service.create_user(user_in, db_session)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	task_in = TaskCreate(
 		user_id=user.id,
 		task_type=TaskType.CUSTOM,
@@ -2018,7 +3025,9 @@ async def test_disabled_backfill_schedule_cleared_before_taskiq_startup(
 	"""API boot clears stale backfill schedules before waiting on TaskIQ."""
 	monkeypatch.setattr(boot_settings, "TESTING", False)
 	fake_source = _FakeThreadScheduleSource()
-	monkeypatch.setattr(thread_tasks, "redis_schedule_source", fake_source)
+	monkeypatch.setattr(
+		thread_maintenance_service, "redis_schedule_source", fake_source
+	)
 
 	cleared = await clear_disabled_thread_maintenance_backfill_schedule()
 
@@ -2043,7 +3052,7 @@ async def test_backfill_sweep_dispatches_eligible_threads(
 	)
 	stale_thread = await _create_thread_with_current_message(
 		db_session,
-		TypeID(user.id),
+		user.id,
 		datetime.now(tz=UTC)
 		- timedelta(hours=settings.tasks.thread_maintenance.inactivity_hours + 1),
 	)
@@ -2099,7 +3108,7 @@ async def test_backfill_sweep_limits_candidate_inspection(
 	for offset in range(4):
 		await _create_thread_with_current_message(
 			db_session,
-			TypeID(user.id),
+			user.id,
 			datetime.now(tz=UTC)
 			- timedelta(
 				hours=settings.tasks.thread_maintenance.inactivity_hours + 4 - offset
@@ -2158,7 +3167,7 @@ async def test_backfill_sweep_respects_max_lookback_days(
 	# this thread is past the lookback window and must be excluded.
 	await _create_thread_with_current_message(
 		db_session,
-		TypeID(user.id),
+		user.id,
 		datetime.now(tz=UTC) - timedelta(days=60),
 	)
 	await db_session.commit()
@@ -2209,7 +3218,7 @@ async def test_backfill_sweep_skips_threads_with_active_maintenance_task(
 	)
 	thread = await _create_thread_with_current_message(
 		db_session,
-		TypeID(user.id),
+		user.id,
 		datetime.now(tz=UTC)
 		- timedelta(hours=settings.tasks.thread_maintenance.inactivity_hours + 1),
 	)

@@ -17,8 +17,25 @@ from api.schemas.prompt import (
 	PromptUpdate,
 )
 from api.schemas.sorting import SortDir
-from api.v1.service import prompts as prompt_service
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authentication import Principal, get_current_principal
+from api.v1.service.prompts import (
+	count_prompts as count_prompts_service,
+)
+from api.v1.service.prompts import (
+	create_prompt as create_prompt_service,
+)
+from api.v1.service.prompts import (
+	delete_prompt as delete_prompt_service,
+)
+from api.v1.service.prompts import (
+	get_prompt as get_prompt_service,
+)
+from api.v1.service.prompts import (
+	list_prompts as list_prompts_service,
+)
+from api.v1.service.prompts import (
+	update_prompt as update_prompt_service,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -35,7 +52,7 @@ async def create_prompt(
 	db: AsyncSession = Depends(get_db),
 ) -> Prompt:
 	"""create a prompt."""
-	return await prompt_service.create_prompt(prompt_in, db, principal=principal)
+	return await create_prompt_service(prompt_in, db, principal=principal)
 
 
 @router.get("", response_model=list[PromptSchema])
@@ -49,7 +66,7 @@ async def list_prompts(
 	db: AsyncSession = Depends(get_db),
 ) -> list[PromptSchema]:
 	"""list prompts."""
-	return await prompt_service.list_prompts(
+	return await list_prompts_service(
 		db,
 		principal=principal,
 		skip=skip,
@@ -67,7 +84,7 @@ async def count_prompts(
 	db: AsyncSession = Depends(get_db),
 ) -> int:
 	"""count prompts matching the list filters."""
-	return await prompt_service.count_prompts(
+	return await count_prompts_service(
 		db,
 		principal=principal,
 		filters=filters,
@@ -81,7 +98,7 @@ async def get_prompt(
 	db: AsyncSession = Depends(get_db),
 ) -> PromptSchema:
 	"""fetch a prompt."""
-	return await prompt_service.get_prompt(prompt_id, db, principal=principal)
+	return await get_prompt_service(prompt_id, db, principal=principal)
 
 
 @router.patch("/{prompt_id}", response_model=PromptSchema)
@@ -92,9 +109,7 @@ async def update_prompt(
 	db: AsyncSession = Depends(get_db),
 ) -> Prompt:
 	"""update a prompt."""
-	return await prompt_service.update_prompt(
-		prompt_id, prompt_in, db, principal=principal
-	)
+	return await update_prompt_service(prompt_id, prompt_in, db, principal=principal)
 
 
 @router.delete("/{prompt_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -104,4 +119,4 @@ async def delete_prompt(
 	db: AsyncSession = Depends(get_db),
 ) -> None:
 	"""delete a prompt."""
-	await prompt_service.delete_prompt(prompt_id, db, principal=principal)
+	await delete_prompt_service(prompt_id, db, principal=principal)

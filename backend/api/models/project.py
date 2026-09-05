@@ -1,7 +1,5 @@
 """project model."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, Index, String
@@ -17,6 +15,7 @@ from api.models.many_to_many import (
 )
 from api.models.mixins import (
 	MetadataJSONMixin,
+	OriginMessageMixin,
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
@@ -34,7 +33,9 @@ if TYPE_CHECKING:
 	from api.models.user import User
 
 
-class Project(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
+class Project(
+	TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, OriginMessageMixin, Base
+):
 	"""project model for organizing resources."""
 
 	__tablename__ = "projects"

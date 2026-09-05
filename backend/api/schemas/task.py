@@ -1,16 +1,16 @@
 """task schemas."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.models.event_types import EventType
 from api.models.task import TaskStatus, TaskType
+from api.schemas.access_rule import ResourceAccessListFilters
 from api.schemas.common import (
 	MISSING,
+	ForbidExtraModel,
 	MetadataModel,
 	MetadataUpdateModel,
 	MissingType,
@@ -33,7 +33,7 @@ type TaskSortBy = (
 type TaskStateFilter = Literal["active", "ended"]
 
 
-class TaskListFilters(BaseModel):
+class TaskListFilters(ResourceAccessListFilters):
 	"""filters for listing tasks."""
 
 	owner_id: TypeID | None = None
@@ -52,7 +52,7 @@ class TaskBase(MetadataModel):
 	result: JSONObject | None = None
 
 
-class TaskCreate(TaskBase):
+class TaskCreate(TaskBase, ForbidExtraModel):
 	"""payload to start a task."""
 
 	user_id: TypeID
@@ -82,6 +82,8 @@ class Task(TaskBase, TimestampedModel):
 
 class TaskCancelRequest(BaseModel):
 	"""payload to request task cancellation."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	reason: str | None = Field(default=None, max_length=500)
 

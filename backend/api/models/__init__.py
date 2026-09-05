@@ -1,5 +1,6 @@
 """Database models."""
 
+from api.models.access_revision import AccessRevision
 from api.models.access_rule import AccessRule
 from api.models.agent import Agent
 from api.models.block import Block
@@ -11,6 +12,8 @@ from api.models.group import Group
 from api.models.mcp import MCPServer
 from api.models.memory import Memory
 from api.models.message import Message
+from api.models.message_attachment import MessageAttachment
+from api.models.message_mention import MessageMention
 from api.models.model import Model
 from api.models.note import Note
 from api.models.notification import Notification, NotificationPushSubscription
@@ -24,15 +27,18 @@ from api.models.setting import SettingsDocument
 from api.models.task import Task
 from api.models.thread import Thread
 from api.models.thread_participant import ThreadParticipant
+from api.models.thread_passage import ThreadPassage
 from api.models.thread_summary import ThreadSummary
 from api.models.user import User
 from api.models.user_client import UserClient
+from api.models.user_session import UserSession
 from api.permissions import AccessLevel
 
 
 __all__ = [
 	"AccessLevel",
 	"AccessRule",
+	"AccessRevision",
 	"Agent",
 	"Block",
 	"Calendar",
@@ -46,6 +52,8 @@ __all__ = [
 	"Memory",
 	"MCPServer",
 	"Message",
+	"MessageAttachment",
+	"MessageMention",
 	"Model",
 	"Note",
 	"Notification",
@@ -62,7 +70,9 @@ __all__ = [
 	"Task",
 	"Thread",
 	"ThreadParticipant",
+	"ThreadPassage",
 	"ThreadSummary",
 	"User",
 	"UserClient",
+	"UserSession",
 ]

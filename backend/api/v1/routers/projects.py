@@ -1,7 +1,5 @@
 """project routers."""
 
-from __future__ import annotations
-
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
@@ -21,9 +19,32 @@ from api.schemas.project import (
 from api.schemas.search import Page, SearchMode
 from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
-from api.v1.service import projects as project_service
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authentication import Principal, get_current_principal
 from api.v1.service.events import SessionId
+from api.v1.service.projects import (
+	count_projects as count_projects_service,
+)
+from api.v1.service.projects import (
+	create_project as create_project_service,
+)
+from api.v1.service.projects import (
+	delete_project as delete_project_service,
+)
+from api.v1.service.projects import (
+	get_project_payload,
+)
+from api.v1.service.projects import (
+	get_project_resource_counts as get_project_resource_counts_service,
+)
+from api.v1.service.projects import (
+	list_projects as list_projects_service,
+)
+from api.v1.service.projects import (
+	search_projects as search_projects_service,
+)
+from api.v1.service.projects import (
+	update_project as update_project_service,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -39,7 +60,7 @@ async def create_project(
 	x_session_id: SessionId = None,
 ) -> ProjectSchema:
 	"""create a new project."""
-	return await project_service.create_project(
+	return await create_project_service(
 		project_in,
 		db,
 		principal=principal,
@@ -58,7 +79,7 @@ async def list_projects(
 	db: AsyncSession = Depends(get_db),
 ) -> list[ProjectSchema]:
 	"""list projects accessible by the caller."""
-	return await project_service.list_projects(
+	return await list_projects_service(
 		db,
 		principal=principal,
 		skip=skip,
@@ -76,7 +97,7 @@ async def count_projects(
 	db: AsyncSession = Depends(get_db),
 ) -> int:
 	"""count projects matching the list filters."""
-	return await project_service.count_projects(
+	return await count_projects_service(
 		db,
 		principal=principal,
 		filters=filters,
@@ -94,7 +115,7 @@ async def search_projects(
 	db: AsyncSession = Depends(get_db),
 ) -> Page[ProjectSchema]:
 	"""search projects accessible by the caller."""
-	scored = await project_service.search_projects(
+	scored = await search_projects_service(
 		q,
 		db,
 		principal=principal,
@@ -115,7 +136,7 @@ async def get_project_resource_counts(
 	db: AsyncSession = Depends(get_db),
 ) -> ProjectResourceCounts:
 	"""fetch resource counts for a project."""
-	return await project_service.get_project_resource_counts(
+	return await get_project_resource_counts_service(
 		project_id,
 		db,
 		principal=principal,
@@ -129,9 +150,7 @@ async def get_project(
 	db: AsyncSession = Depends(get_db),
 ) -> ProjectSchema:
 	"""fetch a project by id."""
-	return await project_service.get_project_payload(
-		project_id, db, principal=principal
-	)
+	return await get_project_payload(project_id, db, principal=principal)
 
 
 @router.patch("/{project_id}", response_model=ProjectSchema)
@@ -143,7 +162,7 @@ async def update_project(
 	x_session_id: SessionId = None,
 ) -> ProjectSchema:
 	"""update a project."""
-	return await project_service.update_project(
+	return await update_project_service(
 		project_id,
 		project_in,
 		db,
@@ -160,7 +179,7 @@ async def delete_project(
 	x_session_id: SessionId = None,
 ) -> None:
 	"""delete a project."""
-	await project_service.delete_project(
+	await delete_project_service(
 		project_id,
 		db,
 		principal=principal,

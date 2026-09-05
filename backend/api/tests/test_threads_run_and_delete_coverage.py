@@ -33,14 +33,16 @@ async def test_thread_run_stream_headers(
 		if False:
 			yield b""
 
-	async def _fake_start_thread_run(
-		*_args: object, **_kwargs: object
-	) -> AsyncGenerator[bytes]:
-		return _stream()
+	async def _fake_launch_thread_run(*_args: object, **_kwargs: object) -> str:
+		return new_typeid("run")
 
 	monkeypatch.setattr(
-		"api.v1.routers.runs.runs_service.start_thread_run",
-		_fake_start_thread_run,
+		"api.v1.routers.runs.launch_thread_run",
+		_fake_launch_thread_run,
+	)
+	monkeypatch.setattr(
+		"api.v1.routers.runs.subscribe_run_stream",
+		lambda _run_id, _subscriber_id: _stream(),
 	)
 
 	resp = await client.post(
@@ -152,13 +154,18 @@ async def test_delete_thread_forbidden_when_editor_not_owner(
 	other_token = login_resp.json()["access_token"]
 	other_headers = {"Authorization": f"Bearer {other_token}"}
 
-	# grant EDITOR access via access rules, but they are not the owner.
-	acl_resp = await client.put(
-		f"/v1/threads/{thread_id}/access/rules",
+	# add them as a participant, but they are not the owner.
+	acl_resp = await client.post(
+		f"/v1/threads/{thread_id}/participants",
 		headers=owner_headers,
-		json=[{"subject_user_id": other_user_id, "level": "editor"}],
+		json={"user_ids": [other_user_id]},
 	)
-	assert acl_resp.status_code == 200
+	assert acl_resp.status_code == 201
+	accept_resp = await client.post(
+		f"/v1/threads/{thread_id}/participants/users/{other_user_id}/invite/accept",
+		headers=other_headers,
+	)
+	assert accept_resp.status_code == 200
 
 	resp = await client.delete(
 		f"/v1/threads/{thread_id}",

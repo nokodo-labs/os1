@@ -1,7 +1,5 @@
 """Group model."""
 
-from __future__ import annotations
-
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -14,6 +12,7 @@ from api.models.mixins import (
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+from nokodo_ai.utils.typeid import TypeID
 
 
 GROUP_TYPEID_PREFIX = "group"
@@ -39,11 +38,11 @@ class GroupMembership(TypeIDPrimaryKeyMixin, MetadataJSONMixin, Base):
 	__tablename__ = "group_memberships"
 	__typeid_prefix__ = GROUP_MEMBERSHIP_TYPEID_PREFIX
 
-	group_id: Mapped[str] = mapped_column(
+	group_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("groups.id", ondelete="CASCADE"),
 	)
-	user_id: Mapped[str] = mapped_column(
+	user_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id", ondelete="CASCADE"),
 	)
@@ -64,7 +63,7 @@ class Group(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 
 	name: Mapped[str] = mapped_column(String(100))
 	description: Mapped[str | None] = mapped_column(String(500))
-	owner_id: Mapped[str] = mapped_column(
+	owner_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id"),
 	)

@@ -1,7 +1,5 @@
 """role schemas."""
 
-from __future__ import annotations
-
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -9,6 +7,7 @@ from pydantic import BaseModel, Field
 from api.permissions import DefaultPermissions
 from api.schemas.common import (
 	MISSING,
+	ForbidExtraModel,
 	MetadataModel,
 	MetadataUpdateModel,
 	MissingType,
@@ -39,7 +38,7 @@ class RoleBase(MetadataModel):
 	default_permissions: DefaultPermissions = Field(default_factory=DefaultPermissions)
 
 
-class RoleCreate(RoleBase):
+class RoleCreate(RoleBase, ForbidExtraModel):
 	"""schema for creating a role."""
 
 	# inherits priority: int = 0 from RoleBase

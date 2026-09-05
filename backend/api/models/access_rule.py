@@ -1,7 +1,5 @@
 """access rule model for unified resource sharing."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, UniqueConstraint
@@ -38,14 +36,14 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 	"""
 	unified access rule that grants a subject access to a resource.
 
-	rules are evaluated in order (by order_index). the last matching rule wins.
+	the highest matching grant wins. order_index controls display order only.
 	owner always has implicit admin access before any rules are evaluated.
 
 	subjects:
 	- user: grants access to a specific user
 	- group: grants access to all members of a group
-	- role: grants access to all users with a specific role (admin-only to create)
-	- public: grants access to everyone (no principal fields set)
+	- role: grants access to all users with a specific role (roles:manage required)
+	- link: grants reader access on direct fetch (no principal fields set)
 
 	access levels:
 	- reader: can view the resource
@@ -56,7 +54,7 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 	__tablename__ = "access_rules"
 	__typeid_prefix__ = "arule"
 
-	# subject specification (exactly one, or none for public)
+	# subject specification (exactly one, or none for link access)
 	subject_user_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id", ondelete="CASCADE"),
@@ -80,63 +78,63 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 	)
 	order_index: Mapped[int] = mapped_column(Integer, default=0)
 
-	# resource FKs (exactly one must be set, or none for role defaults)
-	thread_id: Mapped[str | None] = mapped_column(
+	# exactly one resource FK must be set; role defaults live on Role.
+	thread_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("threads.id", ondelete="CASCADE"),
 		index=True,
 	)
-	project_id: Mapped[str | None] = mapped_column(
+	project_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("projects.id", ondelete="CASCADE"),
 		index=True,
 	)
-	agent_id: Mapped[str | None] = mapped_column(
+	agent_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("agents.id", ondelete="CASCADE"),
 		index=True,
 	)
-	note_id: Mapped[str | None] = mapped_column(
+	note_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("notes.id", ondelete="CASCADE"),
 		index=True,
 	)
-	memory_id: Mapped[str | None] = mapped_column(
+	memory_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("memories.id", ondelete="CASCADE"),
 		index=True,
 	)
-	task_id: Mapped[str | None] = mapped_column(
+	task_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("tasks.id", ondelete="CASCADE"),
 		index=True,
 	)
-	file_id: Mapped[str | None] = mapped_column(
+	file_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("files.id", ondelete="CASCADE"),
 		index=True,
 	)
-	plugin_id: Mapped[str | None] = mapped_column(
+	plugin_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("plugins.id", ondelete="CASCADE"),
 		index=True,
 	)
-	prompt_id: Mapped[str | None] = mapped_column(
+	prompt_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("prompts.id", ondelete="CASCADE"),
 		index=True,
 	)
-	group_id: Mapped[str | None] = mapped_column(
+	group_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("groups.id", ondelete="CASCADE"),
 		index=True,
 	)
-	reminder_list_id: Mapped[str | None] = mapped_column(
+	reminder_list_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("reminder_lists.id", ondelete="CASCADE"),
 		index=True,
 	)
-	calendar_id: Mapped[str | None] = mapped_column(
+	calendar_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("calendars.id", ondelete="CASCADE"),
 		index=True,
@@ -192,7 +190,7 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 	)
 
 	__table_args__ = (
-		# prevent duplicate rules for same subject on same resource
+		# The current link-share model allows one subjectless rule per resource.
 		UniqueConstraint(
 			"subject_user_id",
 			"subject_group_id",
@@ -210,12 +208,28 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 			"reminder_list_id",
 			"calendar_id",
 			name="uq_access_rule_subject_resource",
+			postgresql_nulls_not_distinct=True,
 		),
 		CheckConstraint(
 			"(CASE WHEN subject_user_id IS NULL THEN 0 ELSE 1 END + "
 			"CASE WHEN subject_group_id IS NULL THEN 0 ELSE 1 END + "
 			"CASE WHEN subject_role_id IS NULL THEN 0 ELSE 1 END) IN (0, 1)",
 			name="ck_access_rules_single_principal",
+		),
+		CheckConstraint(
+			"(CASE WHEN thread_id IS NULL THEN 0 ELSE 1 END + "
+			"CASE WHEN project_id IS NULL THEN 0 ELSE 1 END + "
+			"CASE WHEN agent_id IS NULL THEN 0 ELSE 1 END + "
+			"CASE WHEN note_id IS NULL THEN 0 ELSE 1 END + "
+			"CASE WHEN memory_id IS NULL THEN 0 ELSE 1 END + "
+			"CASE WHEN task_id IS NULL THEN 0 ELSE 1 END + "
+			"CASE WHEN file_id IS NULL THEN 0 ELSE 1 END + "
+			"CASE WHEN plugin_id IS NULL THEN 0 ELSE 1 END + "
+			"CASE WHEN prompt_id IS NULL THEN 0 ELSE 1 END + "
+			"CASE WHEN group_id IS NULL THEN 0 ELSE 1 END + "
+			"CASE WHEN reminder_list_id IS NULL THEN 0 ELSE 1 END + "
+			"CASE WHEN calendar_id IS NULL THEN 0 ELSE 1 END) = 1",
+			name="ck_access_rules_single_resource",
 		),
 		# a group cannot grant itself access
 		CheckConstraint(

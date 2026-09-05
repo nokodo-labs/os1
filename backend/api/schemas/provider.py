@@ -1,7 +1,5 @@
 """provider schemas."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Annotated
 
@@ -10,11 +8,13 @@ from pydantic import StringConstraints, field_validator
 from api.models.provider import ProviderStatus, ProviderType
 from api.schemas.common import (
 	MISSING,
+	ForbidExtraModel,
 	MetadataModel,
 	MetadataUpdateModel,
 	MissingType,
 	TimestampedModel,
 )
+from nokodo_ai.utils.typeid import TypeID
 
 
 class ProviderBase(MetadataModel):
@@ -30,7 +30,7 @@ class ProviderBase(MetadataModel):
 	is_autofetch_enabled: bool = True
 
 
-class ProviderCreate(ProviderBase):
+class ProviderCreate(ProviderBase, ForbidExtraModel):
 	"""payload to create a provider."""
 
 	api_key: str | None = None
@@ -53,7 +53,7 @@ class ProviderUpdate(MetadataUpdateModel):
 class Provider(ProviderBase, TimestampedModel):
 	"""response schema."""
 
-	id: str
+	id: TypeID
 	last_synced_at: datetime | None = None
 
 	@field_validator("name", mode="before")

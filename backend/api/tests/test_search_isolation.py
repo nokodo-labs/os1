@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.access_rule import AccessLevel, AccessRule
 from api.models.note import Note
+from api.models.project import Project
 from api.models.reminder import Reminder, ReminderList
 from api.models.thread import Thread
 from api.models.user import User
@@ -25,9 +26,9 @@ from api.permissions import DefaultResourceAccess
 from api.schemas.note import NoteSearchFilters
 from api.schemas.search import SearchMode, SearchParams
 from api.schemas.thread import ThreadSearchFilters
+from api.tests.mocks import patch_vectorstore_ops
 from api.v1.service import notes as notes_service
-from api.v1.service import vectorstores as vectorstores_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.reminders.search import (
 	_autocomplete_reminders,
 	_hybrid_search_reminders,
@@ -39,7 +40,6 @@ from api.v1.service.threads.search import (
 )
 from nokodo_ai.adapters.base.vectorstores import ChunkSearchResult
 from nokodo_ai.utils.security import hash_password
-from nokodo_ai.utils.typeid import TypeID
 
 
 # helpers
@@ -60,7 +60,7 @@ def _user(suffix: str, superuser: bool = False) -> User:
 
 
 def _principal(user: User) -> Principal:
-	return Principal(
+	return Principal.for_user(
 		user=user,
 		group_ids=(),
 		permissions=frozenset(),
@@ -70,7 +70,7 @@ def _principal(user: User) -> Principal:
 
 def _reminder_list(owner: User, suffix: str) -> ReminderList:
 	return ReminderList(
-		owner_id=TypeID(owner.id),
+		owner_id=owner.id,
 		name=f"list_{suffix}",
 		color="#22c55e",
 	)
@@ -197,6 +197,34 @@ async def test_notes_autocomplete_soft_deleted_excluded(
 	)
 
 
+@pytest.mark.asyncio
+async def test_notes_autocomplete_project_filter_scopes_results(
+	db_session: AsyncSession,
+) -> None:
+	"""project_id must keep only notes linked to that project."""
+	s = _uid()
+	u = _user(f"na_proj_{s}")
+	db_session.add(u)
+	await db_session.flush()
+	project = Project(name=f"proj_{s}", owner_id=u.id)
+	db_session.add(project)
+	await db_session.flush()
+
+	in_project = Note(user_id=str(u.id), title=f"projected_note_{s}", content="x")
+	in_project.projects = [project]
+	loose = Note(user_id=str(u.id), title=f"projected_note_{s}_loose", content="x")
+	db_session.add_all([in_project, loose])
+	await db_session.commit()
+
+	filters = NoteSearchFilters(project_id=project.id)
+	results = await notes_service._autocomplete_notes(
+		f"projected_note_{s}", db_session, principal=_principal(u), filters=filters
+	)
+	ids = [str(r.item.id) for r in results]
+	assert str(in_project.id) in ids, "note in the project was filtered out"
+	assert str(loose.id) not in ids, "note outside the project leaked through"
+
+
 # threads - autocomplete (pg_trgm)
 
 
@@ -210,9 +238,7 @@ async def test_threads_autocomplete_isolates_other_user(
 	db_session.add_all([u_a, u_b])
 	await db_session.flush()
 
-	thread_b = Thread(
-		owner_id=TypeID(u_b.id), title=f"private_thread_{s}", is_temporary=False
-	)
+	thread_b = Thread(owner_id=u_b.id, title=f"private_thread_{s}", is_temporary=False)
 	db_session.add(thread_b)
 	await db_session.commit()
 
@@ -235,7 +261,7 @@ async def test_threads_autocomplete_returns_own_thread(
 	await db_session.flush()
 
 	thread_a = Thread(
-		owner_id=TypeID(u_a.id),
+		owner_id=u_a.id,
 		title=f"my_unique_thread_{s}",
 		is_temporary=False,
 	)
@@ -260,7 +286,7 @@ async def test_threads_autocomplete_granted_user_sees_thread(
 	await db_session.flush()
 
 	thread_a = Thread(
-		owner_id=TypeID(u_a.id),
+		owner_id=u_a.id,
 		title=f"shared_thread_{s}",
 		is_temporary=False,
 	)
@@ -269,7 +295,7 @@ async def test_threads_autocomplete_granted_user_sees_thread(
 
 	rule = AccessRule(
 		thread_id=str(thread_a.id),
-		subject_user_id=TypeID(u_b.id),
+		subject_user_id=u_b.id,
 		level=AccessLevel.READER,
 	)
 	db_session.add(rule)
@@ -293,7 +319,7 @@ async def test_threads_autocomplete_temporary_threads_excluded(
 	await db_session.flush()
 
 	tmp_thread = Thread(
-		owner_id=TypeID(u.id),
+		owner_id=u.id,
 		title=f"temp_thread_{s}",
 		is_temporary=True,
 	)
@@ -326,7 +352,7 @@ async def test_reminders_autocomplete_isolates_other_user(
 	await db_session.flush()
 
 	rem_b = Reminder(
-		owner_id=TypeID(u_b.id),
+		owner_id=u_b.id,
 		list_id=list_b.id,
 		title=f"private_reminder_{s}",
 	)
@@ -356,7 +382,7 @@ async def test_reminders_autocomplete_returns_own_reminder(
 	await db_session.flush()
 
 	rem_a = Reminder(
-		owner_id=TypeID(u_a.id),
+		owner_id=u_a.id,
 		list_id=list_a.id,
 		title=f"my_unique_reminder_{s}",
 	)
@@ -394,10 +420,9 @@ async def test_notes_hybrid_postgres_postfilter_blocks_cross_user(
 	await db_session.commit()
 
 	# make vectorstore return user B's note ID (simulated ACL bypass at vector level)
-	monkeypatch.setattr(
-		vectorstores_service,
-		"search",
-		_fake_search_fn(str(note_b.id)),
+	patch_vectorstore_ops(
+		monkeypatch,
+		search=_fake_search_fn(str(note_b.id)),
 	)
 
 	results = await notes_service._hybrid_search_notes(
@@ -419,16 +444,13 @@ async def test_threads_hybrid_postgres_postfilter_blocks_cross_user(
 	db_session.add_all([u_a, u_b])
 	await db_session.flush()
 
-	thread_b = Thread(
-		owner_id=TypeID(u_b.id), title=f"leaked_thread_{s}", is_temporary=False
-	)
+	thread_b = Thread(owner_id=u_b.id, title=f"leaked_thread_{s}", is_temporary=False)
 	db_session.add(thread_b)
 	await db_session.commit()
 
-	monkeypatch.setattr(
-		vectorstores_service,
-		"search",
-		_fake_search_fn(str(thread_b.id)),
+	patch_vectorstore_ops(
+		monkeypatch,
+		search=_fake_search_fn(str(thread_b.id)),
 	)
 
 	results = await _hybrid_search_threads(
@@ -455,17 +477,16 @@ async def test_reminders_hybrid_postgres_postfilter_blocks_cross_user(
 	await db_session.flush()
 
 	rem_b = Reminder(
-		owner_id=TypeID(u_b.id),
+		owner_id=u_b.id,
 		list_id=list_b.id,
 		title=f"leaked_reminder_{s}",
 	)
 	db_session.add(rem_b)
 	await db_session.commit()
 
-	monkeypatch.setattr(
-		vectorstores_service,
-		"search",
-		_fake_search_fn(str(rem_b.id)),
+	patch_vectorstore_ops(
+		monkeypatch,
+		search=_fake_search_fn(str(rem_b.id)),
 	)
 
 	results = await _hybrid_search_reminders(
@@ -491,10 +512,9 @@ async def test_hybrid_own_resource_returned_when_vectorstore_matches(
 	db_session.add(note)
 	await db_session.commit()
 
-	monkeypatch.setattr(
-		vectorstores_service,
-		"search",
-		_fake_search_fn(str(note.id)),
+	patch_vectorstore_ops(
+		monkeypatch,
+		search=_fake_search_fn(str(note.id)),
 	)
 
 	results = await notes_service._hybrid_search_notes(
@@ -518,7 +538,7 @@ async def test_threads_hybrid_grantee_can_see_shared_thread(
 	await db_session.flush()
 
 	thread_a = Thread(
-		owner_id=TypeID(u_a.id),
+		owner_id=u_a.id,
 		title=f"granted_thread_{s}",
 		is_temporary=False,
 	)
@@ -527,16 +547,15 @@ async def test_threads_hybrid_grantee_can_see_shared_thread(
 
 	rule = AccessRule(
 		thread_id=str(thread_a.id),
-		subject_user_id=TypeID(u_b.id),
+		subject_user_id=u_b.id,
 		level=AccessLevel.READER,
 	)
 	db_session.add(rule)
 	await db_session.commit()
 
-	monkeypatch.setattr(
-		vectorstores_service,
-		"search",
-		_fake_search_fn(str(thread_a.id)),
+	patch_vectorstore_ops(
+		monkeypatch,
+		search=_fake_search_fn(str(thread_a.id)),
 	)
 
 	results = await _hybrid_search_threads(
@@ -638,7 +657,7 @@ async def test_threads_include_hidden_admin_sees_temporary(
 	db_session.add(admin)
 	await db_session.flush()
 
-	tmp = Thread(owner_id=TypeID(admin.id), title=f"tmp_thread_{s}", is_temporary=True)
+	tmp = Thread(owner_id=admin.id, title=f"tmp_thread_{s}", is_temporary=True)
 	db_session.add(tmp)
 	await db_session.commit()
 
@@ -652,6 +671,34 @@ async def test_threads_include_hidden_admin_sees_temporary(
 	assert str(tmp.id) in ids, (
 		"admin could not find temporary thread with include_hidden"
 	)
+
+
+@pytest.mark.asyncio
+async def test_threads_autocomplete_project_filter_scopes_results(
+	db_session: AsyncSession,
+) -> None:
+	"""project_id must keep only threads linked to that project."""
+	s = _uid()
+	u = _user(f"th_proj_{s}")
+	db_session.add(u)
+	await db_session.flush()
+	project = Project(name=f"proj_{s}", owner_id=u.id)
+	db_session.add(project)
+	await db_session.flush()
+
+	in_project = Thread(owner_id=u.id, title=f"projected_thread_{s}")
+	in_project.projects = [project]
+	loose = Thread(owner_id=u.id, title=f"projected_thread_{s}_loose")
+	db_session.add_all([in_project, loose])
+	await db_session.commit()
+
+	filters = ThreadSearchFilters(project_id=project.id)
+	results = await _autocomplete_threads(
+		f"projected_thread_{s}", db_session, principal=_principal(u), filters=filters
+	)
+	ids = [str(r.item.id) for r in results]
+	assert str(in_project.id) in ids, "thread in the project was filtered out"
+	assert str(loose.id) not in ids, "thread outside the project leaked through"
 
 
 @pytest.mark.asyncio
@@ -711,9 +758,7 @@ async def test_threads_autocomplete_soft_deleted_excluded(
 	db_session.add(u)
 	await db_session.flush()
 
-	thread = Thread(
-		owner_id=TypeID(u.id), title=f"deleted_thread_{s}", is_temporary=False
-	)
+	thread = Thread(owner_id=u.id, title=f"deleted_thread_{s}", is_temporary=False)
 	db_session.add(thread)
 	await db_session.flush()
 	thread.soft_delete()
@@ -739,7 +784,7 @@ async def test_threads_include_deleted_admin_sees_deleted(
 	await db_session.flush()
 
 	thread = Thread(
-		owner_id=TypeID(owner.id), title=f"deleted_thread_admin_{s}", is_temporary=False
+		owner_id=owner.id, title=f"deleted_thread_admin_{s}", is_temporary=False
 	)
 	db_session.add(thread)
 	await db_session.flush()
@@ -758,52 +803,5 @@ async def test_threads_include_deleted_admin_sees_deleted(
 	)
 
 
-# threads: is_archived (normal filter, works in all modes via SQL post-filter)
-
-
-@pytest.mark.asyncio
-async def test_threads_autocomplete_archived_filter(
-	db_session: AsyncSession,
-) -> None:
-	"""is_archived=True must return only archived threads; False excludes them."""
-	s = _uid()
-	u = _user(f"ta_arch_{s}")
-	db_session.add(u)
-	await db_session.flush()
-
-	archived = Thread(
-		owner_id=TypeID(u.id),
-		title=f"arch_thread_{s}",
-		is_temporary=False,
-		is_archived=True,
-	)
-	active = Thread(
-		owner_id=TypeID(u.id),
-		title=f"arch_thread_{s}",
-		is_temporary=False,
-		is_archived=False,
-	)
-	db_session.add_all([archived, active])
-	await db_session.commit()
-
-	# only archived
-	results_arch = await _autocomplete_threads(
-		f"arch_thread_{s}",
-		db_session,
-		principal=_principal(u),
-		filters=ThreadSearchFilters(is_archived=True),
-	)
-	ids_arch = [str(r.item.id) for r in results_arch]
-	assert str(archived.id) in ids_arch
-	assert str(active.id) not in ids_arch
-
-	# only active
-	results_active = await _autocomplete_threads(
-		f"arch_thread_{s}",
-		db_session,
-		principal=_principal(u),
-		filters=ThreadSearchFilters(is_archived=False),
-	)
-	ids_active = [str(r.item.id) for r in results_active]
-	assert str(active.id) in ids_active
-	assert str(archived.id) not in ids_active
+# archived is now per-user participant state (not a thread search filter), so
+# it is covered by the by-user-status thread endpoint tests, not search.

@@ -1,14 +1,12 @@
 """group schemas."""
 
-from __future__ import annotations
-
 from typing import Literal
 
-from pydantic import BaseModel
-
 from api.models.group import GroupMemberRole
+from api.schemas.access_rule import ResourceAccessListFilters
 from api.schemas.common import (
 	MISSING,
+	ForbidExtraModel,
 	MetadataModel,
 	MetadataUpdateModel,
 	MissingType,
@@ -22,7 +20,7 @@ from nokodo_ai.utils.typeid import TypeID
 type GroupSortBy = CommonSortBy | Literal["name"]
 
 
-class GroupListFilters(BaseModel):
+class GroupListFilters(ResourceAccessListFilters):
 	"""filters for listing groups."""
 
 	owner_id: TypeID | None = None
@@ -37,7 +35,7 @@ class GroupBase(MetadataModel):
 	description: str | None = None
 
 
-class GroupCreate(GroupBase):
+class GroupCreate(GroupBase, ForbidExtraModel):
 	"""schema for creating a group."""
 
 	pass
@@ -58,7 +56,7 @@ class GroupMembershipResponse(ORMModel):
 	role: GroupMemberRole
 
 
-class GroupMembershipCreate(ORMModel):
+class GroupMembershipCreate(ForbidExtraModel):
 	"""schema for adding a member to a group."""
 
 	user_id: TypeID
@@ -71,3 +69,10 @@ class Group(GroupBase, TimestampedModel, ORMModel):
 	id: TypeID
 	owner_id: TypeID
 	memberships: list[GroupMembershipResponse] = []
+
+
+class GroupSummary(ORMModel):
+	"""minimal group identity for embedding (e.g. thread participants)."""
+
+	id: TypeID
+	name: str

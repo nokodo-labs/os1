@@ -1,7 +1,5 @@
 """reminder CRUD and occurrence service helpers."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
@@ -9,6 +7,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.reminder import (
@@ -17,7 +16,7 @@ from api.models.reminder import (
 	ReminderOverride,
 	ReminderStatus,
 )
-from api.permissions import ResourceType
+from api.permissions import ActionPermission, ResourceType
 from api.schemas.reminder import Reminder as ReminderOut
 from api.schemas.reminder import (
 	ReminderCreate,
@@ -28,9 +27,13 @@ from api.schemas.reminder import (
 )
 from api.schemas.scheduled_item import ReminderSeriesEdit, ScheduledItem
 from api.settings import settings
-from api.v1.service import events as event_service
-from api.v1.service.auth import Principal
-from api.v1.service.authorization import resource_access_predicate
+from api.v1.service.authentication import Principal
+from api.v1.service.authorization import (
+	apply_metadata_write,
+	require_permission,
+	resource_access_predicate,
+)
+from api.v1.service.events import persist_and_fanout_event
 from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.reminders.cache import (
 	get_cached_reminder_items,
@@ -41,6 +44,10 @@ from api.v1.service.reminders.lists import (
 	get_or_create_default_reminder_list,
 	get_reminder_list,
 )
+from api.v1.service.reminders.notifications import (
+	cancel_reminder_notifications,
+	schedule_reminder_notifications,
+)
 from api.v1.service.reminders.search import REMINDER_SPEC
 from api.v1.service.scheduling.recurrence import (
 	expand_occurrence_starts,
@@ -49,10 +56,6 @@ from api.v1.service.scheduling.recurrence import (
 	recurrence_to_storage,
 )
 from api.v1.service.vectorize import remove_vectorized_resource, vectorize_resource
-from api.v1.tasks.reminders import (
-	cancel_reminder_notifications,
-	schedule_reminder_notifications,
-)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -99,7 +102,7 @@ async def _load_reminder_parent_chain(
 	seen: set[TypeID] = set()
 	current: Reminder | None = parent
 	while current is not None:
-		current_id = TypeID(current.id)
+		current_id = current.id
 		if current_id in seen:
 			raise _hierarchy_cycle_error()
 		seen.add(current_id)
@@ -208,7 +211,12 @@ async def create_reminder(
 	target_list_id = data.list_id
 	parent: Reminder | None = None
 	if data.parent_id:
-		parent = await get_reminder(data.parent_id, session, principal=principal)
+		parent = await get_reminder(
+			data.parent_id,
+			session,
+			principal=principal,
+			required_level=AccessLevel.EDITOR,
+		)
 		if target_list_id and target_list_id != parent.list_id:
 			raise HTTPException(
 				status_code=status.HTTP_400_BAD_REQUEST,
@@ -216,11 +224,17 @@ async def create_reminder(
 			)
 		target_list_id = parent.list_id
 	if target_list_id is None:
+		require_permission(principal, ActionPermission.REMINDERS_CREATE)
 		target_list_id = (
 			await get_or_create_default_reminder_list(session, principal)
 		).id
 	else:
-		await get_reminder_list(target_list_id, session, principal=principal)
+		await get_reminder_list(
+			target_list_id,
+			session,
+			principal=principal,
+			required_level=AccessLevel.EDITOR,
+		)
 	if data.parent_id:
 		await _validate_reminder_parent_assignment(
 			data.parent_id,
@@ -231,8 +245,7 @@ async def create_reminder(
 		)
 	create_data = data.model_dump(
 		exclude_unset=True,
-		by_alias=True,
-		exclude={"recurrence", "list_id"},
+		exclude={"recurrence", "list_id", "metadata"},
 	)
 	# auto-compute position when not explicitly provided: append last
 	if "position" not in create_data:
@@ -242,22 +255,23 @@ async def create_reminder(
 	create_data["list_id"] = target_list_id
 	create_data["recurrence"] = recurrence_to_storage(data.recurrence)
 	reminder = Reminder(
-		owner_id=principal.user_id,
+		owner_id=principal.user.id,
 		**create_data,
 	)
+	apply_metadata_write(reminder, data.metadata)
 	session.add(reminder)
 	await session.flush()
 	await session.refresh(reminder)
 
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.REMINDER_CREATED,
 		data=ReminderOut.model_validate(reminder).model_dump(mode="json"),
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 		reminder_id=reminder.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 
@@ -496,19 +510,26 @@ async def get_reminder(
 	session: AsyncSession,
 	principal: Principal,
 	with_subtasks: bool = False,
+	required_level: AccessLevel = AccessLevel.READER,
 ) -> Reminder:
 	"""get a reminder by id."""
+	access_predicate = resource_access_predicate(
+		principal,
+		ResourceType.REMINDER,
+		required_level=required_level,
+		include_link_access=True,
+	)
 	if with_subtasks:
 		stmt = (
 			select(Reminder)
 			.options(selectinload(Reminder.subtasks))
-			.where(Reminder.id == reminder_id)
+			.where(Reminder.id == reminder_id, access_predicate)
 		)
 		result = await session.execute(stmt)
 		reminder = result.scalars().first()
 	else:
 		result = await session.execute(
-			select(Reminder).where(Reminder.id == reminder_id)
+			select(Reminder).where(Reminder.id == reminder_id, access_predicate)
 		)
 		reminder = result.scalar_one_or_none()
 
@@ -517,7 +538,6 @@ async def get_reminder(
 			status_code=status.HTTP_404_NOT_FOUND,
 			detail="reminder not found",
 		)
-	await get_reminder_list(reminder.list_id, session, principal=principal)
 	return reminder
 
 
@@ -529,8 +549,13 @@ async def update_reminder(
 	origin_session_id: str | None = None,
 ) -> Reminder:
 	"""update a reminder."""
-	reminder = await get_reminder(reminder_id, session, principal=principal)
-	update_data = data.model_dump(exclude_unset=True, by_alias=True)
+	reminder = await get_reminder(
+		reminder_id,
+		session,
+		principal=principal,
+		required_level=AccessLevel.EDITOR,
+	)
+	update_data = data.model_dump(exclude_unset=True, exclude={"metadata"})
 	previous_list_id = reminder.list_id
 	target_list_id: TypeID | None = None
 	moved_descendants: list[Reminder] = []
@@ -548,7 +573,12 @@ async def update_reminder(
 
 	if "list_id" in update_data:
 		target_list_id = update_data["list_id"]
-		await get_reminder_list(target_list_id, session, principal=principal)
+		await get_reminder_list(
+			target_list_id,
+			session,
+			principal=principal,
+			required_level=AccessLevel.EDITOR,
+		)
 	next_list_id = target_list_id or reminder.list_id
 	if "parent_id" in update_data and update_data["parent_id"] is not None:
 		await _validate_reminder_parent_assignment(
@@ -572,6 +602,7 @@ async def update_reminder(
 		if key == "list_id":
 			continue
 		setattr(reminder, key, value)
+	apply_metadata_write(reminder, data.metadata)
 	if target_list_id is not None:
 		reminder.list_id = target_list_id
 		for descendant in moved_descendants:
@@ -600,13 +631,13 @@ async def update_reminder(
 	]
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.REMINDER_UPDATED,
 		data=event_data,
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 		reminder_id=reminder.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	await _invalidate_reminders(reminder_ids_to_invalidate)
@@ -633,7 +664,11 @@ async def complete_reminder(
 ) -> Reminder:
 	"""mark a reminder as completed, optionally cascading to subtasks."""
 	reminder = await get_reminder(
-		reminder_id, session, principal=principal, with_subtasks=cascade
+		reminder_id,
+		session,
+		principal=principal,
+		with_subtasks=cascade,
+		required_level=AccessLevel.EDITOR,
 	)
 	if reminder.recurrence is not None:
 		raise HTTPException(
@@ -676,13 +711,13 @@ async def complete_reminder(
 	)
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.REMINDER_COMPLETED,
 		data=event_data,
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 		reminder_id=reminder.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	await _invalidate_reminders(reminder_ids_to_invalidate)
@@ -706,16 +741,21 @@ async def complete_reminder_occurrence(
 	origin_session_id: str | None = None,
 ) -> ScheduledItem:
 	"""complete a single recurring reminder occurrence."""
-	reminder = await get_reminder(reminder_id, session, principal=principal)
+	reminder = await get_reminder(
+		reminder_id,
+		session,
+		principal=principal,
+		required_level=AccessLevel.EDITOR,
+	)
 	anchor = reminder.due_at or reminder.remind_at
 	if reminder.recurrence is None or anchor is None:
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="reminder is not recurring",
 		)
 	if not occurrence_exists(anchor, reminder.recurrence, original_occurrence_at):
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="occurrence does not belong to reminder recurrence",
 		)
 	now = datetime.now(UTC)
@@ -764,7 +804,12 @@ async def edit_reminder_series(
 	origin_session_id: str | None = None,
 ) -> Reminder:
 	"""split a recurring reminder and edit this/following occurrences."""
-	reminder = await get_reminder(reminder_id, session, principal=principal)
+	reminder = await get_reminder(
+		reminder_id,
+		session,
+		principal=principal,
+		required_level=AccessLevel.EDITOR,
+	)
 	_validate_reminder_series_split(reminder, data.original_occurrence_at)
 	new_reminder = _build_reminder_split(reminder, data)
 	reminder.recurrence_until = _split_cutoff(data.original_occurrence_at)
@@ -804,17 +849,17 @@ def _validate_reminder_series_split(
 	anchor = _reminder_anchor(reminder)
 	if reminder.recurrence is None or anchor is None:
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="reminder is not recurring",
 		)
 	if _after_recurrence_until(reminder.recurrence_until, original_occurrence_at):
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="occurrence does not belong to reminder recurrence",
 		)
 	if not occurrence_exists(anchor, reminder.recurrence, original_occurrence_at):
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="occurrence does not belong to reminder recurrence",
 		)
 
@@ -870,14 +915,14 @@ def _build_reminder_split(
 	)
 	if new_recurrence is not None and new_due_at is None and new_remind_at is None:
 		raise HTTPException(
-			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="recurring reminder requires due_at or remind_at",
 		)
 	return Reminder(
 		owner_id=reminder.owner_id,
 		list_id=reminder.list_id,
 		parent_id=reminder.parent_id,
-		source_thread_id=reminder.source_thread_id,
+		origin_message_id=reminder.origin_message_id,
 		title=update_data.get("title", reminder.title),
 		description=update_data.get("description", reminder.description),
 		due_at=new_due_at,
@@ -955,7 +1000,7 @@ async def _publish_reminder_created(
 		user_id=reminder.owner_id,
 		reminder_id=reminder.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -982,7 +1027,7 @@ async def _publish_reminder_series_updated(
 		user_id=reminder.owner_id,
 		reminder_id=reminder.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -1016,7 +1061,7 @@ async def _publish_reminder_occurrence_completed(
 		user_id=reminder.owner_id,
 		reminder_id=reminder.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -1061,7 +1106,12 @@ async def delete_reminder(
 	origin_session_id: str | None = None,
 ) -> None:
 	"""delete a reminder and its subtasks."""
-	reminder = await get_reminder(reminder_id, session, principal=principal)
+	reminder = await get_reminder(
+		reminder_id,
+		session,
+		principal=principal,
+		required_level=AccessLevel.EDITOR,
+	)
 	descendants = await _load_reminder_descendants(reminder.id, session)
 	reminder_id_str = str(reminder.id)
 	list_id_str = str(reminder.list_id)
@@ -1072,7 +1122,7 @@ async def delete_reminder(
 
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.REMINDER_DELETED,
 		data={
 			"id": reminder_id_str,
@@ -1081,10 +1131,10 @@ async def delete_reminder(
 				str(descendant.id) for descendant in descendants
 			],
 		},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 		reminder_id=reminder.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	await _invalidate_reminders(reminder_ids_to_invalidate)
@@ -1123,7 +1173,7 @@ async def _load_reminder_descendants(
 			break
 		next_frontier: set[TypeID] = set()
 		for child in children:
-			child_id = TypeID(child.id)
+			child_id = child.id
 			if child_id in seen:
 				raise _hierarchy_cycle_error()
 			seen.add(child_id)
@@ -1145,10 +1195,20 @@ async def move_reminder(
 	origin_session_id: str | None = None,
 ) -> Reminder:
 	"""move a reminder to a different list."""
-	reminder = await get_reminder(reminder_id, session, principal=principal)
+	reminder = await get_reminder(
+		reminder_id,
+		session,
+		principal=principal,
+		required_level=AccessLevel.EDITOR,
+	)
 	previous_list_id = reminder.list_id
 
-	await get_reminder_list(target_list_id, session, principal=principal)
+	await get_reminder_list(
+		target_list_id,
+		session,
+		principal=principal,
+		required_level=AccessLevel.EDITOR,
+	)
 
 	descendants = await _load_reminder_descendants(reminder.id, session)
 	reminder.list_id = target_list_id
@@ -1178,13 +1238,13 @@ async def move_reminder(
 	]
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.REMINDER_UPDATED,
 		data=event_data,
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 		reminder_id=reminder.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session, event=event, origin_session_id=origin_session_id
 	)
 	await _invalidate_reminders(reminder_ids_to_invalidate)

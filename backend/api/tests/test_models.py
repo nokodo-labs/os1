@@ -11,22 +11,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.base import StringEnum
 from api.models.model import ModelType
-from api.models.user import User
 from api.schemas.model import ModelCreate, ModelListFilters, ModelUpdate
 from api.schemas.provider import ProviderCreate
+from api.tests.factories import make_principal
 from api.v1.service import models as model_service
 from api.v1.service import providers as provider_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
+from nokodo_ai.utils.typeid import new_typeid
 
 
 def _admin_principal() -> Principal:
-	user = User(
-		email="admin@example.com",
-		username="admin_models",
-		hashed_password="x",
-		is_superuser=True,
-	)
-	return Principal(user=user, group_ids=(), permissions=frozenset())
+	return make_principal(slug="admin_models", is_superuser=True)
 
 
 @pytest.mark.asyncio
@@ -55,7 +50,7 @@ async def test_create_model(db_session: AsyncSession) -> None:
 async def test_create_model_invalid_provider(db_session: AsyncSession) -> None:
 	admin = _admin_principal()
 	model_in = ModelCreate(
-		provider_id="nonexistent",
+		provider_id=new_typeid("prov"),
 		name="gpt-4",
 		model_type=ModelType.CHAT_MODEL,
 		capabilities=[],
@@ -95,7 +90,7 @@ async def test_list_models(db_session: AsyncSession) -> None:
 
 	models_empty = await model_service.list_models(
 		db_session,
-		filters=ModelListFilters(provider_id="nonexistent"),
+		filters=ModelListFilters(provider_id=new_typeid("prov")),
 		principal=admin,
 	)
 	assert len(models_empty) == 0
@@ -136,8 +131,9 @@ async def test_models_router_endpoints(
 	admin_auth: dict[str, object],
 ) -> None:
 	"""Hit list and detail routes to cover router branch logic."""
-	headers = admin_auth["headers"]
-	assert isinstance(headers, dict)
+	raw_headers = admin_auth["headers"]
+	assert isinstance(raw_headers, dict)
+	headers = {str(key): str(value) for key, value in raw_headers.items()}
 	provider_resp = await client.post(
 		"/v1/providers",
 		json={"name": "models-router-provider", "adapter_type": "openai"},

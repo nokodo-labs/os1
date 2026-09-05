@@ -11,14 +11,27 @@ from api.database import get_db
 from api.models.model import Model
 from api.schemas.model import Model as ModelSchema
 from api.schemas.model import ModelCreate, ModelListFilters, ModelUpdate
-from api.v1.service import models as model_service
-from api.v1.service.auth import Principal, get_current_principal, require_admin
+from api.v1.service.authentication import Principal, get_current_principal
+from api.v1.service.models import (
+	create_model as create_model_service,
+)
+from api.v1.service.models import (
+	delete_model as delete_model_service,
+)
+from api.v1.service.models import (
+	get_model as get_model_service,
+)
+from api.v1.service.models import (
+	list_models as list_models_service,
+)
+from api.v1.service.models import (
+	update_model as update_model_service,
+)
 
 
 router = APIRouter(
 	prefix="/models",
 	tags=["models"],
-	dependencies=[Depends(require_admin)],
 )
 
 
@@ -29,7 +42,7 @@ async def create_model(
 	db: AsyncSession = Depends(get_db),
 ) -> Model:
 	"""Register a model for a provider."""
-	return await model_service.create_model(model_in, db, principal=principal)
+	return await create_model_service(model_in, db, principal=principal)
 
 
 @router.get("", response_model=list[ModelSchema])
@@ -39,7 +52,7 @@ async def list_models(
 	db: AsyncSession = Depends(get_db),
 ) -> list[Model]:
 	"""List models with optional provider filter."""
-	return await model_service.list_models(
+	return await list_models_service(
 		db,
 		filters=filters,
 		principal=principal,
@@ -53,7 +66,7 @@ async def get_model(
 	db: AsyncSession = Depends(get_db),
 ) -> Model:
 	"""Fetch a single model."""
-	return await model_service.get_model(model_id, db, principal=principal)
+	return await get_model_service(model_id, db, principal=principal)
 
 
 @router.patch("/{model_id}", response_model=ModelSchema)
@@ -64,7 +77,7 @@ async def update_model(
 	db: AsyncSession = Depends(get_db),
 ) -> Model:
 	"""Update a model."""
-	return await model_service.update_model(
+	return await update_model_service(
 		model_id,
 		model_in,
 		db,
@@ -79,4 +92,4 @@ async def delete_model(
 	db: AsyncSession = Depends(get_db),
 ) -> None:
 	"""Delete a model."""
-	await model_service.delete_model(model_id, db, principal=principal)
+	await delete_model_service(model_id, db, principal=principal)

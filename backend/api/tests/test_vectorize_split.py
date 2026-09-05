@@ -51,7 +51,7 @@ def _patch(
 	async def _count(texts: list[str], session: object = None) -> list[int] | None:
 		return counts
 
-	monkeypatch.setattr(vectorize, "get_embedding_input_limit", _limit)
+	monkeypatch.setattr(vectorize, "embedding_token_capacity", _limit)
 	monkeypatch.setattr(vectorize, "count_input_tokens", _count)
 
 
@@ -87,6 +87,25 @@ async def test_under_limit_single_piece_keeps_bm25(
 	assert piece.content == "bm25 body"
 	assert piece.chunk_index == 0
 	assert piece.chunk_count == 1
+
+
+@pytest.mark.asyncio
+async def test_unlimited_capacity_never_splits(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	async def _unlimited(session: object = None) -> None:
+		return None
+
+	async def _count(texts: list[str], session: object = None) -> list[int]:
+		return [10_000_000]
+
+	monkeypatch.setattr(vectorize, "embedding_token_capacity", _unlimited)
+	monkeypatch.setattr(vectorize, "count_input_tokens", _count)
+	doc = _Doc(id="n1", dense="dense body", bm25="bm25 body")
+	pieces = await split_for_embedding(_spec(), doc, AsyncSession())
+	assert len(pieces) == 1
+	assert pieces[0].embed_text == "dense body"
+	assert pieces[0].content == "bm25 body"
 
 
 @pytest.mark.asyncio

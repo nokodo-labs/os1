@@ -1,7 +1,5 @@
 """pure recurrence expansion helpers."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 

@@ -1,7 +1,5 @@
 """Service layer for provider models."""
 
-from __future__ import annotations
-
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -15,10 +13,14 @@ from sqlalchemy.orm import selectinload
 
 from api.models.model import InputModality, Model, ModelType
 from api.models.provider import Provider, ProviderStatus
+from api.permissions import ActionPermission
 from api.redis import publish_invalidation
 from api.schemas.model import ModelCreate, ModelListFilters, ModelUpdate
-from api.v1.service.auth import Principal
-from api.v1.service.authorization import require_permission
+from api.v1.service.authentication import Principal
+from api.v1.service.authorization import (
+	apply_metadata_write,
+	require_permission,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -40,12 +42,18 @@ class FetchedModel:
 # defaults
 
 
+_EMBEDDING_MODEL_TYPES = (ModelType.EMBEDDING, ModelType.CONTEXTUALIZED_EMBEDDING)
+"""model types that resolve through the embedding pipeline and share its cache."""
+
+
 def _default_input_modalities(model_type: str) -> list[str]:
 	"""return the default input modalities for a model type."""
 	match model_type:
 		case "chat_model":
 			return [InputModality.TEXT, InputModality.IMAGES]
 		case "embedding":
+			return [InputModality.TEXT]
+		case "reranker":
 			return [InputModality.TEXT]
 		case "image":
 			return [InputModality.TEXT, InputModality.IMAGES]
@@ -63,6 +71,8 @@ _DEFAULT_BASE_URLS: dict[str, str] = {
 	"google": "https://generativelanguage.googleapis.com/v1beta",
 	"ollama": "http://localhost:11434/v1",
 	"voyageai": "https://api.voyageai.com/v1",
+	"cohere": "https://api.cohere.com/v1",
+	"jina": "https://api.jina.ai/v1",
 }
 
 
@@ -86,6 +96,14 @@ def _default_model_adapter(provider_key: str, model_type: str) -> str | None:
 		match provider_key:
 			case "openai" | "ollama" | "google" | "voyageai":
 				return "embedding"
+	if model_type == "contextualized_embedding":
+		match provider_key:
+			case "voyageai":
+				return "contextualized_embedding"
+	if model_type == "reranker":
+		match provider_key:
+			case "voyageai" | "cohere" | "jina":
+				return "rerank"
 	if model_type == "image":
 		match provider_key:
 			case "openai":
@@ -123,6 +141,10 @@ def _merge_headers(
 def _infer_openai_model_type(model_id: str) -> ModelType:
 	"""best-effort model type inference from an openai model id."""
 	lid = model_id.lower()
+	# openai itself has no rerank models; this catches rerankers listed by
+	# self-hosted openai-compatible servers (vllm, llama.cpp, ...)
+	if "rerank" in lid:
+		return ModelType.RERANKER
 	if "embed" in lid:
 		return ModelType.EMBEDDING
 	if lid.startswith("dall-e") or lid.startswith("gpt-image"):
@@ -373,6 +395,77 @@ async def _fetch_google_models(
 		params["pageToken"] = next_token
 
 
+# cohere parser
+
+
+def _parse_cohere_models_payload(
+	payload: object,
+) -> tuple[list[FetchedModel], str | None]:
+	"""parse the cohere /v1/models response into FetchedModel list."""
+	if not isinstance(payload, Mapping):
+		raise ValueError("invalid models payload")
+	payload_map: dict[object, object] = {key: item for key, item in payload.items()}
+	models_list = payload_map.get("models")
+	if not isinstance(models_list, list):
+		raise ValueError("invalid models payload")
+
+	results: list[FetchedModel] = []
+	for item in models_list:
+		if not isinstance(item, Mapping):
+			continue
+		item_map: dict[object, object] = {
+			key: item_value for key, item_value in item.items()
+		}
+		model_name = item_map.get("name")
+		if not isinstance(model_name, str) or model_name.strip() == "":
+			continue
+		context_length = item_map.get("context_length")
+		results.append(
+			FetchedModel(
+				id=model_name,
+				display_name=None,
+				model_type=ModelType.RERANKER,
+				input_modalities=[InputModality.TEXT],
+				context_window=(
+					int(context_length)
+					if isinstance(context_length, (int, float))
+					else None
+				),
+			)
+		)
+
+	next_page_token = payload_map.get("next_page_token")
+	return (
+		results,
+		next_page_token
+		if isinstance(next_page_token, str) and next_page_token.strip() != ""
+		else None,
+	)
+
+
+async def _fetch_cohere_models(
+	client: httpx.AsyncClient,
+	base_url: str,
+	headers: dict[str, str],
+) -> list[FetchedModel]:
+	all_items: list[FetchedModel] = []
+	# only rerank models: the SDK supports cohere for reranking only
+	params: dict[str, str] = {"page_size": "100", "endpoint": "rerank"}
+	while True:
+		resp = await client.get(
+			f"{base_url}/models",
+			headers=headers,
+			params=params,
+		)
+		resp.raise_for_status()
+		payload = resp.json()
+		items, next_token = _parse_cohere_models_payload(payload)
+		all_items.extend(items)
+		if next_token is None:
+			return all_items
+		params["page_token"] = next_token
+
+
 # autofetch sync
 
 
@@ -525,8 +618,22 @@ async def _fetch_models_for_provider(
 			client, base_url=base_url_with_key, headers=headers
 		)
 
+	if provider.adapter_type == "cohere":
+		api_key = provider.api_key
+		if api_key is None:
+			return None
+		headers = _merge_headers(
+			base={"Authorization": f"Bearer {api_key}"},
+			additional=provider.additional_headers,
+		)
+		return await _fetch_cohere_models(client, base_url=base_url, headers=headers)
+
 	# voyageai has no public /v1/models endpoint
 	if provider.adapter_type == "voyageai":
+		return None
+
+	# jina's model list endpoint is not stable enough to rely on yet
+	if provider.adapter_type == "jina":
 		return None
 
 	# openai-compatible (openai, ollama, custom)
@@ -555,7 +662,7 @@ async def _ensure_provider(
 	session: AsyncSession,
 	principal: Principal,
 ) -> None:
-	require_permission(principal, "models:manage")
+	require_permission(principal, ActionPermission.MODELS_MANAGE)
 	provider = await session.get(Provider, provider_id)
 	if not provider:
 		raise HTTPException(
@@ -569,7 +676,6 @@ async def _get_model(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Model:
-	require_permission(principal, "models:manage")
 	stmt = (
 		select(Model).options(selectinload(Model.provider)).where(Model.id == model_id)
 	)
@@ -607,6 +713,12 @@ def _check_valid_adapter(
 	elif model_type == "embedding":
 		if provider_type in ("openai", "ollama", "google", "voyageai"):
 			valid = adapter == "embedding"
+	elif model_type == "contextualized_embedding":
+		if provider_type == "voyageai":
+			valid = adapter == "contextualized_embedding"
+	elif model_type == "reranker":
+		if provider_type in ("voyageai", "cohere", "jina"):
+			valid = adapter == "rerank"
 	elif model_type == "image":
 		if provider_type == "openai":
 			valid = adapter == "images"
@@ -616,6 +728,7 @@ def _check_valid_adapter(
 	if not valid:
 		_labels: dict[str, str] = {
 			"chat_model": "chat model",
+			"contextualized_embedding": "contextualized embedding",
 			"image": "image",
 		}
 		display_model_type = _labels.get(model_type, model_type)
@@ -634,7 +747,7 @@ async def create_model(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Model:
-	require_permission(principal, "models:manage")
+	require_permission(principal, ActionPermission.MODELS_MANAGE)
 
 	provider = await session.get(Provider, model_in.provider_id)
 	if not provider:
@@ -643,7 +756,7 @@ async def create_model(
 			detail="Provider not found",
 		)
 
-	data = model_in.model_dump(by_alias=True)
+	data = model_in.model_dump(exclude={"metadata"})
 	model_type = str(data.get("model_type") or "chat_model")
 
 	if data.get("adapter") is None:
@@ -655,6 +768,7 @@ async def create_model(
 	_check_valid_adapter(provider.adapter_type, model_type, data.get("adapter"))
 
 	model = Model(**data)
+	apply_metadata_write(model, model_in.metadata)
 	session.add(model)
 	await session.commit()
 	return await _get_model(str(model.id), session, principal)
@@ -665,7 +779,7 @@ async def list_models(
 	principal: Principal,
 	filters: ModelListFilters | None = None,
 ) -> list[Model]:
-	require_permission(principal, "models:manage")
+	require_permission(principal, ActionPermission.MODELS_READ)
 	model_filters = filters or ModelListFilters()
 	await _sync_autofetched_models(session, provider_id=model_filters.provider_id)
 	stmt = (
@@ -686,6 +800,7 @@ async def get_model(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Model:
+	require_permission(principal, ActionPermission.MODELS_READ)
 	return await _get_model(model_id, session, principal)
 
 
@@ -695,27 +810,41 @@ async def update_model(
 	session: AsyncSession,
 	principal: Principal,
 ) -> Model:
+	require_permission(principal, ActionPermission.MODELS_MANAGE)
 	model = await _get_model(model_id, session, principal)
 
-	update_data = model_in.model_dump(exclude_unset=True, by_alias=True)
+	update_data = model_in.model_dump(exclude_unset=True, exclude={"metadata"})
 
 	if "adapter" in update_data or "model_type" in update_data:
 		adapter = update_data.get("adapter", model.adapter)
 		model_type = str(update_data.get("model_type", model.model_type))
 		_check_valid_adapter(model.provider.adapter_type, model_type, adapter)
 
-	affects_embedding = model.model_type == ModelType.EMBEDDING
+	final_type = update_data.get("model_type", model.model_type)
+	final_window = update_data.get("context_window", model.context_window)
+	if final_type == ModelType.EMBEDDING and not final_window:
+		raise HTTPException(
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+			detail="embedding models require a context_window",
+		)
+
+	affects_embedding = model.model_type in _EMBEDDING_MODEL_TYPES
 	affects_chat = model.model_type == ModelType.CHAT_MODEL
+	affects_reranker = model.model_type == ModelType.RERANKER
 	for key, value in update_data.items():
 		setattr(model, key, value)
-	affects_embedding = affects_embedding or model.model_type == ModelType.EMBEDDING
+	apply_metadata_write(model, model_in.metadata)
+	affects_embedding = affects_embedding or model.model_type in _EMBEDDING_MODEL_TYPES
 	affects_chat = affects_chat or model.model_type == ModelType.CHAT_MODEL
+	affects_reranker = affects_reranker or model.model_type == ModelType.RERANKER
 
 	await session.commit()
 	if affects_embedding:
 		await publish_invalidation("embedding_model")
 	if affects_chat:
 		await publish_invalidation("task_models")
+	if affects_reranker:
+		await publish_invalidation("rerank_model")
 	return await _get_model(model_id, session, principal)
 
 
@@ -724,12 +853,16 @@ async def delete_model(
 	session: AsyncSession,
 	principal: Principal,
 ) -> None:
+	require_permission(principal, ActionPermission.MODELS_MANAGE)
 	model = await _get_model(model_id, session, principal)
-	affects_embedding = model.model_type == ModelType.EMBEDDING
+	affects_embedding = model.model_type in _EMBEDDING_MODEL_TYPES
 	affects_chat = model.model_type == ModelType.CHAT_MODEL
+	affects_reranker = model.model_type == ModelType.RERANKER
 	await session.delete(model)
 	await session.commit()
 	if affects_embedding:
 		await publish_invalidation("embedding_model")
 	if affects_chat:
 		await publish_invalidation("task_models")
+	if affects_reranker:
+		await publish_invalidation("rerank_model")

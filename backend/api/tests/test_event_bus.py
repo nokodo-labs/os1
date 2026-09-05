@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
 import pytest
 
@@ -39,10 +40,10 @@ async def test_publish_remote_fanout_includes_routing(
 
 
 @pytest.mark.asyncio
-async def test_event_fanout_skips_empty_resource_recipients(
+async def test_event_fanout_relays_empty_resource_recipients(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	"""resource-routed events with no recipients are not mirrored or broadcast."""
+	"""recipientless events still reach server subscribers on every process."""
 	published: list[dict[str, object]] = []
 
 	class _Channel:
@@ -59,7 +60,34 @@ async def test_event_fanout_skips_empty_resource_recipients(
 		broadcast=False,
 	)
 
-	assert published == []
+	assert published == [
+		{
+			"publisher_id": event_bus._process_fanout_id(),
+			"event": {"type": "thread.updated"},
+			"broadcast": False,
+			"recipient_ids": [],
+		}
+	]
+
+
+@pytest.mark.asyncio
+async def test_server_event_handlers_are_keyed_and_error_isolated(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	seen: list[str] = []
+	monkeypatch.setattr(event_bus, "_server_event_handlers", {})
+
+	async def broken(_payload: dict[str, object]) -> None:
+		raise RuntimeError("boom")
+
+	async def capture(payload: dict[str, object]) -> None:
+		seen.append(str(payload["type"]))
+
+	event_bus.register_server_event_handler("access.updated", broken)
+	event_bus.register_server_event_handler("access.updated", capture)
+	await event_bus.dispatch_server_event({"type": "access.updated"})
+	await event_bus.dispatch_server_event({"type": "thread.updated"})
+	assert seen == ["access.updated"]
 
 
 @pytest.mark.asyncio
@@ -70,14 +98,18 @@ async def test_remote_fanout_relay_sends_remote_event_to_users(
 	sent: list[tuple[list[str], dict[str, object]]] = []
 
 	class _Channel:
-		async def subscribe(self):
-			yield {
-				"publisher_id": "remote-process",
-				"event": {"type": "thread.updated"},
-				"recipient_ids": ["user_1"],
-				"broadcast": False,
-			}
-			await asyncio.sleep(10)
+		@contextlib.asynccontextmanager
+		async def attached(self):
+			async def messages():
+				yield {
+					"publisher_id": "remote-process",
+					"event": {"type": "thread.updated"},
+					"recipient_ids": ["user_1"],
+					"broadcast": False,
+				}
+				await asyncio.sleep(10)
+
+			yield messages()
 
 	class _Manager:
 		async def send_to_users(
@@ -98,7 +130,12 @@ async def test_remote_fanout_relay_sends_remote_event_to_users(
 	monkeypatch.setattr(event_bus, "_FANOUT_CHANNEL", _Channel())
 	monkeypatch.setattr(event_service, "event_connections", _Manager())
 
-	task = await event_service.start_remote_fanout_relay()
+	connected = asyncio.Event()
+
+	async def on_connected() -> None:
+		connected.set()
+
+	task = await event_service.start_remote_fanout_relay(on_connected)
 	try:
 		for _ in range(20):
 			if sent:
@@ -107,6 +144,7 @@ async def test_remote_fanout_relay_sends_remote_event_to_users(
 	finally:
 		task.cancel()
 
+	assert connected.is_set()
 	assert sent == [(["user_1"], {"type": "thread.updated"})]
 
 
@@ -118,14 +156,18 @@ async def test_remote_fanout_relay_skips_local_event(
 	sent: list[dict[str, object]] = []
 
 	class _Channel:
-		async def subscribe(self):
-			yield {
-				"publisher_id": event_bus._process_fanout_id(),
-				"event": {"type": "thread.updated"},
-				"user_id": "user_1",
-				"broadcast": False,
-			}
-			await asyncio.sleep(10)
+		@contextlib.asynccontextmanager
+		async def attached(self):
+			async def messages():
+				yield {
+					"publisher_id": event_bus._process_fanout_id(),
+					"event": {"type": "thread.updated"},
+					"user_id": "user_1",
+					"broadcast": False,
+				}
+				await asyncio.sleep(10)
+
+			yield messages()
 
 	class _Manager:
 		async def send_to_users(
@@ -164,13 +206,17 @@ async def test_remote_fanout_relay_sends_remote_broadcast_to_all(
 	sent: list[dict[str, object]] = []
 
 	class _Channel:
-		async def subscribe(self):
-			yield {
-				"publisher_id": "remote-process",
-				"event": {"type": "thread.updated"},
-				"broadcast": True,
-			}
-			await asyncio.sleep(10)
+		@contextlib.asynccontextmanager
+		async def attached(self):
+			async def messages():
+				yield {
+					"publisher_id": "remote-process",
+					"event": {"type": "thread.updated"},
+					"broadcast": True,
+				}
+				await asyncio.sleep(10)
+
+			yield messages()
 
 	class _Manager:
 		async def send_to_users(

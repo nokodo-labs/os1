@@ -1,13 +1,13 @@
 """Project schemas."""
 
-from __future__ import annotations
-
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from api.schemas.access_rule import ResourceAccessListFilters
 from api.schemas.common import (
 	MISSING,
+	ForbidExtraModel,
 	MetadataModel,
 	MetadataUpdateModel,
 	MissingType,
@@ -21,7 +21,7 @@ from nokodo_ai.utils.typeid import TypeID
 type ProjectSortBy = CommonSortBy | Literal["name"]
 
 
-class ProjectListFilters(BaseModel):
+class ProjectListFilters(ResourceAccessListFilters):
 	"""filters for listing projects."""
 
 	owner_id: TypeID | None = None
@@ -41,7 +41,7 @@ class ProjectBase(MetadataModel):
 	description: str | None = None
 
 
-class ProjectCreate(ProjectBase):
+class ProjectCreate(ProjectBase, ForbidExtraModel):
 	"""Schema for creating a project."""
 
 	pass
@@ -59,6 +59,7 @@ class Project(ProjectBase, TimestampedModel, ORMModel):
 
 	id: TypeID
 	owner_id: TypeID
+	origin_message_id: TypeID | None = None
 	thread_ids: list[TypeID] = Field(default_factory=list)
 
 

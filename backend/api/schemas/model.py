@@ -1,23 +1,25 @@
 """model schemas."""
 
-from __future__ import annotations
+from typing import Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from api.models.model import InputModality, ModelType
 from api.schemas.common import (
 	MISSING,
+	ForbidExtraModel,
 	MetadataModel,
 	MetadataUpdateModel,
 	MissingType,
 	TimestampedModel,
 )
+from nokodo_ai.utils.typeid import TypeID
 
 
 class ModelListFilters(BaseModel):
 	"""filters for listing models."""
 
-	provider_id: str | None = None
+	provider_id: TypeID | None = None
 
 
 class ModelBase(MetadataModel):
@@ -36,19 +38,25 @@ class ModelBase(MetadataModel):
 	is_autofetched: bool = False
 
 
-class ModelCreate(ModelBase):
+class ModelCreate(ModelBase, ForbidExtraModel):
 	"""payload to register a model."""
 
 	input_modalities: list[InputModality] | None = None
-	provider_id: str
+	provider_id: TypeID
+
+	@model_validator(mode="after")
+	def _require_embedding_context_window(self) -> Self:
+		if self.model_type == ModelType.EMBEDDING and not self.context_window:
+			raise ValueError("embedding models require a context_window")
+		return self
 
 
 class Model(ModelBase, TimestampedModel):
 	"""response schema."""
 
 	input_modalities: list[InputModality]
-	id: str
-	provider_id: str
+	id: TypeID
+	provider_id: TypeID
 
 
 class ModelUpdate(MetadataUpdateModel):

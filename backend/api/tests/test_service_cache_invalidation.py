@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.event import Event
 from api.models.event_types import EventType
 from api.models.file import File, FileSource, FileStatus
+from api.models.message_attachment import MessageAttachment
 from api.models.thread import Thread
 from api.models.user import User
 from api.permissions import (
@@ -26,7 +28,12 @@ from api.schemas.calendar import (
 	CalendarUpdate,
 )
 from api.schemas.file import FileUpdate
-from api.schemas.message import MessageCreate, MessageUpdate
+from api.schemas.message import (
+	MessageSplice,
+	MessageUpdate,
+	ResourceAttachment,
+	TextContent,
+)
 from api.schemas.note import NoteCreate, NoteUpdate
 from api.schemas.project import ProjectCreate, ProjectUpdate
 from api.schemas.prompt import PromptCreate, PromptUpdate
@@ -43,6 +50,7 @@ from api.schemas.scheduled_item import (
 	Recurrence,
 	ReminderSeriesEdit,
 )
+from api.schemas.thread import ThreadCreate
 from api.schemas.user import UserUpdate
 from api.storage import get_storage_backend
 from api.v1.service import agents as agent_service
@@ -52,13 +60,18 @@ from api.v1.service import projects as project_service
 from api.v1.service import prompts as prompt_service
 from api.v1.service import roles as role_service
 from api.v1.service import users as user_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.calendar import calendars as calendar_service
 from api.v1.service.calendar import events as calendar_event_service
 from api.v1.service.reminders import core as reminder_service
 from api.v1.service.reminders import lists as reminder_list_service
+from api.v1.service.threads import attachments as attachment_service
+from api.v1.service.threads import branches as branch_service
+from api.v1.service.threads import common as thread_common
 from api.v1.service.threads import core as thread_service
-from api.v1.service.threads import messages as message_service
+from api.v1.service.threads.create import create_thread
+from api.v1.service.threads.drafts import MessageDraft
+from api.v1.service.threads.messages import writes as message_service
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -73,7 +86,7 @@ async def _admin_principal(session: AsyncSession, label: str) -> Principal:
 	session.add(user)
 	await session.flush()
 	await session.refresh(user)
-	return Principal(user=user, group_ids=(), permissions=frozenset())
+	return Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 
 
 async def _regular_user(session: AsyncSession, label: str) -> User:
@@ -106,14 +119,11 @@ async def test_superuser_toggle_invalidates_all_accessible_user_caches(
 
 	async def record_resource_types(
 		resource_types: list[ResourceType],
-		session: AsyncSession,
 	) -> None:
-		_ = session
 		calls.append(resource_types)
 
 	monkeypatch.setattr(
-		user_service,
-		"invalidate_accessible_users_for_resource_types",
+		"api.v1.service.users.accounts.invalidate_accessible_users_for_resource_types",
 		record_resource_types,
 	)
 
@@ -167,8 +177,8 @@ async def test_thread_owner_transfer_invalidates_accessible_users_resource(
 		record_vectorize_resource,
 	)
 
-	thread = await thread_service.create_thread(
-		thread_service.ThreadCreate(owner_id=principal.user_id, title="owner cache"),
+	thread = await create_thread(
+		ThreadCreate(owner_id=principal.user.id, title="owner cache"),
 		db_session,
 		principal=principal,
 	)
@@ -218,9 +228,7 @@ async def test_role_default_update_notifies_members_and_invalidates_defaults(
 
 	async def record_resource_types(
 		resource_types: list[ResourceType],
-		session: AsyncSession,
 	) -> None:
-		_ = session
 		type_calls.append(resource_types)
 
 	async def record_persist_and_fanout_event(
@@ -236,7 +244,7 @@ async def test_role_default_update_notifies_members_and_invalidates_defaults(
 
 	monkeypatch.setattr(
 		role_service,
-		"invalidate_accessible_users_for_subject",
+		"enqueue_accessible_users_invalidation_for_subject",
 		record_subject,
 	)
 	monkeypatch.setattr(
@@ -245,7 +253,7 @@ async def test_role_default_update_notifies_members_and_invalidates_defaults(
 		record_resource_types,
 	)
 	monkeypatch.setattr(
-		role_service.event_service,
+		role_service,
 		"persist_and_fanout_event",
 		record_persist_and_fanout_event,
 	)
@@ -263,9 +271,10 @@ async def test_role_default_update_notifies_members_and_invalidates_defaults(
 
 	assert subject_calls == [("role", role.id)]
 	assert type_calls == [[ResourceType.THREAD]]
-	assert len(sent) == 1
-	assert sent[0][0] == [member.id]
-	assert sent[0][1] == EventType.ROLE_UPDATED
+	assert sent == [
+		(None, EventType.ACCESS_DEFAULTS_CHANGED),
+		([member.id], EventType.ROLE_UPDATED),
+	]
 
 
 @pytest.mark.asyncio
@@ -303,9 +312,7 @@ async def test_role_member_update_invalidates_role_default_resource_types(
 
 	async def record_resource_types(
 		resource_types: list[ResourceType],
-		session: AsyncSession,
 	) -> None:
-		_ = session
 		type_calls.append(resource_types)
 
 	async def record_persist_and_fanout_event(
@@ -321,7 +328,7 @@ async def test_role_member_update_invalidates_role_default_resource_types(
 
 	monkeypatch.setattr(
 		role_service,
-		"invalidate_accessible_users_for_subject",
+		"enqueue_accessible_users_invalidation_for_subject",
 		record_subject,
 	)
 	monkeypatch.setattr(
@@ -330,7 +337,7 @@ async def test_role_member_update_invalidates_role_default_resource_types(
 		record_resource_types,
 	)
 	monkeypatch.setattr(
-		role_service.event_service,
+		role_service,
 		"persist_and_fanout_event",
 		record_persist_and_fanout_event,
 	)
@@ -345,7 +352,10 @@ async def test_role_member_update_invalidates_role_default_resource_types(
 	assert subject_calls == [("role", role.id)]
 	assert len(type_calls) == 1
 	assert set(type_calls[0]) == {ResourceType.THREAD, ResourceType.CALENDAR}
-	assert sent == [([member.id], EventType.ROLE_UPDATED)]
+	assert sent == [
+		(None, EventType.ACCESS_DEFAULTS_CHANGED),
+		([member.id], EventType.ROLE_UPDATED),
+	]
 
 
 @pytest.mark.asyncio
@@ -387,9 +397,7 @@ async def test_role_priority_update_does_not_invalidate_default_access(
 
 	async def record_resource_types(
 		resource_types: list[ResourceType],
-		session: AsyncSession,
 	) -> None:
-		_ = session
 		type_calls.append(resource_types)
 
 	async def record_persist_and_fanout_event(
@@ -405,7 +413,7 @@ async def test_role_priority_update_does_not_invalidate_default_access(
 
 	monkeypatch.setattr(
 		role_service,
-		"invalidate_accessible_users_for_subject",
+		"enqueue_accessible_users_invalidation_for_subject",
 		record_subject,
 	)
 	monkeypatch.setattr(
@@ -414,7 +422,7 @@ async def test_role_priority_update_does_not_invalidate_default_access(
 		record_resource_types,
 	)
 	monkeypatch.setattr(
-		role_service.event_service,
+		role_service,
 		"persist_and_fanout_event",
 		record_persist_and_fanout_event,
 	)
@@ -446,12 +454,11 @@ async def test_cached_resource_write_paths_invalidate_payloads(
 		calls.append((resource_type, resource_id))
 
 	monkeypatch.setattr(
-		agent_service,
-		"invalidate_resource_payload_cache",
+		"api.v1.service.agents.core.invalidate_resource_payload_cache",
 		record_resource,
 	)
 	monkeypatch.setattr(
-		file_service.service,
+		file_service.core,
 		"invalidate_resource_payload_cache",
 		record_resource,
 	)
@@ -490,8 +497,8 @@ async def test_cached_resource_write_paths_invalidate_payloads(
 	await agent_service.delete_agent(agent.id, db_session, principal=principal)
 
 	file = File(
-		owner_id=principal.user_id,
-		source=FileSource.UPLOAD,
+		owner_id=principal.user.id,
+		source=FileSource.USER_UPLOADED,
 		storage_backend="local",
 		storage_key="cache-invalidation-file",
 		filename="before.txt",
@@ -542,8 +549,8 @@ async def test_cached_resource_write_paths_invalidate_payloads(
 	)
 	await project_service.delete_project(project.id, db_session, principal=principal)
 
-	thread = await thread_service.create_thread(
-		thread_service.ThreadCreate(owner_id=principal.user_id, title="cache thread"),
+	thread = await create_thread(
+		ThreadCreate(owner_id=principal.user.id, title="cache thread"),
 		db_session,
 		principal=principal,
 	)
@@ -590,8 +597,8 @@ async def test_thread_message_write_paths_invalidate_thread_payload(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
 	principal = await _admin_principal(db_session, "thread-cache")
-	thread = await thread_service.create_thread(
-		thread_service.ThreadCreate(owner_id=principal.user_id, title="messages"),
+	thread = await create_thread(
+		ThreadCreate(owner_id=principal.user.id, title="messages"),
 		db_session,
 		principal=principal,
 	)
@@ -604,44 +611,216 @@ async def test_thread_message_write_paths_invalidate_thread_payload(
 		calls.append((resource_type, resource_id))
 
 	monkeypatch.setattr(
+		branch_service,
+		"invalidate_resource_payload_cache",
+		record_resource,
+	)
+	monkeypatch.setattr(
 		message_service,
+		"invalidate_resource_payload_cache",
+		record_resource,
+	)
+	monkeypatch.setattr(
+		thread_common,
 		"invalidate_resource_payload_cache",
 		record_resource,
 	)
 
 	first = await message_service.create_message(
 		thread.id,
-		MessageCreate(content="first"),
+		MessageDraft(content=[TextContent(text="first")]),
 		db_session,
 		principal=principal,
 	)
+	assert (ResourceType.THREAD, thread.id) in calls
+	calls.clear()
 	second = await message_service.create_message(
 		thread.id,
-		MessageCreate(content="second", parent_id=None),
+		MessageDraft(
+			content=[TextContent(text="second")],
+			splice=MessageSplice(parent_id=None),
+		),
 		db_session,
 		principal=principal,
 	)
-	await message_service.switch_branch(
+	assert (ResourceType.THREAD, thread.id) in calls
+	calls.clear()
+	await branch_service.switch_branch(
 		thread.id,
-		first.id,
+		first.message.id,
+		db_session,
+		principal=principal,
+	)
+	assert (ResourceType.THREAD, thread.id) in calls
+	calls.clear()
+	await message_service.update_user_message(
+		thread.id,
+		second.message.id,
+		MessageUpdate(content="updated second"),
+		db_session,
+		principal=principal,
+	)
+	assert (ResourceType.THREAD, thread.id) in calls
+	calls.clear()
+	await message_service.delete_user_message_turn(
+		thread.id,
+		second.message.id,
+		db_session,
+		principal=principal,
+	)
+
+	assert (ResourceType.THREAD, thread.id) in calls
+
+
+@pytest.mark.asyncio
+async def test_message_cache_failure_does_not_suppress_committed_fanout(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	principal = await _admin_principal(db_session, "message-cache-failure")
+	thread = await create_thread(
+		ThreadCreate(owner_id=principal.user.id, title="cache failure"),
+		db_session,
+		principal=principal,
+	)
+	fanout = AsyncMock()
+	monkeypatch.setattr(message_service, "fanout_event", fanout)
+	monkeypatch.setattr(
+		message_service,
+		"invalidate_resource_payload_cache",
+		AsyncMock(side_effect=RuntimeError("redis unavailable")),
+	)
+
+	written = await message_service.create_message(
+		thread.id,
+		MessageDraft(content=[TextContent(text="committed")]),
+		db_session,
+		principal=principal,
+	)
+
+	assert written.message.id is not None
+	assert fanout.await_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_attachment_create_and_replace_invalidate_resource_access(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	principal = await _admin_principal(db_session, "attachment-access-cache")
+	thread = await create_thread(
+		ThreadCreate(owner_id=principal.user.id, title="attachment access cache"),
+		db_session,
+		principal=principal,
+	)
+	first_file = File(
+		owner_id=principal.user.id,
+		storage_backend="local",
+		storage_key="attachment-access-cache-first",
+		filename="first.txt",
+	)
+	second_file = File(
+		owner_id=principal.user.id,
+		storage_backend="local",
+		storage_key="attachment-access-cache-second",
+		filename="second.txt",
+	)
+	db_session.add_all([first_file, second_file])
+	await db_session.flush()
+	calls: list[tuple[ResourceType, TypeID]] = []
+
+	async def record_resource(
+		resource_type: ResourceType,
+		resource_id: TypeID,
+	) -> None:
+		calls.append((resource_type, resource_id))
+
+	monkeypatch.setattr(
+		attachment_service,
+		"invalidate_accessible_users_for_resource",
+		record_resource,
+	)
+	message = await message_service.create_message(
+		thread.id,
+		MessageDraft(
+			content=[TextContent(text="first attachment")],
+			attachments=[ResourceAttachment(type=ResourceType.FILE, id=first_file.id)],
+		),
 		db_session,
 		principal=principal,
 	)
 	await message_service.update_user_message(
 		thread.id,
-		second.id,
-		MessageUpdate(content="updated second"),
-		db_session,
-		principal=principal,
-	)
-	await message_service.delete_user_message_turn(
-		thread.id,
-		second.id,
+		message.message.id,
+		MessageUpdate(
+			attachments=[ResourceAttachment(type=ResourceType.FILE, id=second_file.id)]
+		),
 		db_session,
 		principal=principal,
 	)
 
-	assert calls == [(ResourceType.THREAD, thread.id)] * 5
+	assert calls == [
+		(ResourceType.FILE, first_file.id),
+		(ResourceType.FILE, first_file.id),
+		(ResourceType.FILE, second_file.id),
+	]
+
+
+@pytest.mark.asyncio
+async def test_message_delete_invalidates_attached_resource_access(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	principal = await _admin_principal(db_session, "msg-delete-cache")
+	thread = await create_thread(
+		ThreadCreate(owner_id=principal.user.id, title="message delete access cache"),
+		db_session,
+		principal=principal,
+	)
+	message = await message_service.create_message(
+		thread.id,
+		MessageDraft(content=[TextContent(text="attached resource")]),
+		db_session,
+		principal=principal,
+	)
+	file = File(
+		owner_id=principal.user.id,
+		storage_backend="local",
+		storage_key="message-delete-access-cache-file",
+		filename="delete.txt",
+	)
+	db_session.add(file)
+	await db_session.flush()
+	db_session.add(
+		MessageAttachment(
+			message_id=message.message.id,
+			position=0,
+			file_id=file.id,
+		)
+	)
+	await db_session.flush()
+	calls: list[list[tuple[ResourceType, TypeID]]] = []
+
+	async def record_resources(
+		resource_refs: list[tuple[ResourceType, TypeID]],
+		session: AsyncSession,
+	) -> None:
+		assert session is not db_session
+		calls.append(resource_refs)
+
+	monkeypatch.setattr(
+		message_service,
+		"refresh_attachment_access",
+		record_resources,
+	)
+	await message_service.delete_user_message_turn(
+		thread.id,
+		message.message.id,
+		db_session,
+		principal=principal,
+	)
+
+	assert calls == [[(ResourceType.FILE, file.id)]]
 
 
 @pytest.mark.asyncio

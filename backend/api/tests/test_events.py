@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 
 import pytest
@@ -9,6 +10,10 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.database.post_commit import (
+	enqueue_post_commit_action,
+	run_post_commit_actions,
+)
 from api.models.access_rule import AccessRule
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
@@ -18,32 +23,145 @@ from api.models.thread import Thread
 from api.models.user import User
 from api.permissions import AccessLevel, ResourceType
 from api.schemas.event import EventCreate, EventListFilters
+from api.tests.factories import make_principal
 from api.v1.service import events as event_service
-from api.v1.service.auth import Principal
-from api.v1.service.chat import run_status
+from api.v1.service.authentication import Principal
+from api.v1.service.authorization import cache as authorization_cache
+from api.v1.service.runs import status as run_status
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
 def _admin_principal() -> Principal:
-	user = User(
-		email="admin@example.com",
-		username="admin_events",
-		hashed_password="x",
-		is_active=True,
-		is_superuser=True,
-		preferences={},
-		integration_tokens={},
-		usage_quotas={},
+	return make_principal(slug="admin_events", is_superuser=True)
+
+
+def test_resource_id_from_data_rejects_malformed_id() -> None:
+	assert (
+		event_service._resource_id_from_data(
+			{"thread_id": "not-a-typeid"},
+			("thread_id",),
+		)
+		is None
 	)
-	return Principal(user=user, group_ids=(), permissions=frozenset())
 
 
 def _non_admin_events_manager_principal(user: User) -> Principal:
-	return Principal(
+	return Principal.for_user(
 		user=user,
 		group_ids=(),
 		permissions=frozenset({"events:manage"}),
 	)
+
+
+@pytest.mark.asyncio
+async def test_live_persisting_emitter_correlates_before_persist_and_fanout(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	message_id = TypeID(new_typeid("msg"))
+	correlated = asyncio.Event()
+	fanned_out = asyncio.Event()
+	observed: list[TypeID | None] = []
+
+	async def correlate(event: Event) -> None:
+		event.message_id = None
+		correlated.set()
+
+	async def fanout(event: Event, _payload: dict[str, object]) -> None:
+		assert correlated.is_set()
+		observed.append(event.message_id)
+		fanned_out.set()
+
+	monkeypatch.setattr(event_service, "_fanout_event_scope", fanout)
+	emit = event_service.build_live_persisting_event_emitter(
+		before_persist=correlate,
+	)
+	await emit(
+		Event(
+			scope=EventScope.SYSTEM,
+			type=EventType.CITATION_SOURCES,
+			data={},
+			message_id=message_id,
+		)
+	)
+	await asyncio.wait_for(fanned_out.wait(), timeout=1)
+	assert observed == [None]
+
+
+@pytest.mark.asyncio
+async def test_live_persisting_emitter_preserves_emission_order(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	first_release = asyncio.Event()
+	fanned_out = asyncio.Event()
+	order: list[str] = []
+
+	async def correlate(event: Event) -> None:
+		if event.data["step"] == "first":
+			await first_release.wait()
+
+	async def fanout(event: Event, _payload: dict[str, object]) -> None:
+		order.append(str(event.data["step"]))
+		if len(order) == 2:
+			fanned_out.set()
+
+	monkeypatch.setattr(event_service, "_fanout_event_scope", fanout)
+	emit = event_service.build_live_persisting_event_emitter(before_persist=correlate)
+	await emit(
+		Event(
+			scope=EventScope.SYSTEM,
+			type=EventType.RUN_ACTIVITY_STARTED,
+			data={"step": "first"},
+		)
+	)
+	await emit(
+		Event(
+			scope=EventScope.SYSTEM,
+			type=EventType.RUN_ACTIVITY_ENDED,
+			data={"step": "second"},
+		)
+	)
+	await asyncio.sleep(0)
+	assert order == []
+	first_release.set()
+	await asyncio.wait_for(fanned_out.wait(), timeout=1)
+	assert order == ["first", "second"]
+
+
+@pytest.mark.asyncio
+async def test_create_event_from_request_requires_events_manage(
+	db_session: AsyncSession,
+) -> None:
+	"""Principals without events:manage cannot create events."""
+	user = User(
+		email="no_perm@example.com",
+		username="no_perm_events",
+		hashed_password="password",
+		is_active=True,
+		is_superuser=False,
+		preferences={},
+		integration_tokens={},
+		usage_quotas={},
+	)
+	db_session.add(user)
+	await db_session.commit()
+	await db_session.refresh(user)
+
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
+
+	with pytest.raises(Exception) as excinfo:
+		await event_service.create_event_from_request(
+			EventCreate(
+				scope=EventScope.USER,
+				scope_id=user.id,
+				type=EventType.NOTIFICATION_CUSTOM,
+				data={"foo": "bar"},
+				user_id=user.id,
+			),
+			db_session,
+			principal=principal,
+		)
+
+	assert getattr(excinfo.value, "status_code", None) == 403
 
 
 @pytest.mark.asyncio
@@ -90,10 +208,10 @@ async def test_create_event_from_request(db_session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_event_from_request_non_admin_cannot_notify_other_user(
+async def test_create_event_from_request_events_manager_can_notify_other_user(
 	db_session: AsyncSession,
 ) -> None:
-	"""Non-admins may only create notifications for themselves."""
+	"""events:manage grants creating events for other users."""
 	actor = User(
 		email="actor@example.com",
 		username="actor_test",
@@ -121,29 +239,27 @@ async def test_create_event_from_request_non_admin_cannot_notify_other_user(
 
 	principal = _non_admin_events_manager_principal(actor)
 
-	with pytest.raises(Exception) as excinfo:
-		await event_service.create_event_from_request(
-			EventCreate(
-				scope=EventScope.USER,
-				scope_id=target.id,
-				type=EventType.NOTIFICATION_CUSTOM,
-				data={"foo": "bar"},
-				user_id=target.id,
-			),
-			db_session,
-			principal=principal,
-		)
+	event = await event_service.create_event_from_request(
+		EventCreate(
+			scope=EventScope.USER,
+			scope_id=target.id,
+			type=EventType.NOTIFICATION_CUSTOM,
+			data={"foo": "bar"},
+			user_id=target.id,
+		),
+		db_session,
+		principal=principal,
+	)
 
-	# Avoid importing FastAPI HTTPException directly in tests; assert via status_code.
-	err = excinfo.value
-	assert getattr(err, "status_code", None) == 403
+	assert str(event.user_id) == str(target.id)
+	assert str(event.scope_id) == str(target.id)
 
 
 @pytest.mark.asyncio
-async def test_create_event_from_request_non_admin_cannot_target_other_user_scope(
+async def test_create_event_from_request_events_manager_can_target_other_user_scope(
 	db_session: AsyncSession,
 ) -> None:
-	"""Non-admins cannot route user-scoped events to another user."""
+	"""events:manage grants routing user-scoped events to another user."""
 	actor = User(
 		email="scope_actor@example.com",
 		username="scope_actor_test",
@@ -171,21 +287,20 @@ async def test_create_event_from_request_non_admin_cannot_target_other_user_scop
 
 	principal = _non_admin_events_manager_principal(actor)
 
-	with pytest.raises(Exception) as excinfo:
-		await event_service.create_event_from_request(
-			EventCreate(
-				scope=EventScope.USER,
-				scope_id=target.id,
-				type=EventType.NOTIFICATION_CUSTOM,
-				data={"foo": "bar"},
-				user_id=actor.id,
-			),
-			db_session,
-			principal=principal,
-		)
+	event = await event_service.create_event_from_request(
+		EventCreate(
+			scope=EventScope.USER,
+			scope_id=target.id,
+			type=EventType.NOTIFICATION_CUSTOM,
+			data={"foo": "bar"},
+			user_id=actor.id,
+		),
+		db_session,
+		principal=principal,
+	)
 
-	err = excinfo.value
-	assert getattr(err, "status_code", None) == 403
+	assert str(event.scope_id) == str(target.id)
+	assert str(event.user_id) == str(actor.id)
 
 
 @pytest.mark.asyncio
@@ -435,6 +550,47 @@ async def test_persist_and_fanout_event_broadcasts_system_scope(
 
 
 @pytest.mark.asyncio
+async def test_persist_runs_deferred_actions_before_live_fanout(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	order: list[str] = []
+
+	async def deferred(db: AsyncSession) -> None:
+		assert db is not db_session
+		order.append("deferred")
+
+	async def fake_fanout(*args: object, **kwargs: object) -> None:
+		_ = args, kwargs
+		order.append("fanout")
+
+	enqueue_post_commit_action(db_session, deferred)
+	monkeypatch.setattr(event_service, "_fanout_event_with_recipients", fake_fanout)
+	await event_service.persist_and_fanout_event(
+		db_session,
+		Event(
+			scope=EventScope.SYSTEM,
+			type=EventType.SETTINGS_UPDATED,
+			data={},
+		),
+	)
+	assert order == ["deferred", "fanout"]
+
+
+@pytest.mark.asyncio
+async def test_post_commit_action_cannot_enqueue_another_action(
+	db_session: AsyncSession,
+) -> None:
+	async def nested(db: AsyncSession) -> None:
+		enqueue_post_commit_action(db, nested)
+
+	enqueue_post_commit_action(db_session, nested)
+	await db_session.commit()
+	with pytest.raises(ExceptionGroup, match="post-commit actions failed"):
+		await run_post_commit_actions(db_session)
+
+
+@pytest.mark.asyncio
 async def test_persist_and_fanout_event_skips_unroutable_non_system_scope(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
@@ -552,7 +708,7 @@ async def test_persist_and_fanout_event_includes_owner_for_new_resource(
 
 
 @pytest.mark.asyncio
-async def test_resolve_event_recipients_includes_affected_project_viewers(
+async def test_accessible_users_for_resources_unions_recipients(
 	db_session: AsyncSession,
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -587,8 +743,9 @@ async def test_resolve_event_recipients_includes_affected_project_viewers(
 		resource_type: ResourceType,
 		resource_id: TypeID,
 		session: AsyncSession,
+		required_level: AccessLevel = AccessLevel.READER,
 	) -> list[TypeID]:
-		_ = session
+		_ = session, required_level
 		calls.append((resource_type, str(resource_id)))
 		if resource_type == ResourceType.THREAD:
 			return [resource_viewer.id]
@@ -597,22 +754,16 @@ async def test_resolve_event_recipients_includes_affected_project_viewers(
 		return []
 
 	monkeypatch.setattr(
-		event_service,
-		"list_accessible_user_ids",
+		authorization_cache,
+		"_list_accessible_user_ids",
 		fake_list_accessible_user_ids,
 	)
-
-	recipients = await event_service._resolve_event_recipient_ids(
-		Event(
-			scope=EventScope.THREAD,
-			scope_id=thread_id,
-			type=EventType.THREAD_UPDATED,
-			data={
-				"id": str(thread_id),
-				"affected_project_ids": [str(project_id)],
-			},
-			thread_id=thread_id,
-		)
+	recipients = await authorization_cache.list_accessible_user_ids_for_resources(
+		[
+			(ResourceType.THREAD, TypeID(thread_id)),
+			(ResourceType.PROJECT, TypeID(project_id)),
+		],
+		db_session,
 	)
 
 	assert {str(recipient_id) for recipient_id in recipients or []} == {
@@ -657,12 +808,15 @@ async def test_broadcast_run_event_uses_live_payload_fanout(
 		recipient_ids: list[object],
 		user_id: object | None = None,
 		broadcast: bool = False,
+		exclude_user_id: object | None = None,
 	) -> None:
-		_ = user_id, broadcast
+		_ = user_id, broadcast, exclude_user_id
 		stream_payloads.append((stream_payload, recipient_ids))
 
+	# run_status delegates the fanout to events.broadcast_to_resource, so the
+	# audience resolution under test lives there.
 	monkeypatch.setattr(
-		run_status,
+		event_service,
 		"fanout_live_payload",
 		fake_fanout_live_payload,
 	)

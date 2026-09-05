@@ -9,8 +9,22 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic import ValidationError
 
-from api.storage import _BACKENDS, close_all, get_storage_backend, register
+from api import runtime
+from api.settings import (
+	LocalStorageBackendConfig,
+	S3StorageBackendConfig,
+	StorageSettings,
+	settings,
+)
+from api.storage import (
+	_BACKENDS,
+	close_all,
+	configure_storage_backends,
+	get_storage_backend,
+	register,
+)
 from api.storage.base import FileInfo, StorageBackend
 from api.storage.local import LocalStorageBackend
 
@@ -166,7 +180,7 @@ def local_root(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def local_backend(local_root: Path) -> LocalStorageBackend:
-	return LocalStorageBackend(root_path=str(local_root))
+	return LocalStorageBackend(name="local", root_path=str(local_root))
 
 
 class TestLocalStorageBackend:
@@ -337,7 +351,7 @@ class TestStorageRegistry:
 	def test_register_and_get(self, local_root: Path) -> None:
 		"""register a backend then retrieve it by name."""
 
-		backend = LocalStorageBackend(root_path=str(local_root))
+		backend = LocalStorageBackend(name="local", root_path=str(local_root))
 		register("local", backend)
 
 		assert get_storage_backend("local") is backend
@@ -346,8 +360,8 @@ class TestStorageRegistry:
 	def test_register_twice_replaces(self, local_root: Path) -> None:
 		"""registering the same name replaces the previous instance."""
 
-		a = LocalStorageBackend(root_path=str(local_root / "a"))
-		b = LocalStorageBackend(root_path=str(local_root / "b"))
+		a = LocalStorageBackend(name="local", root_path=str(local_root / "a"))
+		b = LocalStorageBackend(name="local", root_path=str(local_root / "b"))
 		register("local", a)
 		register("local", b)
 
@@ -369,3 +383,136 @@ class TestStorageRegistry:
 		await close_all()
 		mock_backend.close.assert_awaited_once()
 		assert len(_BACKENDS) == 0
+
+
+# ---------------------------------------------------------------------------
+# configured backend set
+# ---------------------------------------------------------------------------
+
+
+class TestConfiguredBackends:
+	"""configure_storage_backends builds the whole configured set."""
+
+	@pytest.fixture(autouse=True)
+	def _isolate(self) -> Generator[None]:
+		saved = dict(_BACKENDS)
+		saved_storage = settings.assets.storage
+		_BACKENDS.clear()
+		try:
+			yield
+		finally:
+			_BACKENDS.clear()
+			_BACKENDS.update(saved)
+			settings.assets.storage = saved_storage
+
+	async def test_registers_every_configured_backend(self, local_root: Path) -> None:
+		"""configured backends are registered under their own names."""
+
+		settings.assets.storage = StorageSettings(
+			active_backend="local",
+			backends=[LocalStorageBackendConfig(root_path=str(local_root))],
+		)
+		await configure_storage_backends()
+
+		assert get_storage_backend("local").name == "local"
+		assert settings.assets.storage.active_backend == "local"
+
+	async def test_reconfigure_drops_removed_backends(self, local_root: Path) -> None:
+		"""re-running registration reflects a backend the admin removed."""
+
+		settings.assets.storage = StorageSettings(
+			active_backend="local",
+			backends=[LocalStorageBackendConfig(root_path=str(local_root))],
+		)
+		await configure_storage_backends()
+		register("stale", LocalStorageBackend(name="stale", root_path=str(local_root)))
+
+		await configure_storage_backends()
+
+		with pytest.raises(ValueError, match="not registered"):
+			get_storage_backend("stale")
+		assert get_storage_backend("local").name == "local"
+
+	async def test_reconfigure_repoints_existing_backend(
+		self, local_root: Path
+	) -> None:
+		"""a config change rebuilds the backend registered under that name."""
+
+		settings.assets.storage = StorageSettings(
+			active_backend="local",
+			backends=[LocalStorageBackendConfig(root_path=str(local_root / "first"))],
+		)
+		await configure_storage_backends()
+		first = get_storage_backend("local")
+
+		settings.assets.storage = StorageSettings(
+			active_backend="local",
+			backends=[LocalStorageBackendConfig(root_path=str(local_root / "second"))],
+		)
+		await configure_storage_backends()
+
+		assert get_storage_backend("local") is not first
+
+	def test_storage_reload_hook_is_registered(self) -> None:
+		"""a settings change re-runs storage registration in every process."""
+
+		assert configure_storage_backends in runtime._settings_reload_hooks
+
+
+# ---------------------------------------------------------------------------
+# storage settings validation
+# ---------------------------------------------------------------------------
+
+
+class TestStorageSettingsValidation:
+	def test_rejects_duplicate_backend_names(self) -> None:
+		"""two backends may not share a name."""
+
+		with pytest.raises(ValidationError, match="duplicate storage backend names"):
+			StorageSettings(
+				active_backend="dup",
+				backends=[
+					LocalStorageBackendConfig(),
+					S3StorageBackendConfig(name="dup"),
+					S3StorageBackendConfig(name="dup"),
+				],
+			)
+
+	def test_rejects_unknown_active_backend(self) -> None:
+		"""the active backend must be one of the configured backends."""
+
+		with pytest.raises(ValidationError, match="is not a configured backend"):
+			StorageSettings(
+				active_backend="missing",
+				backends=[LocalStorageBackendConfig()],
+			)
+
+	def test_rejects_reserved_local_name_for_s3(self) -> None:
+		"""'local' is reserved for the filesystem backend."""
+
+		with pytest.raises(ValidationError, match="is reserved"):
+			S3StorageBackendConfig(name="local")
+
+	def test_rejects_malformed_backend_name(self) -> None:
+		"""names are restricted to a url/env friendly shape."""
+
+		with pytest.raises(ValidationError, match="must match"):
+			S3StorageBackendConfig(name="Bad Name!")
+
+	def test_accepts_multiple_named_s3_backends(self) -> None:
+		"""several independently named s3 backends may coexist."""
+
+		storage = StorageSettings(
+			active_backend="cold",
+			backends=[
+				LocalStorageBackendConfig(),
+				S3StorageBackendConfig(name="hot", bucket="hot-bucket"),
+				S3StorageBackendConfig(name="cold", bucket="cold-bucket"),
+			],
+		)
+
+		assert [backend.name for backend in storage.backends] == [
+			"local",
+			"hot",
+			"cold",
+		]

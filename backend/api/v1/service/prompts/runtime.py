@@ -4,12 +4,10 @@ this module owns prompt template rendering, runtime variable building, agent
 instruction rendering, and prompt reference validation.
 """
 
-from __future__ import annotations
-
 import re
 from collections.abc import Iterable
 from datetime import UTC, date, datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
@@ -17,9 +15,9 @@ from jinja2 import DictLoader, Environment, StrictUndefined, TemplateNotFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.prompt import Prompt
-from api.models.user import User
-from api.schemas.common import MISSING, MissingType
+from api.schemas.common import unwrap_missing
 from api.schemas.preferences import AccountPreferences, AIPreferences
+from api.v1.schemas.auth import UserSubject
 from api.v1.service.prompts.cache import list_prompt_templates
 from api.v1.service.prompts.external import render_external_prompt_content_map
 from nokodo_ai.utils.typeid import TypeID
@@ -27,13 +25,6 @@ from nokodo_ai.utils.typeid import TypeID
 
 if TYPE_CHECKING:
 	from api.schemas.runs import ClientContext
-
-
-def _preference_value[T](value: T | MissingType, default: T) -> T:
-	"""return a preference value or its default when missing."""
-	if value is MISSING:
-		return default
-	return cast(T, value)
 
 
 # sentinel markers for filter injection points.
@@ -421,7 +412,7 @@ def _resolve_now(client_context: ClientContext | None) -> datetime:
 
 
 def build_prompt_variables(
-	user: User | None = None,
+	user: UserSubject | None = None,
 	client_context: ClientContext | None = None,
 ) -> dict[str, object]:
 	"""build the dict of always-available prompt template variables."""
@@ -508,21 +499,21 @@ def build_prompt_variables(
 		account_section if isinstance(account_section, AccountPreferences) else None
 	)
 
-	if ai and _preference_value(ai.memories_enabled, True) is False:
+	if ai and unwrap_missing(ai.memories_enabled, True) is False:
 		variables["user_memories"] = ""
 	else:
 		variables["user_memories"] = SENTINEL_USER_MEMORIES
 
-	if ai and _preference_value(ai.chat_recall, True) is False:
+	if ai and unwrap_missing(ai.chat_recall, True) is False:
 		variables["chat_context"] = ""
 	else:
 		variables["chat_context"] = SENTINEL_CHAT_CONTEXT
 
-	birth_date = _preference_value(account.birth_date, None) if account else None
+	birth_date = unwrap_missing(account.birth_date, None) if account else None
 	age = _compute_age(birth_date, now)
-	ai_bio = _preference_value(ai.bio, None) if ai else None
-	account_bio = _preference_value(account.bio, None) if account else None
-	use_account_bio = _preference_value(ai.use_account_bio, False) if ai else False
+	ai_bio = unwrap_missing(ai.bio, None) if ai else None
+	account_bio = unwrap_missing(account.bio, None) if account else None
+	use_account_bio = unwrap_missing(ai.use_account_bio, False) if ai else False
 
 	variables.update(
 		{
@@ -535,13 +526,13 @@ def build_prompt_variables(
 				account_bio,
 				use_account_bio=use_account_bio,
 			),
-			"user_gender": _preference_value(account.gender, None) if account else None,
+			"user_gender": unwrap_missing(account.gender, None) if account else None,
 			"user_birth_date": birth_date,
 			"user_age": age,
-			"user_custom_instructions": _preference_value(ai.custom_instructions, None)
+			"user_custom_instructions": unwrap_missing(ai.custom_instructions, None)
 			if ai
 			else None,
-			"ai_personality": _preference_value(ai.personality, None) if ai else None,
+			"ai_personality": unwrap_missing(ai.personality, None) if ai else None,
 		}
 	)
 
@@ -551,7 +542,7 @@ def build_prompt_variables(
 async def render_agent_instructions(
 	session: AsyncSession,
 	text: str,
-	user: User | None = None,
+	user: UserSubject | None = None,
 	client_context: ClientContext | None = None,
 ) -> str:
 	"""render agent system instructions with runtime context variables."""

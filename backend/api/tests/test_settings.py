@@ -219,6 +219,7 @@ def test_settings_patch_accepts_web_search_and_integration_updates() -> None:
 			"ai": {
 				"tasks": {
 					"web_search_model_id": "model-chat",
+					"passage_enrichment_model_id": "model-cheap",
 					"maintenance_max_chars_per_message": 3000,
 				},
 				"context_compaction": {
@@ -230,6 +231,16 @@ def test_settings_patch_accepts_web_search_and_integration_updates() -> None:
 					"blocking_summarization_enabled": True,
 					"blocking_summarization_timeout_seconds": 20.0,
 					"summarization_max_chars_per_message": 3000,
+				},
+			},
+			"assets": {
+				"thread_passages": {
+					"enabled": True,
+					"target_tokens": 2000,
+					"enrichment": {
+						"enabled": False,
+						"max_per_run": 8,
+					},
 				},
 			},
 			"limits": {
@@ -294,11 +305,23 @@ def test_settings_patch_accepts_web_search_and_integration_updates() -> None:
 					"cron": "*/15 * * * *",
 					"batch_size": 30,
 				},
+				"user_session_purge": {
+					"enabled": True,
+					"cron": "0 4 * * *",
+					"batch_size": 1000,
+					"grace_period_days": 30,
+				},
 			},
 		}
 	)
 
 	dumped = patch.model_dump(exclude_unset=True)
+	assert dumped["ai"]["tasks"]["passage_enrichment_model_id"] == "model-cheap"
+	assert dumped["assets"]["thread_passages"]["enabled"] is True
+	assert dumped["assets"]["thread_passages"]["enrichment"] == {
+		"enabled": False,
+		"max_per_run": 8,
+	}
 	assert dumped["web_search"]["agentic"]["agent"] == "native"
 	assert dumped["web_search"]["web_loaders"]["max_chars"] == 40000
 	assert dumped["integrations"]["perplexity"]["image_results_enabled"] is True
@@ -308,6 +331,12 @@ def test_settings_patch_accepts_web_search_and_integration_updates() -> None:
 	assert dumped["tasks"]["maintenance_backfill"]["batch_size"] == 25
 	assert dumped["tasks"]["file_maintenance"]["enabled"] is True
 	assert dumped["tasks"]["file_maintenance"]["batch_size"] == 30
+	assert dumped["tasks"]["user_session_purge"] == {
+		"enabled": True,
+		"cron": "0 4 * * *",
+		"batch_size": 1000,
+		"grace_period_days": 30,
+	}
 
 
 def test_mcp_settings_origin_policy_and_transport_validation() -> None:

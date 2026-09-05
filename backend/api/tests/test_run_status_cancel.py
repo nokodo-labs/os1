@@ -1,4 +1,4 @@
-"""tests for run cancel + task tracking on RunStatusStore."""
+"""tests for run cancellation and task tracking."""
 
 from __future__ import annotations
 
@@ -6,14 +6,15 @@ import asyncio
 
 import pytest
 
-from api.v1.service.chat.run_status import RunState, RunStatusStore
+from api.schemas.runs import RunState
+from api.v1.service.runs.status import RunStore
 from nokodo_ai.utils.typeid import TypeID
 
 
 @pytest.mark.asyncio
 async def test_attach_task_and_cancel_run_stops_task() -> None:
 	"""cancel_run cancels the attached producer task."""
-	store = RunStatusStore()
+	store = RunStore()
 	rs = await store.start_run(
 		run_id=TypeID("run_test_1"),
 		thread_id=TypeID("thread_test_1"),
@@ -42,7 +43,7 @@ async def test_attach_task_and_cancel_run_stops_task() -> None:
 @pytest.mark.asyncio
 async def test_cancel_run_returns_false_when_no_task() -> None:
 	"""cancel_run returns False if no task is attached or run is unknown."""
-	store = RunStatusStore()
+	store = RunStore()
 	# unknown run
 	assert await store.cancel_run(TypeID("run_does_not_exist")) is False
 
@@ -59,7 +60,7 @@ async def test_cancel_run_returns_false_when_no_task() -> None:
 @pytest.mark.asyncio
 async def test_cancel_run_returns_false_when_task_already_done() -> None:
 	"""cancel_run returns False when the attached task has already finished."""
-	store = RunStatusStore()
+	store = RunStore()
 	await store.start_run(
 		run_id=TypeID("run_test_3"),
 		thread_id=TypeID("thread_test_3"),
@@ -80,7 +81,7 @@ async def test_cancel_run_returns_false_when_task_already_done() -> None:
 @pytest.mark.asyncio
 async def test_subscriber_disconnect_does_not_kill_run() -> None:
 	"""unsubscribe only removes the queue; the run + producer state stays."""
-	store = RunStatusStore()
+	store = RunStore()
 	await store.start_run(
 		run_id=TypeID("run_test_4"),
 		thread_id=TypeID("thread_test_4"),
@@ -91,7 +92,7 @@ async def test_subscriber_disconnect_does_not_kill_run() -> None:
 	# simulate a producer publishing one frame, then a subscriber listening
 	await store.publish(TypeID("run_test_4"), b"event: delta\ndata: {}\n\n")
 
-	result = await store.subscribe(TypeID("run_test_4"))
+	result = await store.subscribe(TypeID("run_test_4"), TypeID("user_test_4"))
 	assert result is not None
 	catchup, q = result
 	assert len(catchup) == 1
@@ -103,7 +104,7 @@ async def test_subscriber_disconnect_does_not_kill_run() -> None:
 	assert await store.get_run(TypeID("run_test_4")) is not None
 
 	# new subscriber can still attach and gets the same catchup log
-	result2 = await store.subscribe(TypeID("run_test_4"))
+	result2 = await store.subscribe(TypeID("run_test_4"), TypeID("user_test_4"))
 	assert result2 is not None
 	catchup2, _q2 = result2
 	assert len(catchup2) == 1

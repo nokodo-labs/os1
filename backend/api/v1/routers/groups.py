@@ -1,7 +1,5 @@
 """group management routers."""
 
-from __future__ import annotations
-
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
@@ -21,9 +19,30 @@ from api.schemas.group import (
 )
 from api.schemas.sorting import SortDir
 from api.v1.routers.resource_access import create_resource_access_router
-from api.v1.service import groups as groups_service
-from api.v1.service.auth import Principal, get_current_principal
+from api.v1.service.authentication import Principal, get_current_principal
 from api.v1.service.events import SessionId
+from api.v1.service.groups import (
+	add_member as add_member_service,
+)
+from api.v1.service.groups import (
+	count_groups as count_groups_service,
+)
+from api.v1.service.groups import (
+	create_group as create_group_service,
+)
+from api.v1.service.groups import (
+	delete_group as delete_group_service,
+)
+from api.v1.service.groups import (
+	get_group,
+	list_groups,
+)
+from api.v1.service.groups import (
+	remove_member as remove_member_service,
+)
+from api.v1.service.groups import (
+	update_group as update_group_service,
+)
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -42,7 +61,7 @@ async def read_groups(
 	db: AsyncSession = Depends(get_db),
 ) -> list[Group]:
 	"""list groups. optionally filter by member user_id."""
-	return await groups_service.list_groups(
+	return await list_groups(
 		db,
 		principal=principal,
 		skip=skip,
@@ -60,7 +79,7 @@ async def count_groups(
 	db: AsyncSession = Depends(get_db),
 ) -> int:
 	"""count groups matching the list filters."""
-	return await groups_service.count_groups(
+	return await count_groups_service(
 		db,
 		principal=principal,
 		filters=filters,
@@ -74,7 +93,7 @@ async def read_group(
 	db: AsyncSession = Depends(get_db),
 ) -> Group:
 	"""get a group by id."""
-	return await groups_service.get_group(group_id, db, principal=principal)
+	return await get_group(group_id, db, principal=principal)
 
 
 @router.post("", response_model=GroupSchema, status_code=status.HTTP_201_CREATED)
@@ -85,7 +104,7 @@ async def create_group(
 	x_session_id: SessionId = None,
 ) -> Group:
 	"""create a new group. the caller becomes the owner."""
-	return await groups_service.create_group(
+	return await create_group_service(
 		group_in,
 		db,
 		principal=principal,
@@ -102,7 +121,7 @@ async def update_group(
 	x_session_id: SessionId = None,
 ) -> Group:
 	"""update an existing group."""
-	return await groups_service.update_group(
+	return await update_group_service(
 		group_id,
 		body,
 		db,
@@ -119,7 +138,7 @@ async def delete_group(
 	x_session_id: SessionId = None,
 ) -> None:
 	"""delete a group."""
-	await groups_service.delete_group(
+	await delete_group_service(
 		group_id,
 		db,
 		principal=principal,
@@ -143,7 +162,7 @@ async def add_member(
 	x_session_id: SessionId = None,
 ) -> GroupMembership:
 	"""add a user to a group."""
-	return await groups_service.add_member(
+	return await add_member_service(
 		group_id,
 		member_in,
 		db,
@@ -164,7 +183,7 @@ async def remove_member(
 	x_session_id: SessionId = None,
 ) -> None:
 	"""remove a user from a group."""
-	await groups_service.remove_member(
+	await remove_member_service(
 		group_id,
 		user_id,
 		db,

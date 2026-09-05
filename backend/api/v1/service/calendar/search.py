@@ -1,8 +1,7 @@
 """calendar event search and vectorization helpers."""
 
-from __future__ import annotations
-
 import asyncio
+import logging
 from collections.abc import Coroutine
 
 from sqlalchemy import func, or_, select
@@ -17,23 +16,33 @@ from api.schemas.search import (
 	SearchMode,
 	SearchParams,
 	SearchResourceReferenceType,
+	SearchResultAnchor,
 	SearchResultItem,
-	SearchResultParent,
 	SearchResultType,
 )
-from api.v1.service import vectorstores as vectorstore_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.authorization import resource_access_predicate
 from api.v1.service.embeddings import embed_text
-from api.v1.service.search.primitives import ScoredResult, merge_scored
+from api.v1.service.search.primitives import (
+	ScoredResult,
+	merge_scored,
+	relevance_sort_key,
+)
 from api.v1.service.vectorize import (
 	VectorSpec,
 	vectorize_resources,
 )
-from api.v1.service.vectorstores import VectorChunkResourceType
+from api.v1.service.vectorstores import (
+	VectorChunkResourceType,
+	resource_types_filter,
+	search,
+)
 from nokodo_ai.types import JSONObject
 from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
+
+
+logger = logging.getLogger(__name__)
 
 
 def _calendar_event_dense_text(calendar_event: CalendarEvent) -> str:
@@ -90,21 +99,120 @@ def calendar_event_to_search_item(
 ) -> SearchResultItem:
 	"""projection from a calendar event (and optional score) to a SearchResultItem."""
 	return SearchResultItem(
-		type=SearchResultType.CALENDAR_EVENT,
-		id=TypeID(calendar_event.id),
+		type=SearchResultType.CALENDAR,
+		id=calendar_event.calendar_id,
 		title=calendar_event.title or "",
 		preview=calendar_event.description[:100]
 		if calendar_event.description
 		else None,
 		score=score,
-		parent=SearchResultParent(
-			type=SearchResourceReferenceType.CALENDAR,
-			id=TypeID(calendar_event.calendar_id),
+		anchor=SearchResultAnchor(
+			type=SearchResourceReferenceType.CALENDAR_EVENT,
+			id=calendar_event.id,
 		),
 		metadata=_calendar_event_metadata(calendar_event),
 		created_at=calendar_event.created_at,
 		updated_at=calendar_event.updated_at,
 	)
+
+
+def calendar_to_search_item(
+	calendar: Calendar, score: float | None = None
+) -> SearchResultItem:
+	"""projection from a calendar matched by its own fields to a SearchResultItem."""
+	return SearchResultItem(
+		type=SearchResultType.CALENDAR,
+		id=calendar.id,
+		title=calendar.name,
+		preview=calendar.description[:100] if calendar.description else None,
+		score=score,
+		metadata={"owner_id": str(calendar.owner_id)},
+		created_at=calendar.created_at,
+		updated_at=calendar.updated_at,
+	)
+
+
+def calendar_or_event_to_search_item(
+	hit: CalendarEvent | Calendar, score: float | None = None
+) -> SearchResultItem:
+	"""projection dispatching on which calendar-tier resource matched."""
+	if isinstance(hit, CalendarEvent):
+		return calendar_event_to_search_item(hit, score)
+	return calendar_to_search_item(hit, score)
+
+
+async def _autocomplete_calendars(
+	q: str,
+	principal: Principal,
+	limit: int = 10,
+) -> list[ScoredResult[Calendar]]:
+	"""calendars matched by their own name or description (pg_trgm).
+
+	containers are not vectorized, so this lexical tier runs in every search
+	mode. hits carry no anchor: the calendar itself is the result.
+	"""
+	pattern = contains_pattern(q)
+	sim = func.greatest(
+		func.word_similarity(q, Calendar.name),
+		func.word_similarity(q, func.coalesce(Calendar.description, "")),
+	)
+	stmt = (
+		select(Calendar, sim.label("sim"))
+		.where(
+			or_(
+				sim > 0.1,
+				Calendar.name.ilike(pattern, escape="\\"),
+				Calendar.description.ilike(pattern, escape="\\"),
+			),
+		)
+		.where(resource_access_predicate(principal, ResourceType.CALENDAR))
+		.order_by(sim.desc())
+		.limit(limit)
+	)
+	async with session_scope(None) as s:
+		result = await s.execute(stmt)
+		rows = result.all()
+	return [ScoredResult(item=calendar, score=float(score)) for calendar, score in rows]
+
+
+async def search_calendars(
+	query_text: str,
+	db: AsyncSession,
+	principal: Principal,
+	limit: int = 10,
+	offset: int = 0,
+	search_params: SearchParams | None = None,
+	query_embedding: list[float] | None = None,
+) -> list[ScoredResult[CalendarEvent | Calendar]]:
+	"""all calendar-tier hits, relevance-ordered: events and the calendars
+	themselves matched by their own name or description.
+	"""
+	fetch = offset + limit
+
+	async def _children() -> list[ScoredResult[CalendarEvent | Calendar]]:
+		scored = await search_calendar_events(
+			query_text,
+			db,
+			principal=principal,
+			limit=fetch,
+			search_params=search_params,
+			query_embedding=query_embedding,
+		)
+		return [ScoredResult(item=s.item, score=s.score, hit=s.hit) for s in scored]
+
+	async def _containers() -> list[ScoredResult[CalendarEvent | Calendar]]:
+		scored = await _autocomplete_calendars(query_text, principal, fetch)
+		return [ScoredResult(item=s.item, score=s.score, hit=s.hit) for s in scored]
+
+	tiers = await asyncio.gather(_children(), _containers(), return_exceptions=True)
+	hits: list[ScoredResult[CalendarEvent | Calendar]] = []
+	for tier in tiers:
+		if isinstance(tier, BaseException):
+			logger.warning("calendar search tier failed", exc_info=tier)
+			continue
+		hits.extend(tier)
+	hits.sort(key=relevance_sort_key)
+	return hits[offset : offset + limit]
 
 
 CALENDAR_EVENT_SPEC: VectorSpec[CalendarEvent] = VectorSpec(
@@ -137,11 +245,18 @@ async def vectorize_calendar_events_for_calendar(
 	)
 
 
-async def vectorize_all_calendar_events(session: AsyncSession) -> int:
-	"""vectorize all calendar events in bulk. returns count."""
+async def vectorize_calendar_events(
+	session: AsyncSession,
+	ids: list[TypeID] | None = None,
+) -> int:
+	"""vectorize calendar event points; ids=None means every event. returns count."""
+	if ids is not None and not ids:
+		return 0
 	stmt = select(CalendarEvent).join(
 		Calendar, CalendarEvent.calendar_id == Calendar.id
 	)
+	if ids is not None:
+		stmt = stmt.where(CalendarEvent.id.in_([str(eid) for eid in ids]))
 	result = await session.execute(stmt)
 	return await vectorize_resources(
 		spec=CALENDAR_EVENT_SPEC,
@@ -222,14 +337,12 @@ async def _hybrid_search_calendar_events(
 		)
 	)
 	text_query = query_text if need_sparse else None
-	results = await vectorstore_service.search(
+	results = await search(
 		session=db,
 		query=query_emb,
 		text_query=text_query,
 		limit=limit,
-		query_filter=vectorstore_service.resource_types_filter(
-			[VectorChunkResourceType.CALENDAR_EVENT]
-		),
+		query_filter=resource_types_filter([VectorChunkResourceType.CALENDAR_EVENT]),
 		normalize=params.normalize,
 		group_by="resource_id",
 	)

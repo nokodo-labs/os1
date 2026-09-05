@@ -5,8 +5,6 @@ and participant notifications. the events router delegates all doc.*
 message handling here.
 """
 
-from __future__ import annotations
-
 import base64
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -14,12 +12,12 @@ from typing import TYPE_CHECKING
 from api.database import async_session_local
 from api.logging import get_logger
 from api.permissions import ResourceType
-from api.v1.service import events as event_service
-from api.v1.service.authorization import list_accessible_user_ids
+from api.v1.service.authorization import list_accessible_user_ids_for_resources
 from api.v1.service.document_sessions import (
 	DocumentParticipant,
 	document_session_store,
 )
+from api.v1.service.events import fanout_live_payload
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -85,10 +83,8 @@ async def handle_join(
 
 	resource_type, resource_id = parsed
 	async with async_session_local() as db_session:
-		accessible = await list_accessible_user_ids(
-			resource_type,
-			resource_id,
-			db_session,
+		accessible = await list_accessible_user_ids_for_resources(
+			[(resource_type, resource_id)], db_session
 		)
 	if user_id not in accessible:
 		return DocError(error="access denied")
@@ -107,7 +103,7 @@ async def handle_join(
 	# notify other participants
 	other_ids = list({p.user_id for p in participants if p.session_id != ws_session_id})
 	if other_ids:
-		await event_service.fanout_live_payload(
+		await fanout_live_payload(
 			{
 				"type": "doc.participant_joined",
 				"document_id": document_id,
@@ -136,7 +132,7 @@ async def handle_leave(
 	remaining = await document_session_store.leave(document_id, ws_session_id)
 	other_ids = list({p.user_id for p in remaining})
 	if other_ids:
-		await event_service.fanout_live_payload(
+		await fanout_live_payload(
 			{
 				"type": "doc.participant_left",
 				"document_id": document_id,
@@ -163,7 +159,7 @@ async def handle_update(
 	participants = await document_session_store.get_participants(document_id)
 	peer_ids = list({p.user_id for p in participants})
 	if peer_ids:
-		await event_service.fanout_live_payload(
+		await fanout_live_payload(
 			{
 				"type": "doc.update",
 				"document_id": document_id,
@@ -191,7 +187,7 @@ async def handle_awareness(
 	participants = await document_session_store.get_participants(document_id)
 	peer_ids = list({p.user_id for p in participants if p.session_id != ws_session_id})
 	if peer_ids:
-		await event_service.fanout_live_payload(
+		await fanout_live_payload(
 			{
 				"type": "doc.awareness",
 				"document_id": document_id,
@@ -215,7 +211,7 @@ async def handle_disconnect(
 		remaining = await document_session_store.get_participants(doc_id)
 		other_ids = list({p.user_id for p in remaining})
 		if other_ids:
-			await event_service.fanout_live_payload(
+			await fanout_live_payload(
 				{
 					"type": "doc.participant_left",
 					"document_id": doc_id,

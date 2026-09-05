@@ -1,7 +1,5 @@
 """Memory model."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -15,6 +13,7 @@ from api.models.mixins import (
 	TimestampMixin,
 	TypeIDPrimaryKeyMixin,
 )
+from nokodo_ai.utils.typeid import TypeID
 
 
 if TYPE_CHECKING:
@@ -37,13 +36,13 @@ class Memory(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 		),
 	)
 
-	user_id: Mapped[str] = mapped_column(
+	user_id: Mapped[TypeID] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("users.id"),
 		index=True,
 	)
 	content: Mapped[str] = mapped_column(Text())
-	source_message_id: Mapped[str | None] = mapped_column(
+	source_message_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("messages.id", ondelete="SET NULL"),
 		index=True,
@@ -60,6 +59,7 @@ class Memory(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	)
 	source_message: Mapped[Message | None] = relationship(
 		"Message",
+		foreign_keys=[source_message_id],
 		lazy="selectin",
 	)
 	access_rules: Mapped[list[AccessRule]] = relationship(

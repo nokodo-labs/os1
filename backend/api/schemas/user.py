@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from api.schemas.common import MISSING, MissingType, ORMModel, TimestampedModel
 from api.schemas.preferences import UserPreferences
@@ -81,6 +81,8 @@ class UserCreate(BaseModel):
 	- authenticated superuser: can set privileges
 	"""
 
+	model_config = ConfigDict(extra="forbid")
+
 	email: EmailStr
 	password: str
 	username: Username
@@ -97,8 +99,8 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
 	"""schema for updating a user."""
 
-	email: EmailStr | MissingType = MISSING
-	password: str | MissingType = MISSING
+	model_config = ConfigDict(extra="forbid")
+
 	username: Username | MissingType = MISSING
 	is_active: bool | MissingType = MISSING
 	is_superuser: bool | MissingType = MISSING
@@ -118,8 +120,28 @@ class UserUpdate(BaseModel):
 		return _validate_username(v)
 
 
+class UserPasswordChange(BaseModel):
+	"""payload for changing a user's password."""
+
+	model_config = ConfigDict(extra="forbid")
+
+	current_password: str | None = None
+	new_password: str = Field(min_length=8)
+
+
+class UserEmailChange(BaseModel):
+	"""payload for changing a user's email address."""
+
+	model_config = ConfigDict(extra="forbid")
+
+	current_password: str | None = None
+	new_email: EmailStr
+
+
 class UserBulkLookupRequest(BaseModel):
 	"""request visible user summaries by ID."""
+
+	model_config = ConfigDict(extra="forbid")
 
 	user_ids: list[TypeID] = Field(default_factory=list, max_length=100)
 

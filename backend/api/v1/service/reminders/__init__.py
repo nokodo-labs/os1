@@ -22,14 +22,16 @@ from api.v1.service.reminders.lists import (
 	get_or_create_default_reminder_list,
 	get_reminder_list,
 	list_reminder_lists,
-	search_reminder_lists,
+	load_reminder_lists,
 	update_reminder_list,
 )
 from api.v1.service.reminders.search import (
 	REMINDER_SPEC,
+	reminder_or_list_to_search_item,
 	reminder_to_search_item,
+	search_reminder_lists,
 	search_reminders,
-	vectorize_all_reminders,
+	vectorize_reminders,
 	vectorize_reminders_for_list,
 )
 
@@ -53,15 +55,17 @@ __all__ = [
 	"get_or_create_default_reminder_list",
 	"get_reminder",
 	"get_reminder_list",
+	"load_reminder_lists",
 	"list_reminder_lists",
 	"list_reminders",
 	"list_scheduled_reminders",
 	"move_reminder",
-	"search_reminder_lists",
+	"reminder_or_list_to_search_item",
 	"reminder_to_search_item",
+	"search_reminder_lists",
 	"search_reminders",
 	"update_reminder",
 	"update_reminder_list",
-	"vectorize_all_reminders",
+	"vectorize_reminders",
 	"vectorize_reminders_for_list",
 ]

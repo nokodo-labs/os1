@@ -1,11 +1,9 @@
 """service layer for memory operations."""
 
-from __future__ import annotations
-
 import asyncio
 import json
 import logging
-from collections.abc import Awaitable, Callable, Coroutine, Sequence
+from collections.abc import Awaitable, Callable, Coroutine
 from typing import Literal
 
 from fastapi import HTTPException, status
@@ -18,7 +16,11 @@ from api.database.main import session_scope
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.memory import Memory
-from api.permissions import ResourceType
+from api.models.task import Task, TaskType
+from api.permissions import ActionPermission, ResourceType
+from api.schemas.memory import (
+	Memory as MemoryOut,
+)
 from api.schemas.memory import (
 	MemoryCreate,
 	MemoryListFilters,
@@ -29,29 +31,44 @@ from api.schemas.search import (
 	SearchMode,
 	SearchParams,
 )
-from api.v1.service import events as event_service
-from api.v1.service import vectorstores as vectorstore_service
-from api.v1.service.auth import Principal
+from api.settings import settings as app_settings
+from api.v1.service.authentication import Principal
 from api.v1.service.authorization import (
-	list_accessible_user_ids,
+	apply_metadata_write,
+	apply_resource_access_list_filters,
+	list_accessible_user_ids_for_resources,
+	project_private,
 	require_permission,
+	resource_access_predicate,
 	vector_acl_filter,
 )
-from api.v1.service.authorization.predicates import resource_access_predicate
 from api.v1.service.chat.models import (
 	resolve_task_chat_model,
 	run_chat_model_json_schema,
 )
 from api.v1.service.embeddings import embed_text
+from api.v1.service.events import persist_and_fanout_event
 from api.v1.service.listing import SortDir, apply_sort
 from api.v1.service.search.primitives import ScoredResult, merge_scored
+from api.v1.service.tasks import start_task
 from api.v1.service.vectorize import (
 	VectorSpec,
 	remove_vectorized_resource,
 	vectorize_resource,
 	vectorize_resources,
 )
-from api.v1.service.vectorstores import VectorChunkResourceType
+from api.v1.service.vectorstores import (
+	FieldCondition,
+	FieldMatch,
+	FieldMatchAny,
+	VectorChunkResourceType,
+	resource_types_filter,
+	search,
+	with_conditions,
+)
+from api.v1.service.vectorstores import (
+	delete as delete_vectors,
+)
 from nokodo_ai.messages import SystemMessage, UserMessage
 from nokodo_ai.threads import Thread as SDKThread
 from nokodo_ai.types.json import JSONObject, JSONValue
@@ -61,6 +78,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 logger = logging.getLogger(__name__)
 
+MEMORY_POST_PROCESSING_TASK = "memory.post_process"
 MEMORY_POST_PROCESSING_QUERY_MAX_CHARS = 4000
 MEMORY_POST_PROCESSING_MEMORY_MAX_CHARS = 1200
 MEMORY_POST_PROCESSING_EMBED_TIMEOUT_SECONDS = 45
@@ -68,12 +86,9 @@ MEMORY_POST_PROCESSING_SEARCH_TIMEOUT_SECONDS = 20
 MEMORY_POST_PROCESSING_MODEL_TIMEOUT_SECONDS = 60
 
 
-type MemoryPostProcessingProgress = Callable[[int, str], Awaitable[None]]
-
-
-_POST_PROCESSING_PROMPT = """\
-You maintain a collection of Memories - individual facts about a user, each
-automatically timestamped on creation or update.
+DEFAULT_POST_PROCESSING_PROMPT = """\
+You are the curator of a user's long-term memory store.
+You are called after every turn in a conversation between a User and an Assistant.
 
 You will be provided with:
 1. The most recent conversation turns (negative indices; -1 is the most
@@ -81,8 +96,8 @@ You will be provided with:
 2. Existing memories semantically related to that conversation, ordered by
    relevance (most relevant first).
 
-Determine what actions to take on the memory collection based on the user's
-**latest** message.
+Your task is to determine what actions to take on the memory collection
+based on the user's **latest** message.
 
 <key_instructions>
 1. Focus on the user's most **recent** message. Older messages provide
@@ -94,10 +109,10 @@ Determine what actions to take on the memory collection based on the user's
    memory rather than creating a conflicting new one.
 4. If memories are exact duplicates or direct conflicts about the same topic,
    **consolidate** them by updating or deleting as appropriate.
-5. Capture anything valuable for **personalizing future interactions**.
-6. Always **honor memory requests**, whether direct from the user ("remember
-   this", "forget that") or implicit through the assistant ("I'll remember
-   that"). Treat these as strong signals to store, update, or delete.
+5. Capture anything the **user says about themselves** that is valuable for
+	personalizing future interactions.
+6. Always **honor direct memory requests from the user** ("remember this",
+	"forget that"). Treat these as strong signals to store, update, or delete.
 7. Each memory must be **self-contained and understandable without external
    context**. Avoid ambiguous references like "it" or "that" - include the
    specific subject. Prefer "User's new TV broke" over "It broke".
@@ -109,6 +124,10 @@ Determine what actions to take on the memory collection based on the user's
    user, UPDATE it to use "user".
 10. Use the `created_at` / `updated_at` timestamps to decide which memory is
     most recent when resolving conflicts.
+11. The user is the ONLY source of new memory facts. Never create a memory from
+	anything stated only by the assistant, including tool outcomes, retrieved
+	context, recalled knowledge, assumptions, or facts in an answer. Assistant
+	text may only help interpret what the user said.
 </key_instructions>
 
 <what_to_extract>
@@ -129,6 +148,12 @@ Determine what actions to take on the memory collection based on the user's
 - Content from translation/rewrite/summarization tasks
 - Trivial observations, fleeting thoughts, temporary activities
 - Sarcastic remarks, obvious jokes, hyperbole
+- Questions or things the user was merely curious about (a question is not a fact)
+- Things the user learned or was told during the conversation
+- Tool or web-search outcomes and world facts from the assistant's answer (part
+  of the conversation, not durable facts about the user)
+- Anything stated only by the assistant, even when it sounds personal or
+	references the user; only facts stated by the user can become new memories
 </what_not_to_extract>
 
 <actions>
@@ -162,7 +187,74 @@ the others.
 </consolidation_rules>
 
 <examples>
-**Example 1 - Add new, distinct facts**
+**Example 1 - Nothing to store (questions, curiosity, and recaps are not facts)**
+Conversation:
+-2. user: How do JWT refresh tokens work?
+-1. assistant: Great question! Since I know you're building an app with JWT \
+authentication, this will be helpful :)
+So here's how it works: a refresh token lets you get a new access token \
+without re-authenticating...
+Related Memories:
+[{"id": "memory_301", "created_at": "2025-11-03T10:00:00",
+  "content": "User is building a new app, starting from the backend"},
+ {"id": "memory_302", "created_at": "2025-11-04T18:20:00",
+  "content": "User started coding in november 2025"}]
+Output:
+{"actions": []}
+
+**Example 2 - Clean up: break down bloated memories and delete junk**
+Conversation:
+-2. user: ok let's keep going
+-1. assistant: Sounds good - I'm ready when you are.
+Related Memories:
+[{"id": "memory_401", "created_at": "2025-10-01T08:00:00",
+  "content": "User is a backend developer who lives in Lisbon, drives a Tesla \
+Model 3, is allergic to peanuts, and is learning Portuguese"},
+ {"id": "memory_402", "created_at": "2025-11-05T14:00:00",
+  "content": "User is interested in how JWTs work and has asked exactly what \
+it takes to integrate them into his new app project"},
+ {"id": "memory_403", "created_at": "2025-11-06T09:30:00",
+  "content": "User asked how to center a div in CSS"},
+ {"id": "memory_404", "created_at": "2025-11-07T16:00:00",
+  "content": "User wanted a summary of a paper about transformer models"},
+ {"id": "memory_405", "created_at": "2025-09-12T08:00:00",
+  "content": "User enjoys rock climbing and also plays piano on weekends"}]
+Output:
+{
+  "actions": [
+    {"action": "update", "id": "memory_401",
+     "new_content": "User is a backend developer"},
+    {"action": "add", "content": "User lives in Lisbon", "tags": ["location"]},
+    {"action": "add", "content": "User drives a Tesla Model 3", "tags": \
+["possessions"]},
+    {"action": "add", "content": "User is allergic to peanuts", "tags": \
+["health"]},
+    {"action": "add", "content": "User is learning Portuguese", "tags": \
+["learning"]},
+    {"action": "delete", "id": "memory_402"},
+    {"action": "delete", "id": "memory_403"},
+    {"action": "delete", "id": "memory_404"},
+    {"action": "update", "id": "memory_405",
+     "new_content": "User enjoys rock climbing"},
+    {"action": "add", "content": "User plays piano on weekends", "tags": \
+["hobbies"]}
+  ]
+}
+
+**Example 3 - Only store facts if stated by the user in their LAST message**
+Conversation:
+-4. user: yeah, I really do love BBQ sauce lol
+-3. assistant: haha, I know! you love everything to with BBQ to be fair
+-2. user: wow... you really do know me well! then what are my favorite foods, huh?
+-1. assistant: hmm... let me think
+[called recall_memories tool 5 times]
+so... you LOVE BBQ sauce, you love spicy food, and you love chocolate. \
+those are your top 3 favorite foods!
+Related Memories: []
+Output:
+{"actions": []}
+
+**Example 4 - Add new, distinct facts**
 Conversation:
 -2. user: I work as a senior data scientist at Tesla and I love Rust
 -1. assistant: That's impressive! Rust is great for systems programming.
@@ -177,7 +269,7 @@ Rust", "tags": ["preferences"]}
   ]
 }
 
-**Example 2 - Update on changed preference**
+**Example 5 - Update on changed preference**
 Conversation:
 -2. user: Actually I prefer TypeScript over JavaScript these days
 -1. assistant: TypeScript's type safety makes frontend more maintainable!
@@ -188,11 +280,11 @@ Output:
 {
   "actions": [
     {"action": "update", "id": "memory_abc",
-     "new_content": "User prefers TypeScript for frontend work"}
+     "new_content": "User prefers TypeScript for frontend projects"}
   ]
 }
 
-**Example 3 - Delete on negation / sarcasm**
+**Example 6 - Delete on negation / sarcasm**
 Conversation:
 -2. user: I'm joking! I didn't actually buy the iPhone!
 -1. assistant: Ahh, you got me! No worries.
@@ -202,7 +294,7 @@ Related Memories:
 Output:
 {"actions": [{"action": "delete", "id": "memory_xyz"}]}
 
-**Example 4 - Normalize a name reference**
+**Example 7 - Normalize a name reference**
 Conversation:
 -2. user: just call me joe by the way
 -1. assistant: Got it, Joe!
@@ -217,7 +309,7 @@ Output:
   ]
 }
 
-**Example 5 - Passive maintenance: dedupe and merge**
+**Example 8 - Passive maintenance: dedupe and merge**
 Conversation:
 -2. user: Can you help me write a Python function to sort a list?
 -1. assistant: Of course! Here's an example using sorted()...
@@ -243,6 +335,10 @@ Output:
 }
 </examples>
 """
+"""default system prompt for the memory post-processing maintenance agent."""
+
+
+type MemoryPostProcessingProgress = Callable[[int, str], Awaitable[None]]
 
 
 class _MemoryPostProcessingAction(BaseModel):
@@ -329,13 +425,25 @@ def _truncate_post_processing_text(value: str, max_chars: int) -> str:
 	return trimmed[:max_chars].rstrip()
 
 
+def memory_payloads(memories: list[Memory], principal: Principal) -> list[MemoryOut]:
+	"""project memory rows to their API payloads for the principal."""
+	return project_private(
+		principal,
+		ResourceType.MEMORY,
+		[MemoryOut.from_row(memory) for memory in memories],
+	)
+
+
 async def _get_memory(
 	memory_id: TypeID,
 	session: AsyncSession,
 	principal: Principal,
 ) -> Memory:
 	stmt = select(Memory).where(Memory.id == memory_id)
-	if not principal.is_admin:
+	# operator is the platform's answer to cross-user visibility; a raw
+	# is_superuser check here would 404 for an operator that the listing
+	# predicate happily shows.
+	if not principal.is_resource_operator(ResourceType.MEMORY):
 		stmt = stmt.where(Memory.user_id == principal.user.id)
 	result = await session.execute(stmt)
 	memory = result.scalars().one_or_none()
@@ -353,23 +461,24 @@ async def create_memory(
 	principal: Principal,
 	origin_session_id: str | None = None,
 ) -> Memory:
-	require_permission(principal, "memories:create")
-	data = memory_in.model_dump(by_alias=True)
-	if not principal.is_admin:
+	require_permission(principal, ActionPermission.MEMORIES_CREATE)
+	data = memory_in.model_dump(exclude={"metadata"})
+	if not principal.user.is_superuser:
 		data["user_id"] = principal.user.id
 	memory = Memory(**data)
+	apply_metadata_write(memory, memory_in.metadata)
 	session.add(memory)
 	await session.flush()
 	await session.refresh(memory)
-	memory_id = TypeID(memory.id)
+	memory_id = memory.id
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.MEMORY_CREATED,
 		data={"id": str(memory_id)},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -442,7 +551,13 @@ def _apply_memory_filters(
 		)
 	if filters.tags:
 		stmt = stmt.where(Memory.tags.op("&&")(filters.tags))
-	return stmt
+	return apply_resource_access_list_filters(
+		stmt,
+		principal,
+		ResourceType.MEMORY,
+		filters.access_relationship,
+		filters.resolved_access_level,
+	)
 
 
 async def get_memory(
@@ -463,18 +578,19 @@ async def update_memory(
 	"""update a memory and sync with vectorstore if content changed."""
 	memory = await _get_memory(memory_id, session, principal)
 
-	update_data = memory_in.model_dump(exclude_unset=True, by_alias=True)
+	update_data = memory_in.model_dump(exclude_unset=True, exclude={"metadata"})
 	for key, value in update_data.items():
 		setattr(memory, key, value)
+	apply_metadata_write(memory, memory_in.metadata)
 
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.MEMORY_UPDATED,
 		data={"id": str(memory_id)},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -493,22 +609,20 @@ async def delete_memory(
 ) -> None:
 	"""delete a memory and remove from the search index."""
 	memory = await _get_memory(memory_id, session, principal)
-	delete_recipients = await list_accessible_user_ids(
-		ResourceType.MEMORY,
-		memory_id,
-		session,
+	delete_recipients = await list_accessible_user_ids_for_resources(
+		[(ResourceType.MEMORY, memory_id)], session
 	)
 
 	await session.delete(memory)
 
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.MEMORY_DELETED,
 		data={"id": str(memory_id)},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -538,19 +652,19 @@ async def delete_all_memories(
 	await session.execute(delete(Memory).where(Memory.user_id == user_id))
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.MEMORY_DELETED,
 		data={"all": True, "user_id": str(user_id)},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
 	)
 
-	await vectorstore_service.delete(
-		target=vectorstore_service.resource_types_filter(
+	await delete_vectors(
+		target=resource_types_filter(
 			[VectorChunkResourceType.MEMORY],
 			owner_id=str(user_id),
 		),
@@ -592,22 +706,16 @@ MEMORY_SPEC: VectorSpec[Memory] = VectorSpec(
 
 
 async def vectorize_memories(
-	memory_ids: Sequence[TypeID], session: AsyncSession
+	session: AsyncSession,
+	ids: list[TypeID] | None = None,
 ) -> int:
-	"""vectorize specific memories by id in batches. returns count."""
-	if not memory_ids:
+	"""vectorize memory points; ids=None means every memory. returns count."""
+	if ids is not None and not ids:
 		return 0
-	result = await session.execute(
-		select(Memory).where(Memory.id.in_([str(mid) for mid in memory_ids]))
-	)
-	return await vectorize_resources(
-		spec=MEMORY_SPEC, resources=list(result.scalars().all()), session=session
-	)
-
-
-async def vectorize_all_memories(session: AsyncSession) -> int:
-	"""vectorize all memories in bulk. returns count."""
-	result = await session.execute(select(Memory))
+	stmt = select(Memory)
+	if ids is not None:
+		stmt = stmt.where(Memory.id.in_([str(mid) for mid in ids]))
+	result = await session.execute(stmt)
 	return await vectorize_resources(
 		spec=MEMORY_SPEC, resources=list(result.scalars().all()), session=session
 	)
@@ -615,19 +723,15 @@ async def vectorize_all_memories(session: AsyncSession) -> int:
 
 def _memory_search_conditions(
 	filters: MemorySearchFilters | None,
-) -> list[vectorstore_service.FieldCondition]:
+) -> list[FieldCondition]:
 	"""vector-layer narrowing conditions derived from memory search filters."""
-	conditions: list[vectorstore_service.FieldCondition] = []
+	conditions: list[FieldCondition] = []
 	if filters is None:
 		return conditions
 	if filters.owner_id is not None:
-		conditions.append(
-			vectorstore_service.FieldMatch(key="owner_id", value=str(filters.owner_id))
-		)
+		conditions.append(FieldMatch(key="owner_id", value=str(filters.owner_id)))
 	if filters.tags:
-		conditions.append(
-			vectorstore_service.FieldMatchAny(key="tags", values=filters.tags)
-		)
+		conditions.append(FieldMatchAny(key="tags", values=filters.tags))
 	return conditions
 
 
@@ -655,7 +759,7 @@ async def _autocomplete_memories(
 ) -> list[ScoredResult[Memory]]:
 	"""pg_trgm autocomplete tier for memories, scored by content similarity."""
 	pattern = contains_pattern(q)
-	sim = func.similarity(Memory.content, q)
+	sim = func.word_similarity(q, Memory.content)
 	stmt = (
 		select(Memory, sim.label("sim"))
 		.where(
@@ -698,11 +802,11 @@ async def _hybrid_search_memories(
 	)
 	text_query = query_text if need_sparse else None
 	# ACL prefilter (owner + admin handled inside), narrowed by search filters.
-	query_filter = vectorstore_service.with_conditions(
+	query_filter = with_conditions(
 		vector_acl_filter([VectorChunkResourceType.MEMORY], principal),
 		_memory_search_conditions(filters),
 	)
-	results = await vectorstore_service.search(
+	results = await search(
 		session=db,
 		query=query_emb,
 		text_query=text_query,
@@ -896,6 +1000,9 @@ async def post_process_relevant_memories(
 		60,
 		"running memory model",
 	)
+	system_prompt = (
+		app_settings.ai.memory.post_processing_prompt or DEFAULT_POST_PROCESSING_PROMPT
+	)
 	try:
 		raw = await _run_memory_stage(
 			"running memory model",
@@ -904,7 +1011,7 @@ async def post_process_relevant_memories(
 				chat_model,
 				thread=SDKThread(
 					messages=[
-						SystemMessage.from_text(_POST_PROCESSING_PROMPT),
+						SystemMessage.from_text(system_prompt),
 						UserMessage.from_text(
 							"recent conversation:\n"
 							f"{conversation}\n\nrelated memories:\n"
@@ -914,6 +1021,7 @@ async def post_process_relevant_memories(
 				),
 				json_schema=_MemoryPostProcessingResponse.model_json_schema(),
 				purpose="memory_post_processing",
+				reasoning_effort=app_settings.ai.memory.post_processing_reasoning_effort,
 			),
 		)
 	except _MemoryPostProcessingTimeoutError as exc:
@@ -959,7 +1067,7 @@ async def post_process_relevant_memories(
 			logger.warning(
 				"post-processing: unknown memory id %s for user %s",
 				action.id,
-				principal.user_id,
+				principal.user.id,
 			)
 			continue
 		memory_id = TypeID(action.id)
@@ -982,3 +1090,38 @@ async def post_process_relevant_memories(
 		"updated": updated,
 		"deleted": deleted,
 	}
+
+
+async def start_memory_post_processing_task(
+	session: AsyncSession,
+	principal: Principal,
+	query_text: str,
+	max_related_memories: int,
+	conversation_snapshot: str | None = None,
+	thread_id: str | None = None,
+	message_id: str | None = None,
+	message_ref: str | None = None,
+	run_id: str | None = None,
+	emit_activity: bool = False,
+) -> Task:
+	"""enqueue durable memory maintenance for a conversation query."""
+	runtime: JSONObject = {
+		"query_text": query_text,
+		"max_related_memories": max_related_memories,
+		"conversation_snapshot": conversation_snapshot,
+		"thread_id": thread_id,
+		"message_id": message_id,
+		"message_ref": message_ref,
+		"run_id": run_id,
+		"emit_activity": emit_activity,
+	}
+	return await start_task(
+		session,
+		principal,
+		task_type=TaskType.CUSTOM,
+		task_name=MEMORY_POST_PROCESSING_TASK,
+		metadata={"query_length": len(query_text)},
+		runtime=runtime,
+		stage="queued memory processing",
+		progress=0,
+	)

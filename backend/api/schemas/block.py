@@ -1,13 +1,11 @@
 """user block schemas."""
 
-from __future__ import annotations
-
-from api.schemas.common import ORMModel, TimestampedModel
+from api.schemas.common import ForbidExtraModel, TimestampedModel
 from api.schemas.user import User as UserSchema
 from nokodo_ai.utils.typeid import TypeID
 
 
-class BlockCreate(ORMModel):
+class BlockCreate(ForbidExtraModel):
 	"""payload to block another user."""
 
 	blocked_id: TypeID

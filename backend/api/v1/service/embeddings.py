@@ -1,7 +1,5 @@
 """embedding model building and resolution for the api."""
 
-from __future__ import annotations
-
 import logging
 import time
 from typing import overload
@@ -15,40 +13,49 @@ from api.database import async_session_local
 from api.models.model import Model, ModelType
 from api.models.provider import Provider
 from api.redis import on_invalidation
+from api.runtime import on_settings_reload
+from api.schemas.common import MISSING, MissingType
 from api.settings import settings
-from nokodo_ai.embeddings import EmbeddingInputType, EmbeddingModel
+from nokodo_ai.embeddings import (
+	ContextualizedEmbeddingModel,
+	EmbeddingInputType,
+	EmbeddingModel,
+)
 from nokodo_ai.utils.concurrency import gather_bounded
+from nokodo_ai.utils.tokens import estimate_tokens
 from nokodo_ai.utils.typeid import TypeID
 
 
 logger = logging.getLogger(__name__)
 
-# process-level cache - resolved once, reused for every embed call.
-# avoids a DB round-trip + object construction on every search.
-_cached_embedding_model: EmbeddingModel | None = None
-_cached_embedding_input_limit: int | None = None
+_cached_embedding_model: EmbeddingModel | ContextualizedEmbeddingModel | None = None
+"""process-level cache of the active embedding model, resolved once per process."""
 
-# input token limit used when the embedding model row has no context_window.
-# conservative default below the common 8192 cap to leave room for the
-# chars/4 estimate's error when an adapter exposes no exact tokenizer.
-DEFAULT_EMBEDDING_INPUT_LIMIT = 8192
+_cached_embedding_input_limit: int | None | MissingType = MISSING
+"""per-call token capacity of the cached model. None declares unlimited
+(contextualized models); MISSING means not resolved yet."""
+
+MAX_BATCH_TEXTS = 1000
+"""hard cap on texts per embedding request; strictest common provider limit."""
 
 
 def reset_embedding_model_cache() -> None:
 	"""invalidate the cached embedding model (e.g. after settings change)."""
 	global _cached_embedding_model, _cached_embedding_input_limit
 	_cached_embedding_model = None
-	_cached_embedding_input_limit = None
+	_cached_embedding_input_limit = MISSING
 
 
-# self-register for cross-worker invalidation when the embedding settings
-# change. main.py only needs to start the subscriber; modules own their
-# own reset hook registration.
+# self-register: cleared on model/provider entity changes and after every
+# settings snapshot reload.
 on_invalidation("embedding_model", reset_embedding_model_cache)
+on_settings_reload(reset_embedding_model_cache)
 
 
-async def _get_embedding_model(session: AsyncSession | None = None) -> EmbeddingModel:
-	"""return the cached EmbeddingModel, resolving from DB on first call.
+async def _get_embedding_model(
+	session: AsyncSession | None = None,
+) -> EmbeddingModel | ContextualizedEmbeddingModel:
+	"""return the cached embedding model, resolving from DB on first call.
 
 	when session is None and the cache is cold, opens its own short-lived
 	session for the DB lookup. callers in long-running task code should pass
@@ -62,29 +69,43 @@ async def _get_embedding_model(session: AsyncSession | None = None) -> Embedding
 		async with async_session_local() as owned:
 			return await _get_embedding_model(owned)
 	model = await resolve_embedding_model(session)
-	_cached_embedding_model = build_embedding_model(model)
+	contextualized = model.model_type == ModelType.CONTEXTUALIZED_EMBEDDING
+	if not contextualized and (
+		model.context_window is None or model.context_window <= 0
+	):
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail=f"embedding model {model.name} has no context_window configured",
+		)
+	built = build_embedding_model(model)
 	global _cached_embedding_input_limit
-	_cached_embedding_input_limit = (
-		model.context_window
-		if model.context_window is not None and model.context_window > 0
-		else DEFAULT_EMBEDDING_INPUT_LIMIT
-	)
+	_cached_embedding_input_limit = None if contextualized else model.context_window
+	_cached_embedding_model = built
 	logger.info(
 		"cached embedding model: %s (provider=%s)",
 		model.name,
 		model.provider.name,
 	)
-	return _cached_embedding_model
+	return built
 
 
-async def get_embedding_input_limit(session: AsyncSession | None = None) -> int:
-	"""return the embedding model's max input tokens (context_window).
+async def embedding_token_capacity(session: AsyncSession | None = None) -> int | None:
+	"""return how many tokens one embedding call accepts; None means unlimited.
 
-	falls back to DEFAULT_EMBEDDING_INPUT_LIMIT when the model row stores no
-	context window. resolves and caches the model on first call.
+	this is the routing metric for the vectorization architecture: None
+	(contextualized embedding models) never splits; a finite capacity (the
+	model's required context_window) splits text before embedding. resolves
+	and caches the model on first call, erroring when the active embedding
+	model has no context_window.
 	"""
 	await _get_embedding_model(session)
-	return _cached_embedding_input_limit or DEFAULT_EMBEDDING_INPUT_LIMIT
+	capacity = _cached_embedding_input_limit
+	if capacity is None or isinstance(capacity, int):
+		return capacity
+	raise HTTPException(
+		status_code=status.HTTP_409_CONFLICT,
+		detail="embedding model capacity is unresolved",
+	)
 
 
 async def count_input_tokens(
@@ -126,18 +147,42 @@ async def embed_text(
 	return vector
 
 
+def _pack_batches(
+	texts: list[str],
+	counts: list[int],
+	token_budget: int,
+) -> list[list[str]]:
+	"""greedily pack texts, in order, into batches under the request token budget."""
+	batches: list[list[str]] = []
+	current: list[str] = []
+	current_tokens = 0
+	for text, tokens in zip(texts, counts):
+		if current and (
+			current_tokens + tokens > token_budget or len(current) >= MAX_BATCH_TEXTS
+		):
+			batches.append(current)
+			current = []
+			current_tokens = 0
+		current.append(text)
+		current_tokens += tokens
+	if current:
+		batches.append(current)
+	return batches
+
+
 async def embed_texts(
 	texts: list[str],
 	session: AsyncSession | None = None,
-	batch_size: int | None = None,
 	parallel: bool = True,
 	max_concurrency: int | None = None,
 	input_type: EmbeddingInputType = "document",
 ) -> list[list[float]]:
-	"""embed a list of texts in batches. preserves input order.
+	"""embed a list of texts in token-budget-packed batches. preserves input order.
 
 	defaults to the document retrieval role (this is the bulk indexing path).
-	batch_size defaults to settings.assets.embeddings.batch_size when not set.
+	each request packs texts up to settings.assets.embeddings.batch_token_budget
+	tokens (exact counts when the adapter has a tokenizer, estimates otherwise)
+	and at most MAX_BATCH_TEXTS texts.
 	parallel=True (default): batches are embedded concurrently, capped by
 	max_concurrency.
 	parallel=False: sequential - useful for rate-limited or ordered paths.
@@ -149,18 +194,19 @@ async def embed_texts(
 	if not texts:
 		return []
 	model = await _get_embedding_model(session)
-	actual_batch = batch_size or settings.assets.embeddings.batch_size
+	counts = model.count_tokens(texts) or [estimate_tokens(text) for text in texts]
+	token_budget = settings.assets.embeddings.batch_token_budget
 	actual_concurrency = (
 		max_concurrency
 		if max_concurrency is not None
 		else settings.assets.embeddings.max_concurrency
 	)
-	batches = [texts[i : i + actual_batch] for i in range(0, len(texts), actual_batch)]
+	batches = _pack_batches(texts, counts, token_budget)
 	extra: dict[str, object] = {
 		"model": model.model_name,
 		"text_count": len(texts),
 		"batch_count": len(batches),
-		"batch_size": actual_batch,
+		"token_budget": token_budget,
 		"parallel": parallel,
 		"max_concurrency": actual_concurrency,
 		"input_chars": sum(len(text) for text in texts),
@@ -207,9 +253,14 @@ def build_sdk_adapter_config(
 	return adapter_config
 
 
-def build_embedding_model(model: Model) -> EmbeddingModel:
-	"""create an SDK EmbeddingModel from an ORM model."""
-	if model.model_type != ModelType.EMBEDDING:
+def build_embedding_model(
+	model: Model,
+) -> EmbeddingModel | ContextualizedEmbeddingModel:
+	"""create an SDK embedding model from an ORM model, keyed by its model type."""
+	if model.model_type not in (
+		ModelType.EMBEDDING,
+		ModelType.CONTEXTUALIZED_EMBEDDING,
+	):
 		raise ValueError(f"model {model.id} is not an embedding model")
 
 	adapter_type = model.provider.adapter_type
@@ -217,10 +268,9 @@ def build_embedding_model(model: Model) -> EmbeddingModel:
 		adapter_type += f".{model.adapter}"
 
 	adapter_config = build_sdk_adapter_config(model.provider, adapter_type=adapter_type)
-	return EmbeddingModel.create(
-		model.name,
-		adapter=adapter_config,
-	)
+	if model.model_type == ModelType.CONTEXTUALIZED_EMBEDDING:
+		return ContextualizedEmbeddingModel.create(model.name, adapter=adapter_config)
+	return EmbeddingModel.create(model.name, adapter=adapter_config)
 
 
 @overload
@@ -269,7 +319,11 @@ async def _get_default_embedding_model_id(session: AsyncSession) -> TypeID:
 
 	stmt = (
 		select(Model.id)
-		.where(Model.model_type == ModelType.EMBEDDING)
+		.where(
+			Model.model_type.in_(
+				(ModelType.EMBEDDING, ModelType.CONTEXTUALIZED_EMBEDDING)
+			)
+		)
 		.where(Model.enabled.is_(True))
 		.order_by(Model.created_at.desc())
 	)

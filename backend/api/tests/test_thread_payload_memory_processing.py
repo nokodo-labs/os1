@@ -11,11 +11,12 @@ from api.schemas.thread import ThreadCreate, ThreadUpdate
 from api.schemas.user import UserCreate
 from api.v1.service import memories as memory_service
 from api.v1.service import users as user_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.chat.context import AppContext, RetrievalContext
 from api.v1.service.chat.hooks import memory_post_processing as memory_hook_module
 from api.v1.service.chat.hooks.memory_post_processing import MemoryPostProcessingHook
-from api.v1.service.threads.core import create_thread, update_thread
+from api.v1.service.threads.core import update_thread
+from api.v1.service.threads.create import create_thread
 from nokodo_ai.agents import AgentIterationSnapshot, AgentIterationState
 from nokodo_ai.chat_models import ChatModel
 from nokodo_ai.context import AgentContext
@@ -63,7 +64,7 @@ async def test_thread_update_omitted_tags_are_unchanged(
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 
 	thread = await create_thread(
 		ThreadCreate(owner_id=user.id, title="original", tags=["a", "b"]),
@@ -98,7 +99,7 @@ async def test_thread_update_null_title_clears_title(
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 
 	thread = await create_thread(
 		ThreadCreate(owner_id=user.id, title="original", tags=["a"]),
@@ -172,7 +173,7 @@ async def test_memory_post_processing_hook_defers_to_chat_runner(
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	app_context = AppContext(
 		session=db_session,
 		principal=principal,
@@ -238,7 +239,16 @@ async def test_memory_post_processing_hook_skips_when_messages_are_queued(
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
+	seen_run_ids: list[TypeID] = []
+
+	async def has_in_flight_steering(run_id: TypeID) -> bool:
+		seen_run_ids.append(run_id)
+		return True
+
+	async def has_in_flight_input() -> bool:
+		return await has_in_flight_steering(TypeID("run_memory_hook_queued"))
+
 	app_context = AppContext(
 		session=db_session,
 		principal=principal,
@@ -246,17 +256,7 @@ async def test_memory_post_processing_hook_skips_when_messages_are_queued(
 		thread_id=TypeID("thread_memory_hook_queued"),
 		event_emitter=_noop_event_emitter,
 		retrieval=RetrievalContext(query_text="remember this"),
-	)
-	seen_run_ids: list[TypeID] = []
-
-	async def has_in_flight_steering(run_id: TypeID) -> bool:
-		seen_run_ids.append(run_id)
-		return True
-
-	monkeypatch.setattr(
-		memory_hook_module.run_status_store,
-		"has_in_flight_steering",
-		has_in_flight_steering,
+		has_in_flight_input=has_in_flight_input,
 	)
 	thread = SDKThread()
 	thread.add(UserMessage.from_text("remember this"))
@@ -320,7 +320,7 @@ async def test_memory_post_processing_hook_schedules_after_final_assistant(
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	app_context = AppContext(
 		session=db_session,
 		principal=principal,
@@ -399,7 +399,7 @@ async def test_memory_post_processing_hook_schedules_after_final_assistant(
 	assert "media_type=application/pdf" in snapshot
 	assert "file_id=file_123" in snapshot
 	assert "description=likes chocolate" in snapshot
-	assert "lookup" not in snapshot
+	assert "checking\n[called lookup tool]\ndone" in snapshot
 	assert "tool call dump" not in snapshot
 	assert "tool message dump" not in snapshot
 	assert "tool-output.csv" not in snapshot
@@ -432,7 +432,7 @@ async def test_memory_post_processing_provider_timeout_is_skipped(
 		),
 		db_session,
 	)
-	principal = Principal(user=user, group_ids=(), permissions=frozenset())
+	principal = Principal.for_user(user=user, group_ids=(), permissions=frozenset())
 	progress_events: list[tuple[int, str]] = []
 
 	async def record_progress(progress: int, stage: str) -> None:

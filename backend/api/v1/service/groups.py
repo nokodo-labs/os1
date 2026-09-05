@@ -1,7 +1,5 @@
 """service helpers for group operations."""
 
-from __future__ import annotations
-
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,28 +10,41 @@ from api.models.access_rule import AccessLevel
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.models.group import GROUP_TYPEID_PREFIX, Group, GroupMembership
-from api.permissions import ResourceType
+from api.permissions import ActionPermission, ResourceType
 from api.schemas.group import (
 	GroupCreate,
 	GroupListFilters,
 	GroupMembershipCreate,
 	GroupUpdate,
 )
-from api.v1.service import events as event_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
+from api.v1.service.authentication.cache import invalidate_principals
 from api.v1.service.authorization import (
-	invalidate_accessible_users_for_subject,
-	list_accessible_user_ids,
+	apply_metadata_write,
+	apply_resource_access_list_filters,
+	build_access_change_events,
+	capture_access_change,
+	enqueue_accessible_users_invalidation_for_subject,
+	list_accessible_user_ids_for_resources,
 	require_permission,
 	require_resource_access,
 	resource_access_predicate,
+	resource_refs_for_subject,
+)
+from api.v1.service.events import (
+	fanout_event,
+	persist_and_fanout_event,
 )
 from api.v1.service.listing import SortDir, apply_sort, exact_typeid_filter
 from nokodo_ai.utils.search import contains_pattern
 from nokodo_ai.utils.typeid import TypeID
 
 
-def _apply_group_filters(stmt: Select, group_filters: GroupListFilters) -> Select:
+def _apply_group_filters(
+	stmt: Select,
+	group_filters: GroupListFilters,
+	principal: Principal,
+) -> Select:
 	"""apply group list/count filters."""
 	if group_filters.owner_id is not None:
 		stmt = stmt.where(Group.owner_id == group_filters.owner_id)
@@ -51,7 +62,13 @@ def _apply_group_filters(stmt: Select, group_filters: GroupListFilters) -> Selec
 				exact_typeid_filter(Group.id, group_filters.q, GROUP_TYPEID_PREFIX),
 			)
 		)
-	return stmt
+	return apply_resource_access_list_filters(
+		stmt,
+		principal,
+		ResourceType.GROUP,
+		group_filters.access_relationship,
+		group_filters.resolved_access_level,
+	)
 
 
 async def list_groups(
@@ -72,7 +89,7 @@ async def list_groups(
 			required_level=AccessLevel.READER,
 		)
 	)
-	stmt = _apply_group_filters(stmt, group_filters)
+	stmt = _apply_group_filters(stmt, group_filters, principal)
 	stmt = apply_sort(
 		stmt,
 		sort_by=sort_by,
@@ -108,7 +125,7 @@ async def count_groups(
 			)
 		)
 	)
-	stmt = _apply_group_filters(stmt, group_filters)
+	stmt = _apply_group_filters(stmt, group_filters, principal)
 	return await session.scalar(stmt) or 0
 
 
@@ -146,7 +163,7 @@ async def create_group(
 	origin_session_id: str | None = None,
 ) -> Group:
 	"""create a new group. the creator becomes the owner."""
-	require_permission(principal, "groups:create")
+	require_permission(principal, ActionPermission.GROUPS_CREATE)
 	group = Group(
 		name=group_in.name,
 		description=group_in.description,
@@ -168,12 +185,12 @@ async def create_group(
 	group_id = str(group.id)
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.GROUP_CREATED,
 		data={"id": group_id, "name": group.name},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -197,20 +214,21 @@ async def update_group(
 		required_level=AccessLevel.EDITOR,
 	)
 	group = await _load_group(group_id, session)
-	update_data = group_in.model_dump(exclude_unset=True, by_alias=True)
+	update_data = group_in.model_dump(exclude_unset=True, exclude={"metadata"})
 	for key, value in update_data.items():
 		setattr(group, key, value)
+	apply_metadata_write(group, group_in.metadata)
 	session.add(group)
 	await session.flush()
 	await session.refresh(group)
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.GROUP_UPDATED,
 		data={"id": str(group_id), "name": group.name},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
@@ -233,29 +251,41 @@ async def delete_group(
 		required_level=AccessLevel.ADMIN,
 	)
 	group = await _load_group(group_id, session)
-	# invalidate BEFORE persist_and_fanout_event commits - the CASCADE delete of
-	# access rules means the rows are gone after commit and the query
-	# inside invalidate_accessible_users_for_subject would find nothing.
-	await invalidate_accessible_users_for_subject("group", group_id, session)
-	delete_recipients = await list_accessible_user_ids(
-		ResourceType.GROUP,
-		group_id,
+	access_change = await capture_access_change(
+		await resource_refs_for_subject("group", group_id, session),
 		session,
 	)
+	await enqueue_accessible_users_invalidation_for_subject("group", group_id, session)
+	member_user_ids = [m.user_id for m in group.memberships]
+	await invalidate_principals(member_user_ids)
+	delete_recipients = await list_accessible_user_ids_for_resources(
+		[(ResourceType.GROUP, group_id)], session
+	)
 	await session.delete(group)
+	await session.flush()
+	prepared_access_events = await build_access_change_events(
+		access_change,
+		session,
+		actor_user_id=principal.user.id,
+	)
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.GROUP_DELETED,
 		data={"id": str(group_id)},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
 		recipient_ids=delete_recipients,
 	)
+	for prepared in prepared_access_events:
+		await fanout_event(
+			prepared.event,
+			recipient_ids=prepared.recipient_ids,
+		)
 
 
 # membership management
@@ -287,6 +317,10 @@ async def add_member(
 			status_code=status.HTTP_409_CONFLICT,
 			detail="user is already a member",
 		)
+	access_change = await capture_access_change(
+		await resource_refs_for_subject("group", group_id, session),
+		session,
+	)
 	membership = GroupMembership(
 		group_id=group_id,
 		user_id=str(member_in.user_id),
@@ -295,27 +329,36 @@ async def add_member(
 	session.add(membership)
 	await session.flush()
 	await session.refresh(membership)
+	prepared_access_events = await build_access_change_events(
+		access_change,
+		session,
+		actor_user_id=principal.user.id,
+	)
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.GROUP_MEMBER_ADDED,
 		data={
 			"group_id": group_id,
 			"user_id": str(member_in.user_id),
 			"role": member_in.role,
 		},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await enqueue_accessible_users_invalidation_for_subject(
+		subject_kind="group", subject_id=group_id, session=session
+	)
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
 	)
-	# group membership affects accessible_users for every resource that has
-	# an access rule referencing this group. invalidate exactly those.
-	await invalidate_accessible_users_for_subject(
-		subject_kind="group", subject_id=group_id, session=session
-	)
+	for prepared in prepared_access_events:
+		await fanout_event(
+			prepared.event,
+			recipient_ids=prepared.recipient_ids,
+		)
+	await invalidate_principals([member_in.user_id])
 	return membership
 
 
@@ -346,28 +389,41 @@ async def remove_member(
 			status_code=status.HTTP_404_NOT_FOUND,
 			detail="membership not found",
 		)
+	access_change = await capture_access_change(
+		await resource_refs_for_subject("group", group_id, session),
+		session,
+	)
 	await session.delete(membership)
+	await session.flush()
+	prepared_access_events = await build_access_change_events(
+		access_change,
+		session,
+		actor_user_id=principal.user.id,
+	)
 	event = Event(
 		scope=EventScope.USER,
-		scope_id=principal.user_id,
+		scope_id=principal.user.id,
 		type=EventType.GROUP_MEMBER_REMOVED,
 		data={
 			"group_id": group_id,
 			"user_id": str(user_id),
 		},
-		user_id=principal.user_id,
+		user_id=principal.user.id,
 	)
-	await event_service.persist_and_fanout_event(
+	await enqueue_accessible_users_invalidation_for_subject(
+		subject_kind="group", subject_id=group_id, session=session
+	)
+	await persist_and_fanout_event(
 		session,
 		event=event,
 		origin_session_id=origin_session_id,
 	)
-	await invalidate_accessible_users_for_subject(
-		subject_kind="group", subject_id=group_id, session=session
-	)
-
-
-# internal helpers
+	for prepared in prepared_access_events:
+		await fanout_event(
+			prepared.event,
+			recipient_ids=prepared.recipient_ids,
+		)
+	await invalidate_principals([user_id])
 
 
 async def _load_group(group_id: TypeID, session: AsyncSession) -> Group:

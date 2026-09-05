@@ -5,14 +5,17 @@ from __future__ import annotations
 import hashlib
 import io
 import os
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Generator
+from pathlib import Path
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.file import FileSource, FileStatus
-from api.storage import get_storage_backend
+from api.settings import settings
+from api.storage import _BACKENDS, get_storage_backend, register
+from api.storage.local import LocalStorageBackend
 from api.v1.service.files import delete_content, read_content, store_file
 from nokodo_ai.utils.typeid import new_typeid
 
@@ -45,11 +48,13 @@ class TestUploadFile:
 		assert body["filename"] == "test.txt"
 		assert body["mime_type"] == "text/plain"
 		assert body["status"] == FileStatus.AVAILABLE
-		assert body["source"] == FileSource.UPLOAD
+		assert body["source"] == FileSource.USER_UPLOADED
 		assert body["size_bytes"] == len(payload)
-		assert body["checksum_sha256"] == _sha256(payload)
-		assert body["storage_backend"] == "local"
-		assert body["storage_key"]  # non-empty
+		# storage location and checksum are operator-only; this caller is an
+		# admin, so the private facet comes through populated.
+		assert body["private"]["checksum_sha256"] == _sha256(payload)
+		assert body["private"]["storage_backend"] == "local"
+		assert body["private"]["storage_key"]  # non-empty
 
 	async def test_upload_with_project(
 		self, client: AsyncClient, admin_auth: dict
@@ -75,9 +80,11 @@ class TestUploadFile:
 		body = resp.json()
 		assert project_id in body["project_ids"]
 
-	async def test_upload_custom_source(
+	async def test_upload_source_is_backend_set(
 		self, client: AsyncClient, admin_auth: dict
 	) -> None:
+		# source is not a client-supplied field: a posted source is ignored and
+		# uploads are always recorded as user uploads.
 		headers = admin_auth["headers"]
 		resp = await client.post(
 			"/v1/files/upload",
@@ -85,10 +92,10 @@ class TestUploadFile:
 			files={
 				"file": ("gen.bin", io.BytesIO(b"data"), "application/octet-stream")
 			},
-			data={"source": "generated"},
+			data={"source": "text_extraction"},
 		)
 		assert resp.status_code == 201
-		assert resp.json()["source"] == FileSource.GENERATED
+		assert resp.json()["source"] == FileSource.USER_UPLOADED
 
 	async def test_upload_unauthenticated(self, client: AsyncClient) -> None:
 		resp = await client.post(
@@ -112,7 +119,7 @@ class TestUploadFile:
 		assert resp.status_code == 201
 		body = resp.json()
 		assert body["size_bytes"] == len(payload)
-		assert body["checksum_sha256"] == _sha256(payload)
+		assert body["private"]["checksum_sha256"] == _sha256(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -340,21 +347,115 @@ class TestMetadataCreateFile:
 		self, client: AsyncClient, admin_auth: dict
 	) -> None:
 		headers = admin_auth["headers"]
+		payload = b"manual bytes"
+		await get_storage_backend("local").put(
+			"manual/key.bin", payload, "application/octet-stream"
+		)
 		resp = await client.post(
 			"/v1/files",
 			headers=headers,
 			json={
-				"storage_backend": "local",
-				"storage_key": "manual/key.bin",
+				"private": {
+					"storage_backend": "local",
+					"storage_key": "manual/key.bin",
+				},
 				"filename": "manual.bin",
-				"source": "import",
 			},
 		)
 		assert resp.status_code == 201
 		body = resp.json()
-		assert body["storage_backend"] == "local"
-		assert body["storage_key"] == "manual/key.bin"
+		assert body["private"]["storage_backend"] == "local"
+		assert body["private"]["storage_key"] == "manual/key.bin"
+		# size and checksum describe the BYTES: measured, never declared.
+		assert body["size_bytes"] == len(payload)
+		assert body["private"]["checksum_sha256"] == hashlib.sha256(payload).hexdigest()
+		# source is backend-set, never client-supplied.
+		assert body["source"] == FileSource.USER_UPLOADED
 		assert body["status"] == FileStatus.PENDING
+
+	async def test_create_file_rejects_a_key_with_no_stored_object(
+		self, client: AsyncClient, admin_auth: dict
+	) -> None:
+		"""registering coordinates that point at nothing is a 404, not a row.
+
+		size and checksum are read off the stored object, so a key with no
+		bytes behind it has nothing to measure - and the row would describe a
+		file that does not exist.
+		"""
+		resp = await client.post(
+			"/v1/files",
+			headers=admin_auth["headers"],
+			json={
+				"private": {
+					"storage_backend": "local",
+					"storage_key": "manual/absent.bin",
+				},
+				"filename": "ghost.bin",
+			},
+		)
+		assert resp.status_code == 404
+
+	async def test_create_file_cannot_declare_size(
+		self, client: AsyncClient, admin_auth: dict
+	) -> None:
+		"""size describes the bytes, so the wire must not be able to state it.
+
+		a caller could otherwise register a 2GB object declaring one byte, and
+		every consumer - including the Content-Length header - would believe it.
+		"""
+		resp = await client.post(
+			"/v1/files",
+			headers=admin_auth["headers"],
+			json={
+				"private": {
+					"storage_backend": "local",
+					"storage_key": "manual/sized.bin",
+				},
+				"filename": "sized.bin",
+				"size_bytes": 1,
+			},
+		)
+		assert resp.status_code == 422
+
+	async def test_create_file_cannot_declare_checksum(
+		self, client: AsyncClient, admin_auth: dict
+	) -> None:
+		"""same for the checksum: it is computed from the stored object."""
+		resp = await client.post(
+			"/v1/files",
+			headers=admin_auth["headers"],
+			json={
+				"private": {
+					"storage_backend": "local",
+					"storage_key": "manual/sized.bin",
+					"checksum_sha256": "f" * 64,
+				},
+				"filename": "sized.bin",
+			},
+		)
+		assert resp.status_code == 422
+
+	async def test_create_file_metadata_only_requires_files_manage(
+		self, client: AsyncClient, user_auth: dict
+	) -> None:
+		"""a caller-chosen backend/key points at arbitrary bytes: operators only.
+
+		files:create is not enough; every normal user holds it.
+		"""
+
+		resp = await client.post(
+			"/v1/files",
+			headers=user_auth["headers"],
+			json={
+				"private": {
+					"storage_backend": "local",
+					"storage_key": "someone/elses/key.bin",
+				},
+				"filename": "stolen.bin",
+			},
+		)
+
+		assert resp.status_code == 403
 
 
 # ---------------------------------------------------------------------------
@@ -381,10 +482,10 @@ class TestStoreFile:
 			owner_id=owner_id,
 			filename="report.txt",
 			content_type="text/plain",
-			source=FileSource.GENERATED,
+			source=FileSource.AGENT_GENERATED,
 		)
 		assert file.status == FileStatus.AVAILABLE
-		assert file.source == FileSource.GENERATED
+		assert file.source == FileSource.AGENT_GENERATED
 		assert file.filename == "report.txt"
 		assert file.mime_type == "text/plain"
 		assert file.size_bytes == len(payload)
@@ -446,6 +547,89 @@ class TestStoreFile:
 			project_ids=[project_id],
 		)
 		assert project_id in file.project_ids
+
+
+class TestBackendSwitch:
+	"""files stay readable on the backend they were written to."""
+
+	@pytest.fixture
+	def archived_backend(self, tmp_path: Path) -> Generator[LocalStorageBackend]:
+		"""a second registered backend standing in for a retired one."""
+
+		backend = LocalStorageBackend(
+			name="archive", root_path=str(tmp_path / "archive")
+		)
+		register("archive", backend)
+		try:
+			yield backend
+		finally:
+			_BACKENDS.pop("archive", None)
+
+	async def test_file_readable_after_active_backend_moves_on(
+		self,
+		db_session: AsyncSession,
+		admin_auth: dict,
+		archived_backend: LocalStorageBackend,
+	) -> None:
+		"""a file written to one backend still reads once another is active."""
+
+		owner_id = admin_auth["user"]["id"]
+		payload = b"written before the switch"
+		file = await store_file(
+			db_session,
+			data=payload,
+			owner_id=owner_id,
+			content_type="text/plain",
+			backend_name="archive",
+		)
+		assert file.storage_backend == "archive"
+
+		# the active backend is 'local', yet this file resolves via its own column
+		assert settings.assets.storage.active_backend == "local"
+		stream, content_type, size = await read_content(file)
+		assert await _collect(stream) == payload
+		assert content_type == "text/plain"
+		assert size == len(payload)
+
+	async def test_new_files_follow_the_active_backend(
+		self,
+		db_session: AsyncSession,
+		admin_auth: dict,
+		archived_backend: LocalStorageBackend,
+	) -> None:
+		"""writes without an explicit backend land on the active one."""
+
+		owner_id = admin_auth["user"]["id"]
+		file = await store_file(
+			db_session,
+			data=b"written after the switch",
+			owner_id=owner_id,
+			content_type="text/plain",
+		)
+
+		assert file.storage_backend == settings.assets.storage.active_backend == "local"
+		assert not await archived_backend.exists(file.storage_key)
+
+	async def test_delete_targets_the_files_own_backend(
+		self,
+		db_session: AsyncSession,
+		admin_auth: dict,
+		archived_backend: LocalStorageBackend,
+	) -> None:
+		"""deleting a non-active-backend file removes its own bytes."""
+
+		owner_id = admin_auth["user"]["id"]
+		file = await store_file(
+			db_session,
+			data=b"delete me from the archive",
+			owner_id=owner_id,
+			backend_name="archive",
+		)
+		assert await archived_backend.exists(file.storage_key)
+
+		await delete_content(file)
+
+		assert not await archived_backend.exists(file.storage_key)
 
 
 class TestReadContent:

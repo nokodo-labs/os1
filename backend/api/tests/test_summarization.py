@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import contextlib
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.thread_summary import SummaryPurpose
+from api.settings import settings
 from api.v1.service.chat.context_compaction.summarization import (
 	SUMMARY_COVERED_RAW_IDS_METADATA_KEY,
 	SUMMARY_MESSAGE_METADATA_KEY,
@@ -32,6 +33,45 @@ from nokodo_ai.messages import (
 	UserMessage,
 )
 from nokodo_ai.utils.typeid import TypeID
+
+
+_SUMMARIZATION = "api.v1.service.chat.context_compaction.summarization"
+_SUMMARY_HELPERS = ("create_summary", "list_active_summaries", "supersede_summaries")
+
+
+class _SummaryServiceProxy:
+	"""stand-in for the summary helpers the summarization module imports by name.
+
+	assignments write through to the module so the patched function is what runs, while
+	the mock is retained here so assertions still work after the patch context exits.
+	"""
+
+	def __init__(self, module: object) -> None:
+		object.__setattr__(self, "_module", module)
+		object.__setattr__(self, "_mocks", {})
+
+	def __getattr__(self, name: str) -> object:
+		mocks = object.__getattribute__(self, "_mocks")
+		if name in mocks:
+			return mocks[name]
+		return getattr(object.__getattribute__(self, "_module"), name)
+
+	def __setattr__(self, name: str, value: object) -> None:
+		object.__getattribute__(self, "_mocks")[name] = value
+		setattr(object.__getattribute__(self, "_module"), name, value)
+
+
+@contextlib.contextmanager
+def _patch_summary_service() -> Iterator[_SummaryServiceProxy]:
+	"""patch the summary helpers the summarization module imports directly."""
+	import api.v1.service.chat.context_compaction.summarization as module
+
+	with contextlib.ExitStack() as stack:
+		proxy = _SummaryServiceProxy(module)
+		for name in _SUMMARY_HELPERS:
+			mock = stack.enter_context(patch.object(module, name))
+			object.__getattribute__(proxy, "_mocks")[name] = mock
+		yield proxy
 
 
 _TID = TypeID("th_123")
@@ -201,6 +241,7 @@ class TestPlaceholderSummary:
 class TestSummarizeMessages:
 	@pytest.mark.asyncio()
 	async def test_successful_summarization(self) -> None:
+		custom_prompt = "custom summarization prompt"
 		messages = _compactable_messages()
 		mock_model = AsyncMock()
 		mock_response = MagicMock()
@@ -213,13 +254,12 @@ class TestSummarizeMessages:
 		mock_summary.id = _TSUM_NEW
 
 		with (
+			patch.object(settings.ai.tasks, "summarization_prompt", custom_prompt),
 			patch(
 				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(return_value=mock_model),
 			),
-			patch(
-				"api.v1.service.chat.context_compaction.summarization.summary_service"
-			) as mock_svc,
+			_patch_summary_service() as mock_svc,
 		):
 			mock_svc.create_summary = AsyncMock(return_value=mock_summary)
 			session = AsyncMock()
@@ -233,6 +273,8 @@ class TestSummarizeMessages:
 			)
 
 		assert result == _TSUM_NEW
+		sdk_thread = mock_model.generate.call_args.args[0]
+		assert sdk_thread.messages[0].text.startswith(custom_prompt)
 		mock_svc.create_summary.assert_called_once()
 		call_kwargs = mock_svc.create_summary.call_args.kwargs
 		assert call_kwargs["purpose"] == SummaryPurpose.AGENT_CONTEXT
@@ -252,9 +294,7 @@ class TestSummarizeMessages:
 				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(side_effect=RuntimeError("model unavailable")),
 			),
-			patch(
-				"api.v1.service.chat.context_compaction.summarization.summary_service"
-			) as mock_svc,
+			_patch_summary_service() as mock_svc,
 		):
 			mock_svc.create_summary = AsyncMock(return_value=mock_summary)
 			session = AsyncMock()
@@ -293,9 +333,7 @@ class TestSummarizeMessages:
 				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(return_value=mock_model),
 			),
-			patch(
-				"api.v1.service.chat.context_compaction.summarization.summary_service"
-			) as mock_svc,
+			_patch_summary_service() as mock_svc,
 		):
 			mock_svc.create_summary = AsyncMock(return_value=mock_summary)
 			await summarize_messages(
@@ -326,9 +364,7 @@ class TestSummarizeMessages:
 				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(return_value=mock_model),
 			),
-			patch(
-				"api.v1.service.chat.context_compaction.summarization.summary_service"
-			) as mock_svc,
+			_patch_summary_service() as mock_svc,
 		):
 			mock_svc.create_summary = AsyncMock(return_value=mock_summary)
 			mock_svc.supersede_summaries = AsyncMock()
@@ -390,9 +426,7 @@ class TestSummarizeMessages:
 				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(return_value=mock_model),
 			),
-			patch(
-				"api.v1.service.chat.context_compaction.summarization.summary_service"
-			) as mock_svc,
+			_patch_summary_service() as mock_svc,
 		):
 			mock_svc.create_summary = AsyncMock(return_value=mock_summary)
 			session = AsyncMock()
@@ -430,9 +464,7 @@ class TestSummarizeMessages:
 				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(return_value=mock_model),
 			),
-			patch(
-				"api.v1.service.chat.context_compaction.summarization.summary_service"
-			) as mock_svc,
+			_patch_summary_service() as mock_svc,
 			patch(
 				"api.v1.service.chat.context_compaction.summarization.session_scope",
 				_fake_scope,
@@ -451,9 +483,7 @@ class TestSummarizeMessages:
 class TestCondenseSummaries:
 	@pytest.mark.asyncio()
 	async def test_skips_when_fewer_than_two(self) -> None:
-		with patch(
-			"api.v1.service.chat.context_compaction.summarization.summary_service"
-		) as mock_svc:
+		with _patch_summary_service() as mock_svc:
 			mock_svc.list_active_summaries = AsyncMock(
 				return_value=[_mock_summary()],
 			)
@@ -468,6 +498,7 @@ class TestCondenseSummaries:
 
 	@pytest.mark.asyncio()
 	async def test_successful_condensation(self) -> None:
+		custom_prompt = "custom condensation prompt"
 		existing = [
 			_mock_summary(id_=_TSUM_1, content="first part"),
 			_mock_summary(id_=_TSUM_2, content="second part"),
@@ -481,13 +512,14 @@ class TestCondenseSummaries:
 		mock_model.generate = AsyncMock(return_value=mock_response)
 
 		with (
+			patch.object(
+				settings.ai.tasks, "summary_condensation_prompt", custom_prompt
+			),
 			patch(
 				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(return_value=mock_model),
 			),
-			patch(
-				"api.v1.service.chat.context_compaction.summarization.summary_service"
-			) as mock_svc,
+			_patch_summary_service() as mock_svc,
 		):
 			mock_svc.list_active_summaries = AsyncMock(return_value=existing)
 			mock_svc.create_summary = AsyncMock(return_value=condensed_mock)
@@ -500,6 +532,8 @@ class TestCondenseSummaries:
 			)
 
 		assert result == _TSUM_CONDENSED
+		sdk_thread = mock_model.generate.call_args.args[0]
+		assert sdk_thread.messages[0].text.startswith(custom_prompt)
 		mock_svc.list_active_summaries.assert_called_once_with(
 			_TID,
 			session,
@@ -523,9 +557,7 @@ class TestCondenseSummaries:
 				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(side_effect=RuntimeError("no model")),
 			),
-			patch(
-				"api.v1.service.chat.context_compaction.summarization.summary_service"
-			) as mock_svc,
+			_patch_summary_service() as mock_svc,
 		):
 			mock_svc.list_active_summaries = AsyncMock(return_value=existing)
 			mock_svc.create_summary = AsyncMock(return_value=condensed_mock)
@@ -562,9 +594,7 @@ class TestCondenseSummaries:
 				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(return_value=mock_model),
 			),
-			patch(
-				"api.v1.service.chat.context_compaction.summarization.summary_service"
-			) as mock_svc,
+			_patch_summary_service() as mock_svc,
 		):
 			mock_svc.list_active_summaries = AsyncMock(return_value=existing)
 			mock_svc.create_summary = AsyncMock(return_value=condensed_mock)
@@ -610,9 +640,7 @@ class TestCondenseSummaries:
 				"api.v1.service.chat.context_compaction.summarization.resolve_task_chat_model",
 				AsyncMock(return_value=mock_model),
 			),
-			patch(
-				"api.v1.service.chat.context_compaction.summarization.summary_service"
-			) as mock_svc,
+			_patch_summary_service() as mock_svc,
 			patch(
 				"api.v1.service.chat.context_compaction.summarization.session_scope",
 				_fake_scope,
