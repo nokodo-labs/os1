@@ -6,8 +6,6 @@ is stored in tool message metadata so subsequent calls can
 reconnect to the same environment.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 
@@ -18,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.e2b import E2BClient, FileEntry
 from api.models.file import FileSource
 from api.settings import settings
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.message_metadata import ATTACHMENTS_KEY, E2B_SANDBOX_ID_KEY
 from api.v1.service.files import get_file, ingest_file, read_content
@@ -111,14 +109,13 @@ async def _store_output_files(
 				owner_id=owner_id,
 				filename=entry.filename,
 				content_type=entry.mime_type,
-				source=FileSource.GENERATED,
+				source=FileSource.AGENT_GENERATED,
 				project_ids=project_ids,
 			)
-			file_meta: JSONObject = {}
 			if agent_id:
-				file_meta["agent_id"] = str(agent_id)
-			if file_meta and hasattr(stored, "metadata_"):
-				stored.metadata_ = {**(stored.metadata_ or {}), **file_meta}
+				stored.set_metadata(
+					public={**stored.public_metadata, "agent_id": str(agent_id)}
+				)
 				await session.flush()
 			return stored.id
 		except Exception:

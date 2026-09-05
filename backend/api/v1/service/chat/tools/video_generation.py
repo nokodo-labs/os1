@@ -6,8 +6,6 @@ persisted as File records and referenced through the attachments
 system; the tool never inlines bytes itself.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 

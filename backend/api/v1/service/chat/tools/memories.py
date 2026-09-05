@@ -1,7 +1,5 @@
 """memories tools - search and create memories."""
 
-from __future__ import annotations
-
 import json
 import logging
 
@@ -14,9 +12,12 @@ from api.models.memory import Memory
 from api.schemas.memory import MemoryCreate
 from api.schemas.preferences import AIPreferences
 from api.schemas.search import Page, SearchMode, SearchParams
-from api.v1.service import memories as memory_service
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.chat.context import AppContext
+from api.v1.service.memories import (
+	create_memory,
+	search_memories,
+)
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
@@ -108,7 +109,7 @@ class MemoryRecallTool(Tool[AppContext]):
 	) -> ToolMessage:
 		if __app_context__ is None:
 			return self.error("app context is required", __tool_call_context__)
-		ai = __app_context__.principal.user.prefs.ai
+		ai = __app_context__.principal.subject.prefs.ai
 		if isinstance(ai, AIPreferences) and ai.memories_enabled is False:
 			out: JSONObject = {
 				"status": "success",
@@ -117,7 +118,7 @@ class MemoryRecallTool(Tool[AppContext]):
 			return self.success(json.dumps(out), __tool_call_context__)
 		inp = MemorySearchInput.model_validate(kwargs)
 		try:
-			scored = await memory_service.search_memories(
+			scored = await search_memories(
 				inp.query,
 				__app_context__.session,
 				principal=__app_context__.principal,
@@ -179,7 +180,7 @@ class MemoryCreateTool(Tool[AppContext]):
 	) -> ToolMessage:
 		if __app_context__ is None:
 			return self.error("app context is required", __tool_call_context__)
-		ai = __app_context__.principal.user.prefs.ai
+		ai = __app_context__.principal.subject.prefs.ai
 		if isinstance(ai, AIPreferences) and ai.memories_enabled is False:
 			disabled_out = {
 				"status": "success",
@@ -210,7 +211,7 @@ async def _persist_memory(
 	"""background task: create memory in its own session."""
 	try:
 		async with async_session_local() as session:
-			await memory_service.create_memory(
+			await create_memory(
 				MemoryCreate(
 					content=inp.content,
 					tags=inp.tags,

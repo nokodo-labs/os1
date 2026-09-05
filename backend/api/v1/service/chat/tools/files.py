@@ -1,7 +1,5 @@
 """files tools - get/list and edit file metadata."""
 
-from __future__ import annotations
-
 import json
 import logging
 from typing import Literal
@@ -11,10 +9,23 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from api.models.file import File
 from api.schemas.file import FileUpdate
+from api.schemas.message import CitationSource
 from api.schemas.search import Page, SearchMode, SearchParams
-from api.v1.service import files as file_service
+from api.v1.service.chat.citation_sources import (
+	CitableSource,
+	citation_source,
+	with_citable_sources,
+)
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.models import fetch_agent_input_modalities
+from api.v1.service.files import (
+	get_file,
+	list_files,
+	query_file_content,
+	read_file_content_lines,
+	search_files,
+	update_file,
+)
 from api.v1.service.files.modalities import (
 	classify_media,
 	modality_supported,
@@ -30,9 +41,8 @@ from nokodo_ai.utils.typeid import TypeID
 logger = logging.getLogger(__name__)
 _HYBRID_SEARCH = SearchParams(mode=SearchMode.HYBRID)
 
-# max files a single file_get call may fetch natively in one batch. fetching
-# them together lands all needed media on one tool message in one turn.
 MAX_FILE_GET_BATCH = 8
+"max files a single file_get call may fetch natively in one batch"
 
 
 def _file_search_result(f: File) -> dict[str, object]:
@@ -66,11 +76,34 @@ class FileGetInput(BaseModel):
 	query: str | None = Field(
 		default=None,
 		description=(
-			"hybrid search query. when provided and file_ids is omitted, "
-			"searches files."
+			"hybrid search query. with exactly one file_id, searches inside that "
+			"file's content and returns the top matching chunks with their line "
+			"ranges. with no file_ids, searches across files."
 		),
 		min_length=1,
 		max_length=500,
+	)
+	line_start: int | None = Field(
+		default=None,
+		ge=1,
+		description=(
+			"with exactly one file_id, read that file's extracted text starting "
+			"at this 1-based line. selects line-read mode."
+		),
+	)
+	line_end: int | None = Field(
+		default=None,
+		ge=1,
+		description=(
+			"last 1-based line to read, inclusive. omit to read to the end of the file."
+		),
+	)
+	include_media: bool = Field(
+		default=True,
+		description=(
+			"when fetching files by id, attach supported image/audio/video bytes "
+			"for native viewing. set false for metadata and text description only."
+		),
 	)
 	offset: int = Field(
 		default=0,
@@ -113,8 +146,13 @@ class FileGetTool(Tool[AppContext]):
 	name: str = Field(default="file_get")
 	description: str = Field(
 		default=(
-			"retrieve files. provide file_ids to fetch specific files (up to 8 "
-			"at once), or omit to list the user's most recent uploads."
+			"retrieve files and their contents. with a single file_id, set "
+			"line_start to read the file's text by line range, or set query to "
+			"search inside that file and get the top matching passages with their "
+			"line ranges. with multiple file_ids, fetch the files (media is "
+			"attached for native viewing; documents return their text "
+			"description). with no file_ids, set query to search files or omit it "
+			"to list the most recent uploads."
 		)
 	)
 	parameters: JSONObject = Field(
@@ -124,21 +162,24 @@ class FileGetTool(Tool[AppContext]):
 	async def _fetch_batch(
 		self,
 		file_ids: list[TypeID],
+		include_media: bool,
 		app_context: AppContext,
 		tool_call_context: ToolCallContext,
 	) -> ToolMessage:
 		"""fetch one or more files, attaching supported media natively.
 
 		all fetched media lands on this single tool message so it shares one
-		protection turn. unsupported modalities return metadata only.
+		protection turn. when include_media is false, or the model cannot view
+		the modality, files return metadata and their text description only.
 		"""
 		supported: set[str] | None = None
 		modalities_loaded = False
 		results: list[dict[str, object]] = []
 		attachments: list[ImageContent | FileContent] = []
+		citable_sources: list[CitableSource] = []
 		for file_id in file_ids:
 			try:
-				f = await file_service.get_file(
+				f = await get_file(
 					file_id,
 					app_context.session,
 					principal=app_context.principal,
@@ -161,45 +202,58 @@ class FileGetTool(Tool[AppContext]):
 				result["mime_type"] = f.mime_type
 			if f.size_bytes is not None:
 				result["size_bytes"] = f.size_bytes
+			if f.description:
+				result["description"] = f.description
+			citable_sources.append(
+				citation_source(CitationSource.FILE, f.id, f.filename)
+			)
 
-			# media files attach natively when the model supports the modality;
-			# otherwise metadata only. native bytes are hydrated later by the
-			# file_resolve filter. the updated_at stamp lets the projection layer
-			# tell distinct renditions of a mutable file apart.
+			# media files attach natively when requested and the model supports
+			# the modality; otherwise metadata + description only. native bytes
+			# are hydrated later by the file_resolve filter. the updated_at stamp
+			# lets the projection layer tell distinct renditions of a mutable
+			# file apart.
 			mime = f.mime_type or ""
 			category = classify_media(mime)
 			if category in ("image", "audio", "video"):
-				if not modalities_loaded:
-					supported = await fetch_agent_input_modalities(
-						app_context.agent_id, app_context.session
-					)
-					modalities_loaded = True
-				if modality_supported(mime, supported):
-					metadata: JSONObject = {
-						"file_id": str(f.id),
-						"fetched": True,
-						"updated_at": f.updated_at.isoformat(),
-					}
-					attachment = (
-						ImageContent(
-							filename=f.filename,
-							media_type=mime,
-							metadata=metadata,
-						)
-						if category == "image"
-						else FileContent(
-							filename=f.filename,
-							media_type=mime,
-							metadata=metadata,
-						)
-					)
-					attachments.append(attachment)
-					result["message"] = "file retrieved and attached to this message"
-				else:
+				if not include_media:
 					result["message"] = (
-						"file retrieved; this model cannot view this media type "
-						"natively"
+						"file retrieved; media bytes omitted, description only"
 					)
+				else:
+					if not modalities_loaded:
+						supported = await fetch_agent_input_modalities(
+							app_context.agent_id, app_context.session
+						)
+						modalities_loaded = True
+					if modality_supported(mime, supported):
+						metadata: JSONObject = {
+							"file_id": str(f.id),
+							"fetched": True,
+							"updated_at": f.updated_at.isoformat(),
+						}
+						attachment = (
+							ImageContent(
+								filename=f.filename,
+								media_type=mime,
+								metadata=metadata,
+							)
+							if category == "image"
+							else FileContent(
+								filename=f.filename,
+								media_type=mime,
+								metadata=metadata,
+							)
+						)
+						attachments.append(attachment)
+						result["message"] = (
+							"file retrieved and attached to this message"
+						)
+					else:
+						result["message"] = (
+							"file retrieved; this model cannot view this media "
+							"type natively"
+						)
 			results.append(result)
 
 		output = {
@@ -207,12 +261,117 @@ class FileGetTool(Tool[AppContext]):
 			"count": len(results),
 			"results": results,
 		}
-		return ToolMessage(
-			tool_call_id=tool_call_context.tool_call_id,
-			tool_output=json.dumps(output),
-			metadata=tool_call_context.metadata,
-			is_error=False,
+		return self.success(
+			json.dumps(output),
+			tool_call_context,
+			metadata=with_citable_sources(None, citable_sources),
 			attachments=attachments,
+		)
+
+	async def _query_content(
+		self,
+		file_id: TypeID,
+		query: str,
+		limit: int,
+		app_context: AppContext,
+		tool_call_context: ToolCallContext,
+	) -> ToolMessage:
+		"""search inside one file's body text and return the top passages."""
+		try:
+			hits = await query_file_content(
+				file_id,
+				query,
+				app_context.session,
+				principal=app_context.principal,
+				limit=limit,
+			)
+		except HTTPException as exc:
+			return self.error(str(exc.detail), tool_call_context)
+		results = [
+			{
+				"text": hit.text,
+				"score": round(hit.score, 4),
+				"chunk_index": hit.chunk_index,
+				"chunk_count": hit.chunk_count,
+				"line_start": hit.line_start,
+				"line_end": hit.line_end,
+			}
+			for hit in hits
+		]
+		out: dict[str, object] = {
+			"status": "success",
+			"message": (
+				f"found {len(results)} matching passages"
+				if results
+				else "no matching content found in this file"
+			),
+			"count": len(results),
+			"file_id": str(file_id),
+			"results": results,
+		}
+		return self.success(
+			json.dumps(out),
+			tool_call_context,
+			metadata=with_citable_sources(
+				None,
+				[citation_source(CitationSource.FILE, file_id, None)],
+			),
+		)
+
+	async def _read_lines(
+		self,
+		file_id: TypeID,
+		line_start: int,
+		line_end: int | None,
+		app_context: AppContext,
+		tool_call_context: ToolCallContext,
+	) -> ToolMessage:
+		"""read a line range of one file's extracted text."""
+		try:
+			lines = await read_file_content_lines(
+				file_id,
+				app_context.session,
+				principal=app_context.principal,
+				line_start=line_start,
+				line_end=line_end,
+			)
+		except HTTPException as exc:
+			return self.error(str(exc.detail), tool_call_context)
+		out: dict[str, object]
+		if lines.total_lines == 0:
+			out = {
+				"status": "success",
+				"message": "this file has no readable text content",
+				"file_id": str(file_id),
+				"total_lines": 0,
+				"text": "",
+			}
+			return self.success(
+				json.dumps(out),
+				tool_call_context,
+				metadata=with_citable_sources(
+					None,
+					[citation_source(CitationSource.FILE, file_id, None)],
+				),
+			)
+		out = {
+			"status": "success",
+			"message": (
+				f"read lines {lines.line_start}-{lines.line_end} of {lines.total_lines}"
+			),
+			"file_id": str(file_id),
+			"line_start": lines.line_start,
+			"line_end": lines.line_end,
+			"total_lines": lines.total_lines,
+			"text": lines.text,
+		}
+		return self.success(
+			json.dumps(out),
+			tool_call_context,
+			metadata=with_citable_sources(
+				None,
+				[citation_source(CitationSource.FILE, file_id, None)],
+			),
 		)
 
 	async def call(
@@ -227,14 +386,47 @@ class FileGetTool(Tool[AppContext]):
 			return self.error("app context is required", __tool_call_context__)
 		inp = FileGetInput.model_validate(kwargs)
 
+		# line-read mode: one file's extracted text addressed by line range.
+		if inp.line_start is not None:
+			if not inp.file_ids or len(inp.file_ids) != 1:
+				return self.error(
+					"reading by line requires exactly one file_id",
+					__tool_call_context__,
+				)
+			return await self._read_lines(
+				inp.file_ids[0],
+				inp.line_start,
+				inp.line_end,
+				__app_context__,
+				__tool_call_context__,
+			)
+
+		# content-query mode: search inside one file's body text.
+		if inp.file_ids and inp.query:
+			if len(inp.file_ids) != 1:
+				return self.error(
+					"querying file content requires exactly one file_id",
+					__tool_call_context__,
+				)
+			return await self._query_content(
+				inp.file_ids[0],
+				inp.query,
+				inp.limit,
+				__app_context__,
+				__tool_call_context__,
+			)
+
 		if inp.file_ids:
 			return await self._fetch_batch(
-				inp.file_ids, __app_context__, __tool_call_context__
+				inp.file_ids,
+				inp.include_media,
+				__app_context__,
+				__tool_call_context__,
 			)
 
 		if inp.query:
 			try:
-				scored = await file_service.search_files(
+				scored = await search_files(
 					inp.query,
 					__app_context__.session,
 					principal=__app_context__.principal,
@@ -250,18 +442,28 @@ class FileGetTool(Tool[AppContext]):
 			)
 			results = [_file_search_result(f) for f in page.items]
 			next_offset = inp.offset + inp.limit if page.has_more else None
-			out = {
+			out: dict[str, object] = {
 				"status": "success",
 				"message": f"found {len(results)} files",
 				"count": len(results),
 				"results": results,
 				"next_offset": next_offset,
 			}
-			return self.success(json.dumps(out), __tool_call_context__)
+			return self.success(
+				json.dumps(out),
+				__tool_call_context__,
+				metadata=with_citable_sources(
+					None,
+					[
+						citation_source(CitationSource.FILE, f.id, f.filename)
+						for f in page.items
+					],
+				),
+			)
 
 		# list recent files
 		try:
-			files = await file_service.list_files(
+			files = await list_files(
 				__app_context__.session,
 				principal=__app_context__.principal,
 				limit=inp.limit,
@@ -291,8 +493,20 @@ class FileGetTool(Tool[AppContext]):
 		]
 		n = len(results)
 		msg = f"found {n} {'file' if n == 1 else 'files'}"
-		out = {"status": "success", "message": msg, "count": n, "results": results}
-		return self.success(json.dumps(out), __tool_call_context__)
+		list_out: dict[str, object] = {
+			"status": "success",
+			"message": msg,
+			"count": n,
+			"results": results,
+		}
+		return self.success(
+			json.dumps(list_out),
+			__tool_call_context__,
+			metadata=with_citable_sources(
+				None,
+				[citation_source(CitationSource.FILE, f.id, f.filename) for f in files],
+			),
+		)
 
 
 class FileEditTool(Tool[AppContext]):
@@ -316,7 +530,7 @@ class FileEditTool(Tool[AppContext]):
 			return self.error("app context is required", __tool_call_context__)
 		inp = FileEditInput.model_validate(kwargs)
 		try:
-			f = await file_service.update_file(
+			f = await update_file(
 				inp.file_id,
 				FileUpdate(filename=inp.filename),
 				__app_context__.session,

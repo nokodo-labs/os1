@@ -1,7 +1,5 @@
 """projects tools - get/search projects."""
 
-from __future__ import annotations
-
 import json
 import logging
 
@@ -9,9 +7,14 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.models.project import Project
+from api.schemas.message import CitationSource
 from api.schemas.search import Page
-from api.v1.service import projects as project_service
+from api.v1.service.chat.citation_sources import citation_source, with_citable_sources
 from api.v1.service.chat.context import AppContext
+from api.v1.service.projects import (
+	get_project_payload,
+	search_projects,
+)
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
@@ -93,7 +96,7 @@ class ProjectGetTool(Tool[AppContext]):
 
 		if inp.project_id:
 			try:
-				project = await project_service.get_project_payload(
+				project = await get_project_payload(
 					TypeID(inp.project_id),
 					__app_context__.session,
 					__app_context__.principal,
@@ -110,7 +113,14 @@ class ProjectGetTool(Tool[AppContext]):
 				result["description"] = project.description
 			if project.thread_ids:
 				result["chat_ids"] = [str(chat_id) for chat_id in project.thread_ids]
-			return self.success(json.dumps(result), __tool_call_context__)
+			return self.success(
+				json.dumps(result),
+				__tool_call_context__,
+				metadata=with_citable_sources(
+					None,
+					[citation_source(CitationSource.PROJECT, project.id, project.name)],
+				),
+			)
 
 		if not inp.query:
 			return self.error(
@@ -119,7 +129,7 @@ class ProjectGetTool(Tool[AppContext]):
 			)
 
 		try:
-			scored = await project_service.search_projects(
+			scored = await search_projects(
 				inp.query,
 				__app_context__.session,
 				principal=__app_context__.principal,
@@ -146,11 +156,21 @@ class ProjectGetTool(Tool[AppContext]):
 		count = len(results)
 		message = f"found {count} {'project' if count == 1 else 'projects'}"
 		next_offset = inp.offset + inp.limit if page.has_more else None
-		out = {
+		search_out: dict[str, object] = {
 			"status": "success",
 			"message": message,
 			"count": count,
 			"results": results,
 			"next_offset": next_offset,
 		}
-		return self.success(json.dumps(out), __tool_call_context__)
+		return self.success(
+			json.dumps(search_out),
+			__tool_call_context__,
+			metadata=with_citable_sources(
+				None,
+				[
+					citation_source(CitationSource.PROJECT, item.id, item.name)
+					for item in page.items
+				],
+			),
+		)

@@ -1,20 +1,31 @@
 """chat tools - search and read chats."""
 
-from __future__ import annotations
-
 import json
 
-from fastapi import HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi import HTTPException
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.models.message import Message, MessageType
 from api.models.thread import Thread
 from api.models.thread_summary import SummaryPurpose, ThreadSummary
-from api.schemas.search import Page, SearchMode, SearchParams
+from api.schemas.message import CitationSource
+from api.schemas.search import SearchMode, SearchParams
 from api.schemas.thread import ThreadListFilters
-from api.v1.service import threads as chat_service
+from api.v1.service.chat.citation_sources import citation_source, with_citable_sources
 from api.v1.service.chat.context import AppContext
-from api.v1.service.threads import summaries as chat_summary_service
+from api.v1.service.search.primitives import SearchHit
+from api.v1.service.threads import (
+	count_threads,
+	get_branch_page,
+	get_message,
+	get_thread,
+	list_threads,
+	search_threads,
+)
+from api.v1.service.threads.summaries import (
+	latest_active_summary_text,
+	list_active_summaries,
+)
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
@@ -43,7 +54,19 @@ class ChatGetInput(BaseModel):
 	)
 	message_id: TypeID | None = Field(
 		default=None,
-		description="ID of a message; returns the chat page containing it.",
+		description="ID of a message to locate and read in its chat.",
+	)
+	before: int | None = Field(
+		default=None,
+		description="with message_id, number of earlier messages to include.",
+		ge=0,
+		le=_MAX_PAGE_LIMIT - 1,
+	)
+	after: int | None = Field(
+		default=None,
+		description="with message_id, number of later messages to include.",
+		ge=0,
+		le=_MAX_PAGE_LIMIT - 1,
 	)
 	query: str | None = Field(
 		default=None,
@@ -75,6 +98,18 @@ class ChatGetInput(BaseModel):
 		description="optionally filter listed chats by archive state.",
 	)
 
+	@model_validator(mode="after")
+	def _validate_message_window(self) -> ChatGetInput:
+		if (
+			self.before is not None or self.after is not None
+		) and self.message_id is None:
+			raise ValueError("before and after require message_id")
+		if (self.before or 0) + (self.after or 0) + 1 > _MAX_PAGE_LIMIT:
+			raise ValueError(
+				f"message windows may contain at most {_MAX_PAGE_LIMIT} messages"
+			)
+		return self
+
 
 def _trim(text: str | None, max_chars: int) -> str | None:
 	if text is None or len(text) <= max_chars:
@@ -87,7 +122,6 @@ def _chat_payload(chat: Thread) -> dict[str, object]:
 		"chat_id": str(chat.id),
 		"title": chat.title,
 		"tags": list(chat.tags or []),
-		"is_archived": chat.is_archived,
 		"is_temporary": chat.is_temporary,
 		"owner_id": str(chat.owner_id),
 		"current_message_id": str(chat.current_message_id)
@@ -143,13 +177,24 @@ def _summary_payload(summary: ThreadSummary) -> dict[str, object]:
 	return payload
 
 
-def _thread_search_result(thread: Thread) -> dict[str, object]:
-	"""summarize a chat thread for agent search results."""
-	summary = chat_summary_service.latest_active_summary_text(
-		thread, SummaryPurpose.CATALOG
-	)
+def _thread_search_result(
+	thread: Thread,
+	hit: SearchHit,
+) -> dict[str, object]:
+	"""project a chat search hit into agent-facing domain data."""
+	summary = latest_active_summary_text(thread, SummaryPurpose.CATALOG)
 	if summary is None:
-		summary = (thread.metadata_ or {}).get("summary")
+		summary = thread.public_metadata.get("summary")
+	if hit.anchor is not None:
+		message_payload: dict[str, object] = {
+			"type": "message",
+			"message_id": str(hit.anchor.id),
+			"chat_id": str(thread.id),
+			"chat_title": thread.title or "",
+		}
+		if hit.preview:
+			message_payload["excerpt"] = hit.preview[:300]
+		return message_payload
 	payload: dict[str, object] = {
 		"type": "chat",
 		"chat_id": str(thread.id),
@@ -173,40 +218,11 @@ def _chat_error(exc: HTTPException) -> str:
 	return str(exc.detail).replace("Thread", "chat").replace("thread", "chat")
 
 
-def _message_page(
-	messages: list[Message],
-	skip: int,
-	limit: int,
-	target_message_id: TypeID | None = None,
-) -> tuple[list[Message], int, bool, bool]:
-	total = len(messages)
-	page_skip = skip
-	if target_message_id is not None:
-		matching_index = next(
-			(
-				index
-				for index, message in enumerate(messages)
-				if message.id == target_message_id
-			),
-			None,
-		)
-		if matching_index is None:
-			raise HTTPException(
-				status_code=status.HTTP_404_NOT_FOUND,
-				detail="message not found in active chat view",
-			)
-		page_skip = ((total - 1 - matching_index) // limit) * limit
-	end = max(total - page_skip, 0)
-	start = max(end - limit, 0)
-	page = messages[start:end]
-	return page, page_skip, start > 0, page_skip > 0
-
-
 async def _load_message(
 	message_id: TypeID,
 	app_context: AppContext,
 ) -> Message:
-	return await chat_service.get_message(
+	return await get_message(
 		message_id,
 		app_context.session,
 		principal=app_context.principal,
@@ -220,9 +236,9 @@ class ChatGetTool(Tool[AppContext]):
 	description: str = Field(
 		default=(
 			"retrieve chats. provide query to search, chat_id to read a chat page, "
-			"message_id to read the chat page containing that message, or omit all "
-			"three to list chats in the same order users see them. all search uses "
-			"hybrid retrieval."
+			"message_id to read around a message (optionally with before and after), "
+			"or omit all three to list chats in the same order users see them. all "
+			"search uses hybrid retrieval."
 		)
 	)
 	parameters: JSONObject = Field(
@@ -267,10 +283,14 @@ class ChatGetTool(Tool[AppContext]):
 		tool_call_context: ToolCallContext,
 		app_context: AppContext,
 	) -> ToolMessage:
+		# the tool lists the caller's own inbox: exclude their archived chats
+		# (unless asked) and their not-yet-accepted message requests.
+		me_id = app_context.principal.user.id
 		filters = ThreadListFilters(
-			is_archived=inp.include_archived,
+			not_archived_by=None if inp.include_archived else me_id,
+			not_invite_pending_for=me_id,
 		)
-		chats = await chat_service.list_threads(
+		chats = await list_threads(
 			app_context.session,
 			principal=app_context.principal,
 			filters=filters,
@@ -279,7 +299,7 @@ class ChatGetTool(Tool[AppContext]):
 			sort_by="last_activity_at",
 			sort_dir="desc",
 		)
-		total = await chat_service.count_threads(
+		total = await count_threads(
 			app_context.session,
 			principal=app_context.principal,
 			filters=filters,
@@ -311,7 +331,7 @@ class ChatGetTool(Tool[AppContext]):
 			return self.error(
 				"query is required when searching chats", tool_call_context
 			)
-		scored = await chat_service.search_threads(
+		scored = await search_threads(
 			inp.query,
 			app_context.session,
 			principal=app_context.principal,
@@ -319,20 +339,34 @@ class ChatGetTool(Tool[AppContext]):
 			offset=inp.offset,
 			search_params=_HYBRID_SEARCH,
 		)
-		page = Page(
-			items=[hit.item for hit in scored[: inp.limit]],
-			has_more=len(scored) > inp.limit,
-		)
-		results = [_thread_search_result(item) for item in page.items]
-		next_offset = inp.offset + inp.limit if page.has_more else None
-		out = {
+		has_more = len(scored) > inp.limit
+		results = [
+			_thread_search_result(scored_hit.item, scored_hit.hit)
+			for scored_hit in scored[: inp.limit]
+		]
+		next_offset = inp.offset + inp.limit if has_more else None
+		out: dict[str, object] = {
 			"status": "success",
 			"message": f"found {len(results)} chats",
 			"count": len(results),
 			"results": results,
 			"next_offset": next_offset,
 		}
-		return self.success(json.dumps(out), tool_call_context)
+		return self.success(
+			json.dumps(out),
+			tool_call_context,
+			metadata=with_citable_sources(
+				None,
+				[
+					citation_source(
+						CitationSource.THREAD,
+						hit.item.id,
+						hit.item.title,
+					)
+					for hit in scored[: inp.limit]
+				],
+			),
+		)
 
 	async def _chat_page(
 		self,
@@ -347,7 +381,7 @@ class ChatGetTool(Tool[AppContext]):
 			chat_id = message.thread_id
 		if chat_id is None:
 			return self.error("chat_id or message_id is required", tool_call_context)
-		chat = await chat_service.get_thread(
+		chat = await get_thread(
 			chat_id,
 			app_context.session,
 			principal=app_context.principal,
@@ -356,34 +390,35 @@ class ChatGetTool(Tool[AppContext]):
 		summaries = await self._summary_payloads(app_context, chat.id)
 		if summaries:
 			payload["summaries"] = summaries
-		messages = await chat_service.get_current_branch(
+		branch_page = await get_branch_page(
 			chat.id,
 			app_context.session,
 			principal=app_context.principal,
+			skip=inp.skip,
+			limit=inp.limit,
+			anchor_message_id=target_message_id,
+			before=inp.before,
+			after=inp.after,
 		)
-		message_page, page_skip, has_more_older, has_more_newer = _message_page(
-			messages,
-			inp.skip,
-			inp.limit,
-			target_message_id=target_message_id,
-		)
-		message_results = [_message_payload(message) for message in message_page]
-		out = {
+		message_results = [
+			_message_payload(message) for message in branch_page.messages
+		]
+		out: dict[str, object] = {
 			"status": "success",
 			"message": "chat page retrieved",
 			"chat": payload,
 			"message_page": {
 				"count": len(message_results),
-				"total": len(messages),
-				"skip": page_skip,
+				"total": branch_page.total,
+				"skip": branch_page.skip,
 				"limit": inp.limit,
-				"has_more_older": has_more_older,
-				"has_more_newer": has_more_newer,
-				"next_skip": page_skip + len(message_results)
-				if has_more_older
+				"has_more_older": branch_page.has_toward_root,
+				"has_more_newer": branch_page.has_toward_leaf,
+				"next_skip": branch_page.skip + len(message_results)
+				if branch_page.has_toward_root
 				else None,
-				"previous_skip": max(page_skip - inp.limit, 0)
-				if has_more_newer
+				"previous_skip": max(branch_page.skip - inp.limit, 0)
+				if branch_page.has_toward_leaf
 				else None,
 				"target_message_id": str(target_message_id)
 				if target_message_id
@@ -391,14 +426,20 @@ class ChatGetTool(Tool[AppContext]):
 				"results": message_results,
 			},
 		}
-		return self.success(json.dumps(out), tool_call_context)
+		return self.success(
+			json.dumps(out),
+			tool_call_context,
+			metadata=with_citable_sources(
+				None, [citation_source(CitationSource.THREAD, chat.id, chat.title)]
+			),
+		)
 
 	async def _summary_payloads(
 		self,
 		app_context: AppContext,
 		chat_id: TypeID,
 	) -> list[dict[str, object]]:
-		summaries = await chat_summary_service.list_active_summaries(
+		summaries = await list_active_summaries(
 			chat_id,
 			app_context.session,
 			purpose=SummaryPurpose.CATALOG,

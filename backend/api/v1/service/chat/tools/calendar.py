@@ -1,30 +1,40 @@
 """calendar tools - get/search and create/edit calendar events."""
 
-from __future__ import annotations
-
 import json
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from api.models.calendar import CalendarEvent
+from api.models.calendar import Calendar, CalendarEvent
 from api.schemas.calendar import (
 	CalendarEventCreate,
 	CalendarEventUpdate,
 )
+from api.schemas.message import CitationSource
 from api.schemas.scheduled_item import Recurrence, ScheduledItem
-from api.schemas.search import Page, SearchMode, SearchParams
-from api.v1.service import calendar as calendar_service
+from api.schemas.search import SearchMode, SearchParams
+from api.v1.service.calendar import (
+	create_calendar_event,
+	delete_calendar_event,
+	get_calendar_event,
+	load_calendars,
+	search_calendars,
+	update_calendar_event,
+)
 from api.v1.service.calendar.events import list_calendar_scheduled_items
+from api.v1.service.chat.citation_sources import (
+	CitableSource,
+	citation_source,
+	with_citable_sources,
+)
 from api.v1.service.chat.context import AppContext
-from api.v1.service.chat.message_metadata import CITABLE_SOURCES_KEY
 from api.v1.service.reminders.core import list_reminder_scheduled_items
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
-from nokodo_ai.types.json import JSONObject, JSONValue
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -157,13 +167,48 @@ class CalendarEventWriteInput(BaseModel):
 		return self
 
 
-def _calendar_event_search_result(event: CalendarEvent) -> dict[str, object]:
-	"""summarize a calendar event for agent search results."""
-	return {
-		"id": str(event.id),
-		"title": event.title or "",
-		**({"preview": event.description[:100]} if event.description else {}),
+def _hit_calendar_id(hit: CalendarEvent | Calendar) -> TypeID:
+	"""the routable calendar behind a search hit."""
+	return hit.calendar_id if isinstance(hit, CalendarEvent) else hit.id
+
+
+def _search_result_payload(
+	hit: CalendarEvent | Calendar,
+	calendars_by_id: dict[TypeID, Calendar],
+) -> dict[str, object]:
+	"""project a calendar search hit into agent-facing domain data."""
+	if isinstance(hit, Calendar):
+		return _calendar_payload(hit)
+	calendar = calendars_by_id.get(hit.calendar_id)
+	payload: dict[str, object] = {
+		"type": "calendar_event",
+		"id": str(hit.id),
+		"title": hit.title or "",
+		"calendar_id": str(hit.calendar_id),
+		"calendar_name": calendar.name if calendar is not None else "",
 	}
+	if hit.description:
+		payload["description"] = hit.description[:100]
+	payload["start_at"] = hit.start_at.isoformat()
+	payload["end_at"] = hit.end_at.isoformat()
+	payload["is_recurring"] = hit.recurrence is not None
+	return payload
+
+
+def _calendar_payload(calendar: Calendar) -> dict[str, object]:
+	"""serialize one calendar for agent tool output."""
+	payload: dict[str, object] = {
+		"type": "calendar",
+		"id": str(calendar.id),
+		"name": calendar.name,
+		"color": calendar.color,
+		"is_default": calendar.is_default,
+	}
+	if calendar.description:
+		payload["description"] = calendar.description
+	if calendar.timezone:
+		payload["timezone"] = calendar.timezone
+	return payload
 
 
 def _event_payload(calendar_event: CalendarEvent) -> dict[str, object]:
@@ -231,52 +276,48 @@ def _scheduled_item_payload(item: ScheduledItem) -> dict[str, object]:
 	return payload
 
 
-def _citable_source(
-	source_type: str, source_id: object, title: str | None
-) -> JSONValue:
-	"""build one citation-source payload for concrete scheduled resources."""
-	return {
-		"source_type": source_type,
-		"source_id": str(source_id),
-		"title": title,
-	}
-
-
-def _calendar_event_citable_sources(calendar_event: CalendarEvent) -> list[JSONValue]:
+def _calendar_event_citable_sources(
+	calendar_event: CalendarEvent,
+) -> list[CitableSource]:
 	"""return the event and owning calendar citation sources for an event."""
 	return [
-		_citable_source("calendar_event", calendar_event.id, calendar_event.title),
-		_citable_source("calendar", calendar_event.calendar_id, calendar_event.title),
+		citation_source(
+			CitationSource.CALENDAR_EVENT,
+			calendar_event.id,
+			calendar_event.title,
+		),
+		citation_source(
+			CitationSource.CALENDAR,
+			calendar_event.calendar_id,
+			calendar_event.title,
+		),
 	]
 
 
-def _scheduled_item_citable_sources(item: ScheduledItem) -> list[JSONValue]:
+def _scheduled_item_citable_sources(item: ScheduledItem) -> list[CitableSource]:
 	"""return citation sources represented by one scheduled item."""
-	sources: list[JSONValue] = []
+	sources: list[CitableSource] = []
 	if item.kind == "reminder":
-		sources.append(_citable_source("reminder", item.parent_id, item.title))
+		sources.append(
+			citation_source(CitationSource.REMINDER, item.parent_id, item.title)
+		)
 		if item.reminder_list_id is not None:
 			sources.append(
-				_citable_source("reminder_list", item.reminder_list_id, item.title)
+				citation_source(
+					CitationSource.REMINDER_LIST,
+					item.reminder_list_id,
+					item.title,
+				)
 			)
 	elif item.kind == "event":
-		sources.append(_citable_source("calendar_event", item.parent_id, item.title))
+		sources.append(
+			citation_source(CitationSource.CALENDAR_EVENT, item.parent_id, item.title)
+		)
 		if item.calendar_id is not None:
-			sources.append(_citable_source("calendar", item.calendar_id, item.title))
+			sources.append(
+				citation_source(CitationSource.CALENDAR, item.calendar_id, item.title)
+			)
 	return sources
-
-
-def _success_with_citations(
-	output: dict[str, object],
-	tool_call_context: ToolCallContext,
-	citable_sources: list[JSONValue],
-) -> ToolMessage:
-	"""return a tool success message carrying citation metadata."""
-	return ToolMessage(
-		tool_call_id=tool_call_context.tool_call_id,
-		tool_output=json.dumps(output),
-		metadata={CITABLE_SOURCES_KEY: citable_sources},
-	)
 
 
 class CalendarEventGetTool(Tool[AppContext]):
@@ -313,7 +354,7 @@ class CalendarEventGetTool(Tool[AppContext]):
 
 		try:
 			if inp.calendar_event_id:
-				calendar_event = await calendar_service.get_calendar_event(
+				calendar_event = await get_calendar_event(
 					TypeID(inp.calendar_event_id),
 					__app_context__.session,
 					principal=__app_context__.principal,
@@ -323,14 +364,17 @@ class CalendarEventGetTool(Tool[AppContext]):
 					"message": "calendar event retrieved",
 					"event": _event_payload(calendar_event),
 				}
-				return _success_with_citations(
-					out,
+				return self.success(
+					json.dumps(out),
 					__tool_call_context__,
-					_calendar_event_citable_sources(calendar_event),
+					metadata=with_citable_sources(
+						None,
+						_calendar_event_citable_sources(calendar_event),
+					),
 				)
 
 			if inp.query:
-				scored = await calendar_service.search_calendar_events(
+				scored = await search_calendars(
 					inp.query,
 					__app_context__.session,
 					principal=__app_context__.principal,
@@ -338,28 +382,45 @@ class CalendarEventGetTool(Tool[AppContext]):
 					offset=inp.offset,
 					search_params=_HYBRID_SEARCH,
 				)
-				page = Page(
-					items=[hit.item for hit in scored[: inp.limit]],
-					has_more=len(scored) > inp.limit,
+				has_more = len(scored) > inp.limit
+				hits = [s.item for s in scored[: inp.limit]]
+				calendars_by_id = await load_calendars(
+					[_hit_calendar_id(hit) for hit in hits],
+					__app_context__.session,
+					principal=__app_context__.principal,
 				)
+				hits = [hit for hit in hits if _hit_calendar_id(hit) in calendars_by_id]
 				search_results = [
-					_calendar_event_search_result(item) for item in page.items
+					_search_result_payload(hit, calendars_by_id) for hit in hits
 				]
-				next_offset = inp.offset + inp.limit if page.has_more else None
 				search_out: dict[str, object] = {
 					"status": "success",
-					"message": f"found {len(search_results)} calendar events",
+					"message": f"found {len(search_results)} calendar results",
 					"count": len(search_results),
-					"next_offset": next_offset,
+					"next_offset": inp.offset + inp.limit if has_more else None,
 					"results": search_results,
 				}
-				return _success_with_citations(
-					search_out,
+				return self.success(
+					json.dumps(search_out),
 					__tool_call_context__,
-					[
-						_citable_source("calendar_event", item.id, item.title)
-						for item in page.items
-					],
+					metadata=with_citable_sources(
+						None,
+						[
+							citation_source(
+								CitationSource.CALENDAR_EVENT
+								if isinstance(hit, CalendarEvent)
+								else CitationSource.CALENDAR,
+								hit.id,
+								(
+									hit.title
+									if isinstance(hit, CalendarEvent)
+									else hit.name
+								)
+								or "",
+							)
+							for hit in hits
+						],
+					),
 				)
 		except HTTPException as exc:
 			return self.error(str(exc.detail), __tool_call_context__)
@@ -408,7 +469,7 @@ class CalendarEventGetTool(Tool[AppContext]):
 		)
 		page = items[inp.skip : inp.skip + inp.limit]
 		results = [_scheduled_item_payload(item) for item in page]
-		citable_sources: list[JSONValue] = []
+		citable_sources: list[CitableSource] = []
 		for item in page:
 			citable_sources.extend(_scheduled_item_citable_sources(item))
 		next_skip = (
@@ -426,7 +487,11 @@ class CalendarEventGetTool(Tool[AppContext]):
 			"next_skip": next_skip,
 			"results": results,
 		}
-		return _success_with_citations(out, tool_call_context, citable_sources)
+		return self.success(
+			json.dumps(out),
+			tool_call_context,
+			metadata=with_citable_sources(None, citable_sources),
+		)
 
 
 class CalendarEventWriteTool(Tool[AppContext]):
@@ -463,7 +528,7 @@ class CalendarEventWriteTool(Tool[AppContext]):
 					__tool_call_context__,
 				)
 			try:
-				await calendar_service.delete_calendar_event(
+				await delete_calendar_event(
 					TypeID(inp.calendar_event_id),
 					__app_context__.session,
 					principal=__app_context__.principal,
@@ -503,7 +568,7 @@ class CalendarEventWriteTool(Tool[AppContext]):
 			if inp.labels is not None:
 				update_kwargs["labels"] = inp.labels
 			try:
-				calendar_event = await calendar_service.update_calendar_event(
+				calendar_event = await update_calendar_event(
 					TypeID(inp.calendar_event_id),
 					CalendarEventUpdate.model_validate(update_kwargs),
 					__app_context__.session,
@@ -525,7 +590,7 @@ class CalendarEventWriteTool(Tool[AppContext]):
 				__tool_call_context__,
 			)
 		try:
-			calendar_event = await calendar_service.create_calendar_event(
+			calendar_event = await create_calendar_event(
 				CalendarEventCreate(
 					title=inp.title,
 					description=inp.description,

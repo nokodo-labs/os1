@@ -1,7 +1,5 @@
 """notes tools - get/search and create/edit notes."""
 
-from __future__ import annotations
-
 import json
 import logging
 
@@ -9,16 +7,26 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.models.note import Note
+from api.schemas.message import CitationSource
 from api.schemas.note import NoteCreate, NoteUpdate
 from api.schemas.search import Page, SearchMode, SearchParams
-from api.v1.service import notes as note_service
+from api.v1.service.chat.citation_sources import (
+	CitableSource,
+	citation_source,
+	with_citable_sources,
+)
 from api.v1.service.chat.context import AppContext
-from api.v1.service.chat.message_metadata import CITABLE_SOURCES_KEY
+from api.v1.service.notes import (
+	create_note,
+	get_note,
+	search_notes,
+	update_note,
+)
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
-from nokodo_ai.types.json import JSONObject, JSONValue
+from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
@@ -125,7 +133,7 @@ class NoteGetTool(Tool[AppContext]):
 		if inp.note_id:
 			# direct fetch by ID
 			try:
-				note = await note_service.get_note(
+				note = await get_note(
 					TypeID(inp.note_id),
 					__app_context__.session,
 					__app_context__.principal,
@@ -141,18 +149,12 @@ class NoteGetTool(Tool[AppContext]):
 			}
 			if note.labels:
 				result["labels"] = [str(label) for label in note.labels]
-			return ToolMessage(
-				tool_call_id=__tool_call_context__.tool_call_id,
-				tool_output=json.dumps(result),
-				metadata={
-					CITABLE_SOURCES_KEY: [
-						{
-							"source_type": "note",
-							"source_id": str(note.id),
-							"title": note.title,
-						}
-					]
-				},
+			return self.success(
+				json.dumps(result),
+				__tool_call_context__,
+				metadata=with_citable_sources(
+					None, [citation_source(CitationSource.NOTE, note.id, note.title)]
+				),
 			)
 
 		if not inp.query:
@@ -163,7 +165,7 @@ class NoteGetTool(Tool[AppContext]):
 
 		# search by query
 		try:
-			scored = await note_service.search_notes(
+			scored = await search_notes(
 				inp.query,
 				__app_context__.session,
 				principal=__app_context__.principal,
@@ -190,22 +192,22 @@ class NoteGetTool(Tool[AppContext]):
 		results = [_note_search_result(item) for item in page.items]
 		n = len(results)
 		msg = f"found {n} {'note' if n == 1 else 'notes'}"
-		citable_sources: list[JSONValue] = [
-			{"source_type": "note", "source_id": str(item.id), "title": item.title}
+		citable_sources: list[CitableSource] = [
+			citation_source(CitationSource.NOTE, item.id, item.title)
 			for item in page.items
 		]
 		next_offset = inp.offset + inp.limit if page.has_more else None
-		out = {
+		search_out: dict[str, object] = {
 			"status": "success",
 			"message": msg,
 			"count": n,
 			"results": results,
 			"next_offset": next_offset,
 		}
-		return ToolMessage(
-			tool_call_id=__tool_call_context__.tool_call_id,
-			tool_output=json.dumps(out),
-			metadata={CITABLE_SOURCES_KEY: citable_sources},
+		return self.success(
+			json.dumps(search_out),
+			__tool_call_context__,
+			metadata=with_citable_sources(None, citable_sources),
 		)
 
 
@@ -246,7 +248,7 @@ class NoteWriteTool(Tool[AppContext]):
 			if inp.labels is not None:
 				update_fields["labels"] = inp.labels
 			try:
-				note = await note_service.update_note(
+				note = await update_note(
 					TypeID(inp.note_id),
 					NoteUpdate.model_validate(update_fields),
 					__app_context__.session,
@@ -263,7 +265,7 @@ class NoteWriteTool(Tool[AppContext]):
 				"title is required when creating a note", __tool_call_context__
 			)
 		try:
-			note = await note_service.create_note(
+			note = await create_note(
 				NoteCreate(
 					title=inp.title,
 					content=inp.content or "",

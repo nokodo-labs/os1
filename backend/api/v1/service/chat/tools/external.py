@@ -1,7 +1,5 @@
 """external chat tool source registry."""
 
-from __future__ import annotations
-
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -14,7 +12,7 @@ from nokodo_ai.tool import Tool
 
 if TYPE_CHECKING:
 	from api.schemas.agent import AgentConfig
-	from api.v1.service.auth import Principal
+	from api.v1.service.authentication import Principal
 	from api.v1.service.chat.context import AppContext
 
 type ResolveExternalTools = Callable[

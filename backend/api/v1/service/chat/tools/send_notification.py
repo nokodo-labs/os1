@@ -1,7 +1,5 @@
 """send notification tool - lets agents send notifications directly to users."""
 
-from __future__ import annotations
-
 import logging
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,15 +9,15 @@ from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.permissions import ResourceType
 from api.schemas.notification import NotificationPayload
-from api.v1.service import notifications as notification_service
-from api.v1.service.authorization import list_accessible_user_ids
+from api.v1.service.authorization import list_resource_access_user_ids_for_resources
 from api.v1.service.chat.context import AppContext
+from api.v1.service.notifications import create_notifications
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
-from nokodo_ai.utils.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID, is_typeid, new_typeid
 
 
 logger = logging.getLogger(__name__)
@@ -29,25 +27,29 @@ class SendNotificationInput(BaseModel):
 	"""input schema for send_notification tool."""
 
 	model_config = ConfigDict(extra="forbid")
+	"""a model that invents an argument should be told, not silently obeyed."""
 
 	title: str = Field(
 		...,
 		description="short title for the notification. keep it concise.",
 		max_length=100,
 	)
+	"""headline the recipient sees."""
 	body: str | None = Field(
 		default=None,
 		description="optional message body with helpful context when needed.",
 		max_length=500,
 	)
+	"""supporting text under the title."""
 	user_id: str | None = Field(
 		default=None,
 		description=(
 			"optional specific user ID. omit to notify all chat participants "
 			"including the chat owner. when provided, the target must be a "
-			"participant in the current chat unless the caller is an admin."
+			"participant in the current chat."
 		),
 	)
+	"""narrows the recipients to one chat participant."""
 
 
 class SendNotificationTool(Tool[AppContext]):
@@ -56,21 +58,24 @@ class SendNotificationTool(Tool[AppContext]):
 	by default, notifications are sent to all participants in the thread
 	(including the owner).
 	optionally, a specific user_id can be provided, but only when that user
-	is a participant in the current thread or the caller has admin privileges.
+	is a participant in the current thread.
 	"""
 
 	name: str = Field(default="send_notification")
+	"""what the model calls to invoke this tool."""
 	description: str = Field(
 		default=(
 			"send a notification to chat participants. use this to alert "
 			"users about important information, reminders, or updates. "
 			"by default notifies all participants (including the owner); "
-			"optionally target a specific user."
+			"optionally target a specific participant."
 		)
 	)
+	"""how the model decides whether this tool fits the situation."""
 	parameters: JSONObject = Field(
 		default_factory=lambda: SendNotificationInput.model_json_schema()
 	)
+	"""the argument schema, derived from the input model rather than restated."""
 
 	async def call(
 		self,
@@ -86,6 +91,8 @@ class SendNotificationTool(Tool[AppContext]):
 		ctx = __app_context__
 
 		inp = SendNotificationInput.model_validate(kwargs)
+		if inp.user_id is not None and not is_typeid(inp.user_id, prefix="user"):
+			return self.error("invalid user ID", __tool_call_context__)
 
 		agent_id = ctx.agent_id
 		thread_id = ctx.thread_id
@@ -94,47 +101,45 @@ class SendNotificationTool(Tool[AppContext]):
 		# if any DB operation fails, only this session is affected.
 		try:
 			async with async_session_local() as tool_session:
-				if inp.user_id is not None and ctx.principal.is_admin:
-					target_user_ids: list[TypeID] = [TypeID(inp.user_id)]
-				else:
-					accessible_user_ids: list[TypeID] | None = (
-						await list_accessible_user_ids(
-							ResourceType.THREAD,
-							ctx.thread_id,
-							tool_session,
-						)
-						if ctx.thread_id is not None
-						else None
+				# every argument here is model-generated, and a model reads
+				# untrusted text (search results, attachments, other people's
+				# messages), so the recipient set is always the chat's - who
+				# started the run does not widen it.
+				accessible_user_ids: list[TypeID] | None = (
+					await list_resource_access_user_ids_for_resources(
+						[(ResourceType.THREAD, ctx.thread_id)], tool_session
 					)
-					if inp.user_id is not None:
-						if accessible_user_ids is None:
-							return self.error(
-								"forbidden: targeting a specific user"
-								" requires a chat context",
-								__tool_call_context__,
-							)
-						target_user_id = TypeID(inp.user_id)
-						if target_user_id not in accessible_user_ids:
-							return self.error(
-								"forbidden: target user is not a"
-								" participant in this chat",
-								__tool_call_context__,
-							)
-						target_user_ids = [target_user_id]
-					elif accessible_user_ids is not None:
-						target_user_ids = accessible_user_ids
-					else:
+					if ctx.thread_id is not None
+					else None
+				)
+				if inp.user_id is not None:
+					if accessible_user_ids is None:
 						return self.error(
-							"no recipients: provide user_id or run inside a chat",
+							"forbidden: targeting a specific user"
+							" requires a chat context",
 							__tool_call_context__,
 						)
+					target_user_id = TypeID(inp.user_id)
+					if target_user_id not in accessible_user_ids:
+						return self.error(
+							"forbidden: target user is not a participant in this chat",
+							__tool_call_context__,
+						)
+					target_user_ids = [target_user_id]
+				elif accessible_user_ids is not None:
+					target_user_ids = accessible_user_ids
+				else:
+					return self.error(
+						"no recipients: provide user_id or run inside a chat",
+						__tool_call_context__,
+					)
 
 				recipient_count = len(target_user_ids)
+				if recipient_count == 0:
+					return self.error("no recipients", __tool_call_context__)
 
-				# emit tool event first so the emitter auto-assigns its id;
-				# each notification's event data then references it
-				# (notification -> tool event).
 				tool_event = Event(
+					id=TypeID(new_typeid("event")),
 					scope=EventScope.THREAD if thread_id else EventScope.USER,
 					scope_id=thread_id or ctx.user_id,
 					type=EventType.TOOL_NOTIFICATION,
@@ -150,9 +155,7 @@ class SendNotificationTool(Tool[AppContext]):
 					user_id=ctx.user_id,
 					thread_id=thread_id,
 				)
-				await ctx.event_emitter(tool_event)
-
-				await notification_service.create_notifications(
+				await create_notifications(
 					tool_session,
 					payload=NotificationPayload(
 						title=inp.title,
@@ -163,6 +166,7 @@ class SendNotificationTool(Tool[AppContext]):
 					agent_id=agent_id,
 					user_ids=target_user_ids,
 				)
+				await ctx.event_emitter(tool_event)
 		except Exception:
 			logger.exception("send_notification tool failed")
 			return self.error(

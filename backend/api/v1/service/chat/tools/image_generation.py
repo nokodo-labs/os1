@@ -10,8 +10,6 @@ the tool supports both text-to-image creation and editing an
 existing image: pass file_id to edit, omit for pure generation.
 """
 
-from __future__ import annotations
-
 import base64
 import json
 import logging
@@ -19,7 +17,7 @@ import logging
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.v1.service.auth import Principal
+from api.v1.service.authentication import Principal
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.message_metadata import ATTACHMENTS_KEY
 from api.v1.service.files import read_file_base64
