@@ -14,6 +14,7 @@ from api.schemas.preferences import AIPreferences
 from api.schemas.search import Page, SearchMode, SearchParams
 from api.v1.service.authentication import Principal
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.tools.base import Tool
 from api.v1.service.memories import (
 	create_memory,
 	search_memories,
@@ -21,7 +22,6 @@ from api.v1.service.memories import (
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
-from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
@@ -85,7 +85,7 @@ class MemoryCreateInput(BaseModel):
 	)
 
 
-class MemoryRecallTool(Tool[AppContext]):
+class MemoryRecallTool(Tool):
 	"""search user memories using hybrid BM25 + semantic search."""
 
 	name: str = Field(default="memory_recall")
@@ -99,7 +99,7 @@ class MemoryRecallTool(Tool[AppContext]):
 		default_factory=lambda: MemorySearchInput.model_json_schema()
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
@@ -156,7 +156,7 @@ class MemoryRecallTool(Tool[AppContext]):
 		return self.success(json.dumps(out), __tool_call_context__)
 
 
-class MemoryCreateTool(Tool[AppContext]):
+class MemoryCreateTool(Tool):
 	"""store a new memory."""
 
 	name: str = Field(default="memory_create")
@@ -170,7 +170,7 @@ class MemoryCreateTool(Tool[AppContext]):
 		default_factory=lambda: MemoryCreateInput.model_json_schema()
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,

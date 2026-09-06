@@ -11,11 +11,11 @@ from api.permissions import ResourceType
 from api.schemas.notification import NotificationPayload
 from api.v1.service.authorization import list_resource_access_user_ids_for_resources
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.tools.base import Tool
 from api.v1.service.notifications import create_notifications
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
-from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID, is_typeid, new_typeid
 
@@ -52,7 +52,7 @@ class SendNotificationInput(BaseModel):
 	"""narrows the recipients to one chat participant."""
 
 
-class SendNotificationTool(Tool[AppContext]):
+class SendNotificationTool(Tool):
 	"""tool for sending notifications to users.
 
 	by default, notifications are sent to all participants in the thread
@@ -77,7 +77,7 @@ class SendNotificationTool(Tool[AppContext]):
 	)
 	"""the argument schema, derived from the input model rather than restated."""
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,

@@ -12,6 +12,7 @@ from ...messages import (
 	AssistantMessage,
 	ContentPart,
 	FileContent,
+	FinishReason,
 	ImageContent,
 	JsonContent,
 	RefusalContent,
@@ -72,6 +73,29 @@ _ANTHROPIC_THINKING_BUDGET: dict[str, int] = {
 	"medium": 5000,
 	"high": 10000,
 }
+
+_FINISH_REASONS: dict[str, FinishReason] = {
+	"end_turn": "completed",
+	"stop_sequence": "completed",
+	"tool_use": "completed",
+	"max_tokens": "length",
+	"refusal": "content_filter",
+}
+"""anthropic stop reasons, by the SDK reason each one means.
+
+``tool_use`` is a completed turn: that the model asked for tools is visible in
+the content, so it is not a separate reason for stopping.
+"""
+
+
+def _map_finish_reason(reason: str | None) -> FinishReason | None:
+	"""translate anthropic's stop reason; never guess at one we do not know."""
+	if reason is None:
+		return None
+	mapped = _FINISH_REASONS.get(reason)
+	if mapped is None:
+		logger.debug("unmapped anthropic stop reason: %s", reason)
+	return mapped
 
 
 def _reasoning_effort_to_anthropic(
@@ -233,7 +257,12 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 			cache_read_input_tokens=response.usage.cache_read_input_tokens,
 		)
 
-		return AssistantMessage(content=content, tool_calls=tool_calls, usage=usage)
+		return AssistantMessage(
+			content=content,
+			tool_calls=tool_calls,
+			usage=usage,
+			finish_reason=_map_finish_reason(response.stop_reason),
+		)
 
 	@map_anthropic_generation_exceptions
 	async def _generate_streaming(
@@ -338,6 +367,7 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 						cache_creation_input_tokens=cache_creation_input_tokens,
 						cache_read_input_tokens=cache_read_input_tokens,
 					),
+					finish_reason=_map_finish_reason(event.delta.stop_reason),
 					created_at=now,
 					updated_at=now,
 				)

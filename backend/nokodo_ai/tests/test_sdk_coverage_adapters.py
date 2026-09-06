@@ -618,7 +618,7 @@ def test_openai_chat_helpers_cover_branches(
 	msg2 = _chat_completion_to_assistant_message(completion2)  # type: ignore[arg-type]
 	assert msg2.refusal == "because"
 
-	# unknown completion finish_reason should leave default finish_reason
+	# a provider value we do not map yields None - never a guess
 	completion3 = _DummyOpenAICompletion(
 		choices=[
 			_DummyOpenAIChoice(
@@ -630,7 +630,7 @@ def test_openai_chat_helpers_cover_branches(
 		usage=None,
 	)
 	msg3 = _chat_completion_to_assistant_message(completion3)  # type: ignore[arg-type]
-	assert msg3.finish_reason == "stop"
+	assert msg3.finish_reason is None
 
 
 @pytest.mark.asyncio
@@ -638,8 +638,8 @@ async def test_openai_chat_stream_accumulator_covers_finish_reasons(
 	monkeypatch: pytest.MonkeyPatch,
 	caplog: pytest.LogCaptureFixture,
 ) -> None:
-	# ensure unknown finish reason warning path is hit
-	caplog.set_level("WARNING")
+	# an unmapped provider value is a normal operational fact, not a warning
+	caplog.set_level("DEBUG")
 
 	chunks = [
 		_DummyOpenAIChunk(
@@ -688,8 +688,9 @@ async def test_openai_chat_stream_accumulator_covers_finish_reasons(
 	assert any(m.text == "a" for m in seen)
 	assert any(m.refusal == "no" for m in seen)
 	assert any(m.tool_calls for m in seen)
-	assert any(m.finish_reason == "tool_calls" for m in seen)
-	assert any("unknown openai finish reason" in r.message for r in caplog.records)
+	# `tool_calls` is a completed turn; the tool calls themselves say the rest.
+	assert any(m.finish_reason == "completed" for m in seen)
+	assert any("unmapped openai finish reason" in r.message for r in caplog.records)
 
 
 @pytest.mark.asyncio
@@ -720,7 +721,7 @@ async def test_openai_chat_stream_tool_call_delta_missing_fields() -> None:
 	async for delta in _openai_stream_to_assistant_messages(stream):  # type: ignore[arg-type]
 		seen.append(delta)
 	# should not crash; final message should exist due to finish_reason
-	assert any(m.finish_reason == "tool_calls" for m in seen)
+	assert any(m.finish_reason == "completed" for m in seen)
 
 
 @pytest.mark.asyncio
@@ -953,7 +954,8 @@ def test_openai_chat_completion_to_assistant_message_choices_and_length() -> Non
 		usage=None,
 	)
 	msg = _chat_completion_to_assistant_message(completion)  # type: ignore[arg-type]
-	assert msg.finish_reason == "stop"
+	# no choices means the provider described nothing to finish.
+	assert msg.finish_reason is None
 
 	completion2 = _DummyOpenAICompletion(
 		choices=[
@@ -1031,6 +1033,8 @@ async def test_openai_adapters_generate_and_embedding(
 			output=[],
 			output_text='{"a": 1}',
 			usage=SimpleNamespace(input_tokens=1, output_tokens=1, total_tokens=2),
+			status="completed",
+			incomplete_details=None,
 		)
 
 	async def _create_responses_stream(**kwargs: Any) -> Any:
@@ -1345,6 +1349,8 @@ async def test_openai_responses_generate_once_covers_tool_calls_and_parse_fallba
 					],
 					output_text=output_text,
 					usage=None,
+					status="completed",
+					incomplete_details=None,
 				)
 
 			self.responses = SimpleNamespace(create=_create)
@@ -1367,7 +1373,13 @@ async def test_openai_responses_generate_once_covers_tool_calls_and_parse_fallba
 		def __init__(self) -> None:
 			async def _create(**kwargs: Any) -> Any:
 				_ = kwargs
-				return SimpleNamespace(output=[], output_text="", usage=None)
+				return SimpleNamespace(
+					output=[],
+					output_text="",
+					usage=None,
+					status="completed",
+					incomplete_details=None,
+				)
 
 			self.responses = SimpleNamespace(create=_create)
 
@@ -1391,7 +1403,13 @@ async def test_openai_responses_passes_reasoning_effort(
 		def __init__(self) -> None:
 			async def _create(**kwargs: Any) -> Any:
 				captured.update(kwargs)
-				return SimpleNamespace(output=[], output_text="", usage=None)
+				return SimpleNamespace(
+					output=[],
+					output_text="",
+					usage=None,
+					status="completed",
+					incomplete_details=None,
+				)
 
 			self.responses = SimpleNamespace(create=_create)
 
@@ -1437,6 +1455,7 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 				_ToolUseBlock("t2", "tool2", None),
 			]
 			self.usage = _Usage()
+			self.stop_reason = "tool_use"
 
 	class _StartEvent:
 		def __init__(self, index: int, block: Any):
@@ -1515,6 +1534,7 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 		def __init__(self) -> None:
 			self.content = [_TextBlock('{"a": 1}')]
 			self.usage = _Usage()
+			self.stop_reason = "end_turn"
 
 	class _Client2:
 		def __init__(self) -> None:
@@ -1549,6 +1569,7 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 		def __init__(self) -> None:
 			self.content = [_TextBlock("[1]")]
 			self.usage = _Usage()
+			self.stop_reason = "end_turn"
 
 	class _ClientList:
 		def __init__(self) -> None:
@@ -1583,6 +1604,7 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 		def __init__(self) -> None:
 			self.content = [_TextBlock("{bad")]
 			self.usage = _Usage()
+			self.stop_reason = "end_turn"
 
 	class _Client3:
 		def __init__(self) -> None:
@@ -1610,6 +1632,7 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 		def __init__(self) -> None:
 			self.content = [_TextBlock("")]
 			self.usage = _Usage()
+			self.stop_reason = "end_turn"
 
 	class _ClientEmptyText:
 		def __init__(self) -> None:
@@ -1735,6 +1758,7 @@ async def test_anthropic_streaming_emits_usage(
 	class _MessageDeltaEvent:
 		def __init__(self) -> None:
 			self.usage = _DeltaUsage()
+			self.delta = SimpleNamespace(stop_reason="end_turn")
 
 	class _TextBlock:
 		def __init__(self, text: str):
@@ -1993,3 +2017,106 @@ def test_anthropic_messages_orphaned_tool_use_gets_synthetic_result() -> None:
 	# original user follow-up comes last
 	assert msgs[2]["role"] == "user"
 	assert msgs[2]["content"] == "try again"
+
+
+# --- finish reason mapping ------------------------------------------------
+#
+# every adapter answers the same question ("why did generation end") with the
+# SDK's three values, so each provider's vocabulary needs its own table. a
+# value the table does not know must yield None: guessing here is what let a
+# truncated answer be persisted as a complete turn.
+
+
+@pytest.mark.parametrize(
+	("provider_reason", "expected"),
+	[
+		("stop", "completed"),
+		("tool_calls", "completed"),
+		("length", "length"),
+		("content_filter", "content_filter"),
+		("weird", None),
+		(None, None),
+	],
+)
+def test_openai_chat_completions_maps_finish_reasons(
+	provider_reason: str | None,
+	expected: str | None,
+) -> None:
+	assert cc._map_finish_reason(provider_reason) == expected
+
+
+@pytest.mark.parametrize(
+	("provider_reason", "expected"),
+	[
+		("end_turn", "completed"),
+		("stop_sequence", "completed"),
+		("tool_use", "completed"),
+		("max_tokens", "length"),
+		("refusal", "content_filter"),
+		("weird", None),
+		(None, None),
+	],
+)
+def test_anthropic_maps_stop_reasons(
+	provider_reason: str | None,
+	expected: str | None,
+) -> None:
+	assert am._map_finish_reason(provider_reason) == expected
+
+
+@pytest.mark.parametrize(
+	("provider_reason", "expected"),
+	[
+		("STOP", "completed"),
+		("MAX_TOKENS", "length"),
+		("SAFETY", "content_filter"),
+		("RECITATION", "content_filter"),
+		("BLOCKLIST", "content_filter"),
+		("PROHIBITED_CONTENT", "content_filter"),
+		("SPII", "content_filter"),
+		("WEIRD", None),
+		(None, None),
+	],
+)
+def test_google_maps_finish_reasons(
+	provider_reason: str | None,
+	expected: str | None,
+) -> None:
+	from nokodo_ai.adapters.google import generate_content as gc
+
+	assert gc._map_finish_reason(provider_reason) == expected
+
+
+def test_google_reads_the_enum_member_name() -> None:
+	"""the provider hands back an enum, not the bare wire string."""
+	from nokodo_ai.adapters.google import generate_content as gc
+
+	assert gc._map_finish_reason(SimpleNamespace(name="MAX_TOKENS")) == "length"
+
+
+@pytest.mark.parametrize(
+	("status", "incomplete_reason", "expected"),
+	[
+		("completed", None, "completed"),
+		("incomplete", "max_output_tokens", "length"),
+		("incomplete", "content_filter", "content_filter"),
+		("incomplete", "weird", None),
+		("incomplete", None, None),
+		# no finished response exists, so there is nothing to describe
+		("failed", None, None),
+		("cancelled", None, None),
+		("in_progress", None, None),
+	],
+)
+def test_openai_responses_maps_status_and_incomplete_details(
+	status: str,
+	incomplete_reason: str | None,
+	expected: str | None,
+) -> None:
+	details = (
+		SimpleNamespace(reason=incomplete_reason)
+		if incomplete_reason is not None
+		else None
+	)
+	response = SimpleNamespace(status=status, incomplete_details=details)
+	assert resp_mod._map_finish_reason(cast(Any, response)) == expected

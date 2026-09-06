@@ -18,6 +18,7 @@ from api.schemas.mcp import (
 )
 from api.settings import settings
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.tools.base import Tool as APITool
 from api.v1.service.chat.tools.external import ExternalToolSource
 from api.v1.service.integrations.mcp.cache import (
 	CachedMCPServerTools,
@@ -72,7 +73,7 @@ async def resolve_mcp_extra_tools_for_context(
 	return await resolve_mcp_extra_tools(tool_ids, app_context, agent_config)
 
 
-class MCPRemoteTool(Tool[AppContext]):
+class MCPRemoteTool(APITool):
 	"""chat tool backed by one MCP server tool."""
 
 	server_id: str
@@ -80,7 +81,7 @@ class MCPRemoteTool(Tool[AppContext]):
 	mcp_tool_id: str
 	mcp_tool_name: str
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,

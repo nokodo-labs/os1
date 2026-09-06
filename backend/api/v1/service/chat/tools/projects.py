@@ -11,6 +11,7 @@ from api.schemas.message import CitationSource
 from api.schemas.search import Page
 from api.v1.service.chat.citation_sources import citation_source, with_citable_sources
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.tools.base import Tool
 from api.v1.service.projects import (
 	get_project_payload,
 	search_projects,
@@ -18,7 +19,6 @@ from api.v1.service.projects import (
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
-from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
@@ -68,7 +68,7 @@ class ProjectGetInput(BaseModel):
 	)
 
 
-class ProjectGetTool(Tool[AppContext]):
+class ProjectGetTool(Tool):
 	"""fetch a specific project by ID or search projects by query."""
 
 	name: str = Field(default="project_get")
@@ -82,7 +82,7 @@ class ProjectGetTool(Tool[AppContext]):
 		default_factory=lambda: ProjectGetInput.model_json_schema()
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,

@@ -15,6 +15,7 @@ from api.v1.service.chat.citation_sources import (
 	with_citable_sources,
 )
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.tools.base import Tool
 from api.v1.service.web_search.errors import WebSearchError
 from api.v1.service.web_search.loaders import fetch_url
 from api.v1.service.web_search.progress import source_payload
@@ -22,7 +23,6 @@ from api.v1.service.web_search.search import search_web
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
-from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject, JSONValue
 
 
@@ -58,7 +58,7 @@ class WebSearchInput(BaseModel):
 	)
 
 
-class WebSearchTool(Tool[AppContext]):
+class WebSearchTool(Tool):
 	"""search the web and return raw source resources.
 
 	this is a low-level fallback for cases where the agent specifically
@@ -84,7 +84,7 @@ class WebSearchTool(Tool[AppContext]):
 		exclude=True,
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
@@ -155,7 +155,7 @@ class FetchUrlInput(BaseModel):
 	)
 
 
-class FetchUrlTool(Tool[AppContext]):
+class FetchUrlTool(Tool):
 	"""fetch and return content from a URL."""
 
 	name: str = Field(default="fetch_url")
@@ -170,7 +170,7 @@ class FetchUrlTool(Tool[AppContext]):
 		default_factory=lambda: FetchUrlInput.model_json_schema(),
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,

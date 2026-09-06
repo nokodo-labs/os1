@@ -13,6 +13,7 @@ from api.schemas.search import SearchMode, SearchParams
 from api.schemas.thread import ThreadListFilters
 from api.v1.service.chat.citation_sources import citation_source, with_citable_sources
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.tools.base import Tool
 from api.v1.service.search.primitives import SearchHit
 from api.v1.service.threads import (
 	count_threads,
@@ -29,7 +30,6 @@ from api.v1.service.threads.summaries import (
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
-from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
@@ -229,7 +229,7 @@ async def _load_message(
 	)
 
 
-class ChatGetTool(Tool[AppContext]):
+class ChatGetTool(Tool):
 	"""search, list, and read chats."""
 
 	name: str = Field(default="chat_get")
@@ -245,7 +245,7 @@ class ChatGetTool(Tool[AppContext]):
 		default_factory=lambda: ChatGetInput.model_json_schema()
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,

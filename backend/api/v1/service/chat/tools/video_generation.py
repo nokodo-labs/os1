@@ -13,11 +13,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.message_metadata import ATTACHMENTS_KEY
+from api.v1.service.chat.tools.base import Tool
 from api.v1.service.media import MediaError, generate_video
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
-from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
 
 
@@ -52,7 +52,7 @@ class GenerateVideoInput(BaseModel):
 	)
 
 
-class GenerateVideoTool(Tool[AppContext]):
+class GenerateVideoTool(Tool):
 	"""generate videos from text descriptions."""
 
 	name: str = Field(default="generate_video")
@@ -67,7 +67,7 @@ class GenerateVideoTool(Tool[AppContext]):
 		default_factory=lambda: GenerateVideoInput.model_json_schema(),
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,

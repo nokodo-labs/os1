@@ -19,13 +19,13 @@ from api.settings import settings
 from api.v1.service.authentication import Principal
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.message_metadata import ATTACHMENTS_KEY, E2B_SANDBOX_ID_KEY
+from api.v1.service.chat.tools.base import Tool
 from api.v1.service.files import get_file, ingest_file, read_content
 from api.v1.service.projects import resolve_thread_project_id
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
 from nokodo_ai.threads import Thread as SDKThread
-from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONArray, JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
@@ -182,7 +182,7 @@ def _compute_tool_description() -> str:
 	return desc
 
 
-class CodeInterpreterTool(Tool[AppContext]):
+class CodeInterpreterTool(Tool):
 	"""execute Python code in a sandboxed notebook environment."""
 
 	name: str = Field(default="code_interpreter")
@@ -193,7 +193,7 @@ class CodeInterpreterTool(Tool[AppContext]):
 		default_factory=(lambda: CodeInterpreterInput.model_json_schema()),
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,

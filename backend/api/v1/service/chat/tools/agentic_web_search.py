@@ -16,13 +16,13 @@ from api.v1.service.chat.citation_sources import (
 	with_citable_sources,
 )
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.tools.base import Tool
 from api.v1.service.web_search.agentic import search_agentic_web
 from api.v1.service.web_search.errors import WebSearchError
 from api.v1.service.web_search.progress import build_agentic_web_search_progress
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
-from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject, JSONValue
 
 
@@ -72,7 +72,7 @@ class AgenticWebSearchInput(BaseModel):
 	"""whether image results are wanted, where the provider offers them."""
 
 
-class AgenticWebSearchTool(Tool[AppContext]):
+class AgenticWebSearchTool(Tool):
 	"""perform an AI-powered agentic web search.
 
 	this is the preferred web search tool for general agent use. it runs a
@@ -97,7 +97,7 @@ class AgenticWebSearchTool(Tool[AppContext]):
 	)
 	"""the argument schema, derived from the input model rather than restated."""
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,

@@ -29,11 +29,11 @@ from api.v1.service.chat.citation_sources import (
 	with_citable_sources,
 )
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.tools.base import Tool
 from api.v1.service.reminders.core import list_reminder_scheduled_items
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
-from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
@@ -320,7 +320,7 @@ def _scheduled_item_citable_sources(item: ScheduledItem) -> list[CitableSource]:
 	return sources
 
 
-class CalendarEventGetTool(Tool[AppContext]):
+class CalendarEventGetTool(Tool):
 	"""fetch an event, search events, or list upcoming scheduled items."""
 
 	name: str = Field(default="calendar_event_get")
@@ -335,7 +335,7 @@ class CalendarEventGetTool(Tool[AppContext]):
 		default_factory=lambda: CalendarEventGetInput.model_json_schema()
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
@@ -494,7 +494,7 @@ class CalendarEventGetTool(Tool[AppContext]):
 		)
 
 
-class CalendarEventWriteTool(Tool[AppContext]):
+class CalendarEventWriteTool(Tool):
 	"""create, edit, or delete a calendar event."""
 
 	name: str = Field(default="calendar_event_write")
@@ -509,7 +509,7 @@ class CalendarEventWriteTool(Tool[AppContext]):
 		default_factory=lambda: CalendarEventWriteInput.model_json_schema()
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,

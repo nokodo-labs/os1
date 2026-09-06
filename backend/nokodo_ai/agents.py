@@ -234,10 +234,10 @@ class Agent[AppContextT = None](Base):
 				or a specific tool name
 			stream: if True, yields messages as they are produced
 
-		note on out-of-band injection: to inject user messages into a running
-		agent loop (e.g. run-steering), add a ``SteeringFilter`` to
-		``self.filters`` before calling ``run``. filters run at every iteration
-		boundary and can drain external inboxes into the thread.
+		note on out-of-band injection: to add messages to a loop that is already
+		running, give ``self.filters`` a filter that drains whatever queue the
+		caller fills. filters run at every iteration boundary, so a message that
+		arrives mid-run reaches the model at the next one.
 
 		returns:
 			list of messages produced during this run (non-streaming), or
@@ -385,7 +385,7 @@ class Agent[AppContextT = None](Base):
 
 		# max iterations reached - final call without tools
 		final_message = AssistantMessage()
-		terminal_delta: ChatModelDelta | None = None
+		terminal_delta = None
 		async for chat_delta in self._stream_with_cancel(
 			state.thread,
 			tools=[tool.definition for tool in state.tools],

@@ -284,6 +284,29 @@ def _openai_usage_to_usage(openai_usage: OpenAICompletionUsage) -> Usage:
 	)
 
 
+_FINISH_REASONS: dict[str, FinishReason] = {
+	"stop": "completed",
+	"tool_calls": "completed",
+	"length": "length",
+	"content_filter": "content_filter",
+}
+"""openai finish reasons, by the SDK reason each one means.
+
+``tool_calls`` is a completed turn: that the model asked for tools is visible
+in the content, so it is not a separate reason for stopping.
+"""
+
+
+def _map_finish_reason(reason: str | None) -> FinishReason | None:
+	"""translate openai's finish reason; never guess at one we do not know."""
+	if reason is None:
+		return None
+	mapped = _FINISH_REASONS.get(reason)
+	if mapped is None:
+		logger.debug("unmapped openai finish reason: %s", reason)
+	return mapped
+
+
 async def _openai_stream_to_assistant_messages(
 	stream: OpenAIAsyncStream[OpenAIChatCompletionChunk],
 ) -> AsyncIterator[AssistantMessage]:
@@ -332,15 +355,7 @@ async def _openai_stream_to_assistant_messages(
 				continue
 
 			if choice.finish_reason is not None:
-				if choice.finish_reason in (
-					"stop",
-					"length",
-					"tool_calls",
-					"content_filter",
-				):
-					finish_reason = choice.finish_reason
-				else:
-					logger.warning("unknown openai finish reason")
+				finish_reason = _map_finish_reason(choice.finish_reason)
 
 			delta = choice.delta
 
@@ -470,7 +485,7 @@ def _chat_completion_to_assistant_message(
 
 	content: list[ContentPart] = []
 	tool_calls: list[ToolCall] = []
-	finish_reason: FinishReason = "stop"
+	finish_reason: FinishReason | None = None
 	if not completion.choices:
 		pass
 	else:
@@ -480,6 +495,7 @@ def _chat_completion_to_assistant_message(
 
 			if openai_msg.content is not None:
 				content.append(TextContent(text=openai_msg.content))
+			finish_reason = _map_finish_reason(choice.finish_reason)
 			if choice.finish_reason == "content_filter":
 				if openai_msg.refusal is None:
 					logger.warning(
@@ -488,10 +504,7 @@ def _chat_completion_to_assistant_message(
 					refusal_reason = "content filtered"
 				else:
 					refusal_reason = openai_msg.refusal
-				finish_reason = "content_filter"
 				content.append(RefusalContent(reason=refusal_reason))
-			elif choice.finish_reason in ("stop", "length", "tool_calls"):
-				finish_reason = choice.finish_reason
 	return AssistantMessage(
 		content=content,
 		tool_calls=tool_calls,

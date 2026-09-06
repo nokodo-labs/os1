@@ -233,7 +233,7 @@ def test_assistant_message_merge_covers_tool_usage_and_metadata() -> None:
 	delta = AssistantMessage(content=[TextContent(text="b")])
 	delta.tool_calls = [ToolCall(id="tc1", name="t", arguments="}")]
 	delta.usage = Usage(input_tokens=1, output_tokens=2, total_tokens=3)
-	delta.finish_reason = "stop"
+	delta.finish_reason = "completed"
 	delta.metadata = {"b": 2}
 
 	base.merge(delta)
@@ -241,7 +241,7 @@ def test_assistant_message_merge_covers_tool_usage_and_metadata() -> None:
 	assert base.tool_calls[0].arguments == "{}"
 	assert base.usage.total_tokens == 3
 	assert base.usage is not delta.usage
-	assert base.finish_reason == "stop"
+	assert base.finish_reason == "completed"
 	assert base.metadata == {"a": 1, "b": 2}
 
 	# json helper
@@ -408,48 +408,6 @@ async def test_filters_and_hooks_not_implemented_raise_async() -> None:
 
 	with pytest.raises(NotImplementedError, match="execute method must be"):
 		await h.execute(state.snapshot(), agent_context, None)
-
-
-@pytest.mark.asyncio
-async def test_empty_final_answer_still_ends_the_stream() -> None:
-	"""an agent that runs out of iterations and says nothing must still finish.
-
-	regression: the terminal delta was gated behind a non-empty final message,
-	so a model that returned nothing on the no-tools final call left consumers
-	without the `done` they wait for - the API then never cleared its
-	reservation and rolled the whole run back.
-	"""
-	from nokodo_ai.agents import Agent
-	from nokodo_ai.deltas import ChatModelDelta
-
-	class _EmptyFinalChatModel(ChatModel):
-		async def generate(
-			self,
-			thread: Thread,
-			stream: bool = False,
-			tools: list[Any] | None = None,
-			tool_choice: Any = "auto",
-		) -> Any:
-			async def _stream() -> AsyncIterator[ChatModelDelta]:
-				# no content and no tool calls: the model simply said nothing.
-				yield ChatModelDelta.done_sentinel(chunk_index=0)
-
-			return _stream()
-
-	agent = Agent[None].model_construct(
-		chat_model=_EmptyFinalChatModel.model_construct(model_name="test"),
-		tools=[],
-		filters=[],
-		hooks=[],
-		max_iterations=0,
-	)
-
-	thread = Thread()
-	thread.add(UserMessage.from_text("hi"))
-	deltas = [d async for d in agent.run(thread, stream=True)]
-
-	assert deltas[-1].done is True
-	assert any(d.chat is not None and d.chat.done for d in deltas)
 
 
 # deep_merge

@@ -22,6 +22,7 @@ from api.schemas.scheduled_item import Recurrence
 from api.schemas.search import SearchMode, SearchParams
 from api.v1.service.chat.citation_sources import citation_source, with_citable_sources
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.tools.base import Tool
 from api.v1.service.reminders import (
 	complete_reminder,
 	count_reminder_lists,
@@ -38,7 +39,6 @@ from api.v1.service.reminders import (
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
-from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
@@ -156,7 +156,7 @@ class ReminderWriteInput(BaseModel):
 	)
 
 
-class ReminderGetTool(Tool[AppContext]):
+class ReminderGetTool(Tool):
 	"""fetch, list, or search reminders and reminder lists."""
 
 	name: str = Field(default="reminder_get")
@@ -172,7 +172,7 @@ class ReminderGetTool(Tool[AppContext]):
 		default_factory=lambda: ReminderGetInput.model_json_schema()
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
@@ -376,7 +376,7 @@ class ReminderGetTool(Tool[AppContext]):
 		)
 
 
-class ReminderWriteTool(Tool[AppContext]):
+class ReminderWriteTool(Tool):
 	"""create, edit, or delete reminders."""
 
 	name: str = Field(default="reminder_write")
@@ -391,7 +391,7 @@ class ReminderWriteTool(Tool[AppContext]):
 		default_factory=lambda: ReminderWriteInput.model_json_schema()
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,

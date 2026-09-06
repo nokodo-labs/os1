@@ -16,6 +16,7 @@ from api.v1.service.chat.citation_sources import (
 	with_citable_sources,
 )
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.tools.base import Tool
 from api.v1.service.notes import (
 	create_note,
 	get_note,
@@ -25,7 +26,6 @@ from api.v1.service.notes import (
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
-from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
@@ -103,7 +103,7 @@ class NoteWriteInput(BaseModel):
 	)
 
 
-class NoteGetTool(Tool[AppContext]):
+class NoteGetTool(Tool):
 	"""fetch a specific note by ID or search notes by query."""
 
 	name: str = Field(default="note_get")
@@ -117,7 +117,7 @@ class NoteGetTool(Tool[AppContext]):
 		default_factory=lambda: NoteGetInput.model_json_schema()
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
@@ -211,7 +211,7 @@ class NoteGetTool(Tool[AppContext]):
 		)
 
 
-class NoteWriteTool(Tool[AppContext]):
+class NoteWriteTool(Tool):
 	"""create a new note or edit an existing one."""
 
 	name: str = Field(default="note_write")
@@ -225,7 +225,7 @@ class NoteWriteTool(Tool[AppContext]):
 		default_factory=lambda: NoteWriteInput.model_json_schema()
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,

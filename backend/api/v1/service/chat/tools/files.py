@@ -18,6 +18,7 @@ from api.v1.service.chat.citation_sources import (
 )
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.models import fetch_agent_input_modalities
+from api.v1.service.chat.tools.base import Tool
 from api.v1.service.files import (
 	get_file,
 	list_files,
@@ -33,7 +34,6 @@ from api.v1.service.files.modalities import (
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import FileContent, ImageContent, ToolMessage
-from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
@@ -140,7 +140,7 @@ class FileEditInput(BaseModel):
 	)
 
 
-class FileGetTool(Tool[AppContext]):
+class FileGetTool(Tool):
 	"""list recent files or fetch a specific file by ID."""
 
 	name: str = Field(default="file_get")
@@ -374,7 +374,7 @@ class FileGetTool(Tool[AppContext]):
 			),
 		)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,
@@ -509,7 +509,7 @@ class FileGetTool(Tool[AppContext]):
 		)
 
 
-class FileEditTool(Tool[AppContext]):
+class FileEditTool(Tool):
 	"""rename an existing file."""
 
 	name: str = Field(default="file_edit")
@@ -518,7 +518,7 @@ class FileEditTool(Tool[AppContext]):
 		default_factory=lambda: FileEditInput.model_json_schema()
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,

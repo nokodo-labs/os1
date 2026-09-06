@@ -12,6 +12,7 @@ from ...messages import (
 	AssistantMessage,
 	ContentPart,
 	FileContent,
+	FinishReason,
 	ImageContent,
 	JsonContent,
 	RefusalContent,
@@ -38,6 +39,7 @@ from .exceptions import map_openai_generation_exceptions
 from .types import (
 	OpenAIEasyInputMessageParam,
 	OpenAIReasoning,
+	OpenAIResponse,
 	OpenAIResponseCompletedEvent,
 	OpenAIResponseCreatedEvent,
 	OpenAIResponseFunctionCallArgumentsDeltaEvent,
@@ -66,6 +68,35 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+
+_INCOMPLETE_REASONS: dict[str, FinishReason] = {
+	"max_output_tokens": "length",
+	"content_filter": "content_filter",
+}
+"""why a response came back incomplete, by the SDK reason each one means."""
+
+
+def _map_finish_reason(response: OpenAIResponse) -> FinishReason | None:
+	"""translate a response's outcome; never guess at one we do not know.
+
+	the responses API splits this in two: ``status`` says whether the response
+	finished, and ``incomplete_details`` says what cut it short when it did not.
+	"""
+	if response.status == "completed":
+		return "completed"
+	if response.status != "incomplete":
+		# in_progress / queued / failed / cancelled: no finished response to
+		# describe, so there is no finish reason to report.
+		return None
+	details = response.incomplete_details
+	reason = details.reason if details is not None else None
+	if reason is None:
+		return None
+	mapped = _INCOMPLETE_REASONS.get(reason)
+	if mapped is None:
+		logger.debug("unmapped openai responses incomplete reason: %s", reason)
+	return mapped
 
 
 class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
@@ -187,7 +218,12 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 				total_tokens=response.usage.total_tokens,
 			)
 
-		return AssistantMessage(content=content, tool_calls=tool_calls, usage=usage)
+		return AssistantMessage(
+			content=content,
+			tool_calls=tool_calls,
+			usage=usage,
+			finish_reason=_map_finish_reason(response),
+		)
 
 	@map_openai_generation_exceptions
 	async def _generate_streaming(
@@ -312,7 +348,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 				# we already streamed all fragments; nothing extra to yield
 				continue
 
-			# --- response completed: extract usage ---
+			# --- response completed: extract usage and why it ended ---
 			if isinstance(event, OpenAIResponseCompletedEvent):
 				response_usage = event.response.usage
 				if response_usage:
@@ -321,7 +357,9 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 						output_tokens=response_usage.output_tokens,
 						total_tokens=response_usage.total_tokens,
 					)
-					yield AssistantMessage(usage=usage)
+				finish_reason = _map_finish_reason(event.response)
+				if response_usage or finish_reason is not None:
+					yield AssistantMessage(usage=usage, finish_reason=finish_reason)
 
 	async def cancel_generation(self, latest_message: AssistantMessage) -> bool:
 		"""cancel an in-flight /v1/responses generation server-side.

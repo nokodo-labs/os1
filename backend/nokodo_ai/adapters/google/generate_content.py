@@ -2,6 +2,7 @@
 
 import base64
 import json
+import logging
 from collections.abc import AsyncIterator, Awaitable
 from time import time
 from typing import TYPE_CHECKING, Literal, overload
@@ -12,6 +13,7 @@ from ...messages import (
 	AssistantMessage,
 	ContentPart,
 	FileContent,
+	FinishReason,
 	ImageContent,
 	JsonContent,
 	RefusalContent,
@@ -59,6 +61,8 @@ if TYPE_CHECKING:
 	from nokodo_ai.messages import Message
 
 
+logger = logging.getLogger(__name__)
+
 PROVIDER_NAME = "google.generate_content"
 
 
@@ -68,6 +72,34 @@ _GOOGLE_THINKING_LEVEL: dict[str, GoogleThinkingLevel] = {
 	"medium": GoogleThinkingLevel.MEDIUM,
 	"high": GoogleThinkingLevel.HIGH,
 }
+
+_FINISH_REASONS: dict[str, FinishReason] = {
+	"STOP": "completed",
+	"MAX_TOKENS": "length",
+	"SAFETY": "content_filter",
+	"RECITATION": "content_filter",
+	"BLOCKLIST": "content_filter",
+	"PROHIBITED_CONTENT": "content_filter",
+	"SPII": "content_filter",
+}
+"""google finish reasons, by the SDK reason each one means."""
+
+
+def _map_finish_reason(reason: object) -> FinishReason | None:
+	"""translate google's finish reason; never guess at one we do not know.
+
+	the value arrives as a ``FinishReason`` enum whose member name is the wire
+	value, but plain strings come back from stubs and older payloads.
+	"""
+	if reason is None:
+		return None
+	name = getattr(reason, "name", None)
+	if not isinstance(name, str):
+		name = str(reason)
+	mapped = _FINISH_REASONS.get(name)
+	if mapped is None:
+		logger.debug("unmapped google finish reason: %s", name)
+	return mapped
 
 
 def _reasoning_effort_to_google(
@@ -432,7 +464,17 @@ def _response_to_assistant_message(
 				total_tokens=total,
 			)
 
-	return AssistantMessage(content=content_parts, tool_calls=tool_calls, usage=usage)
+	finish_reason: FinishReason | None = None
+	for candidate in response.candidates or []:
+		finish_reason = _map_finish_reason(candidate.finish_reason)
+		break
+
+	return AssistantMessage(
+		content=content_parts,
+		tool_calls=tool_calls,
+		usage=usage,
+		finish_reason=finish_reason,
+	)
 
 
 class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
@@ -584,6 +626,7 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 		tc_sdk_ids: dict[str, str] = {}
 		tc_created_at: dict[str, float] = {}
 		final_usage: Usage | None = None
+		final_finish_reason: FinishReason | None = None
 
 		stream = await self._client.models.generate_content_stream(
 			model=model,
@@ -621,6 +664,8 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 
 			# --- tool call deltas ---
 			for candidate_index, cand in enumerate(chunk.candidates or []):
+				if cand.finish_reason is not None:
+					final_finish_reason = _map_finish_reason(cand.finish_reason)
 				if cand.content is None:
 					continue
 				for part_index, part in enumerate(cand.content.parts or []):
@@ -689,5 +734,8 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 						)
 
 		# emit usage at the end
-		if final_usage is not None:
-			yield AssistantMessage(usage=final_usage)
+		if final_usage is not None or final_finish_reason is not None:
+			yield AssistantMessage(
+				usage=final_usage,
+				finish_reason=final_finish_reason,
+			)

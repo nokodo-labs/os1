@@ -19,11 +19,11 @@ from api.v1.service.chat.citation_sources import (
 	with_citable_sources,
 )
 from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.tools.base import Tool
 from api.v1.service.search.aggregator import search_stream
 from nokodo_ai.agents import AgentIterationSnapshot
 from nokodo_ai.context import AgentContext, ToolCallContext
 from nokodo_ai.messages import ToolMessage
-from nokodo_ai.tool import Tool
 from nokodo_ai.types.json import JSONObject
 
 
@@ -158,7 +158,7 @@ def _result_citation_source(item: SearchResultItem) -> CitableSource:
 	return citation_source(_CITATION_TYPE_MAP[item.type], item.id, item.title)
 
 
-class ResourceSearchTool(Tool[AppContext]):
+class ResourceSearchTool(Tool):
 	"""search across accessible user resources."""
 
 	name: str = Field(default="resource_search")
@@ -173,7 +173,7 @@ class ResourceSearchTool(Tool[AppContext]):
 		default_factory=lambda: ResourceSearchInput.model_json_schema()
 	)
 
-	async def call(
+	async def run(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],
 		__agent_context__: AgentContext,

@@ -193,7 +193,12 @@ def test_iteration_snapshot_copies_thread_and_shares_tools() -> None:
 
 
 @pytest.mark.asyncio
-async def test_streaming_terminal_delta_gets_default_finish_reason() -> None:
+async def test_streaming_reports_no_finish_reason_when_the_provider_gave_none() -> None:
+	"""the SDK reports what the provider said, and invents nothing.
+
+	this adapter never sets one, so both the terminal delta and the persisted
+	message must say None rather than a plausible-looking "completed".
+	"""
 	adapter = _QueuedChatAdapter(
 		stream_responses=[[AssistantMessage.from_text("done")]]
 	)
@@ -206,9 +211,9 @@ async def test_streaming_terminal_delta_gets_default_finish_reason() -> None:
 
 	assert len(terminal) == 1
 	assert terminal[0].chat is not None
-	assert terminal[0].chat.message.finish_reason == "stop"
+	assert terminal[0].chat.message.finish_reason is None
 	assert isinstance(thread.messages[-1], AssistantMessage)
-	assert thread.messages[-1].finish_reason == "stop"
+	assert thread.messages[-1].finish_reason is None
 
 
 @pytest.mark.asyncio
@@ -237,6 +242,86 @@ async def test_observer_hook_failure_does_not_fail_agent_run() -> None:
 	assert deltas[-1].done
 	assert isinstance(thread.messages[-1], AssistantMessage)
 	assert thread.messages[-1].text == "done"
+
+
+@pytest.mark.asyncio
+async def test_a_failing_filter_surfaces_its_own_exception() -> None:
+	"""nothing the SDK does around a filter may replace what it raised.
+
+	the loop used to run caller cleanup in a `finally` around each callback,
+	which could raise on the way out and mask the real failure.
+	"""
+
+	class _FailingFilter(Filter[None]):
+		name: str = "failing"
+
+		async def process(
+			self,
+			state: AgentIterationState[None],
+			agent_context: AgentContext,
+			app_context: None,
+		) -> AgentIterationState[None]:
+			_ = (state, agent_context, app_context)
+			raise RuntimeError("filter exploded")
+
+	adapter = _QueuedChatAdapter(
+		stream_responses=[[AssistantMessage.from_text("done")]]
+	)
+	agent = Agent(chat_model=_make_chat_model(adapter), filters=[_FailingFilter()])
+	thread = Thread(messages=[UserMessage.from_text("hello")])
+
+	stream = await agent.run(thread, stream=True)
+	with pytest.raises(RuntimeError, match="filter exploded"):
+		_ = [delta async for delta in stream]
+
+
+@pytest.mark.asyncio
+async def test_a_failing_tool_reports_the_failure_as_its_result() -> None:
+	"""a tool that raises ends that tool call, not the run.
+
+	the message it produces is what the model reads next, so the failure has to
+	arrive as a tool result rather than as an exception through the loop.
+	"""
+
+	class _FailingTool(Tool[None]):
+		name: str = "boom"
+		description: str = "always raises"
+		parameters: JSONObject = {}
+
+		async def call(
+			self,
+			__state__: AgentIterationSnapshot[None],
+			__agent_context__: AgentContext,
+			__tool_call_context__: ToolCallContext,
+			__app_context__: None,
+			**kwargs: object,
+		) -> ToolMessage:
+			_ = (__state__, __agent_context__, __tool_call_context__, kwargs)
+			raise RuntimeError("tool exploded")
+
+	adapter = _QueuedChatAdapter(
+		stream_responses=[
+			[
+				AssistantMessage(
+					tool_calls=[ToolCall(id="tc1", name="boom", arguments="{}")]
+				)
+			],
+			[AssistantMessage.from_text("recovered")],
+		]
+	)
+	agent = Agent(
+		chat_model=_make_chat_model(adapter),
+		tools=[_FailingTool()],
+		max_iterations=2,
+	)
+	thread = Thread(messages=[UserMessage.from_text("hello")])
+
+	stream = await agent.run(thread, stream=True)
+	deltas = [delta async for delta in stream]
+
+	tool_messages = [d.tool for d in deltas if d.tool is not None]
+	assert len(tool_messages) == 1
+	assert tool_messages[0].is_error is True
 
 
 def test_should_continue_agent_run_from_thread_state() -> None:
@@ -837,6 +922,11 @@ async def test_agent_streaming_yields_chat_deltas_tool_deltas_and_done() -> None
 
 @pytest.mark.asyncio
 async def test_agent_streaming_omits_empty_final_response() -> None:
+	"""an empty final answer is not added to the thread, but still ENDS.
+
+	the terminal delta used to be withheld along with the message, which left
+	every consumer waiting for a `done` that never came.
+	"""
 	adapter = _QueuedChatAdapter(stream_responses=[[]])
 	chat_model = _make_chat_model(adapter)
 	agent = Agent(chat_model=chat_model, max_iterations=0)
@@ -847,7 +937,11 @@ async def test_agent_streaming_omits_empty_final_response() -> None:
 	deltas = [d async for d in stream]
 
 	assert [message.role for message in thread.messages] == ["user"]
-	assert all(delta.chat is None for delta in deltas)
+	# the only chat delta is the terminal one: no content was produced.
+	chat_deltas = [delta for delta in deltas if delta.chat is not None]
+	assert len(chat_deltas) == 1
+	assert chat_deltas[0].chat is not None
+	assert chat_deltas[0].chat.done is True
 	assert deltas[-1].done is True
 
 
