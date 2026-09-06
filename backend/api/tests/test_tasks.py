@@ -128,7 +128,7 @@ class _FakeCompletedRunAgent:
 				chat=ChatModelDelta(
 					message=SDKAssistantMessage.from_text(
 						"hello from the agent"
-					).model_copy(update={"finish_reason": "stop"}),
+					).model_copy(update={"finish_reason": "completed"}),
 					done=True,
 				),
 				chunk_index=0,
@@ -154,7 +154,7 @@ class _FakeMultiDeltaRunAgent:
 			yield AgentDelta(
 				chat=ChatModelDelta(
 					message=SDKAssistantMessage.from_text("from the agent").model_copy(
-						update={"finish_reason": "stop"}
+						update={"finish_reason": "completed"}
 					),
 					done=True,
 				),
@@ -219,7 +219,7 @@ class _FakeCompletedThenPartialBadRequestRunAgent:
 				chat=ChatModelDelta(
 					message=SDKAssistantMessage.from_text(
 						"complete replacement"
-					).model_copy(update={"finish_reason": "stop"}),
+					).model_copy(update={"finish_reason": "completed"}),
 					done=True,
 				),
 				chunk_index=0,
@@ -1902,7 +1902,8 @@ async def test_replacement_failure_after_first_complete_keeps_replacement(
 	await db_session.refresh(successor)
 	partial = await db_session.get(Message, successor.parent_id)
 	assert partial is not None
-	assert partial.finish_reason == "error"
+	# nothing finished, so the message says nothing; the run's `run.error` does.
+	assert partial.finish_reason is None
 	first = await db_session.get(Message, partial.parent_id)
 	assert first is not None
 	assert first.parent_id == anchor_id
@@ -2343,7 +2344,7 @@ async def test_blocked_sub_thread_output_keeps_run_container(
 					chat=ChatModelDelta(
 						message=SDKAssistantMessage.from_text(
 							"first answer"
-						).model_copy(update={"finish_reason": "stop"}),
+						).model_copy(update={"finish_reason": "completed"}),
 						done=True,
 					),
 					chunk_index=0,
@@ -2353,7 +2354,7 @@ async def test_blocked_sub_thread_output_keeps_run_container(
 					chat=ChatModelDelta(
 						message=SDKAssistantMessage.from_text(
 							"second answer"
-						).model_copy(update={"finish_reason": "stop"}),
+						).model_copy(update={"finish_reason": "completed"}),
 						done=True,
 					),
 					chunk_index=1,

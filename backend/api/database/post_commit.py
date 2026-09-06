@@ -18,11 +18,10 @@ fast path.
 the one thing close-time draining cannot see is a session that rolls back and
 KEEPS GOING: its already-queued actions outlive the rollback in the same
 session, and the retry's commit would promote and run them a second time. a site
-that rolls back and continues must discard explicitly - use
-``discard_uncommitted_post_commit_actions`` when earlier commits in the same
-session are still owed their run, or ``discard_post_commit_actions`` to drop
-everything. a site that rolls back and RAISES needs nothing: close-time discard
-handles it.
+that rolls back and continues must discard explicitly, with
+``discard_uncommitted_post_commit_actions``: work bound to an earlier successful
+commit is durable and stays owed its run, so dropping it is never right. a site
+that rolls back and RAISES needs nothing: close-time discard handles it.
 """
 
 import logging
@@ -161,15 +160,6 @@ def discard_uncommitted_post_commit_actions(session: AsyncSession) -> None:
 	queue = _queue(session, False)
 	if queue is not None:
 		queue.actions.clear()
-		queue.refresh_pending()
-
-
-def discard_post_commit_actions(session: AsyncSession) -> None:
-	"""discard every action queued on a session, committed or not."""
-	queue = _queue(session, False)
-	if queue is not None:
-		queue.actions.clear()
-		queue.committed.clear()
 		queue.refresh_pending()
 
 

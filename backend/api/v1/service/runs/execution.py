@@ -95,7 +95,6 @@ from api.v1.service.threads.common import thread_head_id
 from nokodo_ai.adapters.chat import GenerationError as SDKGenerationError
 from nokodo_ai.deltas import AgentDelta
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
-from nokodo_ai.messages import FinishReason
 from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.types.sentinels import MissingType
@@ -671,7 +670,7 @@ async def run_agent(
 						raise asyncio.CancelledError
 					return result
 
-		async def _settle_output(finish_reason: FinishReason) -> TypeID | None:
+		async def _settle_output() -> TypeID | None:
 			"""submit eligible incomplete output and fail closed while draining."""
 			if output_writer is None:
 				return None
@@ -688,7 +687,6 @@ async def run_agent(
 					partial = build_incomplete_assistant(
 						current_assistant_id=current_assistant_id,
 						assistant=assistant_accum,
-						finish_reason=finish_reason,
 						allow_output=barrier.replacement_committed,
 					)
 					partial_reservation = (
@@ -851,7 +849,7 @@ async def run_agent(
 
 			if output_writer is not None:
 				if current_assistant_reservation is not None:
-					partial_message_id = await _settle_output("error")
+					partial_message_id = await _settle_output()
 					await safe_rollback(session)
 					await terminate_run(
 						run_id,
@@ -873,7 +871,7 @@ async def run_agent(
 				partial_message_id: TypeID | None = None
 				output_failed = False
 				try:
-					partial_message_id = await _settle_output("cancelled")
+					partial_message_id = await _settle_output()
 				except BaseException:
 					output_failed = True
 					logger.exception(
@@ -894,7 +892,7 @@ async def run_agent(
 			raise
 		except SDKGenerationError as exc:
 			try:
-				partial_message_id = await _settle_output("error")
+				partial_message_id = await _settle_output()
 			except BaseException:
 				await safe_rollback(session)
 				await terminate_run(run_id, reason="generation failed")
@@ -926,7 +924,7 @@ async def run_agent(
 					await terminate_run(run_id, reason="generation failed")
 					return
 			try:
-				partial_message_id = await _settle_output("error")
+				partial_message_id = await _settle_output()
 			except BaseException:
 				await safe_rollback(session)
 				await terminate_run(run_id, reason="generation failed")

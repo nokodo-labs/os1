@@ -23,7 +23,7 @@ from api.models.note import Note
 from api.models.notification import Notification
 from api.models.thread import Thread
 from api.models.user import User
-from api.permissions import ResourceType
+from api.permissions import ActionPermission, ResourceType
 from api.schemas.message import MessageSplice, ResourceAttachment, TextContent
 from api.schemas.thread import ThreadCreate
 from api.schemas.user import UserCreate
@@ -549,7 +549,7 @@ async def test_originating_someone_elses_resource_is_rejected(
 	attacker_principal = Principal.for_user(
 		user=attacker,
 		group_ids=(),
-		permissions=frozenset({"threads:create"}),
+		permissions=frozenset({ActionPermission.THREADS_CREATE}),
 	)
 
 	note = Note(user_id=owner.id, title="not yours", content="owned elsewhere")

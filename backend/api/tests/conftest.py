@@ -325,7 +325,9 @@ async def _api_test_seed_default_embedding_model(
 	principal = make_principal(
 		slug="seed_test",
 		is_superuser=True,
-		permissions=frozenset({"providers:manage", "models:manage"}),
+		permissions=frozenset(
+			{ActionPermission.PROVIDERS_MANAGE, ActionPermission.MODELS_MANAGE}
+		),
 	)
 
 	provider = await provider_service.create_provider(

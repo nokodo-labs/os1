@@ -392,11 +392,14 @@ class TestPrincipalPermissions:
 		assert p.has_permission(ActionPermission.PLUGINS_MANAGE)
 
 	@pytest.mark.asyncio
-	@pytest.mark.parametrize("permission", ["*", "threads:*"])
+	@pytest.mark.parametrize(
+		"permission",
+		[PermissionWildcard("*"), PermissionWildcard("threads:*")],
+	)
 	async def test_column_subject_wildcards_match_principal_semantics(
 		self,
 		db_session: AsyncSession,
-		permission: str,
+		permission: PermissionWildcard,
 	) -> None:
 		user = User(
 			email=f"wildcard-{permission.replace(':', '-')}@example.com",
@@ -404,9 +407,10 @@ class TestPrincipalPermissions:
 			hashed_password="pw",
 			is_active=True,
 		)
+		# the stored shape is JSONB, but the value going in is a validated grant
 		role = Role(
 			name=f"wildcard {permission}",
-			default_permissions={"action_permissions": [permission]},
+			default_permissions={"action_permissions": [str(permission)]},
 		)
 		db_session.add_all([user, role])
 		await db_session.flush()
@@ -2107,13 +2111,13 @@ class TestEdgeCases:
 			),
 			global_action_permissions=frozenset(),
 		)
+		# both defaults were set above; None here would mean the model dropped
+		# them, which `level_satisfies` cannot express - so assert, don't ignore
+		thread_default = principal.role_resource_defaults.thread
+		project_default = principal.role_resource_defaults.project
+		assert thread_default is not None
+		assert project_default is not None
 		# thread default is editor
-		assert level_satisfies(
-			principal.role_resource_defaults.thread,  # type: ignore[arg-type]
-			AccessLevel.EDITOR,
-		)
+		assert level_satisfies(thread_default, AccessLevel.EDITOR)
 		# project default is reader (not editor)
-		assert not level_satisfies(
-			principal.role_resource_defaults.project,  # type: ignore[arg-type]
-			AccessLevel.EDITOR,
-		)
+		assert not level_satisfies(project_default, AccessLevel.EDITOR)

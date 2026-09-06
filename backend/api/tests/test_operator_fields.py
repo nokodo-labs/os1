@@ -25,7 +25,12 @@ from api.models.memory import Memory as MemoryModel
 from api.models.message import MessageType
 from api.models.message import UserMessage as MessageModel
 from api.models.thread import Thread as ThreadModel
-from api.permissions import RESOURCE_MANAGE_PERMISSION, ActionPermission, ResourceType
+from api.permissions import (
+	RESOURCE_MANAGE_PERMISSION,
+	ActionPermission,
+	PermissionGrant,
+	ResourceType,
+)
 from api.schemas.common import PrivateFacetModel, PrivateModel
 from api.schemas.file import File as FileOut
 from api.schemas.file import FilePrivateInput, FileUpdate
@@ -88,7 +93,7 @@ def test_leaf_types_resolve_to_their_parent_domain_permission() -> None:
 
 def test_manage_does_not_imply_create() -> None:
 	"""permissions stay atomic; only a domain wildcard covers both."""
-	operator = make_principal(permissions=frozenset({"files:manage"}))
+	operator = make_principal(permissions=frozenset({ActionPermission.FILES_MANAGE}))
 	assert operator.is_resource_operator(ResourceType.FILE)
 	assert not operator.has_permission(ActionPermission.FILES_CREATE)
 
@@ -100,7 +105,9 @@ def test_ownership_never_confers_operator_status() -> None:
 
 
 def test_operator_of_one_type_is_not_operator_of_another() -> None:
-	files_operator = make_principal(permissions=frozenset({"files:manage"}))
+	files_operator = make_principal(
+		permissions=frozenset({ActionPermission.FILES_MANAGE})
+	)
 	assert files_operator.is_resource_operator(ResourceType.FILE)
 	assert not files_operator.is_resource_operator(ResourceType.THREAD)
 
@@ -131,7 +138,7 @@ async def test_operator_short_circuits_to_admin_access(
 		is None
 	)
 
-	operator = make_principal(permissions=frozenset({"files:manage"}))
+	operator = make_principal(permissions=frozenset({ActionPermission.FILES_MANAGE}))
 	assert (
 		await get_effective_access_level(
 			db_session, operator, ResourceType.FILE, file.id
@@ -155,7 +162,7 @@ async def test_operator_sees_every_resource_in_listings(
 	db_session.add(file)
 	await db_session.commit()
 
-	operator = make_principal(permissions=frozenset({"files:manage"}))
+	operator = make_principal(permissions=frozenset({ActionPermission.FILES_MANAGE}))
 	listed = await file_service.list_files(db_session, principal=operator, limit=100)
 	assert str(file.id) in {str(f.id) for f in listed}
 
@@ -221,7 +228,7 @@ def test_non_operator_loses_the_whole_private_facet() -> None:
 
 
 def test_operator_keeps_the_private_facet() -> None:
-	operator = make_principal(permissions=frozenset({"files:manage"}))
+	operator = make_principal(permissions=frozenset({ActionPermission.FILES_MANAGE}))
 	(kept,) = project_private(operator, ResourceType.FILE, [_file_payload()])
 	assert kept.private is not None
 	assert kept.private.storage_backend == "local"
@@ -248,7 +255,7 @@ def test_projected_payloads_are_read_only_views() -> None:
 	(projected,) = project_private(make_principal(), ResourceType.FILE, [source])
 	assert projected.metadata is source.metadata
 
-	operator = make_principal(permissions=frozenset({"files:manage"}))
+	operator = make_principal(permissions=frozenset({ActionPermission.FILES_MANAGE}))
 	(kept,) = project_private(operator, ResourceType.FILE, [source])
 	assert kept is source
 
@@ -268,7 +275,7 @@ def test_no_private_value_survives_a_non_operator_dump() -> None:
 
 
 def test_private_metadata_is_readable_by_operators() -> None:
-	operator = make_principal(permissions=frozenset({"files:manage"}))
+	operator = make_principal(permissions=frozenset({ActionPermission.FILES_MANAGE}))
 	(kept,) = project_private(operator, ResourceType.FILE, [_file_payload()])
 	dumped = kept.model_dump(mode="json")
 	assert dumped["private"]["metadata"] == {"content_vectors_schema": 3}
@@ -339,15 +346,33 @@ def _memory_row() -> MemoryModel:
 
 
 FACET_RESOURCES = [
-	pytest.param(ResourceType.FILE, FileOut, _file_row, "files:manage", id="file"),
 	pytest.param(
-		ResourceType.THREAD, ThreadOut, _thread_row, "threads:manage", id="thread"
+		ResourceType.FILE,
+		FileOut,
+		_file_row,
+		ActionPermission.FILES_MANAGE,
+		id="file",
 	),
 	pytest.param(
-		ResourceType.MESSAGE, MessageOut, _message_row, "threads:manage", id="message"
+		ResourceType.THREAD,
+		ThreadOut,
+		_thread_row,
+		ActionPermission.THREADS_MANAGE,
+		id="thread",
 	),
 	pytest.param(
-		ResourceType.MEMORY, MemoryOut, _memory_row, "memories:manage", id="memory"
+		ResourceType.MESSAGE,
+		MessageOut,
+		_message_row,
+		ActionPermission.THREADS_MANAGE,
+		id="message",
+	),
+	pytest.param(
+		ResourceType.MEMORY,
+		MemoryOut,
+		_memory_row,
+		ActionPermission.MEMORIES_MANAGE,
+		id="memory",
 	),
 ]
 
@@ -359,7 +384,7 @@ def test_facet_is_opt_in_for_every_resource(
 	resource_type: ResourceType,
 	schema: type[PrivateFacetModel[PrivateModel]],
 	row: Callable[[], object],
-	permission: str,
+	permission: PermissionGrant,
 ) -> None:
 	"""``from_row`` is the ONLY way a facet gets populated.
 
@@ -378,7 +403,7 @@ def test_projection_splits_by_operator_for_every_resource(
 	resource_type: ResourceType,
 	schema: type[PrivateFacetModel[PrivateModel]],
 	row: Callable[[], object],
-	permission: str,
+	permission: PermissionGrant,
 ) -> None:
 	"""non-operators lose the facet; operators keep it; nothing leaks in a dump."""
 	(hidden,) = project_private(

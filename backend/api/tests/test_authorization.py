@@ -17,7 +17,7 @@ from api.models.message import UserMessage
 from api.models.reminder import Reminder, ReminderList
 from api.models.thread import Thread
 from api.models.user import User
-from api.permissions import DefaultResourceAccess, ResourceType
+from api.permissions import ActionPermission, DefaultResourceAccess, ResourceType
 from api.tests.factories import create_user, make_principal
 from api.v1.service import vectorize as vectorize_service
 from api.v1.service.authentication import Principal
@@ -359,15 +359,16 @@ async def test_require_thread_and_project_access(db_session: AsyncSession) -> No
 def test_require_permission_denied() -> None:
 	principal = make_principal(slug="authz_deny")
 	with pytest.raises(HTTPException):
-		require_permission(principal, "agents:manage")
+		require_permission(principal, ActionPermission.AGENTS_MANAGE)
 
 
 def test_require_permission_allows() -> None:
 	principal = make_principal(
-		slug="authz_allow", permissions=frozenset({"agents:manage"})
+		slug="authz_allow",
+		permissions=frozenset({ActionPermission.AGENTS_MANAGE}),
 	)
 
-	require_permission(principal, "agents:manage")
+	require_permission(principal, ActionPermission.AGENTS_MANAGE)
 
 
 @pytest.mark.asyncio
@@ -551,8 +552,7 @@ async def test_depth_truncation_is_not_memoised_for_later_refs(
 	await db_session.flush()
 
 	parent_of = {
-		thread.id: chain[index + 1].id
-		for index, thread in enumerate(chain[:-1])
+		thread.id: chain[index + 1].id for index, thread in enumerate(chain[:-1])
 	}
 
 	async def chained_parent_refs(

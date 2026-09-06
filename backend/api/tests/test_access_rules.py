@@ -25,7 +25,7 @@ from api.models.event_types import EventType
 from api.models.note import Note
 from api.models.role import Role
 from api.models.thread import Thread
-from api.permissions import ResourceType
+from api.permissions import ActionPermission, ResourceType
 from api.schemas.access_rule import (
 	AccessRuleCreate,
 	AccessRuleUpdate,
@@ -495,7 +495,7 @@ async def test_agent_access_rejects_role_subject_without_roles_manage(
 	principal = Principal.for_user(
 		user=manager,
 		group_ids=(),
-		permissions=frozenset({"agents:manage"}),
+		permissions=frozenset({ActionPermission.AGENTS_MANAGE}),
 	)
 	with pytest.raises(HTTPException) as forbidden:
 		await access_rule_service.set_access_rules(

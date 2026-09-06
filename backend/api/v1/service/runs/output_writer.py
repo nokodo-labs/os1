@@ -24,7 +24,6 @@ from api.v1.service.threads.messages.writes import (
 	create_message_with_commit_outcome,
 )
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
-from nokodo_ai.messages import FinishReason
 from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.utils.sse import sse_encode
 from nokodo_ai.utils.typeid import TypeID, new_typeid
@@ -797,16 +796,18 @@ class RunOutputWriter:
 def build_incomplete_assistant(
 	current_assistant_id: TypeID | None,
 	assistant: SDKAssistantMessage,
-	finish_reason: FinishReason,
 	allow_output: bool,
 ) -> SDKAssistantMessage | None:
-	"""build persisted incomplete assistant output without side effects."""
+	"""build persisted incomplete assistant output without side effects.
+
+	the partial keeps ``finish_reason`` unset: a finish reason is what the
+	provider said about a response that finished, and this one did not. why the
+	run ended is recorded once, on the run's own ``run.error``.
+	"""
 	if current_assistant_id is None or (
 		not assistant.content and not assistant.tool_calls
 	):
 		return None
 	if not allow_output:
 		return None
-	partial = assistant.model_copy(deep=True)
-	partial.finish_reason = finish_reason
-	return partial
+	return assistant.model_copy(deep=True)

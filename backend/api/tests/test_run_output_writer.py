@@ -235,10 +235,10 @@ async def test_thread_write_reports_committed_row_when_event_delivery_fails(
 def test_assistant_finish_reason_round_trips_through_persistence_models() -> None:
 	draft = MessageDraft.from_sdk_message(
 		SDKAssistantMessage.from_text("answer").model_copy(
-			update={"finish_reason": "stop"}
+			update={"finish_reason": "completed"}
 		)
 	)
-	assert draft.finish_reason == "stop"
+	assert draft.finish_reason == "completed"
 	message = AssistantMessageORM(
 		thread_id=TypeID(new_typeid("thread")),
 		content=[{"type": "text", "text": "answer"}],
@@ -246,7 +246,7 @@ def test_assistant_finish_reason_round_trips_through_persistence_models() -> Non
 	)
 	sdk_message = message.to_sdk()
 	assert isinstance(sdk_message, SDKAssistantMessage)
-	assert sdk_message.finish_reason == "stop"
+	assert sdk_message.finish_reason == "completed"
 
 
 @pytest.mark.asyncio
@@ -319,7 +319,7 @@ async def test_tool_event_resolves_its_assistant_message_from_tool_call_id(
 	reservation = writer.reserve()
 	await writer.submit(
 		reservation,
-		SDKAssistantMessage(tool_calls=[tool_call], finish_reason="tool_calls"),
+		SDKAssistantMessage(tool_calls=[tool_call], finish_reason="completed"),
 		reply_to_message_id=None,
 		read_through_message_id=None,
 		citations=[],
@@ -688,7 +688,6 @@ def test_incomplete_builder_keeps_output_without_metadata() -> None:
 		build_incomplete_assistant(
 			current_assistant_id=message_id,
 			assistant=assistant,
-			finish_reason="cancelled",
 			allow_output=False,
 		)
 		is None
@@ -697,10 +696,11 @@ def test_incomplete_builder_keeps_output_without_metadata() -> None:
 	partial = build_incomplete_assistant(
 		current_assistant_id=message_id,
 		assistant=assistant,
-		finish_reason="error",
 		allow_output=True,
 	)
 	assert partial is not None
 	assert partial.text == "partial answer"
-	assert partial.finish_reason == "error"
+	# a partial message carries no finish reason: nothing finished. why the run
+	# ended lives on its `run.error`.
+	assert partial.finish_reason is None
 	assert partial.metadata is None

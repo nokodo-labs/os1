@@ -867,7 +867,7 @@ def test_chat_service_orm_to_sdk_variants() -> None:
 	assistant_orm.type = MessageTypeORM.ASSISTANT
 	assistant_orm.content = [{"type": "text", "text": "a"}]
 	assistant_orm.tool_calls = [{"id": "t", "name": "fn", "arguments": {}}]
-	assistant_orm.finish_reason = "tool_calls"
+	assistant_orm.finish_reason = "completed"
 	assistant_orm.usage = {"input_tokens": 1, "output_tokens": 2, "total_tokens": 3}
 	assistant_orm.metadata_ = {}
 	assistant_orm._sdk_metadata = lambda: MessageORM._sdk_metadata(assistant_orm)
@@ -900,7 +900,7 @@ def test_chat_service_orm_to_sdk_variants() -> None:
 	assert user_sdk.role == "user"
 	assert system_sdk.role == "system"
 	assert assistant_sdk.usage.total_tokens == 3
-	assert assistant_sdk.finish_reason == "tool_calls"
+	assert assistant_sdk.finish_reason == "completed"
 	assert tool_sdk.is_error is True
 	assert tool_sdk.tool_output == "out"
 	assert tool_sdk_empty.tool_output == ""

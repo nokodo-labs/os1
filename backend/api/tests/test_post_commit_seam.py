@@ -19,7 +19,6 @@ from api.database import post_commit
 from api.database.main import async_session_local, session_scope
 from api.database.post_commit import (
 	PostCommitAction,
-	discard_post_commit_actions,
 	discard_uncommitted_post_commit_actions,
 	enqueue_post_commit_action,
 	pending_post_commit_action_count,
@@ -95,7 +94,9 @@ async def test_session_scope_does_not_drain_a_borrowed_session(
 
 	assert not ran
 	assert pending_post_commit_action_count(db_session) == 1
-	discard_post_commit_actions(db_session)
+	# drain rather than discard: the action IS owed a run, and the owning
+	# fixture session would otherwise log an abandoned-queue error at teardown
+	await run_post_commit_actions(db_session)
 
 
 @pytest.mark.asyncio

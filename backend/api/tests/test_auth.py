@@ -347,7 +347,8 @@ async def test_get_current_principal_with_role(db_session: AsyncSession) -> None
 		name="tester",
 		default_permissions={
 			"resource_access": {},
-			"action_permissions": ["prompts:read"],
+			# JSONB column, but the value is a validated grant, not a loose string
+			"action_permissions": [str(ActionPermission.PROMPTS_READ)],
 		},
 	)
 	user = User(

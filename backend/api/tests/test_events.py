@@ -21,7 +21,7 @@ from api.models.notification import Notification
 from api.models.task import Task, TaskType
 from api.models.thread import Thread
 from api.models.user import User
-from api.permissions import AccessLevel, ResourceType
+from api.permissions import AccessLevel, ActionPermission, ResourceType
 from api.schemas.event import EventCreate, EventListFilters
 from api.tests.factories import make_principal
 from api.v1.service import events as event_service
@@ -49,7 +49,7 @@ def _non_admin_events_manager_principal(user: User) -> Principal:
 	return Principal.for_user(
 		user=user,
 		group_ids=(),
-		permissions=frozenset({"events:manage"}),
+		permissions=frozenset({ActionPermission.EVENTS_MANAGE}),
 	)
 
 
