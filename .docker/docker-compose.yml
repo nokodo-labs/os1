@@ -1,13 +1,13 @@
 name: os1
 
 x-backend-env: &backend-env
-  DATABASE_URL: postgresql+psycopg://nokodo-ai-admin:nokodo-ai@db:5432/nokodo-ai-production
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
   ENV: production
   DEBUG: "false"
   JSON_LOGS: "true"
-  NOKODO__SECURITY__SECRET_KEY: change-this-in-production
-  NOKODO__SECURITY__CORS_ORIGINS: "https://app.yourdomain.com"
-  NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN: "https://app.yourdomain.com"
+  NOKODO__SECURITY__SECRET_KEY: ${NOKODO__SECURITY__SECRET_KEY:?set NOKODO__SECURITY__SECRET_KEY}
+  NOKODO__SECURITY__CORS_ORIGINS: ${NOKODO__SECURITY__CORS_ORIGINS:?set NOKODO__SECURITY__CORS_ORIGINS}
+  NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN: ${NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN:?set NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN}
   NOKODO__CACHE__REDIS__URL: redis://valkey:6379/0
 
 services:
@@ -16,15 +16,15 @@ services:
     container_name: os1-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: nokodo-ai-admin
-      POSTGRES_PASSWORD: nokodo-ai
-      POSTGRES_DB: nokodo-ai-production
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nokodo-ai-admin"]
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -38,6 +38,15 @@ services:
       - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/6333; printf "GET /readyz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3; grep -q "200 OK" <&3'
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   valkey:
     image: valkey/valkey:9-alpine
@@ -52,6 +61,21 @@ services:
       timeout: 3s
       retries: 5
 
+  # the ONLY service that migrates. everything that imports the app waits for
+  # it to exit 0, so the schema and stored data are current before any process
+  # reads settings at import time.
+  migrate:
+    image: ghcr.io/nokodo-labs/os1-backend:latest
+    container_name: os1-migrate
+    restart: "no"
+    environment:
+      <<: *backend-env
+      RUN_MIGRATIONS: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["true"]
+
   backend:
     image: ghcr.io/nokodo-labs/os1-backend:latest
     container_name: os1-backend
@@ -60,18 +84,30 @@ services:
       - "1383:1383"
     environment: *backend-env
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       qdrant:
-        condition: service_started
+        condition: service_healthy
       valkey:
         condition: service_healthy
       taskiq-worker:
-        condition: service_started
+        condition: service_healthy
       taskiq-scheduler:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - backend_data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:1383/health', timeout=5)
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
 
   taskiq-worker:
     image: ghcr.io/nokodo-labs/os1-backend:latest
@@ -79,16 +115,28 @@ services:
     restart: unless-stopped
     environment: *backend-env
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       qdrant:
-        condition: service_started
+        condition: service_healthy
       valkey:
         condition: service_healthy
     volumes:
       - backend_data:/app/data
     command: python -m api.taskiq worker api.taskiq:broker api.tasks.registry
       --workers auto --max-async-tasks 25
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import os, socket, sys, redis; sys.exit(0 if next(redis.from_url(os.environ['NOKODO__CACHE__REDIS__URL']).scan_iter(match=f'nokodo-ai:taskiq:status:worker:{socket.gethostname()}:*'), None) else 1)
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   taskiq-scheduler:
     image: ghcr.io/nokodo-labs/os1-backend:latest
@@ -96,15 +144,27 @@ services:
     restart: unless-stopped
     environment: *backend-env
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       qdrant:
-        condition: service_started
+        condition: service_healthy
       valkey:
         condition: service_healthy
     volumes:
       - backend_data:/app/data
     command: python -m api.taskiq scheduler api.taskiq:scheduler api.tasks.registry
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import os, socket, sys, redis; sys.exit(0 if next(redis.from_url(os.environ['NOKODO__CACHE__REDIS__URL']).scan_iter(match=f'nokodo-ai:taskiq:status:scheduler:{socket.gethostname()}:*'), None) else 1)
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   frontend:
     image: ghcr.io/nokodo-labs/os1-frontend:latest
@@ -116,7 +176,7 @@ services:
       API_ORIGIN: ${API_ORIGIN:-}
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
 
   console:
     image: ghcr.io/nokodo-labs/os1-console:latest
@@ -128,7 +188,7 @@ services:
       API_ORIGIN: ${API_ORIGIN:-}
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
 
 volumes:
   postgres_data:

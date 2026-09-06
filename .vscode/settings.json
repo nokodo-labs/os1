@@ -23,8 +23,18 @@
 	},
 	"files.watcherExclude": {
 		"**/__pycache__/**": true,
-		"**/node_modules/**": true
+		"**/node_modules/**": true,
+		"**/temp/**": true
 	},
+
+	// Tailwind IntelliSense: temp/open-webui/src/tailwind.css has `@config '../tailwind.config.js'`
+	// pointing at a file that does not exist, which puts the language server into an endless
+	// re-initialization loop (1036 retries / 8.4 MB of log observed 2026-08-27).
+	"tailwindCSS.files.exclude": [
+		"**/temp/**",
+		"**/node_modules/**",
+		"**/.git/**"
+	],
 
 	// Git & GitHub
 	"git.enableSmartCommit": true,
@@ -147,7 +157,10 @@
 		"/^git branch\\b.*-(d|D|m|M|-delete|-force)\\b/": false,
 		"/^git tag\\b(\\s*(-l|--list|--sort|--format|--column|--merged|--no-merged|--contains|--no-contains|--points-at)[^;|&]*)?$/": true,
 		"/^git stash list\\b/": true,
-		"/^git stash\\b(?!\\s+list\\b)/": false,
+		"/git stash\\b(?!\\s+list\\b)/": false,
+		"/git reset\\b.*--hard\\b/": false,
+		"/git clean\\b.*-[a-z]*f/": false,
+		"/git push\\b.*(--force|-f\\b)/": false,
 		"/^git worktree list\\b/": true,
 		"Write-Host": true,
 		"Write-Output": true,

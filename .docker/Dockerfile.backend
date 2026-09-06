@@ -4,37 +4,43 @@ ARG PYTHON_VERSION=3.14
 FROM python:${PYTHON_VERSION}-slim
 ARG INSTALL_DEBUGPY=false
 
-# Set environment variables
+# set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency files
+# copy dependency files
 COPY pyproject.toml ./
 
-# Install Python dependencies (library + API deps for production)
+# install Python dependencies (library + API deps for production)
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -e .[api]
 
 RUN if [ "$INSTALL_DEBUGPY" = "true" ]; then pip install debugpy; fi
 
-# Copy application code
+# copy application code
 COPY . .
 
-# Expose port
+RUN chmod +x /app/docker-entrypoint.sh
+
+# expose port
 EXPOSE 1383
 
-# Run the application
+# migrations run here, in their own process, before the app is imported:
+# importing the app reads settings from the database, so a pending data
+# migration must land first. only RUN_MIGRATIONS=1 services migrate, so a
+# cold start never runs the upgrade in more than one container.
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+
 # keep-alive must exceed the fronting proxy idle-reuse window so the proxy
 # (not uvicorn) closes idle sockets first, avoiding stale-socket reuse races.
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "1383", "--timeout-keep-alive", "95"]

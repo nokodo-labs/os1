@@ -28,13 +28,29 @@
 			}
 		},
 		{
-			"label": "backend: run server",
+			"label": "backend: migrate",
 			"type": "shell",
-			"command": "uv run uvicorn api.main:app --host 0.0.0.0 --port 1383 --loop api.runtime:selector_loop_factory",
+			"command": "uv run alembic -c api/migrations/alembic.ini upgrade head",
 			"options": {
 				"cwd": "${workspaceFolder}/backend"
 			},
 			"dependsOn": "backend: ensure dev deps",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "dedicated",
+				"showReuseMessage": false,
+				"close": true
+			}
+		},
+		{
+			"label": "backend: run server",
+			"type": "shell",
+			"command": "uv run uvicorn api.main:app --host 0.0.0.0 --port 1383 --loop nokodo_ai.utils.event_loop:selector_loop_factory",
+			"options": {
+				"cwd": "${workspaceFolder}/backend"
+			},
+			"dependsOn": "backend: migrate",
 			"isBackground": true,
 			"problemMatcher": {
 				"pattern": {

@@ -14,7 +14,7 @@
 				"--port",
 				"1383",
 				"--loop",
-				"api.runtime:selector_loop_factory"
+				"nokodo_ai.utils.event_loop:selector_loop_factory"
 			],
 			"jinja": true,
 			"justMyCode": true,

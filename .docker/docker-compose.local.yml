@@ -6,7 +6,6 @@ x-backend-env-file: &backend-env-file
 
 x-backend-env: &backend-env
   DATABASE_URL: postgresql+psycopg://nokodo-ai-admin:nokodo-ai@db:5432/nokodo-ai-dev
-  NOKODO__ASSETS__STORAGE__S3__ENDPOINT_URL: http://minio:9000
   NOKODO__ASSETS__VECTOR_DATABASE__QDRANT__URL: qdrant:6334
   NOKODO__CACHE__REDIS__URL: redis://valkey:6379/0
 
@@ -40,7 +39,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nokodo-ai-admin"]
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -55,6 +54,15 @@ services:
       - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/6333; printf "GET /readyz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3; grep -q "200 OK" <&3'
+      interval: 10s
+      timeout: 5s
+      retries: 5
     profiles: ["deps", "local", "debug"]
 
   valkey:
@@ -91,6 +99,25 @@ services:
       retries: 5
     profiles: ["deps", "local", "debug"]
 
+  # the ONLY service that migrates, matching prod. everything that imports the
+  # app - including the taskiq entrypoints, which read settings at import -
+  # waits for it to exit 0, so the schema and stored settings are current
+  # before any process reads them.
+  migrate:
+    build: *backend-build
+    container_name: os1-migrate
+    restart: "no"
+    env_file: *backend-env-file
+    environment:
+      <<: *backend-env
+      RUN_MIGRATIONS: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes: *backend-volumes
+    command: ["true"]
+    profiles: ["local", "debug"]
+
   backend:
     build: *backend-build
     container_name: os1-backend
@@ -100,20 +127,32 @@ services:
     env_file: *backend-env-file
     environment: *backend-env
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       qdrant:
-        condition: service_started
+        condition: service_healthy
       minio:
         condition: service_healthy
       valkey:
         condition: service_healthy
       taskiq-worker:
-        condition: service_started
+        condition: service_healthy
       taskiq-scheduler:
-        condition: service_started
+        condition: service_healthy
     volumes: *backend-volumes
     command: uvicorn api.main:app --host 0.0.0.0 --port 1383 --reload --timeout-keep-alive 95
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:1383/health', timeout=5)
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
     profiles: ["local"]
 
   taskiq-worker:
@@ -123,10 +162,12 @@ services:
     env_file: *backend-env-file
     environment: *backend-env
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       qdrant:
-        condition: service_started
+        condition: service_healthy
       minio:
         condition: service_healthy
       valkey:
@@ -134,6 +175,16 @@ services:
     volumes: *backend-volumes
     command: python -m api.taskiq worker api.taskiq:broker api.tasks.registry
       --workers auto --max-async-tasks 25
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import os, socket, sys, redis; sys.exit(0 if next(redis.from_url(os.environ['NOKODO__CACHE__REDIS__URL']).scan_iter(match=f'nokodo-ai:taskiq:status:worker:{socket.gethostname()}:*'), None) else 1)
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     profiles: ["local"]
 
   taskiq-scheduler:
@@ -143,16 +194,28 @@ services:
     env_file: *backend-env-file
     environment: *backend-env
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       qdrant:
-        condition: service_started
+        condition: service_healthy
       minio:
         condition: service_healthy
       valkey:
         condition: service_healthy
     volumes: *backend-volumes
     command: python -m api.taskiq scheduler api.taskiq:scheduler api.tasks.registry
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import os, socket, sys, redis; sys.exit(0 if next(redis.from_url(os.environ['NOKODO__CACHE__REDIS__URL']).scan_iter(match=f'nokodo-ai:taskiq:status:scheduler:{socket.gethostname()}:*'), None) else 1)
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     profiles: ["local"]
 
   backend-debug:
@@ -167,10 +230,12 @@ services:
       <<: *backend-env
       PYTHONPATH: /app
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       qdrant:
-        condition: service_started
+        condition: service_healthy
       minio:
         condition: service_healthy
       valkey:
@@ -196,10 +261,12 @@ services:
       <<: *backend-env
       PYTHONPATH: /app
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       qdrant:
-        condition: service_started
+        condition: service_healthy
       minio:
         condition: service_healthy
       valkey:
@@ -222,10 +289,12 @@ services:
       <<: *backend-env
       PYTHONPATH: /app
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       qdrant:
-        condition: service_started
+        condition: service_healthy
       minio:
         condition: service_healthy
       valkey:
@@ -248,7 +317,7 @@ services:
       API_ORIGIN: ${API_ORIGIN:-http://localhost:1383}
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
     profiles: ["local"]
 
   console:
@@ -263,7 +332,7 @@ services:
       API_ORIGIN: ${API_ORIGIN:-http://localhost:1383}
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
     profiles: ["local"]
 
 volumes:

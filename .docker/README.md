@@ -1,13 +1,24 @@
-# Docker Configuration
+# Docker configuration
 
-Two compose entrypoints support public image-based deployments and local DX.
+two compose entrypoints support public image-based deployments and local DX.
 
-## Files
+## files
 
-- `docker-compose.yml` - public deployment stack. Pulls `:latest` images from GHCR and uses named volumes, so it can run without the source tree.
-- `docker-compose.local.yml` - DX-friendly stack with Compose profiles. Use `deps` for infrastructure only or `local` to build/run the full stack from source.
+- `docker-compose.yml` - public deployment stack. pulls `:latest` images from GHCR and uses named volumes, so it can run without the source tree.
+- `docker-compose.local.yml` - DX-friendly stack with Compose profiles. use `deps` for infrastructure only or `local` to build/run the full stack from source.
 
-## Usage
+## required services
+
+postgres and valkey/redis are both hard dependencies of the API, not optional accelerators.
+
+## usage
+
+the public deployment stack requires a few secrets to be present in the environment.
+supply them however your platform prefers: a shell export, a Portainer/NAS stack env field, or a `.env` file next to the compose:
+
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
+- `NOKODO__SECURITY__SECRET_KEY` (e.g. `python -c "import secrets; print(secrets.token_urlsafe(64))"`)
+- `NOKODO__SECURITY__CORS_ORIGINS`, `NOKODO__BRANDING__PUBLIC_FRONTEND_ORIGIN`
 
 ```bash
 cd .docker
@@ -24,4 +35,4 @@ docker compose up -d
 docker compose down
 ```
 
-See [../docs/setup.md](../docs/setup.md) for the complete instructions.
+see [../docs/setup.md](../docs/setup.md) for the complete instructions.
