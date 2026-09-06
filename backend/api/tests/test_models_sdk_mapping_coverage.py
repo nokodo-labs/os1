@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from api.models.message import Message, MessageType
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
 from nokodo_ai.messages import ToolMessage as SDKToolMessage
@@ -92,13 +95,17 @@ def test_message_to_sdk_tool_keeps_all_text_parts() -> None:
 	assert tool_sdk.tool_output == "firstsecond"
 
 
-def test_message_to_sdk_drops_invalid_historical_finish_reason() -> None:
+def test_message_to_sdk_rejects_an_unknown_finish_reason() -> None:
+	"""a stored value outside the enum is a bug, not something to paper over.
+
+	renames ship with a data migration, so nothing legitimate can produce one;
+	silently nulling it would only hide whoever wrote it.
+	"""
 	assistant = _make_message(msg_type=MessageType.ASSISTANT)
 	assistant.__dict__["finish_reason"] = "invalid"
 
-	assistant_sdk = assistant.to_sdk()
-	assert assistant_sdk.role == "assistant"
-	assert assistant_sdk.finish_reason is None
+	with pytest.raises(ValidationError):
+		assistant.to_sdk()
 
 
 def test_malformed_tool_call_keeps_its_id_so_its_result_stays_paired() -> None:

@@ -2088,10 +2088,15 @@ def test_google_maps_finish_reasons(
 
 
 def test_google_reads_the_enum_member_name() -> None:
-	"""the provider hands back an enum, not the bare wire string."""
-	from nokodo_ai.adapters.google import generate_content as gc
+	"""the provider hands back an enum, not the bare wire string.
 
-	assert gc._map_finish_reason(SimpleNamespace(name="MAX_TOKENS")) == "length"
+	its ``str()`` is the qualified member name, so mapping must read ``value``.
+	"""
+	from nokodo_ai.adapters.google import generate_content as gc
+	from nokodo_ai.adapters.google.types import GoogleFinishReason
+
+	assert str(GoogleFinishReason.MAX_TOKENS) != "MAX_TOKENS"
+	assert gc._map_finish_reason(GoogleFinishReason.MAX_TOKENS) == "length"
 
 
 @pytest.mark.parametrize(

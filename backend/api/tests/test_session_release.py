@@ -16,10 +16,13 @@ from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.hooks.base import Hook
 from api.v1.service.chat.session_release import releasing_session
+from api.v1.service.chat.tools.base import Tool
 from nokodo_ai.agents import AgentIterationSnapshot, AgentIterationState
 from nokodo_ai.chat_models import ChatModel
-from nokodo_ai.context import AgentContext
+from nokodo_ai.context import AgentContext, ToolCallContext
+from nokodo_ai.messages import ToolMessage
 from nokodo_ai.threads import Thread
+from nokodo_ai.types.json import JSONObject
 
 
 pytestmark = pytest.mark.asyncio
@@ -104,6 +107,78 @@ async def test_hook_releases_its_session_after_running() -> None:
 	app_context, session = _app_context()
 
 	await _Ok().execute(_state().snapshot(), _agent_context(), app_context)
+
+	session.close.assert_awaited_once()
+
+
+def _tool_call_context() -> ToolCallContext:
+	return ToolCallContext(tool_call_id="tc_release", tool_call_start_time=0.0)
+
+
+async def test_tool_releases_its_session_after_running() -> None:
+	class _Ok(Tool):
+		name: str = "ok"
+		description: str = "returns"
+		parameters: JSONObject = {}
+
+		async def run(
+			self,
+			__state__: AgentIterationSnapshot[AppContext],
+			__agent_context__: AgentContext,
+			__tool_call_context__: ToolCallContext,
+			__app_context__: AppContext | None,
+			**kwargs: object,
+		) -> ToolMessage:
+			_ = (__state__, __agent_context__, __app_context__, kwargs)
+			return self.success("done", __tool_call_context__)
+
+	app_context, session = _app_context()
+
+	await _Ok().call(
+		_state().snapshot(),
+		_agent_context(),
+		_tool_call_context(),
+		app_context,
+	)
+
+	session.close.assert_awaited_once()
+
+
+async def test_a_failing_tool_still_releases_and_keeps_its_own_error() -> None:
+	"""the SDK turns this into an error tool result; the release must not
+	replace what the tool actually raised on the way there."""
+
+	class _Boom(Tool):
+		name: str = "boom"
+		description: str = "raises"
+		parameters: JSONObject = {}
+
+		async def run(
+			self,
+			__state__: AgentIterationSnapshot[AppContext],
+			__agent_context__: AgentContext,
+			__tool_call_context__: ToolCallContext,
+			__app_context__: AppContext | None,
+			**kwargs: object,
+		) -> ToolMessage:
+			_ = (
+				__state__,
+				__agent_context__,
+				__tool_call_context__,
+				__app_context__,
+				kwargs,
+			)
+			raise RuntimeError("tool exploded")
+
+	app_context, session = _app_context()
+
+	with pytest.raises(RuntimeError, match="tool exploded"):
+		await _Boom().call(
+			_state().snapshot(),
+			_agent_context(),
+			_tool_call_context(),
+			app_context,
+		)
 
 	session.close.assert_awaited_once()
 

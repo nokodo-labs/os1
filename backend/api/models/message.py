@@ -44,8 +44,6 @@ _system_content_adapter: TypeAdapter[SDKSystemContentPart] = TypeAdapter(
 	SDKSystemContentPart
 )
 """validates stored parts into the text-only set a system message may hold."""
-_finish_reason_adapter: TypeAdapter[SDKFinishReason] = TypeAdapter(SDKFinishReason)
-"""validates a stored finish reason against the values the SDK defines."""
 
 
 if TYPE_CHECKING:
@@ -344,22 +342,11 @@ class AssistantMessage(Message):
 					},
 				)
 		usage = SDKUsage.model_validate(self.usage) if self.usage else None
-		finish_reason: SDKFinishReason | None = None
-		if self.finish_reason is not None:
-			try:
-				finish_reason = _finish_reason_adapter.validate_python(
-					self.finish_reason
-				)
-			except ValidationError:
-				logger.warning(
-					"dropping malformed finish reason",
-					extra={"message_id": str(self.id)},
-				)
 		return SDKAssistantMessage(
 			content=self._sdk_content(),
 			tool_calls=tool_calls,
 			usage=usage,
-			finish_reason=finish_reason,
+			finish_reason=self.finish_reason,
 			metadata=self._sdk_metadata(),
 		)
 

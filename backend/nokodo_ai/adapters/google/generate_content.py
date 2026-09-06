@@ -39,6 +39,7 @@ from .types import (
 	GoogleBlob,
 	GoogleContent,
 	GoogleContentUnion,
+	GoogleFinishReason,
 	GoogleFunctionCall,
 	GoogleFunctionCallingConfig,
 	GoogleFunctionDeclaration,
@@ -85,17 +86,15 @@ _FINISH_REASONS: dict[str, FinishReason] = {
 """google finish reasons, by the SDK reason each one means."""
 
 
-def _map_finish_reason(reason: object) -> FinishReason | None:
+def _map_finish_reason(reason: GoogleFinishReason | str | None) -> FinishReason | None:
 	"""translate google's finish reason; never guess at one we do not know.
 
-	the value arrives as a ``FinishReason`` enum whose member name is the wire
-	value, but plain strings come back from stubs and older payloads.
+	the provider's enum subclasses ``str``, but its ``str()`` is the qualified
+	member (``FinishReason.STOP``) rather than the wire value, so read ``value``.
 	"""
 	if reason is None:
 		return None
-	name = getattr(reason, "name", None)
-	if not isinstance(name, str):
-		name = str(reason)
+	name = reason.value if isinstance(reason, GoogleFinishReason) else reason
 	mapped = _FINISH_REASONS.get(name)
 	if mapped is None:
 		logger.debug("unmapped google finish reason: %s", name)

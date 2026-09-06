@@ -14,6 +14,9 @@ from google.genai.types import (
 	ContentUnion as GoogleContentUnion,
 )
 from google.genai.types import (
+	FinishReason as GoogleFinishReason,
+)
+from google.genai.types import (
 	FunctionCall as GoogleFunctionCall,
 )
 from google.genai.types import (
@@ -64,6 +67,7 @@ __all__ = [
 	"GoogleBlob",
 	"GoogleContent",
 	"GoogleContentUnion",
+	"GoogleFinishReason",
 	"GoogleFunctionCall",
 	"GoogleFunctionCallingConfig",
 	"GoogleFunctionDeclaration",
