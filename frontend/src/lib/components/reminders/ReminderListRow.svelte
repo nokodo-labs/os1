@@ -1,29 +1,18 @@
 <script lang="ts">
-	import CheckBox from '$lib/components/icons/CheckBox.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import SidebarListItem from '$lib/components/SidebarListItem.svelte'
 	import { device } from '$lib/stores/device.svelte'
-
-	type Leading =
-		| {
-				type: 'checkbox'
-		  }
-		| {
-				type: 'emoji'
-				emoji: string
-				color?: string | null
-		  }
 
 	interface Props {
 		title: string
 		subtitle?: string | null
 		count?: number | null
 		selected: boolean
-		leading: Leading
+		emoji: string
+		emojiColor?: string | null
 		onSelect: () => void
 		onPrefetch?: () => void
 		onMenu?: (event: MouseEvent) => void
-		rowIconBackground?: boolean
 	}
 
 	let {
@@ -31,11 +20,11 @@
 		subtitle = null,
 		count = null,
 		selected,
-		leading: leadingInfo,
+		emoji,
+		emojiColor = null,
 		onSelect,
 		onPrefetch,
 		onMenu,
-		rowIconBackground = false,
 	}: Props = $props()
 </script>
 
@@ -47,22 +36,12 @@
 	showChevron={true}
 >
 	{#snippet leading()}
-		{#if leadingInfo.type === 'checkbox'}
-			<span
-				class="rounded-pill text-foreground/80 flex h-8 w-8 items-center justify-center {rowIconBackground
-					? 'bg-foreground/8'
-					: ''}"
-			>
-				<CheckBox variant="solid" class="h-5 w-5" />
-			</span>
-		{:else}
-			<span
-				class="rounded-pill text-foreground flex h-8 w-8 items-center justify-center"
-				style:background-color={leadingInfo.color ?? 'rgba(255,255,255,0.08)'}
-			>
-				<span class="text-sm">{leadingInfo.emoji}</span>
-			</span>
-		{/if}
+		<span
+			class="rounded-pill text-foreground flex h-8 w-8 items-center justify-center"
+			style:background-color={emojiColor ?? 'rgba(255,255,255,0.08)'}
+		>
+			<span class="text-sm">{emoji}</span>
+		</span>
 	{/snippet}
 
 	<span class="flex min-w-0 flex-col">

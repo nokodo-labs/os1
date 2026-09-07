@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths'
+	import { contextmenu, type ContextMenuAnchor } from '$lib/attachments/contextmenu'
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
@@ -90,6 +91,7 @@
 
 	let menuOpen = $state(false)
 	let menuButtonEl: HTMLButtonElement | null = $state(null)
+	let menuAnchor = $state<ContextMenuAnchor | null>(null)
 	let showDeleteConfirm = $state(false)
 	const projectVisual = resourceVisual('project')
 	const ProjectIcon = projectVisual.icon
@@ -127,7 +129,14 @@
 	function handleMenuClick(event: MouseEvent) {
 		event.preventDefault()
 		event.stopPropagation()
+		menuAnchor = null
 		menuOpen = !menuOpen
+	}
+
+	/** right-click / hold anywhere on the card opens the same menu, at the gesture. */
+	function openMenuAt(anchor: ContextMenuAnchor): void {
+		menuAnchor = anchor
+		menuOpen = true
 	}
 
 	function handleClick(event: MouseEvent): void {
@@ -157,6 +166,7 @@
 <a
 	href={onclick ? undefined : resolve(`/projects/${resource.id}`)}
 	onclick={handleClick}
+	{@attach contextmenu({ onOpen: openMenuAt, disabled: !hasActions })}
 	class="group liquid-glass liquid-glass--frosted relative block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===
 	'list'
 		? 'flex items-center gap-4 px-5 py-4'
@@ -228,36 +238,35 @@
 				<PopupMenu
 					open={menuOpen}
 					anchorEl={menuButtonEl}
+					anchorPoint={menuAnchor}
 					onClose={() => (menuOpen = false)}
 				>
 					{#if onEdit && canEditProject}
 						<MenuItem
+							icon={InfoCircle}
 							onclick={() => {
 								menuOpen = false
 								onEdit()
 							}}
 						>
-							{#snippet icon()}<InfoCircle
-									variant="solid"
-									class="size-full"
-								/>{/snippet}
 							project properties
 						</MenuItem>
 					{/if}
 					{#if onShare}
 						<MenuItem
+							icon={Share}
 							onclick={() => {
 								menuOpen = false
 								onShare()
 							}}
 						>
-							{#snippet icon()}<Share class="size-full" />{/snippet}
 							share
 						</MenuItem>
 					{/if}
 					{#if onDelete && canDeleteProject}
 						<MenuItem
 							destructive
+							icon={Trash}
 							onclick={(e: MouseEvent) => {
 								e.preventDefault()
 								e.stopPropagation()
@@ -265,7 +274,6 @@
 								showDeleteConfirm = true
 							}}
 						>
-							{#snippet icon()}<Trash class="size-full" />{/snippet}
 							delete
 						</MenuItem>
 					{/if}
@@ -339,32 +347,38 @@
 			>
 				<EllipsisHorizontal class="size-5" />
 			</button>
-			<PopupMenu open={menuOpen} anchorEl={menuButtonEl} onClose={() => (menuOpen = false)}>
+			<PopupMenu
+				open={menuOpen}
+				anchorEl={menuButtonEl}
+				anchorPoint={menuAnchor}
+				onClose={() => (menuOpen = false)}
+			>
 				{#if onEdit && canEditProject}
 					<MenuItem
+						icon={InfoCircle}
 						onclick={() => {
 							menuOpen = false
 							onEdit()
 						}}
 					>
-						{#snippet icon()}<InfoCircle variant="solid" class="size-full" />{/snippet}
 						project properties
 					</MenuItem>
 				{/if}
 				{#if onShare}
 					<MenuItem
+						icon={Share}
 						onclick={() => {
 							menuOpen = false
 							onShare()
 						}}
 					>
-						{#snippet icon()}<Share class="size-full" />{/snippet}
 						share
 					</MenuItem>
 				{/if}
 				{#if onDelete && canDeleteProject}
 					<MenuItem
 						destructive
+						icon={Trash}
 						onclick={(e: MouseEvent) => {
 							e.preventDefault()
 							e.stopPropagation()
@@ -372,7 +386,6 @@
 							showDeleteConfirm = true
 						}}
 					>
-						{#snippet icon()}<Trash class="size-full" />{/snippet}
 						delete
 					</MenuItem>
 				{/if}

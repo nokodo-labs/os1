@@ -8,20 +8,22 @@
 	} from '$lib/api/streaming'
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
-	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ResourcesView from '$lib/components/ResourcesView.svelte'
 	import type { ResourceItem, ResourceLayoutMode } from '$lib/components/widgets/types'
-	import { searchResultToResource } from '$lib/resources/searchResults'
+	import { searchProjectResources } from '$lib/resources/projectSearch'
+	import { resourceItemKey, searchResultToResource } from '$lib/resources/searchResults'
 	import { modals } from '$lib/stores/modals.svelte'
+	import { projects } from '$lib/stores/projects.svelte'
 	import { SvelteSet } from 'svelte/reactivity'
-	import { fade } from 'svelte/transition'
 
 	interface Props {
 		query: string
 		types?: SearchResourceType[]
+		/** search inside one project instead of everything (threads + notes). */
+		projectId?: string | null
 	}
 
-	let { query, types = SEARCH_RESOURCE_TYPES }: Props = $props()
+	let { query, types = SEARCH_RESOURCE_TYPES, projectId = null }: Props = $props()
 
 	let loading = $state(false)
 	let error = $state(false)
@@ -32,6 +34,12 @@
 
 	const trimmedQuery = $derived(query.trim())
 	const effectiveTypes = $derived(types.length > 0 ? types : SEARCH_RESOURCE_TYPES)
+	// a scoped search looks like a global one otherwise, so name the scope
+	const scopeName = $derived(projectId ? (projects.getById(projectId)?.name ?? null) : null)
+
+	$effect(() => {
+		if (projectId) void projects.load()
+	})
 
 	async function runHybridSearch(
 		searchQuery: string,
@@ -51,7 +59,7 @@
 			})) {
 				if (signal.aborted) break
 				const resource = searchResultToResource(result)
-				const key = `${resource.type}:${resource.id}`
+				const key = resourceItemKey(resource)
 				if (seen.has(key)) continue
 				seen.add(key)
 				nextResults.push(resource)
@@ -64,7 +72,34 @@
 		}
 	}
 
-	function scheduleSearch(searchQuery: string, selectedTypes: SearchResourceType[]): void {
+	/** scoped search is a plain fetch: the per-resource endpoints do not stream. */
+	async function runProjectSearch(
+		searchQuery: string,
+		selectedTypes: SearchResourceType[],
+		scopeProjectId: string,
+		signal: AbortSignal
+	): Promise<void> {
+		error = false
+		try {
+			const scoped = await searchProjectResources({
+				query: searchQuery,
+				projectId: scopeProjectId,
+				types: selectedTypes,
+				signal,
+			})
+			if (!signal.aborted) results = scoped
+		} catch {
+			if (!signal.aborted) error = true
+		} finally {
+			if (!signal.aborted) loading = false
+		}
+	}
+
+	function scheduleSearch(
+		searchQuery: string,
+		selectedTypes: SearchResourceType[],
+		scopeProjectId: string | null
+	): void {
 		if (debounceTimer !== null) {
 			window.clearTimeout(debounceTimer)
 			debounceTimer = null
@@ -85,12 +120,16 @@
 		abortController = controller
 		debounceTimer = window.setTimeout(() => {
 			debounceTimer = null
+			if (scopeProjectId) {
+				void runProjectSearch(searchQuery, selectedTypes, scopeProjectId, controller.signal)
+				return
+			}
 			void runHybridSearch(searchQuery, selectedTypes, controller.signal)
 		}, 180) as unknown as number
 	}
 
 	$effect(() => {
-		scheduleSearch(trimmedQuery, effectiveTypes)
+		scheduleSearch(trimmedQuery, effectiveTypes, projectId)
 	})
 
 	function openResult(resource: ResourceItem): void {
@@ -98,24 +137,34 @@
 			case 'file':
 				modals.open('file-details', { fileId: resource.id })
 				return
-			case 'thread':
-				void goto(resolve(`/c/${resource.id}`))
+			case 'thread': {
+				void goto(
+					resource.anchor?.type === 'message'
+						? resolve(`/c/${resource.id}?message=${resource.anchor.id}`)
+						: resolve(`/c/${resource.id}`)
+				)
 				return
+			}
 			case 'note':
 				void goto(resolve(`/notes/${resource.id}`))
 				return
 			case 'reminder':
-				if (resource.parent?.type === 'reminder_list') {
-					void goto(resolve('/reminders/lists/[listId]', { listId: resource.parent.id }))
-				}
 				return
 			case 'reminder_list':
-				void goto(resolve(`/reminders/lists/${resource.id}`))
+				void goto(
+					resource.anchor?.type === 'reminder'
+						? resolve(`/reminders/lists/${resource.id}?reminder=${resource.anchor.id}`)
+						: resolve('/reminders/lists/[listId]', { listId: resource.id })
+				)
 				return
 			case 'calendar_event':
 				return
 			case 'calendar':
-				void goto(resolve('/calendar'))
+				void goto(
+					resource.anchor?.type === 'calendar_event'
+						? resolve(`/calendar?event=${resource.anchor.id}&calendar=${resource.id}`)
+						: resolve('/calendar')
+				)
 				return
 			case 'project':
 				void goto(resolve(`/projects/${resource.id}`))
@@ -128,18 +177,13 @@
 	<EmptyState label="search failed" class="min-h-[45vh]" compact>
 		{#snippet icon()}<Search class="size-5" strokeWidth="2" />{/snippet}
 	</EmptyState>
-{:else if loading && results.length === 0}
-	<div
-		class="pointer-events-none absolute inset-0 flex items-center justify-center"
-		in:fade={{ duration: 120 }}
-		out:fade={{ duration: 260 }}
-	>
-		<NokodoLoader className="text-foreground/65 text-sm font-semibold" />
-	</div>
 {:else}
+	{#if scopeName}
+		<p class="text-foreground/50 px-1 pb-2 text-xs">in {scopeName}</p>
+	{/if}
 	<ResourcesView
 		resources={results}
-		loading={false}
+		loading={loading && results.length === 0}
 		bind:layout
 		listVariant="pill"
 		sort="none"

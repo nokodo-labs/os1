@@ -7,7 +7,7 @@
 	import CreateProjectModal from '$lib/components/modals/CreateProjectModal.svelte'
 	import ProjectPropertiesModal from '$lib/components/modals/ProjectPropertiesModal.svelte'
 	import PageTitle from '$lib/components/PageTitle.svelte'
-	import { MenuItem, PopupMenu } from '$lib/components/primitives'
+	import { MenuItem, MenuSectionHeader, PopupMenu } from '$lib/components/primitives'
 	import ResourcesView from '$lib/components/ResourcesView.svelte'
 	import type { ResourceItem, ResourceLayoutMode } from '$lib/components/widgets'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
@@ -147,12 +147,7 @@
 		onClose={closeSortMenu}
 		class="min-w-52"
 	>
-		<div
-			class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
-		>
-			<SortIcon class="h-3.5 w-3.5" />
-			sort projects
-		</div>
+		<MenuSectionHeader icon={SortIcon}>sort projects</MenuSectionHeader>
 		{#each sortOptions as option (option.value)}
 			<MenuItem
 				selected={sort === option.value}
@@ -161,7 +156,10 @@
 					closeSortMenu()
 				}}
 			>
-				{#snippet icon()}<SortIcon value={option.value} class="h-4 w-4" />{/snippet}
+				{#snippet iconSnippet()}<SortIcon
+						value={option.value}
+						class="size-full"
+					/>{/snippet}
 				{option.label}
 			</MenuItem>
 		{/each}

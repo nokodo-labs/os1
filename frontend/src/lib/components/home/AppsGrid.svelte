@@ -2,13 +2,13 @@
 	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import { passiveWheel } from '$lib/attachments/wheel'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import Bolt from '$lib/components/icons/Bolt.svelte'
 	import Bookmark from '$lib/components/icons/Bookmark.svelte'
 	import Cloud from '$lib/components/icons/Cloud.svelte'
 	import CommandLine from '$lib/components/icons/CommandLine.svelte'
 	import Database from '$lib/components/icons/Database.svelte'
-	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
 	import Heart from '$lib/components/icons/Heart.svelte'
 	import Map from '$lib/components/icons/Map.svelte'
 	import Photo from '$lib/components/icons/Photo.svelte'
@@ -17,7 +17,7 @@
 	import Users from '$lib/components/icons/Users.svelte'
 	import { accentColors, type AccentColorKey } from '$lib/contexts/themeContext.svelte'
 	import { appVisuals, type ResourceIconComponent } from '$lib/resources/resourceVisuals'
-	import { appNavigation } from '$lib/stores/appNavigation.svelte'
+	import { appNavigation, type AppId } from '$lib/stores/appNavigation.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { onDestroy, tick } from 'svelte'
@@ -49,16 +49,42 @@
 				await goto(resolve('/library'))
 				return
 			}
-			await goto(resolve(appNavigation.getEntryRoute(app.id)))
+			await openApp(app.id)
 		},
 	}))
+
+	/**
+	 * `resolve()` is overloaded per route, so it takes one app's routes but not the union
+	 * of every app's - which is all an app id carries. each app resolves its own.
+	 */
+	async function openApp(id: AppId): Promise<void> {
+		switch (id) {
+			case 'settings':
+				return goto(resolve(appNavigation.getEntryRoute('settings')))
+			case 'notes':
+				return goto(resolve(appNavigation.getEntryRoute('notes')))
+			case 'reminders':
+				return goto(resolve(appNavigation.getEntryRoute('reminders')))
+			case 'calendar':
+				return goto(resolve(appNavigation.getEntryRoute('calendar')))
+			case 'messages':
+				return goto(resolve(appNavigation.getEntryRoute('messages')))
+			case 'web':
+				return goto(resolve(appNavigation.getEntryRoute('web')))
+			case 'media':
+				return goto(resolve(appNavigation.getEntryRoute('media')))
+			case 'social':
+				return goto(resolve(appNavigation.getEntryRoute('social')))
+			case 'projects':
+				return goto(resolve(appNavigation.getEntryRoute('projects')))
+		}
+	}
 
 	const debugApps: AppDefinition[] = [
 		{ id: 'bookmarks', title: 'bookmarks', icon: Bookmark },
 		{ id: 'automations', title: 'automations', icon: Bolt },
 		{ id: 'cloud', title: 'cloud', icon: Cloud },
 		{ id: 'database', title: 'database', icon: Database },
-		{ id: 'world', title: 'world', icon: GlobeAlt },
 		{ id: 'photos', title: 'photos', icon: Photo },
 		{ id: 'maps', title: 'maps', icon: Map },
 		{ id: 'spark', title: 'spark', icon: Sparkles },
@@ -224,20 +250,6 @@
 		}
 	}
 
-	function passiveWheel(node: HTMLElement, handler: (event: WheelEvent) => void) {
-		let currentHandler = handler
-		const listener = (event: WheelEvent) => currentHandler(event)
-		node.addEventListener('wheel', listener, { passive: true })
-		return {
-			update(nextHandler: (event: WheelEvent) => void) {
-				currentHandler = nextHandler
-			},
-			destroy() {
-				node.removeEventListener('wheel', listener)
-			},
-		}
-	}
-
 	function syncPageFromScroll() {
 		if (!scrollerEl) return
 		const width = scrollerEl.clientWidth
@@ -297,13 +309,14 @@
 	<!-- scroller takes all available space -->
 	<div
 		bind:this={scrollerEl}
-		class="no-scrollbar relative flex min-h-0 w-full flex-1 snap-x snap-mandatory overflow-x-auto overscroll-x-contain select-none"
+		class="no-scrollbar relative flex min-h-0 w-full flex-1 snap-x snap-mandatory overflow-x-auto overscroll-x-contain"
 		style="touch-action: pan-x; -webkit-overflow-scrolling: touch; padding-block: {hoverBleedPx}px;"
 		onscroll={syncPageFromScroll}
-		use:passiveWheel={onScrollerWheel}
+		{@attach passiveWheel(onScrollerWheel)}
 	>
 		{#each pages as pageApps, pageIndex (pageIndex)}
-			<div class="w-full shrink-0 snap-center overflow-visible">
+			<!-- snap-always: a hard flick lands on the next page, never past it -->
+			<div class="w-full shrink-0 snap-center snap-always overflow-visible">
 				<div
 					class="grid w-full justify-center overflow-visible"
 					style="grid-template-columns: repeat({cols}, {tilePx}px); column-gap: {gridGapXPx}px; row-gap: {gridGapYPx}px; padding-left: {gridSidePaddingPx}px; padding-right: {gridSidePaddingPx}px;"

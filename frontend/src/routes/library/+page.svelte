@@ -12,7 +12,12 @@
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import PageTitle from '$lib/components/PageTitle.svelte'
-	import { MenuItem, PopupMenu } from '$lib/components/primitives'
+	import {
+		MenuItem,
+		MenuSectionHeader,
+		MenuSeparator,
+		PopupMenu,
+	} from '$lib/components/primitives'
 	import ResourcesView from '$lib/components/ResourcesView.svelte'
 	import type {
 		ResourceItem,
@@ -84,21 +89,21 @@
 	const sourceOptions = $derived([
 		{ value: 'all' as const, label: 'all sources', count: totalFileCount, icon: Clip },
 		{
-			value: 'upload' as const,
+			value: 'user_uploaded' as const,
 			label: 'uploads',
-			count: fileCounts.by_source?.upload ?? 0,
+			count: fileCounts.by_source?.user_uploaded ?? 0,
 			icon: ArrowUpTray,
 		},
 		{
-			value: 'generated' as const,
+			value: 'agent_generated' as const,
 			label: 'generated',
-			count: fileCounts.by_source?.generated ?? 0,
+			count: fileCounts.by_source?.agent_generated ?? 0,
 			icon: Sparkles,
 		},
 		{
-			value: 'import' as const,
+			value: 'user_imported' as const,
 			label: 'imports',
-			count: fileCounts.by_source?.import ?? 0,
+			count: fileCounts.by_source?.user_imported ?? 0,
 			icon: DocumentArrowDown,
 		},
 	])
@@ -273,7 +278,7 @@
 		aria-haspopup="menu"
 		aria-expanded={isFilterMenuOpen}
 	>
-		<Funnel variant="solid" />
+		<Funnel variant={activeFilterCount > 0 ? 'solid' : 'outline'} />
 		{#if activeFilterCount > 0}
 			<span
 				class="bg-foreground text-background absolute -top-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full text-[9px] leading-none font-semibold"
@@ -289,42 +294,27 @@
 		onClose={closeFilterMenu}
 		class="min-w-64"
 	>
-		<div
-			class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
-		>
-			<Funnel class="h-3.5 w-3.5" variant="solid" />
-			filter files
-		</div>
-		<div class="text-foreground/45 px-3 pt-1 pb-1 text-[11px] font-semibold uppercase">
-			type
-		</div>
+		<MenuSectionHeader icon={Funnel}>filter files</MenuSectionHeader>
+		<MenuSectionHeader>type</MenuSectionHeader>
 		{#each categoryOptions as option (option.value)}
 			<MenuItem
+				icon={option.icon}
 				selected={categoryFilter === option.value}
 				onclick={() => (categoryFilter = option.value)}
 			>
-				{#snippet icon()}
-					{@const OptionIcon = option.icon}
-					<OptionIcon class="size-full" />
-				{/snippet}
 				{option.label}
 				{#snippet trailing()}
 					<span class="text-foreground/45 text-xs tabular-nums">{option.count}</span>
 				{/snippet}
 			</MenuItem>
 		{/each}
-		<div class="text-foreground/45 px-3 pt-3 pb-1 text-[11px] font-semibold uppercase">
-			source
-		</div>
+		<MenuSectionHeader>source</MenuSectionHeader>
 		{#each sourceOptions as option (option.value)}
 			<MenuItem
+				icon={option.icon}
 				selected={sourceFilter === option.value}
 				onclick={() => (sourceFilter = option.value)}
 			>
-				{#snippet icon()}
-					{@const OptionIcon = option.icon}
-					<OptionIcon class="size-full" />
-				{/snippet}
 				{option.label}
 				{#snippet trailing()}
 					<span class="text-foreground/45 text-xs tabular-nums">{option.count}</span>
@@ -332,14 +322,14 @@
 			</MenuItem>
 		{/each}
 		{#if activeFilterCount > 0}
-			<div class="bg-foreground/8 my-2 h-px"></div>
+			<MenuSeparator />
 			<MenuItem
+				icon={XMark}
 				onclick={() => {
 					categoryFilter = 'all'
 					sourceFilter = 'all'
 				}}
 			>
-				{#snippet icon()}<XMark class="size-full" />{/snippet}
 				clear filters
 			</MenuItem>
 		{/if}
@@ -361,12 +351,7 @@
 		onClose={closeSortMenu}
 		class="min-w-52"
 	>
-		<div
-			class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
-		>
-			<SortIcon class="h-3.5 w-3.5" />
-			sort files
-		</div>
+		<MenuSectionHeader icon={SortIcon}>sort files</MenuSectionHeader>
 		{#each sortOptions as option (option.value)}
 			<MenuItem
 				selected={sort === option.value}
@@ -375,7 +360,10 @@
 					closeSortMenu()
 				}}
 			>
-				{#snippet icon()}<SortIcon value={option.value} class="h-4 w-4" />{/snippet}
+				{#snippet iconSnippet()}<SortIcon
+						value={option.value}
+						class="size-full"
+					/>{/snippet}
 				{option.label}
 			</MenuItem>
 		{/each}

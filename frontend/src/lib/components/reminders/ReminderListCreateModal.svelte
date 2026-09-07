@@ -1,8 +1,9 @@
 <script lang="ts">
-	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
-	import Check from '$lib/components/icons/Check.svelte'
 	import Info from '$lib/components/icons/Info.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import { ModalFormDirty } from '$lib/components/modals/formDirty.svelte'
+	import ModalActions from '$lib/components/modals/ModalActions.svelte'
+	import ModalSaveButton from '$lib/components/modals/ModalSaveButton.svelte'
 	import { Switch } from '$lib/components/primitives'
 	import {
 		maxLengthError,
@@ -35,6 +36,7 @@
 	const reminderVisual = resourceVisual('reminder_list')
 	const ReminderIcon = reminderVisual.icon
 	const reminderAccentStyle = resourceAccentStyle('reminder_list')
+	const form = new ModalFormDirty(() => ({ name, description, icon, color, isDefault }))
 
 	$effect(() => {
 		if (!open) return
@@ -45,6 +47,7 @@
 		isDefault = false
 		isSaving = false
 		error = null
+		form.reset()
 	})
 
 	function displayName(value: string): string {
@@ -72,7 +75,7 @@
 	}
 
 	async function save(): Promise<void> {
-		if (isSaving) return
+		if (isSaving || !form.dirty) return
 		const trimmedName = name.trim()
 		const validationError = validateDraft(trimmedName)
 		if (validationError) {
@@ -111,8 +114,6 @@
 	const fieldClass = `${panelClass} grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 rounded-[16px] border p-3`
 	const inputClass =
 		'border-foreground/12 bg-foreground/4 text-foreground/90 placeholder:text-foreground/35 min-h-10 w-full min-w-0 rounded-xl border px-3 py-2 outline-none transition-colors duration-150 focus:border-[color-mix(in_oklch,var(--accent-primary)_48%,transparent)] focus:bg-foreground/6 disabled:cursor-not-allowed disabled:opacity-55'
-	const actionButtonClass =
-		'rounded-pill inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55'
 </script>
 
 <BaseModal
@@ -258,16 +259,14 @@
 			<p class="text-destructive text-sm">{error}</p>
 		{/if}
 
-		<div class="flex justify-end gap-2 pt-1">
-			<button
-				type="submit"
-				class="{actionButtonClass} bg-(--accent-primary) text-white hover:brightness-[1.06]"
-				disabled={isSaving || !name.trim()}
-			>
-				<Check class="h-4 w-4" />
-				{#if isSaving}<ShimmerText className="inline-block">creating</ShimmerText
-					>{:else}<span>create</span>{/if}
-			</button>
-		</div>
+		<ModalActions class="pt-1">
+			<ModalSaveButton
+				dirty={form.dirty}
+				saving={isSaving}
+				blockedReason={name.trim() ? null : 'name is required'}
+				label="create"
+				savingLabel="creating"
+			/>
+		</ModalActions>
 	</form>
 </BaseModal>

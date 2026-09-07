@@ -271,9 +271,13 @@
 	}
 </script>
 
+<!-- read-only tiptap renders contenteditable="false", which the global
+     select rule excludes, so opt the text back in here -->
 <div
 	bind:this={editorElement}
-	class="shared-editor prose prose-invert h-full max-w-none {className}"
+	class="shared-editor prose prose-invert h-full max-w-none {editable
+		? ''
+		: 'select-text'} {className}"
 ></div>
 
 <style>

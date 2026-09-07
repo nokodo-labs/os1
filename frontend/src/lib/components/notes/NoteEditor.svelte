@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { wheelToHScroll } from '$lib/attachments/wheel'
 	import type { DocParticipant } from '$lib/collaboration'
 	import SharedEditor from '$lib/components/editor/SharedEditor.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
@@ -25,8 +26,7 @@
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import Strikethrough from '$lib/components/icons/Strikethrough.svelte'
 	import Underline from '$lib/components/icons/Underline.svelte'
-	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
-	import { PopupMenu, Switch } from '$lib/components/primitives'
+	import { MenuSeparator, PopupMenu, Skeleton, Switch } from '$lib/components/primitives'
 	import MenuItem from '$lib/components/primitives/MenuItem.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import type { ResourceProjectOption } from '$lib/components/widgets/ResourceProjectsMenu.svelte'
@@ -324,17 +324,6 @@
 			if (sid) currentSessionId = sid
 		}
 	}
-
-	// non-passive wheel handler: allows preventDefault for horizontal scroll redirect
-	function wheelToHScroll(node: HTMLElement): { destroy: () => void } {
-		function handler(event: WheelEvent): void {
-			if (event.deltaY === 0) return
-			event.preventDefault()
-			node.scrollLeft += event.deltaY
-		}
-		node.addEventListener('wheel', handler, { passive: false })
-		return { destroy: () => node.removeEventListener('wheel', handler) }
-	}
 </script>
 
 {#snippet islandContextActions()}
@@ -384,27 +373,24 @@
 		</button>
 		<PopupMenu open={menuOpen} anchorEl={menuButtonEl} onClose={() => (menuOpen = false)}>
 			{#if canEditNote}
-				<MenuItem onclick={() => void handleEnhance()} disabled={isEnhancing}>
-					{#snippet icon()}<Sparkles class="h-4 w-4" />{/snippet}
+				<MenuItem
+					icon={Sparkles}
+					onclick={() => void handleEnhance()}
+					disabled={isEnhancing}
+				>
 					{#if isEnhancing}<ShimmerText className="inline-block">enhancing</ShimmerText
 						>{:else}enhance{/if}
 				</MenuItem>
-				<div class="bg-foreground/10 my-1 h-px w-full"></div>
-				<button
-					type="button"
+				<MenuSeparator />
+				<MenuItem
 					role="menuitemcheckbox"
 					aria-checked={isRawMode}
-					class="rounded-pill text-foreground/85 hover:bg-foreground/10 hover:text-foreground flex w-full cursor-pointer items-center gap-3 border-none bg-transparent px-3 py-2 text-left text-sm transition-all duration-150"
+					icon={Code}
 					onclick={() => setRawMode(!isRawMode)}
 				>
-					<span
-						class="flex h-5 w-5 shrink-0 items-center justify-center *:h-full *:w-full"
-					>
-						<Code class="h-4 w-4" />
-					</span>
-					<span class="flex-1 truncate">markdown mode</span>
-					<Switch size="sm" checked={isRawMode} />
-				</button>
+					markdown mode
+					{#snippet trailing()}<Switch size="sm" checked={isRawMode} />{/snippet}
+				</MenuItem>
 				{#if note}
 					<ResourceProjectsMenu
 						projectOptions={manageableProjectOptions}
@@ -414,18 +400,12 @@
 				{/if}
 			{/if}
 			{#if device.isMobile}
-				<div class="bg-foreground/10 my-1 h-px w-full"></div>
+				<MenuSeparator />
 				{#if note}
-					<MenuItem onclick={handleShare}>
-						{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
-						share
-					</MenuItem>
+					<MenuItem icon={Share} onclick={handleShare}>share</MenuItem>
 				{/if}
 				{#if canEditNote}
-					<MenuItem onclick={handleProperties}>
-						{#snippet icon()}<InfoCircle variant="solid" class="h-4 w-4" />{/snippet}
-						properties
-					</MenuItem>
+					<MenuItem icon={InfoCircle} onclick={handleProperties}>properties</MenuItem>
 				{/if}
 			{/if}
 		</PopupMenu>
@@ -434,8 +414,16 @@
 
 {#if !note}
 	{#if !notes.hydrated}
-		<div class="flex flex-1 items-center justify-center">
-			<NokodoLoader className="opacity-70" expanded={false} />
+		<div class="flex w-full flex-1 flex-col">
+			<div
+				class="rounded-container liquid-glass liquid-glass--frosted flex flex-col gap-3 px-5 py-5 pb-6"
+			>
+				<Skeleton shape="pill" width="55%" height="2rem" />
+				<Skeleton shape="lines" lines={1} width="16rem" />
+			</div>
+			<div class="flex flex-col gap-4 px-3.5 pt-4 pb-6">
+				<Skeleton shape="lines" count={2} lines={4} />
+			</div>
 		</div>
 	{:else}
 		<EmptyState label="note not found" class="flex-1" />
@@ -456,7 +444,7 @@
 			</div>
 
 			<!-- meta row -->
-			<div class="flex w-full scrollbar-none overflow-x-auto" use:wheelToHScroll>
+			<div class="flex w-full scrollbar-none overflow-x-auto" {@attach wheelToHScroll()}>
 				<div class="text-foreground/55 flex w-fit items-center gap-1 text-xs font-medium">
 					<div class="flex w-fit min-w-fit items-center gap-1 px-0.5 py-1">
 						<Calendar class="h-3.5 w-3.5" strokeWidth="2" />
@@ -490,7 +478,7 @@
 			{#if peers.length > 0}
 				<div
 					class="mt-3 flex scrollbar-none items-center gap-3 overflow-x-auto pt-2"
-					use:wheelToHScroll
+					{@attach wheelToHScroll()}
 				>
 					{#each peers as peer, idx (peer.sessionId + ':' + idx)}
 						{@const name = peer.userName || 'user'}
@@ -529,7 +517,7 @@
 			>
 				<div
 					class="border-foreground/10 mt-3 flex scrollbar-none items-center justify-between overflow-x-auto border-t pt-3"
-					use:wheelToHScroll
+					{@attach wheelToHScroll()}
 				>
 					<div class="flex min-w-fit items-center gap-0.5">
 						<button

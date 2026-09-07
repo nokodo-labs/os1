@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { contextmenu, type ContextMenuAnchor } from '$lib/attachments/contextmenu'
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ArrowPath from '$lib/components/icons/ArrowPath.svelte'
@@ -12,8 +13,14 @@
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
-	import { MenuItem, PopupMenu } from '$lib/components/primitives'
+	import {
+		MenuItem,
+		MenuSectionHeader,
+		MenuSeparator,
+		PopupMenu,
+	} from '$lib/components/primitives'
 	import RecurrenceEditor from '$lib/components/scheduling/RecurrenceEditor.svelte'
+	import { reminderAnchor } from '$lib/reminders/reminderFocus'
 	import { maxLengthError, REMINDER_TITLE_MAX_LENGTH } from '$lib/reminders/validation'
 	import { device } from '$lib/stores/device.svelte'
 	import type {
@@ -44,6 +51,8 @@
 		editable?: boolean
 		depth?: number
 		isDragging?: boolean
+		/** px lift applied while a touch drag carries the row; null for pointer/mouse drags. */
+		dragOffsetY?: number | null
 		dropTarget?: 'before' | 'after' | 'child' | null
 		onDragStart?: (event: DragEvent) => void
 		onDragOver?: (event: DragEvent) => void
@@ -78,6 +87,7 @@
 	let repeatButtonEl: HTMLButtonElement | null = $state(null)
 
 	let isMenuOpen = $state(false)
+	let menuAnchor = $state<ContextMenuAnchor | null>(null)
 	let isDatePickerOpen = $state(false)
 	let isRepeatMenuOpen = $state(false)
 	let isSaving = $state(false)
@@ -109,11 +119,24 @@
 		return props.reminder.description?.trim() || null
 	})
 	const depth = $derived(props.kind === 'edit' ? Math.min(props.depth ?? 0, 5) : 0)
+	const liftY = $derived(props.kind === 'edit' ? (props.dragOffsetY ?? null) : null)
 	const rowStyle = $derived.by(() => {
 		const styles: string[] = []
 		if (props.motionDelayMs) styles.push(`--reminder-motion-delay-ms: ${props.motionDelayMs}ms`)
 		if (depth > 0) styles.push(`margin-left: min(${depth * 1.25}rem, 5rem)`)
+		if (liftY !== null) styles.push(`transform: translate3d(0, ${liftY}px, 0)`)
 		return styles.length > 0 ? `${styles.join('; ')};` : undefined
+	})
+
+	/**
+	 * a mouse drag is painted by the browser's own drag image, so the source row is
+	 * dimmed. a touch drag has no drag image: the row itself is lifted and must stay
+	 * fully visible.
+	 */
+	const dragClass = $derived.by(() => {
+		if (props.kind !== 'edit') return ''
+		if (liftY !== null) return 'is-lifted'
+		return props.isDragging ? 'opacity-45' : ''
 	})
 
 	function formatScheduleDateTime(iso: string): string {
@@ -440,6 +463,14 @@
 
 <div
 	bind:this={rootEl}
+	{@attach contextmenu({
+		onOpen: (anchor) => {
+			menuAnchor = anchor
+			isMenuOpen = true
+		},
+		disabled: props.kind !== 'edit' || !isEditable,
+	})}
+	{@attach reminderAnchor(props.kind === 'edit' ? props.reminder.id : null)}
 	data-reminder-row
 	data-reminder-id={props.kind === 'edit' ? props.reminder.id : undefined}
 	data-reminder-draft={props.kind === 'create' ? 'true' : undefined}
@@ -454,7 +485,7 @@
 		? 'is-out is-out-complete'
 		: ''} {isMotionOutUncomplete ? 'is-out is-out-uncomplete' : ''} {isMorphPlus
 		? 'morph-plus'
-		: ''} {props.kind === 'edit' && props.isDragging ? 'opacity-45' : ''}"
+		: ''} {dragClass}"
 	onclick={handleRowClick}
 	onkeydown={handleRowKeyDown}
 	ondragover={props.kind === 'edit' ? props.onDragOver : undefined}
@@ -558,6 +589,7 @@
 						: 'opacity-0 group-hover:opacity-100'}"
 					onclick={(event) => {
 						event.stopPropagation()
+						menuAnchor = null
 						isMenuOpen = !isMenuOpen
 					}}
 					aria-label="reminder actions"
@@ -617,7 +649,7 @@
 								isRepeatMenuOpen = !isRepeatMenuOpen
 							}}
 						>
-							<ArrowPath class="h-3.5 w-3.5" />
+							<ArrowPath variant="solid" class="h-3.5 w-3.5" />
 							<span>{recurrenceLabel ?? 'repeat'}</span>
 						</button>
 					{:else}
@@ -635,7 +667,7 @@
 							class="rounded-pill border-foreground/14 bg-foreground/4 text-foreground/55 hover:bg-foreground/8 flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs transition-colors"
 							disabled
 						>
-							<ArrowPath class="h-3.5 w-3.5" />
+							<ArrowPath variant="solid" class="h-3.5 w-3.5" />
 							<span>repeat</span>
 						</button>
 					{/if}
@@ -686,7 +718,7 @@
 						<span
 							class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/60 inline-flex min-w-0 items-center gap-1.5 border px-2 py-1 text-xs"
 						>
-							<Bell class="h-3.5 w-3.5 shrink-0" />
+							<Bell variant="solid" class="h-3.5 w-3.5 shrink-0" />
 							{formattedRemindAt}
 						</span>
 					{/if}
@@ -694,7 +726,7 @@
 						<span
 							class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/60 inline-flex min-w-0 items-center gap-1.5 border px-2 py-1 text-xs"
 						>
-							<ArrowPath class="h-3.5 w-3.5 shrink-0" />
+							<ArrowPath variant="solid" class="h-3.5 w-3.5 shrink-0" />
 							{recurrenceLabel}
 						</span>
 					{/if}
@@ -704,14 +736,14 @@
 	{/if}
 
 	{#if props.kind === 'edit'}
-		<PopupMenu open={isMenuOpen} anchorEl={menuButtonEl} onClose={() => (isMenuOpen = false)}>
-			<div
-				class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
-			>
-				<ListBullet class="h-3.5 w-3.5" />
-				move to
-			</div>
-			<div class="max-h-44 overflow-auto">
+		<PopupMenu
+			open={isMenuOpen}
+			anchorEl={menuButtonEl}
+			anchorPoint={menuAnchor}
+			onClose={() => (isMenuOpen = false)}
+		>
+			<MenuSectionHeader icon={ListBullet}>move to</MenuSectionHeader>
+			<div class="flex max-h-44 flex-col overflow-auto">
 				{#each props.availableLists as list (list.id)}
 					<MenuItem
 						selected={props.reminder.list_id === list.id}
@@ -721,7 +753,7 @@
 							void props.onMove(list.id)
 						}}
 					>
-						{#snippet icon()}
+						{#snippet iconSnippet()}
 							<span
 								class="rounded-pill flex h-4 w-4 items-center justify-center"
 								style:background-color={list.color ?? 'rgba(255,255,255,0.1)'}
@@ -734,22 +766,20 @@
 				{/each}
 			</div>
 
-			<div class="bg-foreground/10 my-1 h-px w-full"></div>
-			<div class="mt-1">
-				<DeleteButton
-					confirm={true}
-					stopPropagation={true}
-					onTrigger={() => (isMenuOpen = false)}
-					modalText={{
-						title: 'delete reminder?',
-						description: props.kind === 'edit' ? props.reminder.title : '',
-					}}
-					onDelete={() => {
-						if (props.kind !== 'edit') return true
-						return props.onDelete()
-					}}
-				/>
-			</div>
+			<MenuSeparator />
+			<DeleteButton
+				confirm={true}
+				stopPropagation={true}
+				onTrigger={() => (isMenuOpen = false)}
+				modalText={{
+					title: 'delete reminder?',
+					description: props.kind === 'edit' ? props.reminder.title : '',
+				}}
+				onDelete={() => {
+					if (props.kind !== 'edit') return true
+					return props.onDelete()
+				}}
+			/>
 		</PopupMenu>
 
 		<PopupMenu
@@ -757,13 +787,8 @@
 			anchorEl={dateButtonEl}
 			onClose={() => (isDatePickerOpen = false)}
 		>
-			<div class="flex w-72 max-w-[calc(100vw-1rem)] flex-col gap-3 p-2">
-				<div
-					class="text-foreground/50 flex items-center gap-2 px-1 text-xs font-semibold tracking-[0.08em] uppercase"
-				>
-					<Calendar variant="solid" class="h-3.5 w-3.5" />
-					schedule
-				</div>
+			<div class="flex w-72 max-w-[calc(100vw-1rem)] flex-col gap-3">
+				<MenuSectionHeader icon={Calendar}>schedule</MenuSectionHeader>
 				<div class="grid grid-cols-3 gap-1">
 					<button
 						type="button"
@@ -799,7 +824,7 @@
 						next week
 					</button>
 				</div>
-				<label class="text-foreground/55 px-1 text-xs font-medium" for="due-input">
+				<label class="text-foreground/55 px-3 text-xs font-medium" for="due-input">
 					custom date and time
 				</label>
 				<input
@@ -812,12 +837,12 @@
 				/>
 				{#if hasDueDate}
 					<MenuItem
+						icon={XMark}
 						onclick={(event) => {
 							event.stopPropagation()
 							clearDue()
 						}}
 					>
-						{#snippet icon()}<XMark class="h-4 w-4" />{/snippet}
 						clear
 					</MenuItem>
 				{/if}
@@ -848,6 +873,15 @@
 <style>
 	.reminder-row {
 		max-height: 360px;
+	}
+
+	/* the row rides above its neighbours while the finger carries it */
+	.is-lifted {
+		z-index: 20;
+		touch-action: none;
+		will-change: transform;
+		background: color-mix(in oklch, var(--foreground) 10%, transparent);
+		box-shadow: 0 14px 30px rgb(0 0 0 / 0.3);
 	}
 
 	.details-shell {

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
+	import { contextmenu, type ContextMenuAnchor } from '$lib/attachments/contextmenu'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import FloatingScrollTopButton from '$lib/components/FloatingScrollTopButton.svelte'
@@ -12,10 +13,16 @@
 	import Share from '$lib/components/icons/Share.svelte'
 	import SortIcon from '$lib/components/icons/SortIcon.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
+	import MasterSidebarHeader from '$lib/components/layouts/MasterSidebarHeader.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
-	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
-	import PageTitle from '$lib/components/PageTitle.svelte'
-	import { MenuItem, PopupMenu } from '$lib/components/primitives'
+	import ModalActions from '$lib/components/modals/ModalActions.svelte'
+	import {
+		MenuItem,
+		MenuSectionHeader,
+		MenuSeparator,
+		PopupMenu,
+		Skeleton,
+	} from '$lib/components/primitives'
 	import ScrollTopShadow from '$lib/components/ScrollTopShadow.svelte'
 	import SidebarListItem from '$lib/components/SidebarListItem.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
@@ -41,14 +48,10 @@
 	}
 
 	let { selectedNoteId, isMobile = false }: Props = $props()
-	const sidebarListEdgeStyle = $derived(
-		isMobile
-			? 'width: 100%;'
-			: 'margin-left: calc(0px - var(--spacing-page-x)); margin-right: calc(0px - var(--spacing-page-x)); width: calc(100% + var(--spacing-page-x) + var(--spacing-page-x));'
-	)
 
 	let openMenuId: string | null = $state(null)
 	let menuAnchorEl = $state<HTMLElement | null>(null)
+	let menuAnchorPoint = $state<ContextMenuAnchor | null>(null)
 	let listShellEl = $state<HTMLDivElement | null>(null)
 	let listViewportEl = $state<HTMLElement | null>(null)
 
@@ -67,6 +70,13 @@
 		{ value: 'title:asc', label: 'title a-z' },
 		{ value: 'title:desc', label: 'title z-a' },
 	]
+
+	/** right-click / hold anywhere on the row opens the same menu, at the gesture. */
+	function openNoteMenuAt(noteId: string, anchor: ContextMenuAnchor) {
+		openMenuId = noteId
+		menuAnchorEl = null
+		menuAnchorPoint = anchor
+	}
 
 	function closeSortMenu() {
 		isSortMenuOpen = false
@@ -105,15 +115,21 @@
 	let sharedNotesOpen = $state(true)
 
 	type NoteSidebarRow =
+		| { kind: 'header' }
 		| { kind: 'section'; id: 'my' | 'shared'; label: string; count: number; open: boolean }
 		| { kind: 'note'; id: string; note: Note }
 
 	const noteRows = $derived.by((): NoteSidebarRow[] => {
+		const header: NoteSidebarRow[] = isMobile ? [{ kind: 'header' }] : []
+
 		if (sharedNotes.length === 0) {
-			return myNotes.map((note) => ({ kind: 'note', id: note.id, note }))
+			return [
+				...header,
+				...myNotes.map((note) => ({ kind: 'note' as const, id: note.id, note })),
+			]
 		}
 
-		const rows: NoteSidebarRow[] = []
+		const rows: NoteSidebarRow[] = [...header]
 		if (myNotes.length > 0) {
 			rows.push({
 				kind: 'section',
@@ -287,15 +303,19 @@
 	}
 </script>
 
+{#snippet mobileHeading()}
+	<MasterSidebarHeader
+		icon={Document}
+		label="notes"
+		iconColor="text-(--accent-primary)"
+		isMobile
+	/>
+{/snippet}
+
 <div class="flex h-full min-h-0 flex-col">
-	<header
-		class="{isMobile
-			? 'pt-5 pb-4'
-			: 'mt-(--master-detail-header-top) mb-(--spacing-island-content) h-(--master-detail-header-height) py-0'} relative z-10 flex shrink-0 items-center justify-between gap-3 px-2"
-	>
-		<PageTitle icon={Document} label="notes" iconColor="text-(--accent-primary)" tag="h2" />
-		{#if !isMobile}
-			<div class="flex items-center gap-1">
+	{#if !isMobile}
+		<MasterSidebarHeader icon={Document} label="notes" iconColor="text-(--accent-primary)">
+			{#snippet actions()}
 				<button
 					type="button"
 					bind:this={sortButtonEl}
@@ -313,12 +333,7 @@
 					onClose={closeSortMenu}
 					class="min-w-52"
 				>
-					<div
-						class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
-					>
-						<SortIcon class="h-3.5 w-3.5" />
-						sort notes
-					</div>
+					<MenuSectionHeader icon={SortIcon}>sort notes</MenuSectionHeader>
 					{#each sortOptions as option (option.value)}
 						<MenuItem
 							selected={notes.sortMode === option.value}
@@ -327,9 +342,9 @@
 								closeSortMenu()
 							}}
 						>
-							{#snippet icon()}<SortIcon
+							{#snippet iconSnippet()}<SortIcon
 									value={option.value}
-									class="h-4 w-4"
+									class="size-full"
 								/>{/snippet}
 							{option.label}
 						</MenuItem>
@@ -343,22 +358,34 @@
 				>
 					<Plus class="h-6 w-6" />
 				</button>
-			</div>
-		{/if}
-	</header>
+			{/snippet}
+		</MasterSidebarHeader>
+	{/if}
 
 	<nav class="flex min-h-0 flex-1 flex-col">
 		{#if !notes.hydrated && notes.loading}
-			<div class="flex flex-1 items-center justify-center py-8">
-				<NokodoLoader className="opacity-70" expanded={false} />
+			{#if isMobile}{@render mobileHeading()}{/if}
+			<div class="flex flex-col gap-1 px-3 {isMobile ? '' : 'pt-2'}">
+				<Skeleton
+					shape="row"
+					count={8}
+					avatar={false}
+					lines={2}
+					height="3.5rem"
+					radius="pill"
+				/>
 			</div>
 		{:else if noteList.length === 0}
-			<div class="px-2">
-				<EmptyState label="no notes yet" compact />
+			{#if isMobile}{@render mobileHeading()}{/if}
+			<div class="flex min-h-0 flex-1 flex-col px-2">
+				<EmptyState label="no notes yet" compact class="flex-1" />
 			</div>
 		{:else}
 			{#snippet noteItem(note: (typeof noteList)[0])}
-				<div class="group/note relative px-3">
+				<div
+					class="group/note relative px-3"
+					{@attach contextmenu({ onOpen: (anchor) => openNoteMenuAt(note.id, anchor) })}
+				>
 					<SidebarListItem
 						selected={selectedNoteId === note.id}
 						onSelect={() => openNote(note.id)}
@@ -401,6 +428,7 @@
 										e.stopPropagation()
 										if (openMenuId !== note.id)
 											menuAnchorEl = e.currentTarget as HTMLElement
+										menuAnchorPoint = null
 										openMenuId = openMenuId === note.id ? null : note.id
 									}}
 									aria-label="note options"
@@ -414,26 +442,22 @@
 					<PopupMenu
 						open={openMenuId === note.id}
 						anchorEl={menuAnchorEl}
+						anchorPoint={menuAnchorPoint}
 						onClose={() => {
 							openMenuId = null
 						}}
 						data-note-menu
 					>
 						{#if note}
-							<MenuItem onclick={() => handleShare(note.id, note.title ?? 'note')}>
-								{#snippet icon()}<Share
-										class="size-full"
-										strokeWidth="2.1"
-									/>{/snippet}
+							<MenuItem
+								icon={Share}
+								onclick={() => handleShare(note.id, note.title ?? 'note')}
+							>
 								share
 							</MenuItem>
 						{/if}
 						{#if canEditNote(note)}
-							<MenuItem onclick={() => handleProperties(note.id)}>
-								{#snippet icon()}<InfoCircle
-										variant="solid"
-										class="size-full"
-									/>{/snippet}
+							<MenuItem icon={InfoCircle} onclick={() => handleProperties(note.id)}>
 								properties
 							</MenuItem>
 							<ResourceProjectsMenu
@@ -444,12 +468,12 @@
 							/>
 						{/if}
 						{#if canDeleteNote(note)}
-							<div class="bg-foreground/10 my-1 h-px w-full"></div>
-							<MenuItem destructive onclick={() => requestDelete(note.id)}>
-								{#snippet icon()}<Trash
-										class="size-full text-red-400"
-										strokeWidth="2.1"
-									/>{/snippet}
+							<MenuSeparator />
+							<MenuItem
+								destructive
+								icon={Trash}
+								onclick={() => requestDelete(note.id)}
+							>
 								delete
 							</MenuItem>
 						{/if}
@@ -457,11 +481,7 @@
 				</div>
 			{/snippet}
 
-			<div
-				bind:this={listShellEl}
-				class="relative min-h-0 flex-1 overflow-hidden"
-				style={sidebarListEdgeStyle}
-			>
+			<div bind:this={listShellEl} class="relative min-h-0 flex-1 overflow-hidden">
 				<SvelteVirtualList
 					items={noteRows}
 					defaultEstimatedItemHeight={62}
@@ -469,11 +489,21 @@
 					containerClass="relative h-full min-h-0 w-full overflow-hidden"
 					viewportClass="notes-sidebar-viewport absolute inset-0 w-full overflow-y-auto"
 					contentClass="relative min-h-full w-full"
-					itemsClass="absolute top-0 left-0 flex w-full flex-col gap-1 pt-2"
+					itemsClass="absolute top-0 left-0 flex w-full flex-col gap-1 {isMobile
+						? ''
+						: 'pt-2'}"
 				>
 					{#snippet renderItem(row, rowIndex)}
-						{#if row.kind === 'section'}
-							<div class="px-3 {rowIndex === noteRows.length - 1 ? 'pb-5' : ''}">
+						{#if row.kind === 'header'}
+							{@render mobileHeading()}
+						{:else if row.kind === 'section'}
+							<div
+								class="px-3 {rowIndex === noteRows.length - 1
+									? isMobile
+										? 'pb-10'
+										: 'pb-6'
+									: ''}"
+							>
 								<button
 									type="button"
 									class="text-foreground/70 hover:text-foreground/90 flex w-full cursor-pointer items-center gap-1.5 bg-transparent px-2 py-2 text-xs font-semibold tracking-wide uppercase transition-colors duration-150"
@@ -494,13 +524,21 @@
 								</button>
 							</div>
 						{:else}
-							<div class={rowIndex === noteRows.length - 1 ? 'pb-5' : ''}>
+							<div
+								class={rowIndex === noteRows.length - 1
+									? isMobile
+										? 'pb-10'
+										: 'pb-6'
+									: ''}
+							>
 								{@render noteItem(row.note)}
 							</div>
 						{/if}
 					{/snippet}
 				</SvelteVirtualList>
-				<ScrollTopShadow target={listViewportEl} />
+				{#if !isMobile}
+					<ScrollTopShadow target={listViewportEl} />
+				{/if}
 				<FloatingScrollTopButton target={listViewportEl} />
 			</div>
 		{/if}
@@ -527,7 +565,7 @@
 			</div>
 		{/if}
 
-		<div class="flex items-center justify-end gap-2">
+		<ModalActions>
 			<button
 				type="button"
 				class="rounded-pill inline-flex items-center border border-red-500/25 bg-red-500/20 px-4 py-2 text-sm text-red-100 transition-colors duration-150 hover:bg-red-500/30 disabled:opacity-60"
@@ -543,6 +581,6 @@
 					{/if}
 				</span>
 			</button>
-		</div>
+		</ModalActions>
 	</div>
 </BaseModal>

@@ -1,12 +1,16 @@
 <script lang="ts">
-	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import CalendarIcon from '$lib/components/icons/Calendar.svelte'
-	import Check from '$lib/components/icons/Check.svelte'
 	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
 	import Info from '$lib/components/icons/Info.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import { ModalFormDirty } from '$lib/components/modals/formDirty.svelte'
+	import ModalActions, {
+		modalDangerButtonClass,
+		modalQuietButtonClass,
+	} from '$lib/components/modals/ModalActions.svelte'
+	import ModalSaveButton from '$lib/components/modals/ModalSaveButton.svelte'
 	import { Switch } from '$lib/components/primitives'
 	import {
 		calendars,
@@ -55,8 +59,7 @@
 		'border-foreground/12 bg-foreground/4 text-foreground/90 placeholder:text-foreground/35 min-h-10 w-full min-w-0 rounded-xl border px-3 py-2 outline-none transition-colors duration-150 focus:border-[color-mix(in_oklch,var(--accent-primary)_48%,transparent)] focus:bg-foreground/6 disabled:cursor-not-allowed disabled:opacity-55'
 	const iconClass = 'h-4 w-4 text-(--accent-primary)'
 	const labelClass = 'text-foreground/60 text-[0.78rem] font-semibold'
-	const actionButtonClass =
-		'rounded-pill inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55'
+	const form = new ModalFormDirty(() => ({ name, description, color, timezone, isDefault }))
 
 	$effect(() => {
 		if (!open) return
@@ -67,6 +70,7 @@
 		isDefault = calendar?.is_default ?? false
 		saving = false
 		error = ''
+		form.reset()
 	})
 
 	$effect(() => {
@@ -85,7 +89,7 @@
 	}
 
 	async function save(): Promise<void> {
-		if (!canEditCalendar) return
+		if (!canEditCalendar || saving || !form.dirty) return
 		const trimmedName = name.trim()
 		if (!trimmedName) {
 			error = 'name is required'
@@ -102,7 +106,7 @@
 				is_default: isDefault,
 				timezone: timezone.trim() || null,
 				project_ids: calendar?.project_ids ?? [],
-				metadata_: calendar?.metadata_ ?? {},
+				metadata: calendar?.metadata ?? {},
 			}
 			const saved = calendar?.id
 				? await calendars.update(calendar.id, payload satisfies CalendarUpdate)
@@ -249,41 +253,38 @@
 			<p class="text-destructive text-sm">{error}</p>
 		{/if}
 
-		<div class="flex items-center gap-2 pt-1 max-[680px]:flex-wrap">
-			{#if calendar?.id}
-				<button
-					type="button"
-					class="{actionButtonClass} border-foreground/12 text-foreground/80 hover:bg-foreground/6 border bg-transparent"
-					disabled={saving}
-					onclick={shareCalendar}
-				>
-					<Share class="h-4 w-4" />
-					<span>share</span>
-				</button>
-			{/if}
-			{#if calendar?.id && !calendar.is_default && canDeleteCalendar}
-				<button
-					type="button"
-					class="{actionButtonClass} border border-red-500/30 bg-red-500/13 text-red-300"
-					disabled={saving}
-					onclick={requestDelete}
-				>
-					<Trash class="h-4 w-4" />
-					<span>delete</span>
-				</button>
-			{/if}
-			<div class="flex-1"></div>
+		<ModalActions class="pt-1">
+			{#snippet leading()}
+				{#if calendar?.id}
+					<button
+						type="button"
+						class={modalQuietButtonClass}
+						disabled={saving}
+						onclick={shareCalendar}
+					>
+						<Share class="h-4 w-4" />
+						<span>share</span>
+					</button>
+				{/if}
+				{#if calendar?.id && !calendar.is_default && canDeleteCalendar}
+					<button
+						type="button"
+						class={modalDangerButtonClass}
+						disabled={saving}
+						onclick={requestDelete}
+					>
+						<Trash class="h-4 w-4" />
+						<span>delete</span>
+					</button>
+				{/if}
+			{/snippet}
 			{#if canEditCalendar}
-				<button
-					type="submit"
-					class="{actionButtonClass} bg-(--accent-primary) text-white hover:brightness-[1.06]"
-					disabled={saving || !name.trim()}
-				>
-					<Check class="h-4 w-4" />
-					{#if saving}<ShimmerText className="inline-block">saving</ShimmerText
-						>{:else}<span>save</span>{/if}
-				</button>
+				<ModalSaveButton
+					dirty={form.dirty}
+					{saving}
+					blockedReason={name.trim() ? null : 'name is required'}
+				/>
 			{/if}
-		</div>
+		</ModalActions>
 	</form>
 </BaseModal>

@@ -22,10 +22,15 @@
 	})
 </script>
 
+<!--
+	the calendar has no compact master route: in COMPACT the grid IS the whole view,
+	so it takes the full-bleed pane and pads itself for the island (see +page.svelte).
+-->
 <MasterDetailScaffold
 	masterWidthClass="w-[clamp(260px,24vw,360px)] h-full"
 	ariaLabel="calendar"
 	detailBottomPaddingClass="pb-6"
+	mobileFullBleed
 >
 	{#snippet master({ isMobile })}
 		<CalendarSidebar {isMobile} />

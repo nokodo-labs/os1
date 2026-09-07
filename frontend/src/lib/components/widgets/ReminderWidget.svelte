@@ -20,8 +20,8 @@
 	const status = $derived((resource.meta?.status as string | null) ?? null)
 	const dueAt = $derived((resource.meta?.due_at as string | null) ?? null)
 	const remindAt = $derived((resource.meta?.remind_at as string | null) ?? null)
-	const parentListId = $derived(
-		resource.parent?.type === 'reminder_list' ? resource.parent.id : null
+	const listId = $derived(
+		typeof resource.meta?.list_id === 'string' ? resource.meta.list_id : null
 	)
 	const parentLabel = $derived((resource.meta?.parent_label as string | null) ?? null)
 	const parentIcon = $derived((resource.meta?.parent_icon as string | null) ?? null)
@@ -58,8 +58,8 @@
 <a
 	href={onclick
 		? undefined
-		: parentListId
-			? resolve('/reminders/lists/[listId]', { listId: parentListId })
+		: listId
+			? resolve('/reminders/lists/[listId]', { listId })
 			: undefined}
 	onclick={handleClick}
 	class="group liquid-glass liquid-glass--frosted block cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:brightness-110 active:scale-[0.98] {layout ===

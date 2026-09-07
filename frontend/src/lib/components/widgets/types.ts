@@ -23,7 +23,7 @@ export type ResourceFilterMode =
 
 export type ResourceLayoutMode = 'grid' | 'list'
 
-export type ResourceParentRef = components['schemas']['SearchResultParent']
+export type ResourceAnchorRef = components['schemas']['SearchResultAnchor']
 
 /** shared props accepted by all resource widget components */
 export interface WidgetProps {
@@ -36,7 +36,7 @@ export interface WidgetProps {
 export interface ResourceItem {
 	id: string
 	type: ResourceType
-	parent?: ResourceParentRef
+	anchor?: ResourceAnchorRef
 	title: string
 	subtitle?: string
 	preview?: string

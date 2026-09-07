@@ -10,6 +10,7 @@
 	const chrome = useSystemChrome()
 
 	const selectedListId = $derived(page.params.listId ?? null)
+	const focusReminderId = $derived(page.url.searchParams.get('reminder'))
 
 	const handleBackToLists = async () => {
 		await goto(resolve('/reminders/lists'), { keepFocus: true, noScroll: true })
@@ -34,4 +35,4 @@
 	</button>
 {/snippet}
 
-<RemindersPanel listId={selectedListId} showListTitle={device.isMobile} />
+<RemindersPanel listId={selectedListId} showListTitle={device.isMobile} {focusReminderId} />

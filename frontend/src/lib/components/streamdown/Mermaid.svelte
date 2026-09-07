@@ -284,7 +284,7 @@
 		>
 			<svg {@attach panzoom.attach} data-mermaid-svg></svg>
 			{#if showFallback}
-				<pre class="mermaid-fallback"><code>{token.text}</code></pre>
+				<pre class="mermaid-fallback select-text"><code>{token.text}</code></pre>
 			{/if}
 			{#if streamdown.controls.mermaid && !showFallback}
 				<div class={`${streamdown.theme.mermaid.buttons} mermaid-controls`}>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Skeleton } from '$lib/components/primitives'
 	import type { Snippet } from 'svelte'
 
 	interface Props {
@@ -7,6 +8,7 @@
 		label?: string
 		caption?: string
 		showFallback?: boolean
+		mediaLoading?: boolean
 		tone?: 'amber' | 'emerald' | 'rose' | 'sky' | 'yellow'
 		class?: string
 	}
@@ -17,6 +19,7 @@
 		label,
 		caption,
 		showFallback = true,
+		mediaLoading = false,
 		tone = 'sky',
 		class: className = '',
 	}: Props = $props()
@@ -65,6 +68,11 @@
 				<span class="max-w-full truncate text-xs text-current/65">{caption}</span>
 			{/if}
 		</div>
+	{/if}
+
+	<!-- reserves the media box so the image does not pop in -->
+	{#if mediaLoading}
+		<Skeleton width="100%" height="100%" class="absolute inset-0" />
 	{/if}
 
 	{#if children}

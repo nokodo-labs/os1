@@ -31,6 +31,8 @@
 		| '/'
 		| `/c/${string}`
 		| CalendarRouteId
+		// a calendar hit carries its anchor in the query; the route itself is static
+		| `${CalendarRouteId}?${string}`
 		| MessagesRouteId
 		| '/library'
 		| NotesRouteId
@@ -50,6 +52,7 @@
 
 <script lang="ts">
 	import { searchStream, type SearchResult } from '$lib/api/streaming'
+	import SearchResultsBox from '$lib/components/common/SearchResultsBox.svelte'
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte'
 	import Cog6 from '$lib/components/icons/Cog6.svelte'
@@ -59,8 +62,9 @@
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { accentColors } from '$lib/contexts/themeContext.svelte'
 	import { appVisuals, type AppVisualId } from '$lib/resources/resourceVisuals'
-	import { searchResultToResource } from '$lib/resources/searchResults'
+	import { resourceItemKey, searchResultToResource } from '$lib/resources/searchResults'
 	import { appNavigation } from '$lib/stores/appNavigation.svelte'
+	import { messages } from '$lib/stores/messages.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
 
 	interface Props {
@@ -81,13 +85,15 @@
 
 	// search state
 	let searchResults = $state<SearchResult[]>([])
-	let highlightedIndex = $state(-1)
-	let isSuggestionNavigationActive = $state(false)
-	let forceClosed = $state(false)
 	let searchDebounceTimer: number | null = null
 	let searchAbort: AbortController | null = null
 
 	const normalizedQuery = $derived(query.trim().toLowerCase())
+
+	// surface pending message requests as a badge on the messages entry.
+	$effect(() => {
+		void messages.loadInvites()
+	})
 
 	// suggestion data
 	function appVisual(id: AppVisualId) {
@@ -185,16 +191,14 @@
 			const resource = searchResultToResource(result)
 			return {
 				kind: 'resource',
-				id: `resource:${resource.type}:${resource.id}`,
+				id: `resource:${resourceItemKey(resource)}`,
 				resource,
 			}
 		})
 
 		return [...actionEntries, ...resourceEntries].slice(0, 10)
 	})
-	const open = $derived(
-		normalizedQuery.length > 0 && suggestionEntries.length > 0 && !forceClosed
-	)
+	const sections = $derived([{ id: 'suggestions', items: suggestionEntries }])
 
 	// search logic
 	async function runAutocomplete(q: string, signal: AbortSignal): Promise<void> {
@@ -217,10 +221,10 @@
 		}
 	}
 
-	function triggerSearchMode() {
+	function triggerSearchMode(close: () => void) {
 		const q = query.trim()
 		if (!q) return
-		forceClosed = true
+		close()
 		onAction({ type: 'search', query: q })
 	}
 
@@ -238,20 +242,13 @@
 			searchAbort = null
 		}
 
-		// reset force-closed state on any query change
-		forceClosed = false
-
 		if (!hasQuery) {
 			cancelPending()
-			highlightedIndex = -1
-			isSuggestionNavigationActive = false
 			searchResults = []
 			return
 		}
 
 		cancelPending()
-		isSuggestionNavigationActive = false
-		highlightedIndex = -1
 
 		searchDebounceTimer = window.setTimeout(() => {
 			searchDebounceTimer = null
@@ -265,26 +262,38 @@
 	function selectResource(resource: ResourceItem) {
 		switch (resource.type) {
 			case 'thread':
-				onAction({ type: 'navigate', path: `/c/${resource.id}` })
+				onAction({
+					type: 'navigate',
+					path:
+						resource.anchor?.type === 'message'
+							? `/c/${resource.id}?message=${resource.anchor.id}`
+							: `/c/${resource.id}`,
+				})
 				return
 			case 'note':
 				onAction({ type: 'navigate', path: `/notes/${resource.id}` })
 				return
 			case 'reminder':
-				if (resource.parent?.type === 'reminder_list') {
-					onAction({
-						type: 'navigate',
-						path: `/reminders/lists/${resource.parent.id}`,
-					})
-				}
 				return
 			case 'reminder_list':
-				onAction({ type: 'navigate', path: `/reminders/lists/${resource.id}` })
+				onAction({
+					type: 'navigate',
+					path:
+						resource.anchor?.type === 'reminder'
+							? `/reminders/lists/${resource.id}?reminder=${resource.anchor.id}`
+							: `/reminders/lists/${resource.id}`,
+				})
 				return
 			case 'calendar_event':
 				return
 			case 'calendar':
-				onAction({ type: 'navigate', path: appNavigation.getEntryRoute('calendar') })
+				onAction({
+					type: 'navigate',
+					path:
+						resource.anchor?.type === 'calendar_event'
+							? `/calendar?event=${resource.anchor.id}&calendar=${resource.id}`
+							: appNavigation.getEntryRoute('calendar'),
+				})
 				return
 			case 'project':
 				onAction({ type: 'navigate', path: `/projects/${resource.id}` })
@@ -296,10 +305,6 @@
 	}
 
 	function selectEntry(entry: SuggestionEntry) {
-		forceClosed = true
-		highlightedIndex = -1
-		isSuggestionNavigationActive = false
-
 		if (entry.kind === 'resource') {
 			selectResource(entry.resource)
 			return
@@ -353,140 +358,95 @@
 		onAction({ type: 'pulse', message: `${suggestion.title}: coming soon` })
 	}
 
-	// keyboard handler exposed to parent via $bindable
-	function handleKeyDown(event: KeyboardEvent): boolean {
-		if (!open || suggestionEntries.length === 0) return false
-		if (event.key === 'ArrowDown') {
-			event.preventDefault()
-			isSuggestionNavigationActive = true
-			highlightedIndex =
-				highlightedIndex < 0 ? 0 : (highlightedIndex + 1) % suggestionEntries.length
-			return true
-		}
-		if (event.key === 'ArrowUp') {
-			event.preventDefault()
-			isSuggestionNavigationActive = true
-			highlightedIndex =
-				highlightedIndex < 0
-					? suggestionEntries.length - 1
-					: (highlightedIndex - 1 + suggestionEntries.length) % suggestionEntries.length
-			return true
-		}
-		if (event.key === 'Escape') {
-			event.preventDefault()
-			forceClosed = true
-			highlightedIndex = -1
-			isSuggestionNavigationActive = false
-			return true
-		}
-		if (event.key === 'Enter' && !event.shiftKey) {
-			if (!isSuggestionNavigationActive || highlightedIndex < 0) return false
-			event.preventDefault()
-			const entry = suggestionEntries[highlightedIndex]
-			if (!entry) return true
-			selectEntry(entry)
-			return true
-		}
-		return false
-	}
-
-	$effect(() => {
-		onKeyHandler?.(handleKeyDown)
-	})
+	// the box owns the highlight, the keyboard contract and its own dismissal;
+	// the handler it hands back is what the parent gives the chat input.
 </script>
 
-{#if open}
-	<div
-		class="liquid-glass liquid-glass--clip rounded-container isolate flex min-h-0 flex-col overflow-hidden [--lg-bg:color-mix(in_oklch,var(--background)_18%,transparent)] [--lg-blur:8px] dark:[--lg-bg:color-mix(in_oklch,var(--background)_42%,transparent)]"
-	>
-		<div class="relative z-10 flex min-h-0 flex-col">
-			<div
-				class="no-scrollbar min-h-0 overflow-y-auto p-2"
-				role="listbox"
-				aria-label="suggestions"
+<SearchResultsBox
+	{query}
+	{sections}
+	open={normalizedQuery.length > 0}
+	listLabel="suggestions"
+	onSelect={selectEntry}
+	{onKeyHandler}
+>
+	{#snippet row(entry, state)}
+		{#if entry.kind === 'action'}
+			{@const suggestion = entry.suggestion}
+			{@const Icon = suggestion.icon}
+			<button
+				type="button"
+				role="option"
+				aria-selected={state.highlighted}
+				class="focus-visible:bg-foreground/10 flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors duration-150 ease-out {state.highlighted
+					? 'bg-foreground/10'
+					: 'hover:bg-foreground/8 bg-transparent'}"
+				onmouseenter={state.hover}
+				onclick={state.select}
 			>
 				<div
-					class="flex flex-col gap-0 overflow-hidden rounded-[calc(var(--radius-container)-0.5rem)]"
+					class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-[rgb(var(--suggestion-accent-rgb)/0.14)] text-(--suggestion-accent) shadow-[inset_0_0_0_1px_rgb(var(--suggestion-accent-rgb)/0.18)]"
+					style={suggestionAccentStyle(suggestion.accent)}
 				>
-					{#each suggestionEntries as entry, index (entry.id)}
-						{#if entry.kind === 'action'}
-							{@const suggestion = entry.suggestion}
-							{@const Icon = suggestion.icon}
-							<button
-								type="button"
-								role="option"
-								aria-selected={highlightedIndex >= 0 && index === highlightedIndex}
-								class="focus-visible:bg-foreground/10 flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors duration-150 ease-out {index ===
-									highlightedIndex && highlightedIndex >= 0
-									? 'bg-foreground/10'
-									: 'hover:bg-foreground/8 bg-transparent'}"
-								onmouseenter={() => {
-									highlightedIndex = index
-									isSuggestionNavigationActive = true
-								}}
-								onclick={() => selectEntry(entry)}
-							>
-								<div
-									class="rounded-pill flex h-9 w-9 shrink-0 items-center justify-center bg-[rgb(var(--suggestion-accent-rgb)/0.14)] text-(--suggestion-accent) shadow-[inset_0_0_0_1px_rgb(var(--suggestion-accent-rgb)/0.18)]"
-									style={suggestionAccentStyle(suggestion.accent)}
-								>
-									{#if suggestion.iconVariant === 'solid'}
-										<Icon variant="solid" class="h-5 w-5" strokeWidth="2" />
-									{:else}
-										<Icon class="h-5 w-5" strokeWidth="2" />
-									{/if}
-								</div>
-								<div class="min-w-0">
-									<div class="text-foreground/90 truncate text-sm font-semibold">
-										{suggestion.title}
-									</div>
-									{#if suggestion.subtitle}
-										<div class="text-foreground/55 truncate text-sm">
-											{suggestion.subtitle}
-										</div>
-									{/if}
-								</div>
-							</button>
-						{:else}
-							<div
-								role="option"
-								tabindex="-1"
-								aria-selected={highlightedIndex >= 0 && index === highlightedIndex}
-								class="overflow-hidden transition-colors duration-150 ease-out {index ===
-									highlightedIndex && highlightedIndex >= 0
-									? 'bg-foreground/10'
-									: 'hover:bg-foreground/8 bg-transparent'}"
-								onmouseenter={() => {
-									highlightedIndex = index
-									isSuggestionNavigationActive = true
-								}}
-							>
-								<ResourceWidget
-									resource={entry.resource}
-									layout="bare"
-									onclick={() => selectEntry(entry)}
-									class="transition-none"
-								/>
-							</div>
-						{/if}
-					{/each}
+					{#if suggestion.iconVariant === 'solid'}
+						<Icon variant="solid" class="h-5 w-5" strokeWidth="2" />
+					{:else}
+						<Icon class="h-5 w-5" strokeWidth="2" />
+					{/if}
 				</div>
-				<!-- full search trigger -->
-				<div class="border-foreground/8 mt-2 border-t pt-2">
-					<button
-						type="button"
-						class="rounded-pill hover:bg-foreground/8 flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors duration-150 ease-out"
-						onclick={triggerSearchMode}
-					>
-						<div
-							class="rounded-pill bg-foreground/6 text-foreground/50 flex h-8 w-8 shrink-0 items-center justify-center"
-						>
-							<Search class="h-4 w-4" strokeWidth="2" />
+				<div class="min-w-0 flex-1">
+					<div class="flex items-center gap-2">
+						<div class="text-foreground/90 truncate text-sm font-semibold">
+							{suggestion.title}
 						</div>
-						<div class="text-foreground/50 text-xs">search more in-depth</div>
-					</button>
+						{#if suggestion.id === 'messages' && messages.inviteCount > 0}
+							<span
+								class="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-(--accent-primary) px-1.5 text-[0.7rem] font-semibold text-white"
+							>
+								{messages.inviteCount}
+							</span>
+						{/if}
+					</div>
+					{#if suggestion.subtitle}
+						<div class="text-foreground/55 truncate text-sm">
+							{suggestion.subtitle}
+						</div>
+					{/if}
 				</div>
+			</button>
+		{:else}
+			<div
+				role="option"
+				tabindex="-1"
+				aria-selected={state.highlighted}
+				class="overflow-hidden transition-colors duration-150 ease-out {state.highlighted
+					? 'bg-foreground/10'
+					: 'hover:bg-foreground/8 bg-transparent'}"
+				onmouseenter={state.hover}
+			>
+				<ResourceWidget
+					resource={entry.resource}
+					layout="bare"
+					onclick={state.select}
+					class="transition-none"
+				/>
 			</div>
-		</div>
-	</div>
-{/if}
+		{/if}
+	{/snippet}
+
+	{#snippet footer(close)}
+		<!-- full search trigger -->
+		<button
+			type="button"
+			class="rounded-pill hover:bg-foreground/8 flex w-full items-center gap-3 border-none px-3 py-2 text-left transition-colors duration-150 ease-out"
+			onclick={() => triggerSearchMode(close)}
+		>
+			<div
+				class="rounded-pill bg-foreground/6 text-foreground/50 flex h-8 w-8 shrink-0 items-center justify-center"
+			>
+				<Search class="h-4 w-4" strokeWidth="2" />
+			</div>
+			<div class="text-foreground/50 text-xs">search more in-depth</div>
+		</button>
+	{/snippet}
+</SearchResultsBox>

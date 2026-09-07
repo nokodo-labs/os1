@@ -1,10 +1,18 @@
 <script lang="ts">
+	/**
+	 * overflow menu for a resource card. the whole card opens it on right-click
+	 * and on touch hold: mark the card `data-row` and the menu finds it from its
+	 * own trigger (see `attachments/contextmenu`).
+	 */
+
+	import { contextmenu, type ContextMenuAnchor } from '$lib/attachments/contextmenu'
+	import { THREAD_ORIGINATED_TOGGLE } from '$lib/chat/threadActions'
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import Minus from '$lib/components/icons/Minus.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
-	import { MenuItem, PopupMenu } from '$lib/components/primitives'
+	import { MenuItem, MenuSeparator, PopupMenu } from '$lib/components/primitives'
 	import { resourceAccentStyle, resourceVisual } from '$lib/resources/resourceVisuals'
 	import { device } from '$lib/stores/device.svelte'
 	import {
@@ -25,7 +33,7 @@
 		selectedProjectIds?: string[]
 		onProperties?: () => void
 		onShare?: () => void
-		onDelete?: () => Promise<boolean> | boolean | void
+		onDelete?: (deleteOriginatedResources: boolean) => Promise<boolean> | boolean | void
 		onRemoveFromProject?: () => Promise<void> | void
 		onProjectToggle?: (projectId: string, selected: boolean) => Promise<void> | void
 	}
@@ -44,6 +52,7 @@
 
 	let menuOpen = $state(false)
 	let menuButtonEl = $state<HTMLButtonElement | null>(null)
+	let anchorPoint = $state<ContextMenuAnchor | null>(null)
 
 	const ownerId = $derived(
 		typeof resource.meta?.owner_id === 'string' ? resource.meta.owner_id : null
@@ -60,6 +69,7 @@
 				return type
 			case 'reminder':
 			case 'calendar_event':
+			case 'message':
 				return null
 		}
 	}
@@ -99,8 +109,20 @@
 	function toggleMenu(event: MouseEvent): void {
 		event.preventDefault()
 		event.stopPropagation()
+		anchorPoint = null
 		menuOpen = !menuOpen
 	}
+
+	$effect(() => {
+		const row = menuButtonEl?.closest('[data-row]')
+		if (!(row instanceof HTMLElement)) return
+		return contextmenu({
+			onOpen: (anchor) => {
+				anchorPoint = anchor
+				menuOpen = true
+			},
+		})(row)
+	})
 
 	function runAction(action: (() => void | Promise<void>) | undefined): void {
 		if (!action) return
@@ -123,27 +145,28 @@
 		<EllipsisHorizontal class="size-5" />
 	</button>
 
-	<PopupMenu open={menuOpen} anchorEl={menuButtonEl} onClose={closeMenus} class="min-w-52">
+	<PopupMenu
+		open={menuOpen}
+		anchorEl={menuButtonEl}
+		{anchorPoint}
+		onClose={closeMenus}
+		class="min-w-52"
+	>
 		{#if onProperties && canEdit}
-			<MenuItem onclick={() => runAction(onProperties)}>
-				{#snippet icon()}<InfoCircle variant="solid" class="size-full" />{/snippet}
-				properties
-			</MenuItem>
+			<MenuItem icon={InfoCircle} onclick={() => runAction(onProperties)}>properties</MenuItem
+			>
 		{/if}
 		{#if onShare}
-			<MenuItem onclick={() => runAction(onShare)}>
-				{#snippet icon()}<Share class="size-full" />{/snippet}
-				share
-			</MenuItem>
+			<MenuItem icon={Share} onclick={() => runAction(onShare)}>share</MenuItem>
 		{/if}
 		{#if onRemoveFromProject && canEdit}
 			<MenuItem onclick={() => runAction(onRemoveFromProject)}>
-				{#snippet icon()}
+				{#snippet iconSnippet()}
 					<span
 						class="relative flex size-full items-center justify-center"
 						style={projectAccentStyle}
 					>
-						<ProjectIcon variant="solid" class="size-full text-(--accent-primary)" />
+						<ProjectIcon class="size-full text-(--accent-primary)" />
 						<Minus
 							class="absolute -right-1 -bottom-0.5 size-3.5 text-red-400"
 							strokeWidth="2.6"
@@ -157,7 +180,7 @@
 			<ResourceProjectsMenu {projectOptions} {selectedProjectIds} {onProjectToggle} />
 		{/if}
 		{#if onDelete && canDelete}
-			<div class="bg-foreground/12 my-1 h-px w-full"></div>
+			<MenuSeparator />
 			<DeleteButton
 				confirm={true}
 				stopPropagation={true}
@@ -166,6 +189,7 @@
 					title: `delete ${resource.title || 'resource'}?`,
 					description: resource.title,
 				}}
+				modalToggle={resource.type === 'thread' ? THREAD_ORIGINATED_TOGGLE : undefined}
 				{onDelete}
 			/>
 		{/if}

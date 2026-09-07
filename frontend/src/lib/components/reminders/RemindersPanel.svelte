@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import CheckBox from '$lib/components/icons/CheckBox.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
+	import { Skeleton } from '$lib/components/primitives'
+	import { cancelReminderReveal, revealReminder } from '$lib/reminders/reminderFocus'
 	import {
 		reminders,
 		type ReminderUpdate,
@@ -17,9 +18,11 @@
 	interface Props {
 		listId: string | null
 		showListTitle?: boolean
+		/** reminder to scroll to and flash once it renders, from a search anchor. */
+		focusReminderId?: string | null
 	}
 
-	let { listId, showListTitle = false }: Props = $props()
+	let { listId, showListTitle = false, focusReminderId = null }: Props = $props()
 
 	// state
 
@@ -51,11 +54,30 @@
 	}
 	const incoming = new SvelteMap<string, IncomingEntry>()
 
+	/** placeholder rows for the first load: depth mirrors the real subtask indent */
+	const skeletonRows = [
+		{ id: 0, depth: 0, width: '78%' },
+		{ id: 1, depth: 0, width: '54%' },
+		{ id: 2, depth: 1, width: '46%' },
+		{ id: 3, depth: 1, width: '62%' },
+		{ id: 4, depth: 0, width: '70%' },
+		{ id: 5, depth: 0, width: '50%' },
+	]
+
 	const MOTION_MS = 420
+	const ANCHOR_REVEAL_WAIT_MS = 1500
+	/** matches the completed section's expand transition, so the scroll measures settled rows. */
+	const COMPLETED_EXPAND_MS = 240
+	let handledFocusKey: string | null = null
+	let focusTimer: number | null = null
 	let draggingReminderId = $state<string | null>(null)
 	let dropReminderId = $state<string | null>(null)
 	let dropPosition = $state<DropPosition | null>(null)
 	let pointerDragCleanup: (() => void) | null = null
+	/** px the touch-dragged row is lifted from its slot; null while no pointer drag runs. */
+	let pointerDragOffsetY = $state<number | null>(null)
+	/** distance from the row's top to the finger, kept so the row does not jump on grab. */
+	let pointerDragGrabY = 0
 
 	// derived
 
@@ -257,6 +279,8 @@
 		draggingReminderId = null
 		dropReminderId = null
 		dropPosition = null
+		pointerDragOffsetY = null
+		pointerDragGrabY = 0
 	}
 
 	function getDropTarget(reminderId: string): DropPosition | null {
@@ -361,22 +385,35 @@
 		await repositionReminder(sourceId, target, position)
 	}
 
+	/**
+	 * a touch drag carries the row itself under the finger, so the whole stack at the
+	 * point is walked and the dragged row skipped, instead of taking the topmost hit.
+	 */
 	function dropTargetAtPoint(
 		clientX: number,
 		clientY: number
 	): { target: ReminderTreeItem; position: DropPosition | null } | null {
-		const element = document.elementFromPoint(clientX, clientY)
-		const placeholder = element?.closest('[data-reminder-drop-id]') as HTMLElement | null
-		if (placeholder) {
-			const target = findTreeItem(placeholder.dataset.reminderDropId ?? null)
-			const position = placeholder.dataset.reminderDropPosition
-			if (target && (position === 'before' || position === 'after' || position === 'child')) {
-				return { target, position }
+		for (const element of document.elementsFromPoint(clientX, clientY)) {
+			const placeholder = element.closest('[data-reminder-drop-id]')
+			if (placeholder instanceof HTMLElement) {
+				const target = findTreeItem(placeholder.dataset.reminderDropId ?? null)
+				const position = placeholder.dataset.reminderDropPosition
+				if (
+					target &&
+					(position === 'before' || position === 'after' || position === 'child')
+				) {
+					return { target, position }
+				}
 			}
+
+			const row = element.closest('[data-reminder-id]')
+			if (!(row instanceof HTMLElement)) continue
+			const reminderId = row.dataset.reminderId ?? null
+			if (reminderId === draggingReminderId) continue
+			const target = findTreeItem(reminderId)
+			if (target) return { target, position: null }
 		}
-		const row = element?.closest('[data-reminder-id]') as HTMLElement | null
-		const target = findTreeItem(row?.dataset.reminderId ?? null)
-		return target ? { target, position: null } : null
+		return null
 	}
 
 	function updatePointerDrop(clientX: number, clientY: number): void {
@@ -404,15 +441,43 @@
 		setDropTarget(target, computeDropPositionFromPoint(clientX, clientY, row, target))
 	}
 
+	function reminderRowElement(reminderId: string): HTMLElement | null {
+		return document.querySelector(`[data-reminder-id="${reminderId}"]`)
+	}
+
+	/** the painted translation, so the lift is always measured from the row's layout box. */
+	function appliedTranslateY(element: HTMLElement): number {
+		const transform = window.getComputedStyle(element).transform
+		if (!transform || transform === 'none') return 0
+		return new DOMMatrixReadOnly(transform).m42
+	}
+
+	/**
+	 * keep the lifted row under the finger. drop placeholders reflow the list while
+	 * a drag runs, so the offset is re-derived from the row's current slot each move
+	 * instead of accumulating from the grab point.
+	 */
+	function updatePointerDragOffset(clientY: number): void {
+		if (!draggingReminderId) return
+		const row = reminderRowElement(draggingReminderId)
+		if (!row) return
+		const slotTop = row.getBoundingClientRect().top - appliedTranslateY(row)
+		pointerDragOffsetY = clientY - pointerDragGrabY - slotTop
+	}
+
 	function handlePointerDragStart(event: PointerEvent, reminder: ReminderWithSubtasks): void {
 		if (!canEditActiveList || !browser) return
 		if (event.pointerType === 'mouse') return
 		event.preventDefault()
 		pointerDragCleanup?.()
 		draggingReminderId = reminder.id
+		const row = reminderRowElement(reminder.id)
+		pointerDragGrabY = row ? event.clientY - row.getBoundingClientRect().top : 0
+		pointerDragOffsetY = 0
 
 		const handleMove = (moveEvent: PointerEvent) => {
 			moveEvent.preventDefault()
+			updatePointerDragOffset(moveEvent.clientY)
 			updatePointerDrop(moveEvent.clientX, moveEvent.clientY)
 		}
 		const handleUp = (upEvent: PointerEvent) => {
@@ -614,6 +679,36 @@
 			void resourceAccess.ensure('reminder_list', activeList.id, activeList.owner_id)
 	})
 
+	// jump to a search-anchored reminder (?reminder=<id>), once it has rendered
+	$effect(() => {
+		const anchorId = focusReminderId
+		if (!anchorId) return
+		const key = `${listId ?? ''}:${anchorId}`
+		if (handledFocusKey === key) return
+		const item = reminderTreeItems.find((entry) => entry.reminder.id === anchorId)
+		if (!item) return
+		handledFocusKey = key
+
+		const reveal = () => void revealReminder(anchorId, { wait: ANCHOR_REVEAL_WAIT_MS })
+		if (item.reminder.status !== 'completed' || untrack(() => showCompleted)) {
+			reveal()
+			return
+		}
+		// the match is filed under completed: open that section before scrolling
+		showCompleted = true
+		focusTimer = window.setTimeout(reveal, COMPLETED_EXPAND_MS)
+	})
+
+	// a reveal waiting for its reminder must not outlive the list that asked for it
+	$effect(() => {
+		void listId
+		return () => {
+			if (focusTimer !== null) window.clearTimeout(focusTimer)
+			focusTimer = null
+			cancelReminderReveal()
+		}
+	})
+
 	$effect(() => {
 		if (!browser) return
 		const handler = (event: Event) => {
@@ -707,8 +802,18 @@
 	{/if}
 
 	{#if isLoading}
-		<div class="flex flex-1 items-center justify-center">
-			<NokodoLoader className="opacity-70" expanded={false} />
+		<div class="flex-1 px-1 pb-6 {showListTitle ? '' : 'pt-4'}">
+			<div class="flex flex-col gap-1">
+				{#each skeletonRows as row (row.id)}
+					<div
+						class="flex items-center gap-3 px-3 py-2.5"
+						style={row.depth > 0 ? `margin-left: ${row.depth * 1.25}rem;` : ''}
+					>
+						<Skeleton shape="avatar" width="1.5rem" height="1.5rem" class="shrink-0" />
+						<Skeleton shape="lines" lines={1} width={row.width} />
+					</div>
+				{/each}
+			</div>
 		</div>
 	{:else}
 		<div class="flex-1 px-1 pb-6 {showListTitle ? '' : 'pt-4'}">
@@ -724,6 +829,7 @@
 						{reminder}
 						depth={item.depth}
 						isDragging={draggingReminderId === reminder.id}
+						dragOffsetY={draggingReminderId === reminder.id ? pointerDragOffsetY : null}
 						dropTarget={getDropTarget(reminder.id)}
 						editable={canEditActiveList}
 						expanded={expandedReminderId === reminder.id &&
@@ -805,7 +911,8 @@
 						: '-translate-y-1 grid-rows-[0fr] opacity-0'}"
 					aria-hidden={!showCompleted}
 				>
-					<div class="min-h-0 overflow-hidden">
+					<!-- the clip that makes the collapse work would swallow a lifted row -->
+					<div class="min-h-0 {pointerDragOffsetY === null ? 'overflow-hidden' : ''}">
 						<div class="flex flex-col gap-1 pt-1">
 							{#each completedReminderItems as item (item.reminder.id)}
 								{@const reminder = item.reminder}
@@ -818,6 +925,9 @@
 									{reminder}
 									depth={item.depth}
 									isDragging={draggingReminderId === reminder.id}
+									dragOffsetY={draggingReminderId === reminder.id
+										? pointerDragOffsetY
+										: null}
 									dropTarget={getDropTarget(reminder.id)}
 									editable={canEditActiveList}
 									expanded={expandedReminderId === reminder.id &&

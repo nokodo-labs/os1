@@ -1,9 +1,7 @@
 <script lang="ts">
 	import TagEditor from '$lib/components/common/TagEditor.svelte'
-	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import Bell from '$lib/components/icons/Bell.svelte'
 	import Calendar from '$lib/components/icons/Calendar.svelte'
-	import Check from '$lib/components/icons/Check.svelte'
 	import ClockRotateRight from '$lib/components/icons/ClockRotateRight.svelte'
 	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
 	import Info from '$lib/components/icons/Info.svelte'
@@ -12,6 +10,11 @@
 	import Tag from '$lib/components/icons/Tag.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import { ModalFormDirty } from '$lib/components/modals/formDirty.svelte'
+	import ModalActions, {
+		modalDangerButtonClass,
+	} from '$lib/components/modals/ModalActions.svelte'
+	import ModalSaveButton from '$lib/components/modals/ModalSaveButton.svelte'
 	import { DropdownSelect, Switch } from '$lib/components/primitives'
 	import NotificationOffsetsEditor from '$lib/components/scheduling/NotificationOffsetsEditor.svelte'
 	import RecurrenceEditor from '$lib/components/scheduling/RecurrenceEditor.svelte'
@@ -57,8 +60,6 @@
 		'border-[color-mix(in_oklch,var(--accent-primary)_36%,transparent)] bg-[color-mix(in_oklch,var(--accent-primary)_20%,transparent)] text-foreground'
 	const optionButtonQuietClass =
 		'border-foreground/10 bg-foreground/5 text-foreground/72 hover:bg-foreground/8 hover:text-foreground'
-	const actionButtonClass =
-		'rounded-pill inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55'
 	const localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
 	let {
@@ -127,6 +128,24 @@
 		availableCalendars.find((calendar) => calendar.id === selectedCalendarId)?.name ??
 			'calendar'
 	)
+	// the edited data only; the show* disclosures are chrome, not values
+	const form = new ModalFormDirty(() => ({
+		title,
+		description,
+		startDate,
+		endDate,
+		startTime,
+		endTime,
+		allDay,
+		selectedCalendarId,
+		timezone,
+		placeMode,
+		location,
+		virtualUrl,
+		recurrenceValue,
+		labels,
+		notificationOffsets,
+	}))
 
 	$effect(() => {
 		if (!open) return
@@ -201,6 +220,7 @@
 		showTimezone = false
 		error = ''
 		saving = false
+		form.reset()
 	}
 
 	function hydrateExisting(source: CalendarEvent): void {
@@ -234,6 +254,7 @@
 		showTimezone = Boolean(source.timezone && source.timezone !== localTimezone)
 		error = ''
 		saving = false
+		form.reset()
 	}
 
 	function selectPlaceMode(mode: PlaceMode): void {
@@ -326,7 +347,7 @@
 			location: placeMode === 'location' ? location.trim() || null : null,
 			virtual_url: placeMode === 'virtual' ? virtualUrl.trim() || null : null,
 			labels,
-			metadata_: event?.metadata_ ?? {},
+			metadata: event?.metadata ?? {},
 		}
 	}
 
@@ -336,7 +357,7 @@
 	}
 
 	async function save(): Promise<void> {
-		if (saving || !canEditEvent) return
+		if (saving || !canEditEvent || !form.dirty) return
 		const payload = buildPayload()
 		if (!payload) return
 		saving = true
@@ -695,30 +716,27 @@
 			<div class="text-destructive col-span-full text-sm">{error}</div>
 		{/if}
 
-		<div class="col-span-full flex items-center gap-2 pt-1 max-[680px]:flex-wrap">
-			{#if event?.id && canEditEvent}
-				<button
-					type="button"
-					class="{actionButtonClass} border border-red-500/30 bg-red-500/13 text-red-300"
-					disabled={saving}
-					onclick={requestDelete}
-				>
-					<Trash class="h-4 w-4" />
-					<span>delete</span>
-				</button>
-			{/if}
-			<div class="flex-1"></div>
+		<ModalActions class="col-span-full pt-1">
+			{#snippet leading()}
+				{#if event?.id && canEditEvent}
+					<button
+						type="button"
+						class={modalDangerButtonClass}
+						disabled={saving}
+						onclick={requestDelete}
+					>
+						<Trash class="h-4 w-4" />
+						<span>delete</span>
+					</button>
+				{/if}
+			{/snippet}
 			{#if canEditEvent}
-				<button
-					type="submit"
-					class="{actionButtonClass} bg-(--accent-primary) text-white hover:brightness-[1.06]"
-					disabled={saving || !title.trim()}
-				>
-					<Check class="h-4 w-4" />
-					{#if saving}<ShimmerText className="inline-block">saving</ShimmerText
-						>{:else}<span>save</span>{/if}
-				</button>
+				<ModalSaveButton
+					dirty={form.dirty}
+					{saving}
+					blockedReason={title.trim() ? null : 'title is required'}
+				/>
 			{/if}
-		</div>
+		</ModalActions>
 	</form>
 </BaseModal>

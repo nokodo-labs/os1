@@ -2,6 +2,7 @@
 	import { browser } from '$app/environment'
 	import MimeIcon from '$lib/components/icons/MimeIcon.svelte'
 	import User from '$lib/components/icons/User.svelte'
+	import { Skeleton } from '$lib/components/primitives'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { resourceAccentStyle, resourceVisual } from '$lib/resources/resourceVisuals'
 	import { files } from '$lib/stores/files.svelte'
@@ -20,6 +21,7 @@
 	let { resource, layout = 'grid', class: className = '', onclick }: Props = $props()
 	let rootEl = $state<HTMLElement | null>(null)
 	let shouldLoadPreview = $state(false)
+	let thumbnailSettled = $state(false)
 
 	const mimeType = $derived((resource.meta?.mime_type as string) ?? '')
 	const fileType = $derived(
@@ -36,6 +38,7 @@
 	const fileAccentStyle = resourceAccentStyle('file')
 
 	const hasRenderedPreview = $derived(Boolean(thumbnailUrl && category === 'image'))
+	const thumbnailPending = $derived(hasRenderedPreview && !thumbnailSettled)
 
 	$effect(() => {
 		if (!browser || category !== 'image' || !rootEl) return
@@ -57,11 +60,11 @@
 </script>
 
 {#snippet fileIcon()}
-	<MimeIcon {mimeType} class="size-5" />
+	<MimeIcon {mimeType} variant="solid" class="size-5" />
 {/snippet}
 
 {#snippet previewIcon()}
-	<MimeIcon {mimeType} class="size-6" />
+	<MimeIcon {mimeType} variant="solid" class="size-6" />
 {/snippet}
 
 {#snippet filePreview()}
@@ -70,6 +73,7 @@
 		label={fileType}
 		caption={source || (fileSize > 0 ? fileSizeLabel : 'file')}
 		showFallback={!hasRenderedPreview}
+		mediaLoading={thumbnailPending}
 		class="-mx-6 -mt-6"
 	>
 		{#snippet icon()}
@@ -81,6 +85,8 @@
 				alt={resource.title}
 				class="h-full w-full object-cover"
 				draggable="false"
+				onload={() => (thumbnailSettled = true)}
+				onerror={() => (thumbnailSettled = true)}
 			/>
 		{/if}
 	</ResourcePreview>
@@ -126,12 +132,19 @@
 		</div>
 	{:else}
 		{#if thumbnailUrl && category === 'image'}
-			<img
-				src={thumbnailUrl}
-				alt={resource.title}
-				class="size-10 shrink-0 rounded-xl object-cover"
-				draggable="false"
-			/>
+			<div class="relative size-10 shrink-0">
+				<img
+					src={thumbnailUrl}
+					alt={resource.title}
+					class="size-10 rounded-xl object-cover"
+					draggable="false"
+					onload={() => (thumbnailSettled = true)}
+					onerror={() => (thumbnailSettled = true)}
+				/>
+				{#if thumbnailPending}
+					<Skeleton width="100%" height="100%" radius="md" class="absolute inset-0" />
+				{/if}
+			</div>
 		{:else}
 			<div
 				class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_oklch,var(--resource-accent)_15%,transparent)] text-(--accent-primary)"

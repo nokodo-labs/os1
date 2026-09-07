@@ -2,7 +2,8 @@
 	import { browser } from '$app/environment'
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
-	import { portal } from '$lib/actions/portal'
+	import { page } from '$app/state'
+	import { portal } from '$lib/attachments/portal'
 	import CalendarEventModal from '$lib/components/calendar/CalendarEventModal.svelte'
 	import CalendarSidebar from '$lib/components/calendar/CalendarSidebar.svelte'
 	import CalendarIcon from '$lib/components/icons/Calendar.svelte'
@@ -10,6 +11,7 @@
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import Sidebar from '$lib/components/icons/Sidebar.svelte'
+	import { Skeleton } from '$lib/components/primitives'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { useTheme } from '$lib/contexts/themeContext.svelte'
 	import {
@@ -69,6 +71,7 @@
 	let mobileSidebarOpen = $state(false)
 	let mobileSidebarEl = $state<HTMLElement | null>(null)
 	let syncingFromStore = false
+	let handledEventAnchorKey: string | null = null
 
 	function closeMobileSidebar(): void {
 		if (browser && mobileSidebarEl) {
@@ -123,6 +126,17 @@
 		{ label: 'week', value: ViewType.WEEK },
 		{ label: 'month', value: ViewType.MONTH },
 		{ label: 'year', value: ViewType.YEAR },
+	]
+
+	/** staggered chips so the timed views read as events instead of bars */
+	const skeletonChipColumns = [
+		{ offset: '1.5rem', heights: ['2.5rem', '4rem'] },
+		{ offset: '4.5rem', heights: ['3rem'] },
+		{ offset: '2.5rem', heights: ['3.5rem', '2.5rem'] },
+		{ offset: '6rem', heights: ['4.5rem'] },
+		{ offset: '2rem', heights: ['2.5rem', '3rem'] },
+		{ offset: '5rem', heights: ['3.5rem'] },
+		{ offset: '3rem', heights: ['3rem', '2.5rem'] },
 	]
 
 	const dragPlugin = createDragPlugin({
@@ -208,6 +222,23 @@
 	const canCreateEvent = $derived(editableDefaultCalendarId !== null)
 	const modalDefaultStart = $derived(eventModalStart ?? defaultEventStart())
 
+	// first paint only: hasLoaded stays true afterwards, and a failed fetch drops
+	// the placeholder rather than parking on it
+	const isFirstLoad = $derived(
+		(!calendars.hasLoaded || !scheduledItems.hasLoaded) &&
+			(calendars.loading || scheduledItems.loading)
+	)
+	const skeletonColumns = $derived(
+		currentView === ViewType.YEAR ? 4 : currentView === ViewType.DAY ? 1 : 7
+	)
+	const skeletonColumnIndexes = $derived(
+		Array.from({ length: skeletonColumns }, (_, index) => index)
+	)
+	const usesCellSkeleton = $derived(
+		currentView === ViewType.MONTH || currentView === ViewType.YEAR
+	)
+	const skeletonCellRows = $derived(currentView === ViewType.YEAR ? 3 : 6)
+
 	$effect(() => {
 		calendar.app.setTheme(theme.resolvedMode)
 	})
@@ -266,6 +297,19 @@
 			window.removeEventListener('calendar:focus', handleFocus)
 			window.removeEventListener('calendar:filter', handleFilter)
 		}
+	})
+
+	// jump to a search-anchored event (?event=<id>&calendar=<container id>)
+	$effect(() => {
+		if (!browser) return
+		const params = page.url.searchParams
+		const eventId = params.get('event')
+		if (!eventId) return
+		const calendarId = params.get('calendar')
+		const anchorKey = `${calendarId ?? ''}:${eventId}`
+		if (handledEventAnchorKey === anchorKey) return
+		handledEventAnchorKey = anchorKey
+		void focusAnchoredEvent(eventId, calendarId)
 	})
 
 	$effect(() => {
@@ -378,7 +422,7 @@
 			start_at: startAt,
 			end_at: endAt,
 			all_day: allDay,
-			metadata_: {},
+			metadata: {},
 		}
 	}
 
@@ -692,6 +736,33 @@
 		eventModalOpen = true
 	}
 
+	/**
+	 * focus an event addressed by its own id, which is what a search anchor
+	 * carries: a click hands over an occurrence id instead. resolve the event,
+	 * move the view onto its day so the occurrences around it load, then focus
+	 * the matching occurrence through the same path a click takes.
+	 */
+	async function focusAnchoredEvent(eventId: string, calendarId: string | null): Promise<void> {
+		const known = calendarEvents.all.find((event) => event.id === eventId) ?? null
+		const source = known ?? (calendarId ? await calendarEvents.get(eventId, calendarId) : null)
+		if (!source) return
+		const start = new SvelteDate(source.start_at)
+		if (Number.isNaN(start.getTime())) return
+
+		currentDate = start
+		calendar.setCurrentDate(start)
+		await tick()
+		const focusWindow = getScheduledWindow(start, currentView)
+		await scheduledItems.load({ startAt: focusWindow.startAt, endAt: focusWindow.endAt })
+		const occurrence = scheduledItems.all.find(
+			(item) => item.kind === 'event' && item.parent_id === eventId
+		)
+		await focusCalendarEvent(
+			occurrence?.id ?? eventId,
+			occurrence?.effective_start_at ?? source.start_at
+		)
+	}
+
 	async function selectCalendarEvent(eventId: string, startAt: string): Promise<void> {
 		const start = new SvelteDate(startAt)
 		currentDate = start
@@ -758,13 +829,16 @@
 			<Sidebar variant="solid" />
 		</button>
 	{/if}
+	<!-- the island sizes every context glyph to a 2.3rem square, and a chevron only
+	     inks the middle third of it - the negative margin trims that dead width so
+	     the arrows sit at the same rhythm as the wider glyphs beside them. -->
 	<button
 		type="button"
-		class="flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+		class="-mx-2 flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
 		aria-label="previous date"
 		onclick={goToPrevious}
 	>
-		<ChevronLeft />
+		<ChevronLeft strokeWidth="2" />
 	</button>
 	<button
 		type="button"
@@ -776,11 +850,11 @@
 	</button>
 	<button
 		type="button"
-		class="flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+		class="-mx-2 flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
 		aria-label="next date"
 		onclick={goToNext}
 	>
-		<ChevronRight />
+		<ChevronRight strokeWidth="2" />
 	</button>
 	{#if canCreateEvent}
 		<button
@@ -795,10 +869,12 @@
 {/snippet}
 
 <div
-	class="calendar-page flex h-full min-h-0 flex-1 flex-col gap-[clamp(10px,1.1vw,14px)] overflow-hidden"
+	class="calendar-page flex h-full min-h-0 flex-1 flex-col gap-[clamp(10px,1.1vw,14px)] overflow-hidden {device.isMobile
+		? 'px-(--spacing-page-x) pt-[calc(var(--chrome-island-offset,0px)+var(--spacing-island-content))]'
+		: ''}"
 >
 	{#if device.isMobile}
-		<div use:portal>
+		<div {@attach portal()}>
 			<aside
 				bind:this={mobileSidebarEl}
 				class="bg-background/90 fixed inset-y-0 left-0 z-50 h-dvh w-full max-w-[min(100vw,28rem)] overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] backdrop-blur-[22px] transition-transform duration-300 ease-in-out {mobileSidebarOpen
@@ -846,9 +922,55 @@
 	</header>
 
 	<div
-		class="nokodo-calendar liquid-glass liquid-glass--frosted border-foreground/16 isolate flex min-h-0 flex-1 overflow-hidden rounded-(--calendar-radius) border shadow-[0_22px_64px_rgb(0_0_0/0.28),inset_0_1px_0_rgb(255_255_255/0.14)] [--calendar-radius:clamp(16px,1.8vw,24px)] [clip-path:inset(0_round_var(--calendar-radius))] max-[888px]:[--calendar-radius:18px]"
+		class="nokodo-calendar liquid-glass liquid-glass--frosted border-foreground/16 isolate relative flex min-h-0 flex-1 overflow-hidden rounded-(--calendar-radius) border shadow-[0_22px_64px_rgb(0_0_0/0.28),inset_0_1px_0_rgb(255_255_255/0.14)] [--calendar-radius:clamp(16px,1.8vw,24px)] [clip-path:inset(0_round_var(--calendar-radius))] max-[888px]:[--calendar-radius:18px]"
+		class:calendar-loading={isFirstLoad}
 	>
 		<DayFlowCalendar {calendar} />
+
+		{#if isFirstLoad}
+			<div
+				class="pointer-events-none absolute inset-0 flex flex-col gap-2 overflow-hidden p-3"
+				aria-hidden="true"
+			>
+				{#if currentView !== ViewType.YEAR}
+					<div
+						class="grid shrink-0 gap-2"
+						style="grid-template-columns: repeat({skeletonColumns}, minmax(0, 1fr));"
+					>
+						<Skeleton
+							shape="lines"
+							lines={1}
+							count={skeletonColumns}
+							class="items-center"
+						/>
+					</div>
+				{/if}
+
+				{#if usesCellSkeleton}
+					<div
+						class="grid min-h-0 flex-1 gap-1.5"
+						style="grid-template-columns: repeat({skeletonColumns}, minmax(0, 1fr)); grid-template-rows: repeat({skeletonCellRows}, minmax(0, 1fr));"
+					>
+						<Skeleton shape="gridCell" count={skeletonColumns * skeletonCellRows} />
+					</div>
+				{:else}
+					<div
+						class="grid min-h-0 flex-1 gap-2"
+						style="grid-template-columns: repeat({skeletonColumns}, minmax(0, 1fr));"
+					>
+						{#each skeletonColumnIndexes as columnIndex (columnIndex)}
+							{@const column =
+								skeletonChipColumns[columnIndex % skeletonChipColumns.length]}
+							<div class="flex flex-col gap-2" style="padding-top: {column.offset};">
+								{#each column.heights as height, chipIndex (chipIndex)}
+									<Skeleton shape="block" {height} radius="sm" />
+								{/each}
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</div>
+		{/if}
 	</div>
 
 	<CalendarEventModal
@@ -877,6 +999,11 @@
 		height: 100%;
 		width: 100%;
 		max-width: 100%;
+	}
+
+	/* the grid stays mounted so it keeps measuring itself while the placeholder covers it */
+	.calendar-loading :global(.df-calendar-wrapper) {
+		opacity: 0;
 	}
 
 	.nokodo-calendar :global(.df-calendar-container),

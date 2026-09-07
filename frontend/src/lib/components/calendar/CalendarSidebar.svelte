@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { contextmenu, type ContextMenuAnchor } from '$lib/attachments/contextmenu'
 	import CalendarManageModal from '$lib/components/calendar/CalendarManageModal.svelte'
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import Calendar from '$lib/components/icons/Calendar.svelte'
@@ -12,7 +13,7 @@
 	import Trash from '$lib/components/icons/Trash.svelte'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import PageTitle from '$lib/components/PageTitle.svelte'
-	import { MenuItem, PopupMenu } from '$lib/components/primitives'
+	import { MenuItem, MenuSeparator, PopupMenu } from '$lib/components/primitives'
 	import ScrollTopShadow from '$lib/components/ScrollTopShadow.svelte'
 	import SidebarListItem from '$lib/components/SidebarListItem.svelte'
 	import type { ResourceProjectOption } from '$lib/components/widgets/ResourceProjectsMenu.svelte'
@@ -39,15 +40,11 @@
 	}
 
 	let { isMobile = false, onClose }: Props = $props()
-	const sidebarListEdgeStyle = $derived(
-		isMobile
-			? 'width: 100%;'
-			: 'margin-left: calc(0px - var(--spacing-page-x)); margin-right: calc(0px - var(--spacing-page-x)); width: calc(100% + var(--spacing-page-x) + var(--spacing-page-x));'
-	)
 	let manageModalOpen = $state(false)
 	let manageCalendar = $state<CalendarRecord | null>(null)
 	let openCalendarMenuId = $state<string | null>(null)
 	let calendarMenuButtonEl = $state<HTMLElement | null>(null)
+	let calendarMenuAnchor = $state<ContextMenuAnchor | null>(null)
 	let selectedCalendarId = $state<string | null>(null)
 	let ownedCalendarsOpen = $state(true)
 	let sharedCalendarsOpen = $state(true)
@@ -228,11 +225,20 @@
 		}
 		openCalendarMenuId = calendarId
 		calendarMenuButtonEl = anchorEl
+		calendarMenuAnchor = null
+	}
+
+	/** right-click / hold anywhere on the row opens the same menu, at the gesture. */
+	function openCalendarMenuAt(calendarId: string, anchor: ContextMenuAnchor): void {
+		openCalendarMenuId = calendarId
+		calendarMenuButtonEl = null
+		calendarMenuAnchor = anchor
 	}
 
 	function closeCalendarMenu(): void {
 		openCalendarMenuId = null
 		calendarMenuButtonEl = null
+		calendarMenuAnchor = null
 	}
 
 	function shareCalendar(calendar: CalendarRecord): void {
@@ -317,7 +323,12 @@
 
 {#snippet calendarRow(calendar: CalendarRecord)}
 	{@const ownerLabel = calendarOwnerLabel(calendar)}
-	<div class="relative px-3">
+	<div
+		class="relative px-3"
+		{@attach contextmenu({
+			onOpen: (anchor) => openCalendarMenuAt(calendar.id, anchor),
+		})}
+	>
 		<SidebarListItem
 			selected={selectedCalendarId === calendar.id}
 			onSelect={() => selectCalendar(calendar.id)}
@@ -366,19 +377,16 @@
 		<PopupMenu
 			open={openCalendarMenuId === calendar.id}
 			anchorEl={calendarMenuButtonEl}
+			anchorPoint={calendarMenuAnchor}
 			onClose={closeCalendarMenu}
 		>
 			{#if canEditCalendar(calendar)}
-				<MenuItem onclick={() => editCalendar(calendar)}>
-					{#snippet icon()}<InfoCircle variant="solid" class="size-full" />{/snippet}
+				<MenuItem icon={InfoCircle} onclick={() => editCalendar(calendar)}>
 					properties
 				</MenuItem>
 			{/if}
 			{#if calendar}
-				<MenuItem onclick={() => shareCalendar(calendar)}>
-					{#snippet icon()}<Share class="size-full" strokeWidth="2.1" />{/snippet}
-					share
-				</MenuItem>
+				<MenuItem icon={Share} onclick={() => shareCalendar(calendar)}>share</MenuItem>
 			{/if}
 			{#if canEditCalendar(calendar)}
 				<ResourceProjectsMenu
@@ -389,12 +397,8 @@
 				/>
 			{/if}
 			{#if !calendar.is_default && canDeleteCalendar(calendar)}
-				<div class="bg-foreground/10 my-1 h-px w-full"></div>
-				<MenuItem destructive onclick={() => requestDeleteCalendar(calendar)}>
-					{#snippet icon()}<Trash
-							class="size-full text-red-400"
-							strokeWidth="2.1"
-						/>{/snippet}
+				<MenuSeparator />
+				<MenuItem destructive icon={Trash} onclick={() => requestDeleteCalendar(calendar)}>
 					delete
 				</MenuItem>
 			{/if}
@@ -522,8 +526,8 @@
 <div class="flex h-full min-h-0 flex-col">
 	<header
 		class="{isMobile
-			? 'pt-5 pb-4'
-			: 'mt-(--master-detail-header-top) mb-(--spacing-island-content) h-(--master-detail-header-height) py-0'} relative z-10 flex shrink-0 items-center justify-between gap-3 px-2"
+			? 'px-2 pt-5 pb-4'
+			: 'mt-(--master-detail-header-top) mb-(--spacing-island-content) h-(--master-detail-header-height) px-[calc(var(--spacing-page-x)+0.5rem)] py-0'} relative z-10 flex shrink-0 items-center justify-between gap-3"
 	>
 		<PageTitle icon={Calendar} label="calendar" iconColor="text-(--accent-primary)" tag="h2" />
 		{#if isMobile && onClose}
@@ -547,7 +551,7 @@
 		{/if}
 	</header>
 
-	<div class="relative min-h-0 flex-1 overflow-hidden" style={sidebarListEdgeStyle}>
+	<div class="relative min-h-0 flex-1 overflow-hidden">
 		<nav
 			bind:this={scrollEl}
 			class="flex h-full min-h-0 w-full flex-col overflow-y-auto pt-2 pb-6"

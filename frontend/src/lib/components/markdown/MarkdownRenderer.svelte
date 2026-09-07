@@ -225,7 +225,7 @@
 	{#snippet children({ token, children })}
 		{#if token.type === 'details'}
 			<details class="border-border/60 bg-card/20 rounded-container my-3 border p-3">
-				<summary class="text-foreground cursor-pointer text-sm font-medium select-none">
+				<summary class="text-foreground cursor-pointer text-sm font-medium">
 					{token.summary || 'details'}
 				</summary>
 				<div class="mt-2">

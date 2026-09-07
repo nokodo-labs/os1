@@ -4,7 +4,7 @@
 	import { SortIcon } from '$lib/components/icons'
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import NotesSidebar from '$lib/components/notes/NotesSidebar.svelte'
-	import { MenuItem, PopupMenu } from '$lib/components/primitives'
+	import { MenuItem, MenuSectionHeader, PopupMenu } from '$lib/components/primitives'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { notes, type NotesSortMode } from '$lib/stores/notes.svelte'
@@ -66,12 +66,7 @@
 		onClose={closeSortMenu}
 		class="min-w-52"
 	>
-		<div
-			class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
-		>
-			<SortIcon class="h-3.5 w-3.5" />
-			sort notes
-		</div>
+		<MenuSectionHeader icon={SortIcon}>sort notes</MenuSectionHeader>
 		{#each sortOptions as option (option.value)}
 			<MenuItem
 				selected={notes.sortMode === option.value}
@@ -80,7 +75,10 @@
 					closeSortMenu()
 				}}
 			>
-				{#snippet icon()}<SortIcon value={option.value} class="h-4 w-4" />{/snippet}
+				{#snippet iconSnippet()}<SortIcon
+						value={option.value}
+						class="size-full"
+					/>{/snippet}
 				{option.label}
 			</MenuItem>
 		{/each}
@@ -97,12 +95,10 @@
 {/snippet}
 
 {#if device.isMobile}
-	<div class="flex h-full min-h-0 flex-1 flex-col">
-		<NotesSidebar selectedNoteId={null} isMobile={true} />
-	</div>
+	<NotesSidebar selectedNoteId={null} isMobile={true} />
 {:else}
 	<div
-		class="flex h-[calc(100vh-var(--chrome-island-offset,0)-var(--spacing-island-content)-2.5rem)] items-center justify-center"
+		class="flex h-[calc(100vh-var(--chrome-island-offset,0px)-var(--spacing-island-content)-2.5rem)] items-center justify-center"
 	>
 		<p class="text-foreground/50 text-sm">select or create a note</p>
 	</div>

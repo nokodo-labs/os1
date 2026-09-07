@@ -25,6 +25,7 @@
 
 	// track selected list from URL
 	const selectedListId = $derived(page.params.listId ?? null)
+	const mobileFullBleed = $derived(page.url.pathname === '/reminders/lists')
 
 	// loading state for desktop sidebar
 	let isLoadingLists = $state(false)
@@ -61,23 +62,22 @@
 		}
 	}
 
-	// track last visited path/list for navigation continuity
+	// track last visited path/level for navigation continuity
 	$effect(() => {
 		if (!browser) return
 
 		const path = page.url.pathname
-		if (path.startsWith('/reminders/lists/') && selectedListId) {
-			reminders.lastVisitedPath = path
-			appNavigation.setLastVisited('reminders', path)
-		}
-
-		if (selectedListId) reminders.lastVisitedListId = selectedListId
+		appNavigation.setLastVisited('reminders', path)
 
 		void untrack(() => ensureListRoute(path, selectedListId))
 	})
 </script>
 
-<MasterDetailScaffold masterWidthClass="w-[clamp(280px,30vw,520px)]" ariaLabel="reminder lists">
+<MasterDetailScaffold
+	masterWidthClass="w-[clamp(280px,30vw,520px)]"
+	ariaLabel="reminder lists"
+	{mobileFullBleed}
+>
 	{#snippet master({ isMobile })}
 		<ReminderListsSidebar {selectedListId} isLoading={isLoadingLists} {isMobile} />
 	{/snippet}

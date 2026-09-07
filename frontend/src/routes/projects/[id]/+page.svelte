@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
 	import { api } from '$lib/api/client'
-	import { deleteThread, updateThread } from '$lib/chat/threadActions'
+	import { deleteThread } from '$lib/chat/threadActions'
 	import CalendarManageModal from '$lib/components/calendar/CalendarManageModal.svelte'
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
@@ -12,6 +12,7 @@
 	import Funnel from '$lib/components/icons/Funnel.svelte'
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import Plus from '$lib/components/icons/Plus.svelte'
+	import Search from '$lib/components/icons/Search.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
 	import SortIcon from '$lib/components/icons/SortIcon.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
@@ -19,7 +20,7 @@
 	import ProjectPropertiesModal from '$lib/components/modals/ProjectPropertiesModal.svelte'
 	import ResourcePickerModal from '$lib/components/modals/ResourcePickerModal.svelte'
 	import PageTitle from '$lib/components/PageTitle.svelte'
-	import { MenuItem, PopupMenu } from '$lib/components/primitives'
+	import { MenuItem, MenuSectionHeader, PopupMenu, Skeleton } from '$lib/components/primitives'
 	import ReminderListPropertiesModal from '$lib/components/reminders/ReminderListPropertiesModal.svelte'
 	import ResourcesView from '$lib/components/ResourcesView.svelte'
 	import type {
@@ -68,10 +69,6 @@
 	let isEditModalOpen = $state(false)
 	let isPickerOpen = $state(false)
 	let editThread = $state<Thread | null>(null)
-	let editThreadTitle = $state('')
-	let editThreadTags = $state<string[]>([])
-	let editThreadError = $state<string | null>(null)
-	let isSavingThreadEdit = $state(false)
 	let editReminderList = $state<ReminderListWithCounts | null>(null)
 	let editCalendar = $state<CalendarRecord | null>(null)
 	let isCalendarModalOpen = $state(false)
@@ -129,7 +126,6 @@
 			createdAt: new Date(thread.created_at).getTime(),
 			meta: {
 				tags: thread.tags,
-				is_archived: thread.is_archived,
 				owner_id: thread.owner_id,
 				project_ids: thread.project_ids,
 			},
@@ -417,7 +413,12 @@
 	}
 
 	function handleResourceShare(resource: ResourceItem): void {
-		if (resource.type === 'reminder' || resource.type === 'calendar_event') return
+		if (
+			resource.type === 'reminder' ||
+			resource.type === 'calendar_event' ||
+			resource.type === 'message'
+		)
+			return
 		modals.open('resource-access', {
 			resourceType: resource.type,
 			resourceId: resource.id,
@@ -437,7 +438,6 @@
 		if (resource.type === 'thread') {
 			const thread = await getThreadResource(resource.id)
 			if (!thread) return
-			editThreadError = null
 			editThread = thread
 			return
 		}
@@ -451,10 +451,13 @@
 		}
 	}
 
-	async function handleResourceDelete(resource: ResourceItem): Promise<boolean> {
+	async function handleResourceDelete(
+		resource: ResourceItem,
+		deleteOriginatedResources: boolean
+	): Promise<boolean> {
 		let success = false
 		if (resource.type === 'thread') {
-			const status = await deleteThread(resource.id)
+			const status = await deleteThread(resource.id, { deleteOriginatedResources })
 			success = status === 204
 			if (success) {
 				chat.removeRecentThread(resource.id)
@@ -490,44 +493,6 @@
 			? uniqueIds([...currentIds, targetProjectId])
 			: currentIds.filter((id) => id !== targetProjectId)
 		await updateResourceProjects(resource, nextProjectIds)
-	}
-
-	$effect(() => {
-		if (!editThread) return
-		editThreadTitle = editThread.title ?? ''
-		editThreadTags = Array.isArray(editThread.tags) ? [...editThread.tags] : []
-	})
-
-	function closeThreadProperties(): void {
-		if (isSavingThreadEdit) return
-		editThread = null
-		editThreadError = null
-	}
-
-	function saveThreadProperties(): void {
-		if (isSavingThreadEdit || !editThread) return
-		void (async () => {
-			const threadId = editThread?.id
-			if (!threadId) return
-			isSavingThreadEdit = true
-			editThreadError = null
-			const ok = await updateThread(threadId, editThreadTitle.trim(), editThreadTags)
-			if (ok) editThread = null
-			else editThreadError = 'could not save changes'
-			isSavingThreadEdit = false
-		})()
-	}
-
-	function shareThreadProperties(): void {
-		if (!editThread) return
-		const thread = editThread
-		editThread = null
-		editThreadError = null
-		modals.open('resource-access', {
-			resourceType: 'thread',
-			resourceId: thread.id,
-			title: thread.title ?? thread.id,
-		})
 	}
 
 	function handleItemClick(item: ResourceItem): void {
@@ -653,6 +618,17 @@
 		<ChevronLeft strokeWidth="2" />
 	</button>
 
+	{#if projectId}
+		<button
+			type="button"
+			class="group rounded-pill flex cursor-pointer items-center justify-center border-none bg-transparent opacity-80 transition-all duration-150 hover:scale-[1.05] hover:opacity-100 active:scale-[0.97]"
+			onclick={() => goto(resolve(`/?search=&project=${projectId}`))}
+			aria-label="search in project"
+		>
+			<Search strokeWidth="2" />
+		</button>
+	{/if}
+
 	<button
 		type="button"
 		bind:this={filterButtonEl}
@@ -662,7 +638,7 @@
 		aria-haspopup="menu"
 		aria-expanded={isFilterMenuOpen}
 	>
-		<Funnel variant="solid" />
+		<Funnel variant={filter === 'all' ? 'outline' : 'solid'} />
 	</button>
 	<PopupMenu
 		open={isFilterMenuOpen}
@@ -670,12 +646,7 @@
 		onClose={closeMenus}
 		class="min-w-52"
 	>
-		<div
-			class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
-		>
-			<Funnel class="h-3.5 w-3.5" variant="solid" />
-			filter resources
-		</div>
+		<MenuSectionHeader icon={Funnel}>filter resources</MenuSectionHeader>
 		{#each filterOptions as option (option.value)}
 			{@const visual = option.resourceType ? resourceVisual(option.resourceType) : null}
 			<MenuItem
@@ -685,17 +656,20 @@
 					closeMenus()
 				}}
 			>
-				{#snippet icon()}
+				{#snippet iconSnippet()}
 					{#if visual}
 						{@const Icon = visual.icon}
 						<span
 							class="flex size-full items-center justify-center text-(--accent-primary)"
 							style={resourceAccentStyle(visual.type)}
 						>
-							<Icon variant="solid" />
+							<Icon variant={filter === option.value ? 'solid' : 'outline'} />
 						</span>
 					{:else}
-						<Funnel class="h-4 w-4" variant="solid" />
+						<Funnel
+							class="size-full"
+							variant={filter === option.value ? 'solid' : 'outline'}
+						/>
 					{/if}
 				{/snippet}
 				{option.label}
@@ -715,12 +689,7 @@
 		<SortIcon />
 	</button>
 	<PopupMenu open={isSortMenuOpen} anchorEl={sortButtonEl} onClose={closeMenus} class="min-w-52">
-		<div
-			class="text-foreground/50 flex items-center gap-2 px-3 pt-1 pb-2 text-xs font-semibold tracking-[0.08em] uppercase"
-		>
-			<SortIcon class="h-3.5 w-3.5" />
-			sort resources
-		</div>
+		<MenuSectionHeader icon={SortIcon}>sort resources</MenuSectionHeader>
 		{#each sortOptions as option (option.value)}
 			<MenuItem
 				selected={sort === option.value}
@@ -729,7 +698,10 @@
 					closeMenus()
 				}}
 			>
-				{#snippet icon()}<SortIcon value={option.value} class="h-4 w-4" />{/snippet}
+				{#snippet iconSnippet()}<SortIcon
+						value={option.value}
+						class="size-full"
+					/>{/snippet}
 				{option.label}
 			</MenuItem>
 		{/each}
@@ -765,14 +737,14 @@
 	{:else if loading && !project}
 		<div class="flex items-center gap-3">
 			<FinderFolder class="text-foreground h-7 w-7 shrink-0" variant="solid" />
-			<div class="bg-foreground/10 h-8 w-48 animate-pulse rounded-full"></div>
+			<Skeleton shape="pill" width="12rem" height="2rem" />
 		</div>
 	{:else}
 		<div class="flex items-start gap-3">
 			<div class="flex-1">
 				<PageTitle icon={FinderFolder} label={project?.name ?? ''} />
 				{#if project?.description}
-					<p class="text-foreground/60 mt-2 text-sm">{project.description}</p>
+					<p class="text-foreground/60 mt-2 text-sm select-text">{project.description}</p>
 				{/if}
 			</div>
 			{#if project}
@@ -794,48 +766,39 @@
 						onClose={() => (moreMenuOpen = false)}
 					>
 						{#if project}
-							<MenuItem onclick={shareProject}>
-								{#snippet icon()}<Share class="size-4" />{/snippet}
-								share
-							</MenuItem>
+							<MenuItem icon={Share} onclick={shareProject}>share</MenuItem>
 						{/if}
 						{#if canEditProject}
 							<MenuItem
+								icon={InfoCircle}
 								onclick={() => {
 									moreMenuOpen = false
 									isEditModalOpen = true
 								}}
 							>
-								{#snippet icon()}<InfoCircle
-										variant="solid"
-										class="size-4"
-									/>{/snippet}
 								project properties
 							</MenuItem>
 							<MenuItem
+								icon={Plus}
 								onclick={() => {
 									moreMenuOpen = false
 									isPickerOpen = true
 								}}
 							>
-								{#snippet icon()}<Plus class="size-4" />{/snippet}
 								add resource
 							</MenuItem>
 						{/if}
 						{#if canDeleteProject}
-							<button
-								type="button"
-								class="group/del rounded-pill text-foreground/80 flex w-full cursor-pointer items-center border-none bg-transparent px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-red-500/10 hover:text-red-300"
+							<MenuItem
+								destructive
+								icon={Trash}
 								onclick={() => {
 									moreMenuOpen = false
 									showDeleteConfirm = true
 								}}
 							>
-								<Trash
-									class="h-4 w-4 text-red-400 transition-colors duration-150 group-hover/del:text-red-300"
-								/>
-								<span class="ml-2">delete</span>
-							</button>
+								delete
+							</MenuItem>
 						{/if}
 					</PopupMenu>
 				</div>
@@ -884,13 +847,7 @@
 <ChatPropertiesModal
 	open={editThread !== null}
 	thread={editThread}
-	bind:title={editThreadTitle}
-	bind:tags={editThreadTags}
-	error={editThreadError}
-	isSaving={isSavingThreadEdit}
-	onClose={closeThreadProperties}
-	onShare={shareThreadProperties}
-	onSave={saveThreadProperties}
+	onClose={() => (editThread = null)}
 />
 
 <ReminderListPropertiesModal

@@ -10,6 +10,7 @@
 	import { pageTitleStore } from '$lib/stores/pageTitle.svelte'
 	import { session } from '$lib/stores/session.svelte'
 	import { settingsState } from '$lib/stores/settings.svelte'
+	import { getOrCreateClientKey } from '$lib/stores/userClient.svelte'
 
 	let identifier = $state('')
 	let password = $state('')
@@ -146,9 +147,11 @@
 		isSubmitting = true
 
 		try {
+			const clientKey = getOrCreateClientKey()
 			const { data, error, response } = await api.POST('/v1/auth/login/access-token', {
 				headers: {
 					'Content-Type': 'application/x-www-form-urlencoded',
+					...(clientKey ? { 'X-Client-Key': clientKey } : {}),
 				},
 				body: {
 					username: identifier.trim(),
