@@ -5,6 +5,7 @@
 	import { markAuthReady } from '$lib/auth/session.svelte'
 	import BackgroundManager, {
 		type BackgroundConfig,
+		type BackgroundType,
 	} from '$lib/components/backgrounds/BackgroundManager.svelte'
 	import ChatSidebar from '$lib/components/chat/sidebar/ChatSidebar.svelte'
 	import AddFriendsModal from '$lib/components/modals/AddFriendsModal.svelte'
@@ -16,7 +17,6 @@
 	import NotePropertiesModal from '$lib/components/modals/NotePropertiesModal.svelte'
 	import ShareResourceModal from '$lib/components/modals/ShareResourceModal.svelte'
 	import NokodoBrandLogo from '$lib/components/NokodoBrandLogo.svelte'
-	import ResourceAccessModal from '$lib/components/resource-access/ResourceAccessModal.svelte'
 	import SplashController from '$lib/components/SplashController.svelte'
 	import BackendReconnect from '$lib/components/system/BackendReconnect.svelte'
 	import Dock from '$lib/components/system/Dock.svelte'
@@ -180,10 +180,27 @@
 
 	// gate initial page paint behind the splash.
 	const backgroundBlocker = appReadiness.createBlocker()
-	function handleBackgroundReady() {
-		backgroundBlocker.done()
+	let appInitialized = $state(false)
+	let readyBg = $state<BackgroundType | null>(null)
+	function handleBackgroundReady(bg: BackgroundType) {
+		readyBg = bg
 	}
+	$effect(() => {
+		if (!appInitialized) return
+		if (readyBg !== null && readyBg === background.resolved) {
+			backgroundBlocker.done()
+		}
+	})
+	// the wallpaper depends on preferences (when authed) and settings (auth
+	// pages). render 'none' until those have loaded so we never spin up a WebGL
+	// context for a default wallpaper we'd immediately throw away.
+	const displayBackground = $derived<BackgroundType>(
+		appInitialized ? background.resolved : 'none'
+	)
+	// safety net: never let a stalled background hold the splash up forever.
+	const backgroundBlockerFallback = setTimeout(() => backgroundBlocker.done(), 5000)
 	onDestroy(() => {
+		clearTimeout(backgroundBlockerFallback)
 		backgroundBlocker.done()
 	})
 
@@ -196,11 +213,14 @@
 		// this keeps 404s visible even when the user is logged out.
 		if (page.status === 404) {
 			markAuthReady()
+			appInitialized = true
 			return
 		}
 
 		// initialize app (auth restoration, settings, event stream)
 		const { authenticated, token, backendUnreachable: unreachable } = await initApp()
+		// preferences are now settled -> background.resolved is final.
+		appInitialized = true
 
 		if (unreachable) {
 			backendUnreachable = true
@@ -226,7 +246,7 @@
 		if (token) {
 			// access gate
 			await permissions.load()
-			if (permissions.list !== null && !permissions.hasPermission('frontend:access')) {
+			if (permissions.hasLoaded && !permissions.hasPermission('frontend:access')) {
 				pendingApproval = true
 			}
 		}
@@ -250,6 +270,7 @@
 
 	const isChatSwipeEligibleRoute = $derived.by(() => {
 		const path = page.url.pathname
+		if (!chrome.hasChatShell) return false
 		return path === '/' || path.startsWith('/c/')
 	})
 
@@ -316,6 +337,31 @@
 		dockSwipeActive = false
 		dockSwipePointerId = null
 	}
+
+	/**
+	 * a closed dock is a full panel of glass, a run of tinted rows and the
+	 * control center, all parked just off the right edge.  once the slide has
+	 * finished there is nothing to look at, so the whole subtree stops being
+	 * painted - it keeps its layout (the notification list measures itself
+	 * through it) but leaves the compositor entirely until asked for again.
+	 */
+	/** the close slide plus a frame, so parking never clips the slide's tail. */
+	const DOCK_PARK_MS = 360
+
+	let isDockParked = $state(!chrome.isDockOpen)
+
+	// on a timer rather than the slide's own transitionend: a throttled tab can
+	// skip straight to the end state without ever firing one, and the panel
+	// would then stay in the compositor for the rest of the session.  the class
+	// keys off the open state too, so opening unparks in the same dom update.
+	$effect(() => {
+		if (chrome.isDockOpen) {
+			isDockParked = false
+			return
+		}
+		const timer = setTimeout(() => (isDockParked = true), DOCK_PARK_MS)
+		return () => clearTimeout(timer)
+	})
 
 	let sidebarSwipePointerId = $state<number | null>(null)
 	let sidebarSwipeStartX = $state(0)
@@ -386,14 +432,18 @@
 
 <!-- BackgroundManager handles all backgrounds with smooth transitions -->
 <BackgroundManager
-	type={background.resolved}
+	type={displayBackground}
 	config={{
 		...DEFAULT_BACKGROUND_CONFIG,
 		...(background.pageConfig || {}),
 		color: background.resolvedStaticColor,
 	}}
 	onReady={handleBackgroundReady}
->
+/>
+
+<!-- app shell: sibling of the wallpaper, never nested inside it. it owns the
+     stacking context every z-index below (island, dock, modals) is relative to. -->
+<div class="fixed inset-0 z-0">
 	{#if backendUnreachable}
 		<BackendReconnect />
 	{:else if pendingApproval}
@@ -430,7 +480,7 @@
 
 			<!-- main content -->
 			<div
-				class="main-content-shell no-scrollbar relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pt-[calc(var(--chrome-island-offset,0)+16px)]"
+				class="main-content-shell no-scrollbar relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pt-[calc(var(--chrome-island-offset,0px)+16px)]"
 				role="main"
 				style="touch-action: pan-y; overscroll-behavior-y: contain;"
 				bind:this={mainContentShell}
@@ -476,8 +526,10 @@
 			>
 				<div
 					class="dock-content liquid-glass h-full w-full px-0 pt-4 pb-4 {chrome.isDockOpen
-						? 'translate-x-0'
-						: 'translate-x-full'}"
+						? 'dock-content--open translate-x-0'
+						: 'translate-x-full'} {!chrome.isDockOpen && isDockParked
+						? 'dock-content--parked'
+						: ''}"
 				>
 					<Dock />
 				</div>
@@ -502,14 +554,9 @@
 				payload={modals.notePropertiesPayload}
 				onClose={modals.close}
 			/>
-			<ResourceAccessModal
+			<ShareResourceModal
 				open={modals.isOpen('resource-access')}
 				payload={modals.resourceAccessPayload}
-				onClose={modals.close}
-			/>
-			<ShareResourceModal
-				open={modals.isOpen('share-resource')}
-				payload={modals.shareResourcePayload}
 				onClose={modals.close}
 			/>
 		</div>
@@ -537,28 +584,52 @@
 			if (toast?.type === 'notification') chrome.openDock()
 		}}
 	/>
-</BackgroundManager>
+</div>
 
 <style>
 	.dock-content {
+		/* the panel is the ONLY glass in the dock: everything it hosts tints over
+		   this one blurred surface rather than blurring its own copy of the page. */
 		--lg-blur: 8px;
+		/* oklab, not oklch: polar mixing averages the hue angle without premultiplying it,
+		   so mixing the accent into an achromatic wash rotates it toward 0deg (red) */
 		--lg-bg: color-mix(
-			in oklch,
+			in oklab,
 			var(--accent-primary) 10%,
-			color-mix(in oklch, var(--background) 12%, transparent)
+			color-mix(in oklab, var(--background) 12%, transparent)
 		);
+		/* the app's page-transition family (app.css): the same curve both ways,
+		   longer coming in than going out, so arriving settles and leaving is
+		   crisp.  no overshoot - a spring here would pull the panel past the
+		   right edge and open a gap behind it. */
+		--dock-slide-ms: 300ms;
+		--dock-slide-ease: cubic-bezier(0.4, 0, 0.2, 1);
 		transition:
-			translate 300ms ease-in-out,
-			transform 300ms ease-in-out,
+			translate var(--dock-slide-ms) var(--dock-slide-ease),
+			transform var(--dock-slide-ms) var(--dock-slide-ease),
 			background var(--lg-transition),
 			box-shadow var(--lg-transition);
 	}
 
+	.dock-content--open {
+		--dock-slide-ms: 420ms;
+	}
+
+	.dock-content--parked {
+		visibility: hidden;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.dock-content {
+			--dock-slide-ms: 0ms;
+		}
+	}
+
 	:global(.dark) .dock-content {
 		--lg-bg: color-mix(
-			in oklch,
+			in oklab,
 			var(--accent-primary) 12%,
-			color-mix(in oklch, var(--background) 35%, transparent)
+			color-mix(in oklab, var(--background) 35%, transparent)
 		);
 	}
 

@@ -3,7 +3,13 @@
 	<head>
 		<meta charset="utf-8" />
 		<base href="/" />
-		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<!-- interactive-widget=resizes-content: android shrinks the LAYOUT viewport for
+		     the virtual keyboard, so `--app-height`/dvh and every `bottom: 0` anchor are
+		     natively above it. ios ignores the value and keeps the js visualViewport sync. -->
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+		/>
 		<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
 		<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
 		<meta name="mobile-web-app-capable" content="yes" />

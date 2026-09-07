@@ -172,6 +172,20 @@
 		overscroll-behavior: none;
 	}
 
+	/* nothing selects by default: ui chrome is not copy. content opts in with
+	   `select-text`; editable fields are always selectable. */
+	html {
+		user-select: none;
+		-webkit-user-select: none;
+		-webkit-touch-callout: none;
+	}
+	input,
+	textarea,
+	[contenteditable]:not([contenteditable='false']) {
+		user-select: text;
+		-webkit-user-select: text;
+	}
+
 	* {
 		@apply border-border outline-ring/50;
 	}
@@ -203,7 +217,6 @@
 		@apply focus-visible:ring-foreground/40 focus-visible:ring-2 focus-visible:outline-none;
 		@apply active:scale-[0.97];
 		-webkit-tap-highlight-color: transparent;
-		user-select: none;
 	}
 
 	/* app viewport height: uses --app-height from the device store on mobile */
@@ -217,27 +230,31 @@
 		@apply focus-visible:ring-foreground/40 focus-visible:ring-2 focus-visible:outline-none;
 		@apply active:scale-[0.98];
 		-webkit-tap-highlight-color: transparent;
-		user-select: none;
 	}
 }
 
-/* custom scrollbar */
-::-webkit-scrollbar {
-	width: 6px;
-	height: 6px;
-}
+/* custom scrollbar (slim webkit bars).
+   scoped to fine pointers (desktop/laptop) only: defining ::-webkit-scrollbar forces a classic,
+   space-taking bar and disables the native overlay scrollbar. on touch devices (coarse pointer) we
+   skip it so the OS uses its native overlay scrollbar. */
+@media (pointer: fine) {
+	::-webkit-scrollbar {
+		width: 6px;
+		height: 6px;
+	}
 
-::-webkit-scrollbar-track {
-	background: transparent;
-}
+	::-webkit-scrollbar-track {
+		background: transparent;
+	}
 
-::-webkit-scrollbar-thumb {
-	background: color-mix(in oklch, var(--foreground) 10%, transparent);
-	border-radius: 10px;
-}
+	::-webkit-scrollbar-thumb {
+		background: color-mix(in oklch, var(--foreground) 10%, transparent);
+		border-radius: 10px;
+	}
 
-::-webkit-scrollbar-thumb:hover {
-	background: color-mix(in oklch, var(--foreground) 20%, transparent);
+	::-webkit-scrollbar-thumb:hover {
+		background: color-mix(in oklch, var(--foreground) 20%, transparent);
+	}
 }
 
 /* hide scrollbar for specific scroll areas (e.g., home apps grid). */

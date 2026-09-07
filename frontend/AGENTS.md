@@ -64,83 +64,105 @@ frontend/
 ├── src/
 │   ├── app.html
 │   ├── app.d.ts
-│   ├── app.css
-│   ├── service-worker.ts
-│   ├── routes/
+│   ├── app.css                   # global styles + tailwind layer
+│   ├── service-worker.ts         # PWA service worker (offline, caching, push)
+│   ├── routes/                   # SvelteKit file-based routes
 │   │   ├── +error.svelte
-│   │   ├── +layout.svelte
+│   │   ├── +layout.svelte        # root shell (island, dock, providers)
 │   │   ├── +layout.ts
-│   │   ├── +page.svelte
-│   │   ├── c/[id]/
-│   │   ├── debug/
+│   │   ├── +page.svelte          # home screen (unified search + chat entry)
+│   │   ├── c/[id]/               # chat conversation view
+│   │   ├── calendar/             # calendar + events view
+│   │   ├── debug/                # dev-only demo/test pages
 │   │   │   ├── +page.svelte
 │   │   │   ├── backgrounds/
+│   │   │   ├── chat-send/
 │   │   │   ├── liquid-glass/
 │   │   │   ├── liquid-metal/
+│   │   │   ├── mermaid/
+│   │   │   ├── open-webui-import/
 │   │   │   ├── pwa/
 │   │   │   ├── runs/
-│   │   │   └── shimmer/
-│   │   ├── library/
+│   │   │   ├── shimmer/
+│   │   │   └── toasts/
+│   │   ├── library/              # user resource library (files, media)
 │   │   ├── login/
-│   │   ├── notes/
-│   │   │   └── [id]/
-│   │   ├── projects/
-│   │   │   └── [id]/
-│   │   ├── reminders/
-│   │   │   └── lists/[listId]/
-│   │   ├── settings/
+│   │   ├── media/                # media app (placeholder)
+│   │   │   └── (tabs)/
+│   │   │       ├── discover/
+│   │   │       ├── movies/
+│   │   │       ├── search/
+│   │   │       └── shows/
+│   │   ├── messages/             # direct messages / threads inbox
+│   │   ├── notes/                # notes list
+│   │   │   └── [id]/             # single note editor
+│   │   ├── projects/             # projects list
+│   │   │   └── [id]/             # single project view
+│   │   ├── reminders/            # reminders + lists
+│   │   │   └── lists/[listId]/   # single reminder list
+│   │   ├── settings/             # user settings sections
 │   │   │   ├── about/
 │   │   │   ├── accessibility/
 │   │   │   ├── advanced/
 │   │   │   ├── ai/
 │   │   │   ├── appearance/
 │   │   │   ├── debug/
+│   │   │   ├── integrations/
 │   │   │   ├── notifications/
 │   │   │   ├── privacy/
 │   │   │   └── security/
 │   │   ├── signup/
-│   │   └── social/
-│   │       ├── (tabs)/
-│   │       │   ├── friends/
-│   │       │   └── groups/
-│   │       ├── groups/[id]/
-│   │       └── users/[id]/
+│   │   ├── social/               # friends, groups, profiles
+│   │   │   ├── (tabs)/
+│   │   │   │   ├── friends/
+│   │   │   │   └── groups/
+│   │   │   ├── groups/[id]/
+│   │   │   └── users/[id]/
+│   │   └── web/                  # web search / browse (placeholder)
 │   ├── lib/
-│   │   ├── actions/
-│   │   ├── api/
-│   │   │   └── streaming/
-│   │   ├── auth/
-│   │   ├── chat/
-│   │   ├── citations/        # centralized citation source config (icon, color, href, widget per source type)
-│   │   ├── collaboration/
+│   │   ├── animations/           # motion/transition helpers
+│   │   ├── api/                  # OpenAPI client + generated types
+│   │   │   └── streaming/        # SSE/stream consumption helpers
+│   │   ├── attachments/          # element behaviour ({@attach}), never use: actions
+│   │   ├── auth/                 # auth state + flows
+│   │   ├── chat/                 # chat client logic (runs, messages, steering)
+│   │   ├── citations/            # centralized citation source config (icon, color, href, widget per source type)
+│   │   ├── collaboration/        # CRDT collaborative editing client
 │   │   ├── components/
-│   │   │   ├── backgrounds/ (webgl/)
-│   │   │   ├── chat/ (sidebar/, tools/, webgl/)
-│   │   │   ├── common/
-│   │   │   ├── editor/
-│   │   │   ├── effects/
+│   │   │   ├── backgrounds/ (canvas/, webgl/)
+│   │   │   ├── calendar/
+│   │   │   ├── chat/ (activities/, sidebar/, tools/, webgl/)
+│   │   │   ├── common/           # shared building blocks (timestamp, loaders, etc.)
+│   │   │   ├── editor/           # rich text / document editor UI
+│   │   │   ├── effects/          # liquid glass/mercury/metal + shimmer effects
 │   │   │   ├── home/
 │   │   │   ├── icons/
-│   │   │   ├── layouts/
+│   │   │   ├── layouts/          # page scaffolds (master-detail, tab island)
 │   │   │   ├── markdown/
+│   │   │   ├── messages/
 │   │   │   ├── modals/
 │   │   │   ├── notes/
-│   │   │   ├── primitives/ (liquid-glass/)
+│   │   │   ├── primitives/ (liquid-glass/)   # low-level inputs (switch, slider, menu, etc.)
 │   │   │   ├── reminders/
+│   │   │   ├── scheduling/       # recurrence + schedule pickers
 │   │   │   ├── settings/
-│   │   │   ├── streamdown/ (utils/)
-│   │   │   ├── system/
+│   │   │   ├── share/            # ACL / sharing UI
+│   │   │   ├── streamdown/ (utils/)          # streaming markdown renderer (mermaid, tables)
+│   │   │   ├── system/           # shell chrome (island, dock, notifications)
 │   │   │   └── widgets/
-│   │   ├── config/
-│   │   ├── contexts/
-│   │   ├── liquid-glass/ (a/, b/)
-│   │   ├── liquid-mercury/ (b/)
-│   │   ├── liquid-metal/ (svg/)
-│   │   ├── stores/           # see stores/README.md for architecture + lifecycle contract
+│   │   ├── config/               # runtime config loading
+│   │   ├── contexts/             # svelte context providers
+│   │   ├── editor/               # editor state/logic (non-component)
+│   │   ├── liquid-glass/ (a/, b/)            # liquid glass effect implementations
+│   │   ├── liquid-mercury/ (b/)              # liquid mercury effect implementation
+│   │   ├── liquid-metal/ (svg/)              # liquid metal effect implementation
+│   │   ├── reminders/            # reminders client logic
+│   │   ├── resources/            # resource (file/media) client logic
+│   │   ├── stores/               # see stores/README.md for architecture + lifecycle contract
 │   │   ├── styles/
-│   │   ├── tools/
+│   │   ├── tools/                # chat tool UI definitions
 │   │   ├── utils/
-│   │   ├── init.ts
+│   │   ├── init.ts               # app bootstrap
 │   │   ├── index.ts
 │   │   └── utils.ts
 │   └── test/
@@ -153,6 +175,7 @@ frontend/
     ├── offline.html
     ├── robots.txt
     ├── shimmer.css
+    ├── shortcuts/
     ├── splash-preview.html
     └── splash.css
 ```

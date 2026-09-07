@@ -3,13 +3,10 @@
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import FloatingScrollTopButton from '$lib/components/FloatingScrollTopButton.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
-	import {
-		resourceAccess,
-		type AccessControlledResourceType,
-	} from '$lib/stores/resourceAccess.svelte'
 	import Grid from '$lib/components/icons/Grid.svelte'
 	import ListBullet from '$lib/components/icons/ListBullet.svelte'
 	import LoadingMoreIndicator from '$lib/components/LoadingMoreIndicator.svelte'
+	import { Skeleton } from '$lib/components/primitives'
 	import CalendarWidget from '$lib/components/widgets/CalendarWidget.svelte'
 	import ChatWidget from '$lib/components/widgets/ChatWidget.svelte'
 	import FileWidget from '$lib/components/widgets/FileWidget.svelte'
@@ -24,6 +21,11 @@
 		ResourceLayoutMode,
 		ResourceSortMode,
 	} from '$lib/components/widgets/types'
+	import { resourceItemKey } from '$lib/resources/searchResults'
+	import {
+		resourceAccess,
+		type AccessControlledResourceType,
+	} from '$lib/stores/resourceAccess.svelte'
 	import { session } from '$lib/stores/session.svelte'
 
 	type ResourceViewLayout = ResourceLayoutMode | 'pill'
@@ -43,7 +45,6 @@
 		sort?: ResourceSortMode | 'none'
 		pageSize?: number
 		emptyMessage?: string
-		emptyIcon?: typeof Grid
 		showLayoutToggle?: boolean
 		showPagination?: boolean
 		currentUserId?: string | null
@@ -53,10 +54,12 @@
 		sharedEmptyMessage?: string
 		showOwnershipSections?: boolean
 		showScrollTopButton?: boolean
-		scrollTopButtonBottom?: string
 		onItemEdit?: (item: ResourceItem) => void
 		onItemShare?: (item: ResourceItem) => void
-		onItemDelete?: (item: ResourceItem) => Promise<boolean> | boolean | void
+		onItemDelete?: (
+			item: ResourceItem,
+			deleteOriginatedResources: boolean
+		) => Promise<boolean> | boolean | void
 		onItemRemoveFromProject?: (item: ResourceItem) => Promise<void> | void
 		onItemProjectToggle?: (
 			item: ResourceItem,
@@ -92,7 +95,6 @@
 		sharedEmptyMessage = 'nothing shared with you',
 		showOwnershipSections = true,
 		showScrollTopButton = true,
-		scrollTopButtonBottom = '1.5rem',
 		onItemEdit,
 		onItemShare,
 		onItemDelete,
@@ -328,6 +330,7 @@
 				return type
 			case 'reminder':
 			case 'calendar_event':
+			case 'message':
 				return null
 		}
 	}
@@ -537,7 +540,7 @@
 				layout={concreteLayout}
 				onEdit={onItemEdit ? () => onItemEdit(resource) : undefined}
 				onShare={onItemShare ? () => onItemShare(resource) : undefined}
-				onDelete={onItemDelete ? () => onItemDelete(resource) : undefined}
+				onDelete={onItemDelete ? () => onItemDelete(resource, false) : undefined}
 				onclick={onItemClick ? () => onItemClick(resource) : undefined}
 			/>
 		{/if}
@@ -574,7 +577,7 @@
 
 {#snippet actionWrappedResourceCard(resource: ResourceItem)}
 	{@const displayResource = resourceWithSharing(resource)}
-	<div class="group/resource relative min-w-0">
+	<div class="group/resource relative min-w-0" data-row>
 		{@render resourceCard(resource)}
 		{#if hasGenericActions && resource.type !== 'project'}
 			<ResourceActionMenu
@@ -584,7 +587,10 @@
 				selectedProjectIds={selectedProjectIds(resource)}
 				onProperties={onItemEdit ? () => onItemEdit(resource) : undefined}
 				onShare={onItemShare ? () => onItemShare(resource) : undefined}
-				onDelete={onItemDelete ? () => onItemDelete(resource) : undefined}
+				onDelete={onItemDelete
+					? (deleteOriginatedResources) =>
+							onItemDelete(resource, deleteOriginatedResources)
+					: undefined}
 				onRemoveFromProject={onItemRemoveFromProject
 					? () => onItemRemoveFromProject(resource)
 					: undefined}
@@ -608,13 +614,13 @@
 		<LoadingMoreIndicator className="py-6" label="loading more resources" />
 	{:else if layout === 'grid'}
 		<div class="grid gap-4 pb-4" style={virtualGridRowStyle}>
-			{#each row.items as resource (resource.id)}
+			{#each row.items as resource (resourceItemKey(resource))}
 				{@render actionWrappedResourceCard(resource)}
 			{/each}
 		</div>
 	{:else}
 		<div class="flex flex-col gap-2 pb-2">
-			{#each row.items as resource (resource.id)}
+			{#each row.items as resource (resourceItemKey(resource))}
 				{@render actionWrappedResourceCard(resource)}
 			{/each}
 		</div>
@@ -666,16 +672,10 @@
 
 	{#if loading}
 		<div class={layout === 'grid' ? resourceGridClass : 'flex flex-col gap-2'}>
-			{#each [0, 1, 2, 3, 4, 5] as i (i)}
-				<div
-					class="liquid-glass liquid-glass--frosted animate-pulse overflow-hidden {layout ===
-					'grid'
-						? 'h-80 rounded-2xl'
-						: effectiveLayout === 'pill'
-							? 'rounded-pill h-12'
-							: 'h-16 rounded-2xl'}"
-				></div>
-			{/each}
+			<Skeleton
+				count={6}
+				shape={layout === 'grid' ? 'card' : effectiveLayout === 'pill' ? 'pill' : 'block'}
+			/>
 		</div>
 	{:else if paginated.length === 0 && !showSharedSections}
 		<EmptyState label={emptyMessage} class="min-h-[45vh] flex-1 overflow-hidden py-16" />
@@ -694,8 +694,8 @@
 	{#if showScrollTopButton}
 		<FloatingScrollTopButton
 			target={pageScrollTarget}
-			class="pointer-events-none fixed z-20 flex justify-center"
-			style="left: var(--island-left, 0px); right: 0; bottom: {scrollTopButtonBottom};"
+			fixed
+			style="left: var(--island-left, 0px); right: 0;"
 		/>
 	{/if}
 

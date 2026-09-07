@@ -10,7 +10,13 @@
 		type SearchResourceType,
 	} from '$lib/api/streaming'
 	import { getAccessToken } from '$lib/auth/session.svelte'
-	import { deriveToolChoice, type RunModifiers } from '$lib/chat/attachments'
+	import {
+		deriveToolChoice,
+		originatedResourceRefs,
+		toResourceRefs,
+		type RunModifiers,
+	} from '$lib/chat/attachments'
+	import { HOME_PLACEHOLDER_TEXTS } from '$lib/chat/placeholderExamples'
 	import AgentSelector from '$lib/components/chat/AgentSelector.svelte'
 	import ChatInput from '$lib/components/chat/ChatInput.svelte'
 	import ChatSidebarToggleButton from '$lib/components/chat/ChatSidebarToggleButton.svelte'
@@ -79,6 +85,11 @@
 		return page.url.searchParams.get('search') ?? ''
 	})
 	const isSearchMode = $derived(searchModeQuery !== null)
+	// `?project=` scopes search mode to one project (set by the project page)
+	const searchProjectId = $derived.by((): string | null => {
+		if (!browser) return null
+		return page.url.searchParams.get('project')
+	})
 
 	// auto-send ?q= query param as a new chat message (runs once per unique q value).
 	// the effect reactively waits for auth + agent readiness so it doesn't fire
@@ -230,13 +241,13 @@
 		const threadId = newTypeid('thread')
 		const now = new Date().toISOString()
 
-		// build RunInput shape
-		const runInput: RunInput = { text: content || null }
+		// a run's input is an ordinary user message
+		const runInput: RunInput = { type: 'user' }
+		if (content) runInput.content = [{ type: 'text', text: content }]
 		if (modifiers?.attachments && modifiers.attachments.length > 0) {
-			runInput.attachments = modifiers.attachments.map((a) => ({
-				type: a.resourceType,
-				id: a.fileId,
-			}))
+			runInput.attachments = toResourceRefs(modifiers.attachments)
+			const originated = originatedResourceRefs(modifiers.attachments)
+			if (originated.length > 0) runInput.originated_resources = originated
 		}
 
 		const toolChoice = modifiers ? deriveToolChoice(modifiers) : null
@@ -252,7 +263,6 @@
 				owner_id: '',
 				title: null,
 				tags: [],
-				is_archived: false,
 				is_temporary: isTemporaryChatMode,
 				project_ids: [],
 				created_at: now,
@@ -308,11 +318,16 @@
 		chatStartError = null
 	}
 
+	/** search-mode query string, carrying the project scope while one is active. */
+	function searchModeParams(q: string): string {
+		const scope = searchProjectId ? `&project=${encodeURIComponent(searchProjectId)}` : ''
+		return `search=${encodeURIComponent(q)}${scope}`
+	}
+
 	function handleSearchSubmit(content: string) {
 		const q = content.trim()
 		submittedSearchQuery = q
-		const target = q ? `/?search=${encodeURIComponent(q)}` : '/?search'
-		void goto(resolve(target as unknown as '/'), {
+		void goto(resolve(`/?${searchModeParams(q)}`), {
 			keepFocus: true,
 			noScroll: true,
 			replaceState: true,
@@ -356,8 +371,7 @@
 			const q = action.query.trim()
 			searchInputValue = q
 			submittedSearchQuery = q
-			const target = q ? `/?search=${encodeURIComponent(q)}` : '/?search'
-			void goto(resolve(target as unknown as '/'), { keepFocus: true, noScroll: true })
+			void goto(resolve(`/?${searchModeParams(q)}`), { keepFocus: true, noScroll: true })
 		} else if (action.type === 'pulse') {
 			chrome.setPulse(action.message)
 			window.setTimeout(() => chrome.setPulse(null), 1800)
@@ -442,7 +456,11 @@
 				{:else if activeModeBanner}
 					{@render modeBanner(activeModeBanner)}
 				{:else if isSearchMode}
-					<HomeSearchMode query={submittedSearchQuery} types={searchResourceTypes} />
+					<HomeSearchMode
+						query={submittedSearchQuery}
+						types={searchResourceTypes}
+						projectId={searchProjectId}
+					/>
 				{/if}
 			</div>
 		</div>
@@ -534,6 +552,7 @@
 					onKeyDown={(e) => suggestionsKeyHandler?.(e) || false}
 					{isGenerating}
 					placeholder="send a message"
+					placeholderExamples={HOME_PLACEHOLDER_TEXTS}
 					{focusToken}
 				/>
 			</div>

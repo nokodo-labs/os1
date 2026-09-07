@@ -3,12 +3,15 @@
 	import type { Snippet } from 'svelte'
 
 	type ActionsVisibility = 'always' | 'hover' | 'reserve-hover' | 'overlay-always'
+	/** `pill` draws a resting tint, for lists that sit on the page instead of a sidebar surface. */
+	type Surface = 'transparent' | 'pill'
 
 	interface Props {
 		selected?: boolean
 		onSelect?: () => void | Promise<void>
 		onPrefetch?: () => void
 		actionsVisibility?: ActionsVisibility
+		surface?: Surface
 		showChevron?: boolean
 		radiusClass?: string
 		paddingClass?: string
@@ -23,6 +26,7 @@
 		onSelect,
 		onPrefetch,
 		actionsVisibility = 'hover',
+		surface = 'transparent',
 		showChevron = false,
 		radiusClass = 'rounded-pill',
 		paddingClass = 'px-3 py-2.5',
@@ -31,6 +35,12 @@
 		leading,
 		actions,
 	}: Props = $props()
+
+	const surfaceClass = $derived(
+		surface === 'pill'
+			? 'bg-foreground/8 hover:bg-foreground/12'
+			: 'bg-transparent hover:bg-interactive-hover'
+	)
 
 	function handleKeyDown(event: KeyboardEvent) {
 		if (event.key !== 'Enter' && event.key !== ' ') return
@@ -42,7 +52,7 @@
 <div
 	role="button"
 	tabindex="0"
-	class={`group/sidebar-item relative overflow-hidden ${radiusClass} flex w-full min-w-0 cursor-pointer items-center gap-3 border border-transparent bg-transparent ${paddingClass} hover:border-foreground/15 hover:bg-interactive-hover text-left transition-all duration-200 ${className}`}
+	class={`group/sidebar-item relative overflow-hidden ${radiusClass} flex w-full min-w-0 cursor-pointer items-center gap-3 border border-transparent ${surfaceClass} ${paddingClass} hover:border-foreground/15 text-left transition-all duration-200 ${className}`}
 	style={selected
 		? 'background-color: rgb(var(--accent-rgb) / 0.3); border-color: rgb(var(--accent-rgb) / 0.55);'
 		: ''}
