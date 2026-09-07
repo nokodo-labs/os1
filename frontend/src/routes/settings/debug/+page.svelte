@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths'
 	import CommandLine from '$lib/components/icons/CommandLine.svelte'
+	import { debugFields } from '$lib/components/settings/fields/debug'
+	import SettingsField from '$lib/components/settings/SettingsField.svelte'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { useDebugUi } from '$lib/contexts/debugUiContext.svelte'
 	import { device } from '$lib/stores/device.svelte'
@@ -31,11 +33,7 @@
 		</div>
 	{:else}
 		<div class="space-y-4">
-			<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-				<div class="text-foreground/85 text-sm font-semibold">debug apps</div>
-				<div class="text-foreground/55 mt-1 text-sm">
-					show placeholder apps on the home screen for testing.
-				</div>
+			<SettingsField field={debugFields.debugApps}>
 				<label class="mt-4 flex items-center justify-between gap-4">
 					<span class="text-foreground/75 text-sm">enable debug apps</span>
 					<input
@@ -49,11 +47,9 @@
 						}}
 					/>
 				</label>
-			</div>
+			</SettingsField>
 
-			<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-				<div class="text-foreground/85 text-sm font-semibold">appearance</div>
-				<div class="text-foreground/55 mt-1 text-sm">admin-only debug overrides.</div>
+			<SettingsField field={debugFields.appearance}>
 				<label class="mt-4 flex items-center justify-between gap-4">
 					<span class="text-foreground/75 text-sm">disable background</span>
 					<input
@@ -67,13 +63,9 @@
 						}}
 					/>
 				</label>
-			</div>
+			</SettingsField>
 
-			<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-				<div class="text-foreground/85 text-sm font-semibold">debug pages</div>
-				<div class="text-foreground/55 mt-1 text-sm">
-					visual test pages and playgrounds.
-				</div>
+			<SettingsField field={debugFields.debugPages}>
 				<div class="mt-4 flex flex-wrap gap-2">
 					<a
 						href={resolve('/debug')}
@@ -82,14 +74,9 @@
 						open debug index
 					</a>
 				</div>
-			</div>
+			</SettingsField>
 
-			<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-				<div class="text-foreground/85 text-sm font-semibold">device insights</div>
-				<div class="text-foreground/55 mt-1 text-sm">
-					computed device metrics and gpu tier signal breakdown.
-				</div>
-
+			<SettingsField field={debugFields.deviceInsights}>
 				<div class="text-foreground/75 mt-4 grid gap-3 text-sm sm:grid-cols-2">
 					<div class="rounded-pill border-foreground/10 bg-foreground/3 border px-3 py-2">
 						<div class="text-foreground/50 text-xs font-semibold uppercase">
@@ -179,13 +166,9 @@
 						</div>
 					</div>
 				{/if}
-			</div>
+			</SettingsField>
 
-			<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-				<div class="text-foreground/85 text-sm font-semibold">apps grid</div>
-				<div class="text-foreground/55 mt-1 text-sm">
-					visual tweaks for the home apps grid.
-				</div>
+			<SettingsField field={debugFields.appsGrid}>
 				<button
 					type="button"
 					onclick={() => debugUi.toggleAppsGridIconShape()}
@@ -195,14 +178,9 @@
 					<span>icon shape</span>
 					<span class="text-foreground/55">{debugUi.appsGridIconShape}</span>
 				</button>
-			</div>
+			</SettingsField>
 
-			<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-				<div class="text-foreground/85 text-sm font-semibold">markdown streaming</div>
-				<div class="text-foreground/55 mt-1 text-sm">
-					tune the streamdown animation used while tokens arrive.
-				</div>
-
+			<SettingsField field={debugFields.markdownStreaming}>
 				<label class="mt-4 flex items-center justify-between gap-4">
 					<span class="text-foreground/75 text-sm">enabled</span>
 					<input
@@ -273,14 +251,9 @@
 						class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/85 w-28 border px-3 py-2 text-sm outline-none"
 					/>
 				</label>
-			</div>
+			</SettingsField>
 
-			<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-				<div class="text-foreground/85 text-sm font-semibold">chat send animation</div>
-				<div class="text-foreground/55 mt-1 text-sm">
-					how an outgoing message animates from the input into a bubble. morph uses the
-					view transitions api; flyup is a css fallback.
-				</div>
+			<SettingsField field={debugFields.chatSendAnimation}>
 				<div class="mt-4 flex flex-wrap gap-1">
 					{#each sendAnimationModes as m (m)}
 						<button
@@ -295,7 +268,7 @@
 						</button>
 					{/each}
 				</div>
-			</div>
+			</SettingsField>
 		</div>
 	{/if}
 </SettingsSectionLayout>

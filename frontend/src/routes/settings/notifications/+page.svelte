@@ -1,6 +1,8 @@
 <script lang="ts">
 	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import { Switch } from '$lib/components/primitives'
+	import { notificationsFields } from '$lib/components/settings/fields/notifications'
+	import SettingsField from '$lib/components/settings/SettingsField.svelte'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
 	import {
@@ -34,44 +36,28 @@
 	description="configure alerts, sounds, and reminder settings"
 >
 	<div class="space-y-4">
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="flex items-start justify-between gap-4">
-				<div>
-					<div class="text-foreground/85 text-sm font-semibold" id="push-label">
-						push notifications
-					</div>
-					<div class="text-foreground/55 mt-1 text-sm">
-						extra delivery when the app is closed or in the background.
-					</div>
-					<div class="text-foreground/40 mt-2 text-xs">{pushStatus}</div>
-				</div>
+		<SettingsField field={notificationsFields.push}>
+			{#snippet control(labelId)}
 				<Switch
 					size="md"
 					checked={pushEnabled}
 					onchange={setPushNotifications}
-					ariaLabelledbyId="push-label"
+					ariaLabelledbyId={labelId}
 				/>
-			</div>
-		</div>
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="flex items-start justify-between gap-4">
-				<div>
-					<div class="text-foreground/85 text-sm font-semibold" id="email-label">
-						email notifications
-					</div>
-					<div class="text-foreground/55 mt-1 text-sm">
-						email digests and important alerts.
-					</div>
-					<div class="text-foreground/40 mt-2 text-xs">coming soon</div>
-				</div>
+			{/snippet}
+			<div class="text-foreground/40 mt-2 text-xs">{pushStatus}</div>
+		</SettingsField>
+		<SettingsField field={notificationsFields.email}>
+			{#snippet control(labelId)}
 				<Switch
 					size="md"
 					checked={false}
 					disabled
 					tooltip="coming soon"
-					ariaLabelledbyId="email-label"
+					ariaLabelledbyId={labelId}
 				/>
-			</div>
-		</div>
+			{/snippet}
+			<div class="text-foreground/40 mt-2 text-xs">coming soon</div>
+		</SettingsField>
 	</div>
 </SettingsSectionLayout>

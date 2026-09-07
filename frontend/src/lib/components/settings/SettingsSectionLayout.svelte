@@ -5,6 +5,7 @@
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import type { Component, Snippet } from 'svelte'
+	import { cancelSettingsFieldReveal } from './fieldFocus'
 
 	interface Props {
 		icon: Component
@@ -28,6 +29,9 @@
 			return () => chrome.setContextActions(null)
 		}
 	})
+
+	// a reveal still waiting for its field must not outlive the section that asked
+	$effect(() => () => cancelSettingsFieldReveal())
 </script>
 
 {#snippet mobileBackAction()}

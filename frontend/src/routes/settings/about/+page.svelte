@@ -4,6 +4,8 @@
 	import Heart from '$lib/components/icons/Heart.svelte'
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import NokodoBrandLogo from '$lib/components/NokodoBrandLogo.svelte'
+	import { aboutFields } from '$lib/components/settings/fields/about'
+	import SettingsField from '$lib/components/settings/SettingsField.svelte'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { settingsState } from '$lib/stores/settings.svelte'
 	import { onMount } from 'svelte'
@@ -102,8 +104,7 @@
 		</div>
 
 		<!-- links -->
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-foreground text-sm font-semibold">links</div>
+		<SettingsField field={aboutFields.links}>
 			<div class="mt-3 space-y-1">
 				{#each links as link (link.href)}
 					<a
@@ -121,11 +122,10 @@
 					</a>
 				{/each}
 			</div>
-		</div>
+		</SettingsField>
 
 		<!-- shields -->
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-foreground text-sm font-semibold">community</div>
+		<SettingsField field={aboutFields.community}>
 			<div class="mt-3 flex flex-wrap gap-2">
 				{#each shields as badge (badge.label)}
 					<a href={badge.href} target="_blank" rel="external noopener noreferrer">
@@ -133,11 +133,10 @@
 					</a>
 				{/each}
 			</div>
-		</div>
+		</SettingsField>
 
 		<!-- legal -->
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-foreground text-sm font-semibold">legal</div>
+		<SettingsField field={aboutFields.legal}>
 			<div class="text-foreground/50 mt-2 space-y-2 text-xs">
 				<p>&copy; {new Date().getFullYear()} nokodo. all rights reserved.</p>
 				<p>
@@ -146,7 +145,7 @@
 					applicable).
 				</p>
 			</div>
-		</div>
+		</SettingsField>
 		<div
 			class="text-foreground/50 flex w-full flex-col items-center justify-center gap-2 text-xs"
 		>

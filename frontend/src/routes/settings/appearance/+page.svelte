@@ -1,13 +1,24 @@
 <script lang="ts">
+	import ArrowUp from '$lib/components/icons/ArrowUp.svelte'
+	import Bars3BottomLeft from '$lib/components/icons/Bars3BottomLeft.svelte'
+	import ChatBubbleAngular from '$lib/components/icons/ChatBubbleAngular.svelte'
+	import ChatBubbleOval from '$lib/components/icons/ChatBubbleOval.svelte'
+	import ChatBubbles from '$lib/components/icons/ChatBubbles.svelte'
+	import CheckDouble from '$lib/components/icons/CheckDouble.svelte'
 	import Eye from '$lib/components/icons/Eye.svelte'
+	import Minus from '$lib/components/icons/Minus.svelte'
 	import Moon from '$lib/components/icons/Moon.svelte'
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import Sun from '$lib/components/icons/Sun.svelte'
+	import Union from '$lib/components/icons/Union.svelte'
 	import { RadioGroup, Switch } from '$lib/components/primitives'
+	import { appearanceFields } from '$lib/components/settings/fields/appearance'
 	import PreferenceScopeToggle from '$lib/components/settings/PreferenceScopeToggle.svelte'
+	import SettingsField from '$lib/components/settings/SettingsField.svelte'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { accentColors, selectableAccentColors } from '$lib/contexts/themeContext.svelte'
-	import { background } from '$lib/stores/background.svelte'
+	import { background, isAnimatedBackground } from '$lib/stores/background.svelte'
+	import { readReceiptStyle, type ReadReceiptStyle } from '$lib/stores/readReceiptStyle.svelte'
 	import {
 		preferences,
 		type AccentColor,
@@ -25,6 +36,9 @@
 		{ value: 'dark', label: 'dark', icon: Moon },
 	] as const
 
+	// only wallpapers the API can store: `BackgroundType` here is the generated
+	// preferences enum, so a new light/dark sibling appears here once it is added
+	// to `backend/api/schemas/preferences.py`. the rest live in /debug/backgrounds.
 	const backgrounds: { value: BackgroundType; label: string }[] = [
 		{ value: 'galaxy', label: 'galaxy' },
 		{ value: 'darkveil', label: 'dark veil' },
@@ -41,23 +55,39 @@
 		{ value: 'static', label: 'static color' },
 	]
 
+	// tail styles are shapes, not brands: the angular bubble is whatsapp's
+	// tight-cornered tail, the oval one is imessage's curl. `Minus` is the
+	// shared "nothing applied" glyph for both chat pickers.
 	const bubbleTailOptions = [
-		{ value: 'none', label: 'none' },
-		{ value: 'whatsapp', label: 'whatsapp' },
-		{ value: 'imessage', label: 'imessage' },
+		{ value: 'none', label: 'none', icon: Minus },
+		{ value: 'whatsapp', label: 'whatsapp', icon: ChatBubbleAngular },
+		{ value: 'imessage', label: 'imessage', icon: ChatBubbleOval },
 	] as const
 
 	const bubbleAnimationOptions = [
-		{ value: 'morph', label: 'morph' },
-		{ value: 'flyup', label: 'fly up' },
-		{ value: 'none', label: 'none' },
+		{ value: 'morph', label: 'morph', icon: Union },
+		{ value: 'flyup', label: 'fly up', icon: ArrowUp },
+		{ value: 'none', label: 'none', icon: Minus },
 	] as const
+
+	const readReceiptOptions = [
+		{ value: 'ticks', label: 'ticks', icon: CheckDouble },
+		{ value: 'text', label: 'text', icon: Bars3BottomLeft },
+	] as const
+
+	// this device may not be able to animate at all - then only static is on offer
+	const allowsAnimated = $derived(background.allowsAnimated)
+	const offeredBackgrounds = $derived(
+		allowsAnimated ? backgrounds : backgrounds.filter((bg) => !isAnimatedBackground(bg.value))
+	)
 
 	// reactive getters from the typed store
 	const selectedBackground = $derived.by((): BackgroundType => {
 		const bg = preferences.data.appearance.background
 		// background can be disabled via the admin debug toggle. keep the picker usable.
-		return bg === 'none' || bg === null ? 'lightrays' : bg
+		const selected = bg === 'none' || bg === null ? 'lightrays' : bg
+		// show what actually renders, not a stored pick this device cannot run
+		return allowsAnimated ? selected : 'static'
 	})
 
 	const selectedMode = $derived(preferences.data.appearance.themeMode ?? 'auto')
@@ -65,7 +95,9 @@
 	const autoAccentColors = $derived(preferences.data.appearance.autoAccentColors ?? true)
 	const autoBackground = $derived(preferences.data.appearance.autoBackground ?? true)
 	const staticColor = $derived(background.userStaticColor)
-	const selectedBubbleTailStyle = $derived(preferences.data.appearance.bubbleTailStyle ?? 'none')
+	const selectedBubbleTailStyle = $derived(
+		preferences.data.appearance.bubbleTailStyle ?? 'imessage'
+	)
 	const selectedBubbleAnimation = $derived(preferences.data.appearance.bubbleAnimation ?? 'morph')
 	const themeScope = $derived(preferences.themeScope)
 	const wallpaperScope = $derived(preferences.wallpaperScope)
@@ -104,6 +136,13 @@
 		void preferences.updateBubbleAnimation(mode as BubbleAnimation)
 	}
 
+	// local-only until the synced field ships (B28): no scope toggle to offer yet
+	const selectedReadReceiptStyle = $derived(readReceiptStyle.style)
+
+	function setReadReceiptStyle(style: string): void {
+		readReceiptStyle.set(style as ReadReceiptStyle)
+	}
+
 	function setThemeScope(scope: ClientPreferenceScope): void {
 		void preferences.setThemeScope(scope)
 	}
@@ -127,201 +166,226 @@
 	description="customize theme, colors, and visual preferences"
 >
 	<div class="space-y-4">
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-				<div>
-					<div class="text-foreground text-sm font-semibold">theme</div>
-					<div class="text-foreground/50 mt-1 text-sm">
-						choose light, dark, or auto which matches the theme to your wallpaper
-					</div>
-				</div>
+		<SettingsField field={appearanceFields.theme} controlLayout="wrap">
+			{#snippet control()}
 				<PreferenceScopeToggle scope={themeScope} onchange={setThemeScope} />
-			</div>
+			{/snippet}
 			<RadioGroup
 				options={themeModeOptions}
 				value={selectedMode}
 				onchange={setThemeMode}
 				class="mt-4"
 			/>
-		</div>
+		</SettingsField>
 
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="flex items-center justify-between">
-				<div>
-					<div class="text-foreground text-sm font-semibold">auto accent colors</div>
-					<div class="text-foreground/50 mt-1 text-sm">
-						accent colors change automatically based on context
-					</div>
-				</div>
-				<Switch size="md" checked={autoAccentColors} onchange={setAutoAccentColors} />
-			</div>
+		<SettingsField field={appearanceFields.autoAccentColors}>
+			{#snippet control(labelId)}
+				<Switch
+					size="md"
+					checked={autoAccentColors}
+					onchange={setAutoAccentColors}
+					ariaLabelledbyId={labelId}
+				/>
+			{/snippet}
 
 			{#if !autoAccentColors}
 				<div
 					class="border-foreground/15 mt-5 border-t pt-5"
 					transition:slide={{ duration: 200 }}
 				>
-					<div class="text-foreground text-sm font-semibold">accent color</div>
-					<div class="text-foreground/50 mt-1 text-sm">
-						customize the accent color used for highlights and selection states
-					</div>
-					<div class="mt-4 flex flex-wrap gap-3">
-						{#each selectableAccentColors as colorKey (colorKey)}
-							{@const isSelected = selectedAccent === colorKey}
-							<button
-								type="button"
-								onclick={() => setAccent(colorKey)}
-								class="group rounded-pill flex cursor-pointer items-center gap-2.5 border px-3 py-2 transition-all duration-200
+					<SettingsField field={appearanceFields.accentColor} surface="plain" size="sm">
+						<div class="mt-4 flex flex-wrap gap-3">
+							{#each selectableAccentColors as colorKey (colorKey)}
+								{@const isSelected = selectedAccent === colorKey}
+								<button
+									type="button"
+									onclick={() => setAccent(colorKey)}
+									class="group rounded-pill flex cursor-pointer items-center gap-2.5 border px-3 py-2 transition-all duration-200
 									{isSelected
-									? 'border-foreground/30 bg-foreground/15'
-									: 'border-foreground/10 bg-foreground/5 hover:border-foreground/20 hover:bg-foreground/10'}"
-							>
-								<!-- radio dot indicator -->
-								<span
-									class="flex h-4 w-4 items-center justify-center rounded-full border-2 transition-all
+										? 'border-foreground/30 bg-foreground/15'
+										: 'border-foreground/10 bg-foreground/5 hover:border-foreground/20 hover:bg-foreground/10'}"
+								>
+									<!-- radio dot indicator -->
+									<span
+										class="flex h-4 w-4 items-center justify-center rounded-full border-2 transition-all
 										{isSelected ? 'border-foreground' : 'border-foreground/40'}"
-								>
-									{#if isSelected}
-										<span
-											class="h-2 w-2 rounded-full"
-											style="background-color: {accentColors[colorKey]
-												.primary}"
-										></span>
-									{/if}
-								</span>
-								<span
-									class="text-sm font-medium {isSelected
-										? 'text-foreground'
-										: 'text-foreground/60 group-hover:text-foreground'}"
-									>{colorKey}</span
-								>
-							</button>
-						{/each}
-					</div>
+									>
+										{#if isSelected}
+											<span
+												class="h-2 w-2 rounded-full"
+												style="background-color: {accentColors[colorKey]
+													.primary}"
+											></span>
+										{/if}
+									</span>
+									<span
+										class="text-sm font-medium {isSelected
+											? 'text-foreground'
+											: 'text-foreground/60 group-hover:text-foreground'}"
+										>{colorKey}</span
+									>
+								</button>
+							{/each}
+						</div>
+					</SettingsField>
 				</div>
 			{/if}
-		</div>
+		</SettingsField>
 
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-				<div>
-					<div class="text-foreground text-sm font-semibold">wallpaper</div>
-					<div class="text-foreground/50 mt-1 text-sm">
-						choose the app background for all devices or only this one
-					</div>
-				</div>
+		<SettingsField field={appearanceFields.wallpaper} controlLayout="wrap">
+			{#snippet control()}
 				<PreferenceScopeToggle scope={wallpaperScope} onchange={setWallpaperScope} />
-			</div>
+			{/snippet}
 
-			<div class="mt-5 flex items-center justify-between gap-4">
-				<div>
-					<div class="text-foreground/75 text-sm font-medium">auto wallpaper</div>
-					<div class="text-foreground/45 mt-1 text-xs">
-						wallpaper changes automatically based on context
-					</div>
-				</div>
-				<Switch size="md" checked={autoBackground} onchange={setAutoBackground} />
-			</div>
+			<SettingsField
+				field={appearanceFields.autoWallpaper}
+				surface="plain"
+				size="row"
+				class="mt-5"
+			>
+				{#snippet control(labelId)}
+					<Switch
+						size="md"
+						checked={autoBackground}
+						onchange={setAutoBackground}
+						ariaLabelledbyId={labelId}
+					/>
+				{/snippet}
+			</SettingsField>
 
 			{#if !autoBackground}
 				<div
 					class="border-foreground/15 mt-5 border-t pt-5"
 					transition:slide={{ duration: 200 }}
 				>
-					<div class="text-foreground text-sm font-semibold">choose wallpaper</div>
-					<div class="text-foreground/50 mt-1 text-sm">
-						select a dynamic background for the app
-					</div>
-					<div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-						{#each backgrounds as bg (bg.value)}
-							{@const isSelected = selectedBackground === bg.value}
-							<button
-								type="button"
-								onclick={() => setBackground(bg.value)}
-								class="rounded-pill group flex cursor-pointer items-center gap-2.5 border px-3 py-2.5 text-left text-sm transition-all duration-200
+					<SettingsField
+						field={appearanceFields.chooseWallpaper}
+						surface="plain"
+						size="sm"
+						description={allowsAnimated
+							? appearanceFields.chooseWallpaper.description
+							: 'animated wallpapers are off on this device'}
+					>
+						<div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+							{#each offeredBackgrounds as bg (bg.value)}
+								{@const isSelected = selectedBackground === bg.value}
+								<button
+									type="button"
+									onclick={() => setBackground(bg.value)}
+									class="rounded-pill group flex cursor-pointer items-center gap-2.5 border px-3 py-2.5 text-left text-sm transition-all duration-200
 									{isSelected
-									? 'border-foreground/30 bg-foreground/15'
-									: 'border-foreground/10 bg-foreground/5 hover:border-foreground/20 hover:bg-foreground/10'}"
-							>
-								<!-- radio dot indicator -->
-								<span
-									class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-all
+										? 'border-foreground/30 bg-foreground/15'
+										: 'border-foreground/10 bg-foreground/5 hover:border-foreground/20 hover:bg-foreground/10'}"
+								>
+									<!-- radio dot indicator -->
+									<span
+										class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-all
 										{isSelected ? 'border-foreground' : 'border-foreground/40'}"
-								>
-									{#if isSelected}
-										<span class="bg-foreground h-2 w-2 rounded-full"></span>
-									{/if}
-								</span>
-								<span
-									class="font-medium {isSelected
-										? 'text-foreground'
-										: 'text-foreground/60 group-hover:text-foreground'}"
-									>{bg.label}</span
-								>
-							</button>
-						{/each}
-					</div>
-
-					{#if selectedBackground === 'static'}
-						<div
-							class="border-foreground/15 mt-4 flex items-center gap-3 border-t pt-4"
-							transition:slide={{ duration: 200 }}
-						>
-							<label class="text-foreground/60 text-sm font-medium" for="static-color"
-								>static color</label
-							>
-							<input
-								id="static-color"
-								type="color"
-								value={staticColor}
-								oninput={(e) => setStaticColor(e.currentTarget.value)}
-								class="border-foreground/20 h-8 w-10 cursor-pointer rounded border bg-transparent"
-							/>
-							<span class="text-foreground/40 font-mono text-xs">{staticColor}</span>
+									>
+										{#if isSelected}
+											<span class="bg-foreground h-2 w-2 rounded-full"></span>
+										{/if}
+									</span>
+									<span
+										class="font-medium {isSelected
+											? 'text-foreground'
+											: 'text-foreground/60 group-hover:text-foreground'}"
+										>{bg.label}</span
+									>
+								</button>
+							{/each}
 						</div>
-					{/if}
+
+						{#if selectedBackground === 'static'}
+							<div
+								class="border-foreground/15 mt-4 flex items-center gap-3 border-t pt-4"
+								transition:slide={{ duration: 200 }}
+							>
+								<label
+									class="text-foreground/60 text-sm font-medium"
+									for="static-color">static color</label
+								>
+								<input
+									id="static-color"
+									type="color"
+									value={staticColor}
+									oninput={(e) => setStaticColor(e.currentTarget.value)}
+									class="border-foreground/20 h-8 w-10 cursor-pointer rounded border bg-transparent"
+								/>
+								<span class="text-foreground/40 font-mono text-xs"
+									>{staticColor}</span
+								>
+							</div>
+						{/if}
+					</SettingsField>
 				</div>
 			{/if}
-		</div>
+		</SettingsField>
 
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-				<div>
-					<div class="text-foreground text-sm font-semibold">chat bubble tails</div>
-					<div class="text-foreground/50 mt-1 text-sm">
-						add decorative tails to chat message bubbles, similar to popular messaging
-						apps
-					</div>
-				</div>
-				<PreferenceScopeToggle scope={bubbleTailScope} onchange={setBubbleTailScope} />
-			</div>
-			<RadioGroup
-				options={bubbleTailOptions}
-				value={selectedBubbleTailStyle}
-				onchange={setBubbleTailStyle}
-				class="mt-4"
-			/>
-		</div>
+		<SettingsField field={appearanceFields.chat}>
+			{#snippet leading()}
+				<ChatBubbles class="text-foreground/60 h-5 w-5" />
+			{/snippet}
 
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-				<div>
-					<div class="text-foreground text-sm font-semibold">bubble animation</div>
-					<div class="text-foreground/50 mt-1 text-sm">
-						how your outgoing message animates into the chat thread
-					</div>
-				</div>
-				<PreferenceScopeToggle
-					scope={bubbleAnimationScope}
-					onchange={setBubbleAnimationScope}
-				/>
+			<div class="mt-4">
+				<SettingsField
+					field={appearanceFields.bubbleTails}
+					surface="plain"
+					size="sm"
+					controlLayout="wrap"
+				>
+					{#snippet control()}
+						<PreferenceScopeToggle
+							scope={bubbleTailScope}
+							onchange={setBubbleTailScope}
+						/>
+					{/snippet}
+					<RadioGroup
+						options={bubbleTailOptions}
+						value={selectedBubbleTailStyle}
+						onchange={setBubbleTailStyle}
+						class="mt-4"
+					/>
+				</SettingsField>
 			</div>
-			<RadioGroup
-				options={bubbleAnimationOptions}
-				value={selectedBubbleAnimation}
-				onchange={setBubbleAnimation}
-				class="mt-4"
-			/>
-		</div>
+
+			<div class="border-foreground/15 mt-5 border-t pt-5">
+				<SettingsField
+					field={appearanceFields.bubbleAnimation}
+					surface="plain"
+					size="sm"
+					controlLayout="wrap"
+				>
+					{#snippet control()}
+						<PreferenceScopeToggle
+							scope={bubbleAnimationScope}
+							onchange={setBubbleAnimationScope}
+						/>
+					{/snippet}
+					<RadioGroup
+						options={bubbleAnimationOptions}
+						value={selectedBubbleAnimation}
+						onchange={setBubbleAnimation}
+						class="mt-4"
+					/>
+				</SettingsField>
+			</div>
+
+			<div class="border-foreground/15 mt-5 border-t pt-5">
+				<SettingsField
+					field={appearanceFields.readReceipts}
+					surface="plain"
+					size="sm"
+					controlLayout="wrap"
+				>
+					<RadioGroup
+						options={readReceiptOptions}
+						value={selectedReadReceiptStyle}
+						onchange={setReadReceiptStyle}
+						class="mt-4"
+					/>
+				</SettingsField>
+			</div>
+		</SettingsField>
 	</div>
 </SettingsSectionLayout>

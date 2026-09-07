@@ -15,19 +15,31 @@
 	import Trash from '$lib/components/icons/Trash.svelte'
 	import Wrench from '$lib/components/icons/Wrench.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import ModalActions from '$lib/components/modals/ModalActions.svelte'
 	import type { DropdownSelectOption, SelectorOption } from '$lib/components/primitives'
-	import { ActionButton, DropdownSelect, Selector, Switch } from '$lib/components/primitives'
+	import {
+		ActionButton,
+		DropdownSelect,
+		Selector,
+		Skeleton,
+		Switch,
+	} from '$lib/components/primitives'
+	import {
+		integrationsFields,
+		pendingIntegrationFields,
+	} from '$lib/components/settings/fields/integrations'
+	import SettingsField from '$lib/components/settings/SettingsField.svelte'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
-	import { session } from '$lib/stores/session.svelte'
+	import { mcpServers } from '$lib/stores/mcpServers.svelte'
 	import { faviconCandidates, faviconUrl } from '$lib/utils/favicons'
 	import { onMount } from 'svelte'
 
 	type ApiTask = components['schemas']['Task']
-	type MCPCapabilityType = components['schemas']['MCPCapabilityType']
 	type MCPDiscoveredTool = components['schemas']['MCPDiscoveredTool']
 	type MCPServer = components['schemas']['MCPServer']
 	type MCPServerCreate = components['schemas']['MCPServerCreate']
 	type MCPServerUpdate = components['schemas']['MCPServerUpdate']
+	type MCPTransport = components['schemas']['MCPTransport']
 	type TaskStatus = components['schemas']['TaskStatus']
 
 	type OpenWebUIDeployment = {
@@ -76,16 +88,13 @@
 	let importTaskStreamController: AbortController | null = null
 	let importTaskStreamId: string | null = null
 	let openWebUIFaviconIndex = $state(0)
-	let mcpServers = $state<MCPServer[]>([])
-	let mcpServersLoaded = $state(false)
-	let mcpServersError = $state<string | null>(null)
-	let mcpCanManage = $state(true)
 	let mcpModalOpen = $state(false)
 	let mcpModalMode = $state<'create' | 'edit'>('create')
 	let mcpEditingId = $state<string | null>(null)
 	let mcpName = $state('')
 	let mcpDescription = $state('')
 	let mcpUrl = $state('')
+	let mcpTransport = $state<MCPTransport>('streamable_http')
 	let mcpAuthType = $state<'none' | 'bearer'>('none')
 	let mcpAccessToken = $state('')
 	let mcpEnabled = $state(true)
@@ -99,14 +108,7 @@
 	const selectedDeployment = $derived(
 		deployments.find((deployment) => deployment.origin === selectedOrigin) ?? null
 	)
-	const userMcpServers = $derived.by(() => {
-		const currentUserId = session.currentUserId
-		return mcpServers.filter(
-			(server) =>
-				server.scope === 'user' &&
-				(currentUserId === null || server.owner_user_id === currentUserId)
-		)
-	})
+	const userMcpServers = $derived(mcpServers.own)
 	const selectedMcpServer = $derived(
 		mcpEditingId === null
 			? null
@@ -129,6 +131,28 @@
 		{ value: 'none', label: 'none', description: 'no authentication' },
 		{ value: 'bearer', label: 'bearer token', description: 'send an authorization token' },
 	]
+	// streamable HTTP is the only protocol the platform speaks today. the rest stay
+	// listed but unavailable so the choice reads as a roadmap, not a missing feature.
+	const mcpTransportOptions: SelectorOption[] = [
+		{
+			value: 'streamable_http',
+			label: 'streamable HTTP',
+			description: 'one HTTP endpoint, the current MCP standard',
+		},
+		{
+			value: 'sse',
+			label: 'server-sent events',
+			description: 'not supported yet',
+			disabled: true,
+		},
+		{
+			value: 'stdio',
+			label: 'local process',
+			description: 'not supported yet',
+			disabled: true,
+		},
+	]
+	const showMcpAccessToken = $derived(mcpAuthType === 'bearer')
 	const importTaskActive = $derived(
 		importTask?.status === 'pending' || importTask?.status === 'running'
 	)
@@ -170,24 +194,6 @@
 				: importTaskStatus
 	)
 
-	const pendingIntegrations = [
-		{
-			name: 'Gemini',
-			origin: 'https://gemini.google.com',
-			description: 'import conversations from Gemini',
-		},
-		{
-			name: 'ChatGPT',
-			origin: 'https://chatgpt.com',
-			description: 'import conversations from ChatGPT',
-		},
-		{
-			name: 'Claude',
-			origin: 'https://claude.com',
-			description: 'import conversations from Claude',
-		},
-	] as const
-
 	const openWebUIFaviconCandidates = faviconCandidates('https://openwebui.com')
 	const openWebUIFaviconUrl = $derived(openWebUIFaviconCandidates[openWebUIFaviconIndex])
 
@@ -218,33 +224,13 @@
 		sourcesLoaded = true
 	}
 
-	async function loadMcpServers() {
-		mcpServersError = null
-		const { data, error, response } = await api.GET('/v1/integrations/mcp/servers')
-		if (error || !data) {
-			mcpCanManage = response.status !== 403 && response.status !== 404
-			mcpServersError =
-				response.status === 403 || response.status === 404
-					? 'MCP servers are not available for your account'
-					: 'failed to load MCP servers'
-			mcpServersLoaded = true
-			return
-		}
-		mcpCanManage = true
-		mcpServers = data
-		mcpServersLoaded = true
-	}
-
-	function replaceMcpServer(server: MCPServer): void {
-		mcpServers = mcpServers.map((item) => (item.id === server.id ? server : item))
-	}
-
 	function openCreateMcpModal(): void {
 		mcpModalMode = 'create'
 		mcpEditingId = null
 		mcpName = ''
 		mcpDescription = ''
 		mcpUrl = ''
+		mcpTransport = 'streamable_http'
 		mcpAuthType = 'none'
 		mcpAccessToken = ''
 		mcpEnabled = true
@@ -258,11 +244,17 @@
 		mcpName = server.name
 		mcpDescription = server.description ?? ''
 		mcpUrl = server.url ?? ''
+		mcpTransport = server.transport
 		mcpAuthType = server.auth_type === 'bearer' ? 'bearer' : 'none'
 		mcpAccessToken = ''
 		mcpEnabled = server.enabled
 		mcpSubmitError = null
 		mcpModalOpen = true
+	}
+
+	function transportFromValue(value: string): MCPTransport {
+		if (value === 'sse' || value === 'stdio') return value
+		return 'streamable_http'
 	}
 
 	function mcpDescriptionValue(): string | null {
@@ -285,7 +277,7 @@
 					name: mcpName.trim(),
 					description: mcpDescriptionValue(),
 					scope: 'user',
-					transport: 'streamable_http',
+					transport: mcpTransport,
 					url: mcpUrlValue(),
 					command: null,
 					args: [],
@@ -302,18 +294,15 @@
 					config: {},
 					access_token: mcpAccessToken.trim() || null,
 				}
-				const { data, error } = await api.POST('/v1/integrations/mcp/servers', {
-					body: payload,
-				})
-				if (error || !data) throw new Error('failed to add MCP server')
-				mcpServers = [data, ...mcpServers]
-				mcpEditingId = data.id
+				const created = await mcpServers.create(payload)
+				if (!created) throw new Error('failed to add MCP server')
+				mcpEditingId = created.id
 				mcpModalMode = 'edit'
 			} else if (mcpEditingId !== null) {
 				const payload: MCPServerUpdate = {
 					name: mcpName.trim(),
 					description: mcpDescriptionValue(),
-					transport: 'streamable_http',
+					transport: mcpTransport,
 					url: mcpUrlValue(),
 					command: null,
 					args: [],
@@ -330,15 +319,8 @@
 				}
 				const token = mcpAccessToken.trim()
 				if (token) payload.access_token = token
-				const { data, error } = await api.PATCH(
-					'/v1/integrations/mcp/servers/{server_id}',
-					{
-						params: { path: { server_id: mcpEditingId } },
-						body: payload,
-					}
-				)
-				if (error || !data) throw new Error('failed to save MCP server')
-				replaceMcpServer(data)
+				const saved = await mcpServers.update(mcpEditingId, payload)
+				if (!saved) throw new Error('failed to save MCP server')
 			}
 			mcpAccessToken = ''
 		} catch (err) {
@@ -353,14 +335,8 @@
 		mcpDiscovering = true
 		mcpSubmitError = null
 		try {
-			const { data, error } = await api.POST(
-				'/v1/integrations/mcp/servers/{server_id}/discover',
-				{
-					params: { path: { server_id: mcpEditingId } },
-				}
-			)
-			if (error || !data) throw new Error('failed to discover MCP tools')
-			replaceMcpServer(data.server)
+			const discovered = await mcpServers.discover(mcpEditingId)
+			if (!discovered) throw new Error('failed to discover MCP tools')
 		} catch (err) {
 			mcpSubmitError = err instanceof Error ? err.message : 'failed to discover MCP tools'
 		} finally {
@@ -375,11 +351,8 @@
 		mcpSaving = true
 		mcpSubmitError = null
 		try {
-			const { error } = await api.DELETE('/v1/integrations/mcp/servers/{server_id}', {
-				params: { path: { server_id: serverId } },
-			})
-			if (error) throw new Error('failed to delete MCP server')
-			mcpServers = mcpServers.filter((server) => server.id !== serverId)
+			const removed = await mcpServers.remove(serverId)
+			if (!removed) throw new Error('failed to delete MCP server')
 			mcpModalOpen = false
 		} catch (err) {
 			mcpSubmitError = err instanceof Error ? err.message : 'failed to delete MCP server'
@@ -390,25 +363,11 @@
 
 	async function toggleMcpTool(tool: MCPDiscoveredTool, enabled: boolean): Promise<void> {
 		if (mcpEditingId === null) return
-		const capabilityType: MCPCapabilityType = 'tool'
 		mcpSavingToolId = tool.id
 		mcpSubmitError = null
 		try {
-			const { data, error } = await api.PATCH(
-				'/v1/integrations/mcp/servers/{server_id}/capabilities/{capability_type}/{capability_id}',
-				{
-					params: {
-						path: {
-							server_id: mcpEditingId,
-							capability_type: capabilityType,
-							capability_id: tool.id,
-						},
-					},
-					body: { enabled },
-				}
-			)
-			if (error || !data) throw new Error('failed to update MCP tool')
-			replaceMcpServer(data)
+			const saved = await mcpServers.setToolEnabled(mcpEditingId, tool.id, enabled)
+			if (!saved) throw new Error('failed to update MCP tool')
 		} catch (err) {
 			mcpSubmitError = err instanceof Error ? err.message : 'failed to update MCP tool'
 		} finally {
@@ -545,7 +504,7 @@
 	}
 
 	function taskMetadata(task: ApiTask | null): Record<string, unknown> {
-		return (task?.metadata_ ?? {}) as Record<string, unknown>
+		return (task?.metadata ?? {}) as Record<string, unknown>
 	}
 
 	function isOpenWebUIImportTask(task: ApiTask | null): boolean {
@@ -626,7 +585,7 @@
 
 	onMount(() => {
 		void loadSources()
-		void loadMcpServers()
+		void mcpServers.load()
 		void loadLatestImportTask()
 		const unsubscribe = eventStreamClient.subscribe(handleTaskEvent)
 		return () => {
@@ -642,36 +601,26 @@
 	description="import data from other tools"
 >
 	<div class="space-y-4">
-		<section class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<header>
-				<div class="flex min-w-0 items-start gap-3">
-					<div
-						class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden"
-					>
-						{#if openWebUIFaviconUrl}
-							<img
-								src={openWebUIFaviconUrl}
-								alt=""
-								class="h-7 w-7 object-contain"
-								onerror={markOpenWebUIFaviconFailed}
-							/>
-						{:else}
-							<GlobeAlt class="text-foreground/70 h-5 w-5" />
-						{/if}
-					</div>
-					<div class="min-w-0">
-						<div class="text-foreground/90 text-base font-semibold">Open WebUI</div>
-						<div class="text-foreground/55 mt-1 text-sm">
-							import chats, memories, and notes from configured deployments.
-						</div>
-					</div>
+		<SettingsField field={integrationsFields.openWebUI}>
+			{#snippet leading()}
+				<div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden">
+					{#if openWebUIFaviconUrl}
+						<img
+							src={openWebUIFaviconUrl}
+							alt=""
+							class="h-7 w-7 object-contain"
+							onerror={markOpenWebUIFaviconFailed}
+						/>
+					{:else}
+						<GlobeAlt class="text-foreground/70 h-5 w-5" />
+					{/if}
 				</div>
-			</header>
+			{/snippet}
 
 			<div class="mt-5 space-y-4">
 				{#if !sourcesLoaded}
-					<div class="text-foreground/55 text-sm">
-						<ShimmerText className="inline-block">loading deployments</ShimmerText>
+					<div class="grid gap-2">
+						<Skeleton shape="row" count={2} radius="container" />
 					</div>
 				{:else if sourcesError}
 					<div
@@ -929,35 +878,31 @@
 					</form>
 				{/if}
 			</div>
-		</section>
+		</SettingsField>
 
-		<section class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<header>
-				<div class="flex min-w-0 items-start gap-3">
-					<div
-						class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden"
-					>
-						<Wrench class="text-foreground/70 h-6 w-6" />
-					</div>
-					<div class="min-w-0">
-						<div class="text-foreground/90 text-base font-semibold">MCP servers</div>
-						<div class="text-foreground/55 mt-1 text-sm">
-							connect tools from servers you trust.
-						</div>
-					</div>
+		<SettingsField field={integrationsFields.mcpServers}>
+			{#snippet leading()}
+				<div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden">
+					<Wrench class="text-foreground/70 h-6 w-6" />
 				</div>
-			</header>
+			{/snippet}
 
 			<div class="mt-5 space-y-3">
-				{#if !mcpServersLoaded}
-					<div class="text-foreground/55 text-sm">
-						<ShimmerText className="inline-block">loading MCP servers</ShimmerText>
-					</div>
-				{:else if mcpServersError}
+				{#if mcpServers.error}
 					<div
 						class="rounded-container border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200"
 					>
-						{mcpServersError}
+						{mcpServers.error}
+					</div>
+				{:else if !mcpServers.hasLoaded}
+					<div class="space-y-2">
+						<Skeleton
+							shape="row"
+							count={2}
+							avatar={false}
+							trailing
+							radius="container"
+						/>
 					</div>
 				{:else if userMcpServers.length === 0}
 					<EmptyState label="no MCP servers" compact={true}>
@@ -997,21 +942,19 @@
 				<ActionButton
 					variant="secondary"
 					class="dark:border-foreground dark:bg-foreground dark:text-background dark:hover:bg-foreground/90 w-full"
-					disabled={!mcpCanManage || !mcpServersLoaded}
+					disabled={!mcpServers.canManage || !mcpServers.hasLoaded}
 					onclick={openCreateMcpModal}
 				>
 					<Plus class="h-4 w-4" />
 					add new MCP server
 				</ActionButton>
 			</div>
-		</section>
+		</SettingsField>
 
 		<div class="grid gap-4 sm:grid-cols-3">
-			{#each pendingIntegrations as integration (integration.name)}
-				<section
-					class="rounded-container liquid-glass liquid-glass--frosted p-5 opacity-75"
-				>
-					<div class="flex items-start gap-3">
+			{#each pendingIntegrationFields as integration (integration.field.id)}
+				<SettingsField field={integration.field} class="opacity-75">
+					{#snippet leading()}
 						<div
 							class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden"
 						>
@@ -1021,17 +964,9 @@
 								class="h-7 w-7 object-contain"
 							/>
 						</div>
-						<div class="min-w-0">
-							<div class="text-foreground/85 text-base font-semibold">
-								{integration.name}
-							</div>
-							<div class="text-foreground/50 mt-1 text-sm">
-								{integration.description}
-							</div>
-							<div class="text-foreground/42 mt-3 text-xs">coming soon</div>
-						</div>
-					</div>
-				</section>
+					{/snippet}
+					<div class="text-foreground/42 mt-3 text-xs">coming soon</div>
+				</SettingsField>
 			{/each}
 		</div>
 	</div>
@@ -1078,6 +1013,18 @@
 			</div>
 		</div>
 
+		<div
+			class="border-foreground/10 bg-foreground/4 rounded-container flex items-center justify-between gap-3 border p-3"
+		>
+			<div class="min-w-0">
+				<div id="mcp-enabled-label" class="text-foreground/75">enabled</div>
+				<div class="text-foreground/45 mt-0.5 text-xs">
+					a server that is off is ignored in chats
+				</div>
+			</div>
+			<Switch size="sm" bind:checked={mcpEnabled} ariaLabelledbyId="mcp-enabled-label" />
+		</div>
+
 		<div class="grid gap-3 sm:grid-cols-2">
 			<div>
 				<label
@@ -1111,8 +1058,18 @@
 		</div>
 
 		<div>
+			<div class="text-foreground/55 mb-1.5 pl-4 text-xs font-medium">protocol</div>
+			<Selector
+				options={mcpTransportOptions}
+				value={mcpTransport}
+				onchange={(value) => (mcpTransport = transportFromValue(value))}
+				ariaLabel="MCP protocol"
+			/>
+		</div>
+
+		<div>
 			<label class="text-foreground/55 mb-1.5 block pl-4 text-xs font-medium" for="mcp-url">
-				streamable HTTP URL
+				server URL
 			</label>
 			<input
 				id="mcp-url"
@@ -1122,21 +1079,26 @@
 			/>
 		</div>
 
-		<div>
-			<label class="text-foreground/55 mb-1.5 block pl-4 text-xs font-medium" for="mcp-token">
-				access token
-			</label>
-			<input
-				id="mcp-token"
-				type="password"
-				autocomplete="off"
-				class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border px-4 py-2.5 text-sm transition-colors outline-none"
-				bind:value={mcpAccessToken}
-				placeholder={mcpModalMode === 'edit'
-					? 'leave blank to keep current token'
-					: 'paste bearer token'}
-			/>
-		</div>
+		{#if showMcpAccessToken}
+			<div>
+				<label
+					class="text-foreground/55 mb-1.5 block pl-4 text-xs font-medium"
+					for="mcp-token"
+				>
+					bearer token
+				</label>
+				<input
+					id="mcp-token"
+					type="password"
+					autocomplete="off"
+					class="rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border px-4 py-2.5 text-sm transition-colors outline-none"
+					bind:value={mcpAccessToken}
+					placeholder={mcpModalMode === 'edit'
+						? 'leave blank to keep current token'
+						: 'paste bearer token'}
+				/>
+			</div>
+		{/if}
 
 		<div>
 			<label
@@ -1151,15 +1113,6 @@
 				bind:value={mcpDescription}
 				placeholder="what this server is for"
 			></textarea>
-		</div>
-
-		<div
-			class="border-foreground/10 bg-foreground/4 rounded-container flex items-center justify-between gap-3 border p-3"
-		>
-			<div class="min-w-0">
-				<div id="mcp-enabled-label" class="text-foreground/80 font-medium">enabled</div>
-			</div>
-			<Switch bind:checked={mcpEnabled} ariaLabelledbyId="mcp-enabled-label" />
 		</div>
 
 		{#if mcpModalMode === 'edit'}
@@ -1200,6 +1153,7 @@
 									</div>
 								</div>
 								<Switch
+									size="sm"
 									checked={tool.enabled}
 									disabled={mcpSavingToolId === tool.id}
 									onchange={() => toggleMcpTool(tool, !tool.enabled)}
@@ -1213,8 +1167,8 @@
 			</div>
 		{/if}
 
-		<div class="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
-			<div>
+		<ModalActions class="pt-1">
+			{#snippet leading()}
 				{#if mcpModalMode === 'edit'}
 					<button
 						type="button"
@@ -1226,18 +1180,16 @@
 						delete
 					</button>
 				{/if}
-			</div>
-			<div class="flex justify-end gap-2">
-				<ActionButton disabled={mcpSaving || !mcpName.trim()} onclick={saveMcpServer}>
-					{#if mcpSaving}
-						<ShimmerText className="inline-block">saving</ShimmerText>
-					{:else}
-						<FloppyDisk class="h-4 w-4" />
-						save
-					{/if}
-				</ActionButton>
-			</div>
-		</div>
+			{/snippet}
+			<ActionButton disabled={mcpSaving || !mcpName.trim()} onclick={saveMcpServer}>
+				{#if mcpSaving}
+					<ShimmerText className="inline-block">saving</ShimmerText>
+				{:else}
+					<FloppyDisk class="h-4 w-4" />
+					save
+				{/if}
+			</ActionButton>
+		</ModalActions>
 	</form>
 </BaseModal>
 
@@ -1269,21 +1221,23 @@
 			</p>
 		</div>
 
-		<div class="flex justify-end gap-2 pt-1">
-			{#if selectedDeployment}
-				<button
-					type="button"
-					class="rounded-pill border-foreground/10 bg-foreground/10 text-foreground/90 hover:border-foreground/15 hover:bg-foreground/15 inline-flex items-center justify-center gap-2 border px-4 py-2 text-sm font-medium transition-all duration-150"
-					onclick={openSelectedDeployment}
-				>
-					<GlobeAlt class="h-4 w-4" />
-					open Open WebUI
-				</button>
-			{/if}
+		<ModalActions class="pt-1">
+			{#snippet leading()}
+				{#if selectedDeployment}
+					<button
+						type="button"
+						class="rounded-pill border-foreground/10 bg-foreground/10 text-foreground/90 hover:border-foreground/15 hover:bg-foreground/15 inline-flex items-center justify-center gap-2 border px-4 py-2 text-sm font-medium transition-all duration-150"
+						onclick={openSelectedDeployment}
+					>
+						<GlobeAlt class="h-4 w-4" />
+						open Open WebUI
+					</button>
+				{/if}
+			{/snippet}
 			<ActionButton variant="ghost" onclick={() => (showHowTo = false)}>
 				<Check class="h-4 w-4" />
 				done
 			</ActionButton>
-		</div>
+		</ModalActions>
 	</div>
 </BaseModal>

@@ -5,6 +5,8 @@
 	import Lock from '$lib/components/icons/Lock.svelte'
 	import Users from '$lib/components/icons/Users.svelte'
 	import { DropdownSelect, Switch } from '$lib/components/primitives'
+	import { privacyFields, privacyVisibilityFields } from '$lib/components/settings/fields/privacy'
+	import SettingsField from '$lib/components/settings/SettingsField.svelte'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { clearGeolocation, requestGeolocation } from '$lib/stores/device.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
@@ -66,54 +68,6 @@
 		if (data) session.currentUser = { ...data }
 	}
 
-	const privacyFields = [
-		{
-			key: 'online_status',
-			label: 'online status',
-			description: 'who can see your online/activity status',
-		},
-		{
-			key: 'profile_picture',
-			label: 'profile picture',
-			description: 'who can see your profile picture',
-		},
-		{
-			key: 'real_name',
-			label: 'real name',
-			description: 'who can see your display name',
-		},
-		{
-			key: 'bio',
-			label: 'bio',
-			description: 'who can see your bio',
-		},
-		{
-			key: 'email',
-			label: 'email address',
-			description: 'who can see your email address',
-		},
-		{
-			key: 'gender',
-			label: 'gender',
-			description: 'who can see your gender',
-		},
-		{
-			key: 'birth_date',
-			label: 'age / birth date',
-			description: 'who can see your age or birth date',
-		},
-		{
-			key: 'allow_dms',
-			label: 'direct messages',
-			description: 'who can send you direct messages',
-		},
-		{
-			key: 'allow_friend_requests',
-			label: 'friend requests',
-			description: 'who can send you friend requests',
-		},
-	] as const
-
 	// AI personalization toggles
 	const useLocation = $derived(preferences.data.privacy.useLocation ?? false)
 	const useDeviceContext = $derived(preferences.data.privacy.useDeviceContext ?? true)
@@ -144,94 +98,86 @@
 >
 	<div class="space-y-4">
 		<!-- profile privacy controls -->
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-foreground/85 text-sm font-semibold">profile visibility</div>
-			<div class="text-foreground/55 mt-1 text-sm">
-				choose who can see each part of your profile.
-			</div>
+		<SettingsField field={privacyFields.profileVisibility}>
 			<div class="mt-4 space-y-4">
-				<div class="flex items-center justify-between gap-3">
-					<div class="min-w-0 flex-1">
-						<div class="text-foreground/70 text-sm">email search</div>
-						<div class="text-foreground/50 text-xs">
-							allow people to find you by your email address
-						</div>
-					</div>
-					<Switch size="sm" checked={findByEmail} onchange={setFindByEmail} />
-				</div>
-				{#each privacyFields as field (field.key)}
-					<div class="flex items-center justify-between gap-3">
-						<div class="min-w-0 flex-1">
-							<div class="text-foreground/70 text-sm">{field.label}</div>
-							<div class="text-foreground/50 text-xs">{field.description}</div>
-						</div>
-						<DropdownSelect
-							options={visibilityOptions}
-							value={getVisibility(field.key)}
-							onchange={(value) => void setVisibility(field.key, value as Visibility)}
-							ariaLabel={`${field.label} visibility`}
-							class="w-36 shrink-0"
-							buttonClass="px-3 py-1.5 text-xs"
+				<SettingsField field={privacyFields.emailSearch} surface="plain" size="row">
+					{#snippet control(labelId)}
+						<Switch
+							size="sm"
+							checked={findByEmail}
+							onchange={setFindByEmail}
+							ariaLabelledbyId={labelId}
 						/>
-					</div>
+					{/snippet}
+				</SettingsField>
+				{#each privacyVisibilityFields as row (row.key)}
+					<SettingsField field={row.field} surface="plain" size="row">
+						{#snippet control()}
+							<DropdownSelect
+								options={visibilityOptions}
+								value={getVisibility(row.key)}
+								onchange={(value) =>
+									void setVisibility(row.key, value as Visibility)}
+								ariaLabel={`${row.field.label} visibility`}
+								class="w-36 shrink-0"
+								buttonClass="px-3 py-1.5 text-xs"
+							/>
+						{/snippet}
+					</SettingsField>
 				{/each}
 			</div>
-		</div>
+		</SettingsField>
 
 		<!-- AI personalization -->
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-foreground/85 text-sm font-semibold">AI personalization</div>
-			<div class="text-foreground/55 mt-1 text-sm">
-				control what information is shared with the AI to personalise your experience.
-			</div>
+		<SettingsField field={privacyFields.aiPersonalization}>
 			<div class="mt-4 space-y-4">
-				<div class="flex items-center justify-between gap-3">
-					<div>
-						<div class="text-foreground/70 text-sm">device information</div>
-						<div class="text-foreground/50 text-xs">
-							share timezone, device type, and browser to help the AI personalise
-							responses
-						</div>
-					</div>
-					<Switch size="md" checked={useDeviceContext} onchange={setUseDeviceContext} />
-				</div>
-				<div class="flex items-center justify-between gap-3">
-					<div>
-						<div class="text-foreground/70 text-sm">precise location</div>
-						<div class="text-foreground/50 text-xs">
-							share your location with the AI for location-aware responses
-						</div>
-					</div>
-					<Switch size="md" checked={useLocation} onchange={setUseLocation} />
-				</div>
-				<div class="flex items-center justify-between gap-3">
-					<div>
-						<div class="text-foreground/70 text-sm">battery status</div>
-						<div class="text-foreground/50 text-xs">
-							share charging state and battery level for context-aware responses
-						</div>
-					</div>
-					<Switch size="md" checked={useBatteryStatus} onchange={setUseBatteryStatus} />
-				</div>
+				<SettingsField field={privacyFields.deviceInformation} surface="plain" size="row">
+					{#snippet control(labelId)}
+						<Switch
+							size="md"
+							checked={useDeviceContext}
+							onchange={setUseDeviceContext}
+							ariaLabelledbyId={labelId}
+						/>
+					{/snippet}
+				</SettingsField>
+				<SettingsField field={privacyFields.preciseLocation} surface="plain" size="row">
+					{#snippet control(labelId)}
+						<Switch
+							size="md"
+							checked={useLocation}
+							onchange={setUseLocation}
+							ariaLabelledbyId={labelId}
+						/>
+					{/snippet}
+				</SettingsField>
+				<SettingsField field={privacyFields.batteryStatus} surface="plain" size="row">
+					{#snippet control(labelId)}
+						<Switch
+							size="md"
+							checked={useBatteryStatus}
+							onchange={setUseBatteryStatus}
+							ariaLabelledbyId={labelId}
+						/>
+					{/snippet}
+				</SettingsField>
 			</div>
-		</div>
+		</SettingsField>
 
 		<!-- data collection -->
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-foreground/85 text-sm font-semibold">data collection</div>
-			<div class="text-foreground/55 mt-1 text-sm">
-				control what data is collected and how it's used.
-			</div>
+		<SettingsField field={privacyFields.dataCollection}>
 			<div class="mt-4 space-y-3">
-				<div class="flex items-center justify-between">
-					<span class="text-foreground/70 text-sm">analytics</span>
-					<div class="bg-foreground/20 h-6 w-12 rounded-full"></div>
-				</div>
-				<div class="flex items-center justify-between">
-					<span class="text-foreground/70 text-sm">crash reports</span>
-					<div class="bg-foreground/20 h-6 w-12 rounded-full"></div>
-				</div>
+				<SettingsField field={privacyFields.analytics} surface="plain" size="row">
+					{#snippet control()}
+						<div class="bg-foreground/20 h-6 w-12 rounded-full"></div>
+					{/snippet}
+				</SettingsField>
+				<SettingsField field={privacyFields.crashReports} surface="plain" size="row">
+					{#snippet control()}
+						<div class="bg-foreground/20 h-6 w-12 rounded-full"></div>
+					{/snippet}
+				</SettingsField>
 			</div>
-		</div>
+		</SettingsField>
 	</div>
 </SettingsSectionLayout>

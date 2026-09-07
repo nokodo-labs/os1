@@ -3,6 +3,8 @@
 	import Knobs from '$lib/components/icons/Knobs.svelte'
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import { ActionButton, Switch } from '$lib/components/primitives'
+	import { aiFields } from '$lib/components/settings/fields/ai'
+	import SettingsField from '$lib/components/settings/SettingsField.svelte'
 	import SettingsSectionLayout from '$lib/components/settings/SettingsSectionLayout.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { preferences } from '$lib/stores/preferences.svelte'
@@ -63,65 +65,64 @@
 >
 	<div class="space-y-4">
 		<!-- AI bio -->
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="flex items-center justify-between">
-				<div>
-					<div class="text-foreground text-sm font-semibold">use account bio</div>
-					<div class="text-foreground/50 mt-1 text-sm">
-						use your account bio as context for AI conversations instead of a separate
-						AI bio.
-					</div>
-				</div>
-				<Switch size="md" checked={useAccountBio} onchange={setUseAccountBio} />
-			</div>
+		<SettingsField field={aiFields.useAccountBio}>
+			{#snippet control(labelId)}
+				<Switch
+					size="md"
+					checked={useAccountBio}
+					onchange={setUseAccountBio}
+					ariaLabelledbyId={labelId}
+				/>
+			{/snippet}
 
 			{#if !useAccountBio}
 				<div
 					class="border-foreground/15 mt-5 border-t pt-5"
 					transition:slide={{ duration: 200 }}
 				>
-					<div class="text-foreground text-sm font-semibold">AI bio</div>
-					<div class="text-foreground/50 mt-1 text-sm">
-						tell the AI about yourself - your interests, work, and preferences. this
-						helps personalize responses.
-					</div>
-					<textarea
-						class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 mt-3 w-full resize-none rounded-xl border px-4 py-3 text-sm transition-colors outline-none"
-						rows="4"
-						placeholder="e.g., i'm a software engineer interested in AI and design..."
-						value={aiBio}
-						oninput={(e) => setAiBio(e.currentTarget.value)}
-					></textarea>
+					<SettingsField field={aiFields.aiBio} surface="plain" size="sm">
+						<textarea
+							class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 mt-3 w-full resize-none rounded-xl border px-4 py-3 text-sm transition-colors outline-none"
+							rows="4"
+							placeholder="e.g., i'm a software engineer interested in AI and design..."
+							value={aiBio}
+							oninput={(e) => setAiBio(e.currentTarget.value)}
+						></textarea>
+					</SettingsField>
 				</div>
 			{/if}
-		</div>
+		</SettingsField>
 
 		<!-- memories -->
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="flex items-center gap-3 pb-1">
+		<SettingsField field={aiFields.memories}>
+			{#snippet leading()}
 				<Brain class="text-foreground/60 h-5 w-5" />
-				<div class="text-foreground text-sm font-semibold">memories</div>
-			</div>
-			<div class="text-foreground/50 mt-1 text-sm">
-				the AI remembers things you tell it across conversations to provide more relevant
-				responses.
-			</div>
+			{/snippet}
 
 			<div class="mt-4 space-y-3">
-				<div class="flex items-center justify-between">
-					<span class="text-foreground/70 text-sm">enable memories</span>
-					<Switch size="md" checked={memoriesEnabled} onchange={setMemoriesEnabled} />
-				</div>
+				<SettingsField field={aiFields.enableMemories} surface="plain" size="row">
+					{#snippet control(labelId)}
+						<Switch
+							size="md"
+							checked={memoriesEnabled}
+							onchange={setMemoriesEnabled}
+							ariaLabelledbyId={labelId}
+						/>
+					{/snippet}
+				</SettingsField>
 
 				{#if memoriesEnabled}
 					<div transition:slide={{ duration: 200 }}>
-						<div class="flex items-center justify-between">
-							<span class="text-foreground/70 text-sm">chat recall</span>
-							<Switch size="md" checked={chatRecall} onchange={setChatRecall} />
-						</div>
-						<div class="text-foreground/40 mt-1 pl-0 text-xs">
-							allow the AI to reference previous conversations for context.
-						</div>
+						<SettingsField field={aiFields.chatRecall} surface="plain" size="row">
+							{#snippet control(labelId)}
+								<Switch
+									size="md"
+									checked={chatRecall}
+									onchange={setChatRecall}
+									ariaLabelledbyId={labelId}
+								/>
+							{/snippet}
+						</SettingsField>
 					</div>
 
 					<div
@@ -139,15 +140,10 @@
 					</div>
 				{/if}
 			</div>
-		</div>
+		</SettingsField>
 
 		<!-- custom instructions -->
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-foreground text-sm font-semibold">custom instructions</div>
-			<div class="text-foreground/50 mt-1 text-sm">
-				provide specific instructions the AI should always follow. these apply to every
-				conversation.
-			</div>
+		<SettingsField field={aiFields.customInstructions}>
 			<textarea
 				class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 mt-3 w-full resize-none rounded-xl border px-4 py-3 text-sm transition-colors outline-none"
 				rows="4"
@@ -155,14 +151,10 @@
 				value={customInstructions}
 				oninput={(e) => setCustomInstructions(e.currentTarget.value)}
 			></textarea>
-		</div>
+		</SettingsField>
 
 		<!-- AI personality -->
-		<div class="rounded-container liquid-glass liquid-glass--frosted p-5">
-			<div class="text-foreground text-sm font-semibold">personality</div>
-			<div class="text-foreground/50 mt-1 text-sm">
-				describe how you'd like the AI to communicate - its tone, style, and character.
-			</div>
+		<SettingsField field={aiFields.personality}>
 			<textarea
 				class="border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 mt-3 w-full resize-none rounded-xl border px-4 py-3 text-sm transition-colors outline-none"
 				rows="3"
@@ -170,6 +162,6 @@
 				value={personality}
 				oninput={(e) => setPersonality(e.currentTarget.value)}
 			></textarea>
-		</div>
+		</SettingsField>
 	</div>
 </SettingsSectionLayout>

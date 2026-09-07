@@ -12,7 +12,7 @@ type SettingsVersions = components['schemas']['SettingsVersions']
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000
 
 export const settingsState = $state({
-	ready: false,
+	hasLoaded: false,
 	loading: false,
 	error: null as string | null,
 	data: null as Settings | null,
@@ -32,7 +32,7 @@ export function invalidateSettings(): void {
 }
 
 export function clearSettings(): void {
-	settingsState.ready = false
+	settingsState.hasLoaded = false
 	settingsState.loading = false
 	settingsState.error = null
 	settingsState.data = null
@@ -76,7 +76,7 @@ export function applySettingsPatch(
 	if (options?.markFresh ?? true) {
 		settingsState.fetchedAt = Date.now()
 		settingsState.stale = false
-		settingsState.ready = true
+		settingsState.hasLoaded = true
 	}
 }
 
@@ -84,7 +84,7 @@ export function applySettingsSnapshot(snapshot: Settings, versions: SettingsVers
 	settingsState.data = snapshot
 	settingsState.versions = versions
 	settingsState.fetchedAt = Date.now()
-	settingsState.ready = true
+	settingsState.hasLoaded = true
 	settingsState.stale = false
 }
 
@@ -116,7 +116,7 @@ export async function loadSettings(options?: {
 			settingsState.data = data.data
 			settingsState.versions = data.versions
 			settingsState.fetchedAt = Date.now()
-			settingsState.ready = true
+			settingsState.hasLoaded = true
 			settingsState.stale = false
 			return settingsState.data
 		} catch {

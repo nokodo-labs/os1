@@ -296,7 +296,7 @@ function createPreferencesStore() {
 			autoAccentColors: true,
 			autoBackground: true,
 			staticColor: '#171717',
-			bubbleTailStyle: 'none',
+			bubbleTailStyle: 'imessage',
 			bubbleAnimation: 'morph',
 		},
 		account: {
