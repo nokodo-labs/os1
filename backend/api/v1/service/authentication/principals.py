@@ -74,16 +74,32 @@ class Principal:
 		permissions: frozenset[PermissionGrant] = frozenset(),
 		role_ids: tuple[TypeID, ...] = (),
 		role_resource_defaults: DefaultResourceAccess | None = None,
-		global_action_permissions: frozenset[PermissionGrant] = frozenset(),
+		global_action_permissions: frozenset[PermissionGrant] | None = None,
 	) -> Principal:
-		"""build a principal whose subject is the given user row."""
+		"""build a principal whose subject is the given user row.
+
+		the process-global defaults are merged in unless the caller passes its
+		own, exactly as ``_assemble_principal`` does for every principal the
+		running system builds. that matters because this constructor's only
+		callers are tests: left un-merged it hands them a principal shape
+		production never produces - one carrying none of the global grants a
+		real principal always carries - and every assertion made against it is
+		then made against a fiction.
+		"""
+		global_defaults = settings.default_permissions
 		return cls(
 			subject=UserSubject.from_user(user),
 			group_ids=group_ids,
 			permissions=permissions,
 			role_ids=role_ids,
-			role_resource_defaults=(role_resource_defaults or DefaultResourceAccess()),
-			global_action_permissions=global_action_permissions,
+			role_resource_defaults=(
+				role_resource_defaults or DefaultResourceAccess()
+			).merge(global_defaults.resource_access),
+			global_action_permissions=(
+				frozenset(global_defaults.action_permissions)
+				if global_action_permissions is None
+				else global_action_permissions
+			),
 		)
 
 	@property
@@ -342,7 +358,7 @@ async def load_principal_for_user(
 	if user is None:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,
-			detail="User not found",
+			detail="user not found",
 		)
 	if not user.is_active:
 		raise HTTPException(

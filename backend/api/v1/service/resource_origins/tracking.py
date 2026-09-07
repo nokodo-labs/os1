@@ -38,11 +38,12 @@ async def assign_resource_origins(
 			.where(
 				config.id_col == resource.id,
 				config.origin_message_fk.is_(None),
+				# no link arm: claiming an origin requires ADMIN and the link arm
+				# only ever grants READER.
 				resource_access_predicate(
 					principal,
 					resource.type,
 					required_level=AccessLevel.ADMIN,
-					include_link_access=True,
 				),
 			)
 			.values({config.origin_message_fk.key: message_id})

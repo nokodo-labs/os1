@@ -127,6 +127,10 @@ async def test_concurrent_first_dm_creates_single_thread(
 				session,
 				principal=principal,
 			)
+			# the caller owns the commit, as every real one does: the pair lock
+			# is transaction-scoped, so the loser only sees the winner's thread
+			# once that transaction ends.
+			await session.commit()
 			return str(thread.id)
 
 	first, second = await asyncio.gather(_create(), _create())

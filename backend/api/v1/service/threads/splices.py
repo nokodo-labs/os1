@@ -290,7 +290,13 @@ async def prepare_message_placement(
 	principal: Principal,
 	advances_head: bool = True,
 ) -> PreparedPlacement:
-	"""resolve the writer model and the splice one message will be written with."""
+	"""resolve the writer model and the splice one message will be written with.
+
+	call this with the thread write lock held: the head is refreshed here, so a
+	caller that loaded the thread before the lock still places against the head
+	that survived the wait.
+	"""
+	await session.refresh(thread, attribute_names=["current_message_id"])
 	multi_writer = await is_multi_writer_thread(session, thread.id)
 	return PreparedPlacement(
 		splice=await prepare_message_splice(
@@ -676,7 +682,13 @@ async def resolve_run_tail_splice(
 	multi_writer: bool,
 	read_through_message_id: TypeID | None = None,
 ) -> MessageSplice:
-	"""place generated output at its run tail and preserve unseen traffic."""
+	"""place generated output at its run tail and preserve unseen traffic.
+
+	call this with the thread write lock held: the head is refreshed here, so a
+	caller that loaded the thread before the lock still places against the head
+	that survived the wait.
+	"""
+	await session.refresh(thread, attribute_names=["current_message_id"])
 	tail = await session.get(Message, run_tail_id)
 	if tail is None or tail.thread_id != thread.id:
 		raise HTTPException(

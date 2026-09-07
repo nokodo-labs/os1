@@ -366,10 +366,8 @@ async def _reconcile_one_thread_content_vectors(
 				[str(thread.id)], ResourceType.THREAD, session
 			)
 		)[str(thread.id)]
-		# TODO(contextualized-embeddings): route on embedding_token_capacity().
-		# unlimited capacity (voyage-context-4) embeds all of a thread's
-		# passages as one document call; finite capacity groups passages into
-		# capacity-sized calls. replaces the title prefix on the dense side.
+		# TODO(contextualized-embeddings): route on embedding_token_capacity() -
+		# unlimited capacity embeds all a thread's passages as one document call.
 		embeddings = await embed_texts(
 			[planned[passage_id][1] for passage_id in to_build],
 			session,

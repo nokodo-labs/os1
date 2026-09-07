@@ -552,16 +552,16 @@ def apply_participant_state_filters(
 	asking - the principal only gates ACCESS. each named subject is gated,
 	since presence or absence in the result discloses their state.
 	"""
-	for status, include_id, exclude_id in participant_state_filters(filters):
+	for state, include_id, exclude_id in participant_state_filters(filters):
 		for user_id in (include_id, exclude_id):
 			if user_id is not None:
 				require_state_subject_access(user_id, principal)
 		if include_id is not None:
 			stmt = stmt.where(
-				Thread.id.in_(participant_status_subquery(include_id, status))
+				Thread.id.in_(participant_status_subquery(include_id, state))
 			)
 		if exclude_id is not None:
 			stmt = stmt.where(
-				Thread.id.not_in(participant_status_subquery(exclude_id, status))
+				Thread.id.not_in(participant_status_subquery(exclude_id, state))
 			)
 	return stmt

@@ -57,6 +57,8 @@ from api.v1.service.threads.attachments import (
 	replace_message_attachments,
 )
 from api.v1.service.threads.common import (
+	INVITE_PENDING,
+	INVITE_STATUS_KEY,
 	emit_thread_updated,
 	is_multi_writer_thread,
 	load_thread,
@@ -222,7 +224,7 @@ async def create_message_with_commit_outcome(
 		principal,
 		notifies=draft.type == MessageType.USER,
 	)
-	resolved_message_id = message_id or TypeID(new_typeid("msg"))
+	resolved_message_id = message_id or new_typeid("msg")
 	if placement is None:
 		placement = await prepare_message_placement(
 			session,
@@ -333,7 +335,7 @@ async def create_message_at_run_tail_with_commit_outcome(
 		principal,
 		notifies=draft.type == MessageType.USER,
 	)
-	resolved_message_id = message_id or TypeID(new_typeid("msg"))
+	resolved_message_id = message_id or new_typeid("msg")
 	multi_writer = await is_multi_writer_thread(session, thread_id)
 	splice = await resolve_run_tail_splice(
 		session,
@@ -393,9 +395,6 @@ async def _begin_message_write(
 		required_level=AccessLevel.EDITOR,
 	)
 	await acquire_resource_write_lock(session, "thread", thread_id)
-	# the head was read before the lock; a writer that committed while we
-	# queued would leave us placing against a stale one.
-	await session.refresh(thread, attribute_names=["current_message_id"])
 	if not notifies:
 		return thread, []
 	# resolved before the participant relationship can change
@@ -406,7 +405,7 @@ async def _begin_message_write(
 	for part in thread.participants:
 		if part.user_id is None:
 			continue
-		if part.muted or (part.metadata_ or {}).get("invite_status") == "pending":
+		if part.muted or part.public_metadata.get(INVITE_STATUS_KEY) == INVITE_PENDING:
 			excluded.add(part.user_id)
 	return thread, [uid for uid in accessible_ids if uid not in excluded]
 
@@ -747,9 +746,8 @@ async def update_user_message(
 	message_data = message_event_data(message)
 	if content_update is not None and message.content != previous_content:
 		message_data["previous_content"] = previous_content
-	# the event log IS the edit history, so it commits with the edit it
-	# describes: writing it afterwards leaves a window where the message is
-	# changed and what it used to say is gone.
+	# the event log IS the edit history, so it commits with the edit: writing
+	# it afterwards leaves a window where the previous content is gone.
 	events = [
 		Event(
 			scope=EventScope.THREAD,

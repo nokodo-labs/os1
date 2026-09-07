@@ -272,9 +272,8 @@ async def get_file_content(
 		encoded = quote(filename, safe="")
 		fallback = filename.encode("ascii", "ignore").decode("ascii") or "download"
 		fallback = fallback.replace("\\", "_").replace('"', "_")
-		# use inline disposition for media types so browsers render them
-		# directly (e.g. <img> tags); attachment for everything else.
-		# download=True forces attachment regardless of content type.
+		# inline disposition for media types so browsers render them directly;
+		# attachment for everything else, and always when download is set.
 		if download:
 			disposition = "attachment"
 		else:

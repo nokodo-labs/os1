@@ -67,9 +67,8 @@ class ThreadSummary(
 	message_count: Mapped[int] = mapped_column(Integer, default=0)
 	content: Mapped[str] = mapped_column(Text, default="")
 
-	# self-referential FK for recursive condensation.
-	# when this summary is superseded by a condensed summary,
-	# superseded_by points to the replacement.
+	# self-referential FK for recursive condensation: points at the condensed
+	# summary that superseded this one.
 	superseded_by_id: Mapped[TypeID | None] = mapped_column(
 		String(TYPEID_LENGTH),
 		ForeignKey("thread_summaries.id", ondelete="SET NULL"),

@@ -52,9 +52,8 @@ async def accept_invite(
 	"""accept a pending message request, joining the thread."""
 	require_state_subject_access(user_id, principal)
 	participant = await get_thread_participant(session, thread_id, user_id=user_id)
-	# a state row alone is not an invite: rows also appear from read cursors or
-	# mute/pin on plain shares. only the pending marker authorizes the editor
-	# upgrade, otherwise a read-only share could self-escalate via accept.
+	# a state row alone is not an invite (read cursors and mute/pin create them
+	# too); only the pending marker authorizes the editor upgrade.
 	if (
 		participant is None
 		or (participant.metadata_ or {}).get(INVITE_STATUS_KEY) != INVITE_PENDING
@@ -65,9 +64,8 @@ async def accept_invite(
 		)
 	clear_invite_status(participant)
 	await session.flush()
-	# accepting upgrades the read-only invite to full editor access in place;
-	# the reader->editor upsert emits access.updated (actor == subject), which
-	# renders as "joined".
+	# the reader->editor upsert emits access.updated with actor == subject,
+	# which renders as "joined".
 	await grant_user_access_unchecked(
 		ResourceType.THREAD,
 		thread_id,

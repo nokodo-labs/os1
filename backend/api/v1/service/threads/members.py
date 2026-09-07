@@ -85,7 +85,10 @@ async def _thread_writer_model_hook(
 		if resource_type == ResourceType.THREAD
 	]
 	before = {
-		thread_id: len(resolved_access[(ResourceType.THREAD, thread_id)][3]) > 1
+		thread_id: len(
+			resolved_access[(ResourceType.THREAD, thread_id)].derived_writers
+		)
+		> 1
 		for thread_id in thread_ids
 	}
 
@@ -96,7 +99,10 @@ async def _thread_writer_model_hook(
 		"""return writer-model transitions for affected threads."""
 		result: dict[ResourceRef, AccessChangeEventEnrichment] = {}
 		after = {
-			thread_id: len(after_access[(ResourceType.THREAD, thread_id)][3]) > 1
+			thread_id: len(
+				after_access[(ResourceType.THREAD, thread_id)].derived_writers
+			)
+			> 1
 			for thread_id in thread_ids
 		}
 		changed_thread_ids = [
