@@ -1,12 +1,24 @@
 """tests for Google generate_content adapter conversion."""
 
-import base64
+from __future__ import annotations
 
+import base64
+from types import SimpleNamespace
+from typing import Any
+
+import pytest
+
+from nokodo_ai.adapters.google.base import BaseGoogleAdapter
 from nokodo_ai.adapters.google.generate_content import (
+	GoogleGenerateContentAdapter,
 	_content_part_to_google,
 	_messages_to_google,
 )
-from nokodo_ai.adapters.google.types import GoogleContent, GoogleFunctionResponse
+from nokodo_ai.adapters.google.types import (
+	GoogleContent,
+	GoogleFunctionResponse,
+	GoogleGenerateContentResponse,
+)
 from nokodo_ai.messages import (
 	AssistantMessage,
 	FileContent,
@@ -14,6 +26,7 @@ from nokodo_ai.messages import (
 	Message,
 	ToolCall,
 	ToolMessage,
+	UserMessage,
 )
 
 
@@ -117,3 +130,82 @@ def test_google_tool_message_without_attachments_has_no_parts() -> None:
 
 	assert fr.response == {"value": 42}
 	assert fr.parts is None
+
+
+class _StreamedChunks:
+	"""the shape ``generate_content_stream`` yields, without the provider."""
+
+	def __init__(self, chunks: list[GoogleGenerateContentResponse]) -> None:
+		self._chunks = list(chunks)
+
+	def __aiter__(self) -> _StreamedChunks:
+		return self
+
+	async def __anext__(self) -> GoogleGenerateContentResponse:
+		if not self._chunks:
+			raise StopAsyncIteration
+		return self._chunks.pop(0)
+
+
+def _function_call_chunk(name: str, args: dict[str, object]) -> Any:
+	"""one streamed chunk holding a single complete function call."""
+	return SimpleNamespace(
+		text=None,
+		usage_metadata=None,
+		candidates=[
+			SimpleNamespace(
+				finish_reason=None,
+				content=SimpleNamespace(
+					parts=[
+						SimpleNamespace(
+							function_call=SimpleNamespace(name=name, args=args),
+							thought_signature=None,
+							thought=None,
+						)
+					]
+				),
+			)
+		],
+	)
+
+
+@pytest.mark.asyncio
+async def test_google_streaming_keeps_two_calls_at_the_same_part_index_apart(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""a call's identity is the order it arrived, not its slot in a chunk.
+
+	google emits each function call whole. keying on the position within a
+	chunk aliases two calls that both land at part 0, and ``merge`` would
+	concatenate their complete argument strings into invalid json.
+	"""
+
+	class _DummyClient:
+		def __init__(self) -> None:
+			async def _stream(**kwargs: object) -> _StreamedChunks:
+				_ = kwargs
+				return _StreamedChunks(
+					[
+						_function_call_chunk("first", {"a": 1}),
+						_function_call_chunk("second", {"b": 2}),
+					]
+				)
+
+			self.models = SimpleNamespace(generate_content_stream=_stream)
+
+	monkeypatch.setattr(BaseGoogleAdapter, "_get_client", lambda self: _DummyClient())
+	adapter = GoogleGenerateContentAdapter()
+
+	accumulated = AssistantMessage()
+	async for delta in adapter.generate(
+		[UserMessage.from_text("hi")],
+		"gemini-2.5-flash",
+		stream=True,
+	):
+		accumulated = accumulated.merge(delta)
+
+	assert [call.name for call in accumulated.tool_calls] == ["first", "second"]
+	assert [call.arguments for call in accumulated.tool_calls] == [
+		'{"a": 1}',
+		'{"b": 2}',
+	]

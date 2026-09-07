@@ -82,6 +82,9 @@ from openai.types.responses import (
 	ResponseCreatedEvent as OpenAIResponseCreatedEvent,
 )
 from openai.types.responses import (
+	ResponseFailedEvent as OpenAIResponseFailedEvent,
+)
+from openai.types.responses import (
 	ResponseFormatTextJSONSchemaConfigParam as OpenAIResponseTextJSONSchemaConfigParam,
 )
 from openai.types.responses import (
@@ -101,6 +104,9 @@ from openai.types.responses import (
 )
 from openai.types.responses import (
 	ResponseFunctionToolCallParam as OpenAIResponseFunctionToolCallParam,
+)
+from openai.types.responses import (
+	ResponseIncompleteEvent as OpenAIResponseIncompleteEvent,
 )
 from openai.types.responses import (
 	ResponseInputContentParam as OpenAIResponseInputContentParam,
@@ -201,6 +207,8 @@ __all__ = [
 	"OpenAIResponseTextDeltaEvent",
 	"OpenAIResponseCompletedEvent",
 	"OpenAIResponseCreatedEvent",
+	"OpenAIResponseFailedEvent",
+	"OpenAIResponseIncompleteEvent",
 	"OpenAIResponseFunctionCallArgumentsDeltaEvent",
 	"OpenAIResponseFunctionCallArgumentsDoneEvent",
 	"OpenAIResponseOutputItemAddedEvent",

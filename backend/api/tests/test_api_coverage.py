@@ -114,6 +114,11 @@ class _FakeSession:
 		self.last_stmt: object = None
 		self.added: list[object] = []
 		self.deleted: list[object] = []
+		# every real session carries one, and the post-commit queue lives in it
+		# (`enqueue_post_commit_action`). a service that enqueues repairable
+		# after-commit work would otherwise fail here for the fake's reasons
+		# rather than its own.
+		self.info: dict[object, object] = {}
 
 	async def execute(self, stmt: object, *_: object, **__: object) -> _FakeResult:  # type: ignore[override]
 		self.last_stmt = stmt
@@ -154,6 +159,7 @@ async def test_openai_router_uses_chat_model(monkeypatch: pytest.MonkeyPatch) ->
 		def __init__(self) -> None:
 			self.text = "hi"
 			self.usage = Usage(input_tokens=1, output_tokens=2, total_tokens=3)
+			self.finish_reason = "length"
 
 	class FakeChatModel:
 		@classmethod
@@ -188,6 +194,9 @@ async def test_openai_router_uses_chat_model(monkeypatch: pytest.MonkeyPatch) ->
 	assert captured["stream"] is False
 	assert captured["params"] == {"temperature": 0.1, "max_tokens": 5}
 	assert resp.usage.total_tokens == 3
+	# a truncated answer is reported as truncated: the compat client has no
+	# other channel to learn it, since this endpoint neither streams nor errors.
+	assert resp.choices[0].finish_reason == "length"
 
 
 @pytest.mark.asyncio
@@ -198,6 +207,7 @@ async def test_openai_router_handles_all_roles(monkeypatch: pytest.MonkeyPatch) 
 		def __init__(self) -> None:
 			self.text = "ok"
 			self.usage = None
+			self.finish_reason = "completed"
 
 	class FakeChatModel:
 		@classmethod
@@ -234,6 +244,7 @@ async def test_openai_router_handles_all_roles(monkeypatch: pytest.MonkeyPatch) 
 	assert [m.role for m in captured["messages"]] == ["system", "assistant", "user"]
 	assert captured["stream"] is False
 	assert resp.usage.total_tokens == 0
+	assert resp.choices[0].finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -414,9 +425,8 @@ async def test_threads_router_delegates(monkeypatch: pytest.MonkeyPatch) -> None
 		principal=principal,  # type: ignore[arg-type]
 		db=None,  # type: ignore[arg-type]
 	)  # type: ignore[arg-type]
-	# create + list embed participants via build_thread_payload, and every
-	# message route projects its private facet, so these are schema payloads
-	# rather than the raw ORM objects the service returned.
+	# create + list embed participants via build_thread_payload, so these are
+	# schema payloads rather than the raw ORM objects the service returned.
 	assert isinstance(created, ThreadSchema)
 	assert created.id == fake_thread.id
 	assert [t.id for t in listed] == [fake_thread.id]

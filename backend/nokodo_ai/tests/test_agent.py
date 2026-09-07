@@ -217,6 +217,63 @@ async def test_streaming_reports_no_finish_reason_when_the_provider_gave_none() 
 
 
 @pytest.mark.asyncio
+async def test_streaming_carries_a_reported_finish_reason_onto_the_terminal_delta() -> (
+	None
+):
+	"""a reason the provider DID report survives to both consumers.
+
+	the accumulated reason is copied onto the terminal delta, which is what the
+	client reads and what the persistence layer writes down - dropping either
+	assignment turns every persisted finish_reason into NULL silently.
+	"""
+	adapter = _QueuedChatAdapter(
+		stream_responses=[
+			[
+				AssistantMessage.from_text("trunc"),
+				AssistantMessage(finish_reason="length"),
+			]
+		]
+	)
+	agent = Agent(chat_model=_make_chat_model(adapter))
+	thread = Thread(messages=[UserMessage.from_text("hello")])
+
+	stream = await agent.run(thread, stream=True)
+	deltas = [delta async for delta in stream]
+	terminal = [delta for delta in deltas if delta.chat is not None and delta.chat.done]
+
+	assert len(terminal) == 1
+	assert terminal[0].chat is not None
+	assert terminal[0].chat.message.finish_reason == "length"
+	assert isinstance(thread.messages[-1], AssistantMessage)
+	assert thread.messages[-1].finish_reason == "length"
+
+
+@pytest.mark.asyncio
+async def test_max_iterations_final_call_reports_its_finish_reason() -> None:
+	"""the tool-less final call carries its reason the same way the loop does."""
+	adapter = _QueuedChatAdapter(
+		stream_responses=[
+			[
+				AssistantMessage.from_text("final"),
+				AssistantMessage(finish_reason="length"),
+			]
+		]
+	)
+	agent = Agent(chat_model=_make_chat_model(adapter), max_iterations=0)
+	thread = Thread(messages=[UserMessage.from_text("hello")])
+
+	stream = await agent.run(thread, stream=True)
+	deltas = [delta async for delta in stream]
+	terminal = [delta for delta in deltas if delta.chat is not None and delta.chat.done]
+
+	assert len(terminal) == 1
+	assert terminal[0].chat is not None
+	assert terminal[0].chat.message.finish_reason == "length"
+	assert isinstance(thread.messages[-1], AssistantMessage)
+	assert thread.messages[-1].finish_reason == "length"
+
+
+@pytest.mark.asyncio
 async def test_observer_hook_failure_does_not_fail_agent_run() -> None:
 	class _FailingHook(Hook[None]):
 		name: str = "failing"
@@ -819,7 +876,12 @@ async def test_agent_sync_max_iterations_final_call_disables_tools() -> None:
 
 
 @pytest.mark.asyncio
-async def test_agent_sync_omits_empty_final_response() -> None:
+async def test_agent_sync_keeps_an_empty_final_response() -> None:
+	"""a turn the model answered with nothing is still a message it sent.
+
+	the final call is made with ``tool_choice="none"``, so an empty result is
+	the model's answer rather than an artifact of the iteration limit.
+	"""
 	adapter = _QueuedChatAdapter(sync_responses=[AssistantMessage()])
 	chat_model = _make_chat_model(adapter)
 	agent = Agent(chat_model=chat_model, max_iterations=0)
@@ -828,8 +890,10 @@ async def test_agent_sync_omits_empty_final_response() -> None:
 
 	result = await agent.run(thread)
 
-	assert result == []
-	assert [message.role for message in thread.messages] == ["user"]
+	assert len(result) == 1
+	assert isinstance(result[0], AssistantMessage)
+	assert result[0].content == []
+	assert [message.role for message in thread.messages] == ["user", "assistant"]
 
 
 @pytest.mark.asyncio
@@ -921,11 +985,13 @@ async def test_agent_streaming_yields_chat_deltas_tool_deltas_and_done() -> None
 
 
 @pytest.mark.asyncio
-async def test_agent_streaming_omits_empty_final_response() -> None:
-	"""an empty final answer is not added to the thread, but still ENDS.
+async def test_agent_streaming_keeps_an_empty_final_response() -> None:
+	"""an empty final answer is added to the thread, and still ENDS.
 
-	the terminal delta used to be withheld along with the message, which left
-	every consumer waiting for a `done` that never came.
+	the final call is made with ``tool_choice="none"``, so an empty result is
+	a turn the model answered with nothing rather than an artifact of the
+	iteration limit - and the terminal delta must arrive either way, or every
+	consumer waits for a `done` that never comes.
 	"""
 	adapter = _QueuedChatAdapter(stream_responses=[[]])
 	chat_model = _make_chat_model(adapter)
@@ -936,7 +1002,7 @@ async def test_agent_streaming_omits_empty_final_response() -> None:
 	stream = await agent.run(thread, stream=True)
 	deltas = [d async for d in stream]
 
-	assert [message.role for message in thread.messages] == ["user"]
+	assert [message.role for message in thread.messages] == ["user", "assistant"]
 	# the only chat delta is the terminal one: no content was produced.
 	chat_deltas = [delta for delta in deltas if delta.chat is not None]
 	assert len(chat_deltas) == 1

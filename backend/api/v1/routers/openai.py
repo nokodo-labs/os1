@@ -19,7 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_db
 from api.v1.service.authentication import Principal, get_current_principal
 from nokodo_ai.chat_models import ChatModel
-from nokodo_ai.messages import AssistantMessage, Message, SystemMessage, UserMessage
+from nokodo_ai.messages import (
+	AssistantMessage,
+	FinishReason,
+	Message,
+	SystemMessage,
+	UserMessage,
+)
 
 
 router = APIRouter(prefix="/openai", tags=["openai"])
@@ -37,6 +43,29 @@ class OpenAIChatCompletionRequest(BaseModel):
 	max_tokens: int | None = None
 
 
+_FINISH_REASONS: dict[FinishReason, str] = {
+	"completed": "stop",
+	"length": "length",
+	"content_filter": "content_filter",
+}
+"""the SDK's reason, in the vocabulary an openai client expects.
+
+unambiguous because this endpoint offers no tools, so openai's ``tool_calls``
+can never apply.
+"""
+
+
+def _to_openai_finish_reason(reason: FinishReason | None) -> str | None:
+	"""report why generation stopped; never claim a stop the provider did not.
+
+	the client has no other channel to learn a response was truncated or
+	filtered - this endpoint is non-streaming and returns no error for either.
+	"""
+	if reason is None:
+		return None
+	return _FINISH_REASONS[reason]
+
+
 class OpenAIChatCompletionResponseMessage(BaseModel):
 	role: str = "assistant"
 	content: str
@@ -45,7 +74,7 @@ class OpenAIChatCompletionResponseMessage(BaseModel):
 class OpenAIChatCompletionChoice(BaseModel):
 	index: int = 0
 	message: OpenAIChatCompletionResponseMessage
-	finish_reason: str | None = "stop"
+	finish_reason: str | None = None
 
 
 class OpenAIChatCompletionUsage(BaseModel):
@@ -116,7 +145,7 @@ async def chat_completions(
 			OpenAIChatCompletionChoice(
 				index=0,
 				message=OpenAIChatCompletionResponseMessage(content=assistant.text),
-				finish_reason="stop",
+				finish_reason=_to_openai_finish_reason(assistant.finish_reason),
 			)
 		],
 		usage=usage,

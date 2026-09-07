@@ -53,6 +53,10 @@ from nokodo_ai.adapters.openai.responses import (
 	_tool_choice_to_openai_responses,
 	_tools_to_openai_responses,
 )
+from nokodo_ai.adapters.openai.types import (
+	OpenAIResponseCompletedEvent,
+	OpenAIResponseIncompleteEvent,
+)
 from nokodo_ai.adapters.qdrant import base as qdrant_base
 from nokodo_ai.adapters.qdrant.base import BaseQdrantAdapter
 from nokodo_ai.messages import (
@@ -61,6 +65,7 @@ from nokodo_ai.messages import (
 	ImageContent,
 	JsonContent,
 	Message,
+	RefusalContent,
 	SystemMessage,
 	ToolCall,
 	ToolMessage,
@@ -351,9 +356,8 @@ def test_anthropic_messages_to_anthropic_tool_use_id_fallback_and_errors() -> No
 	assistant = AssistantMessage(content=[], tool_calls=[tool_call])
 	system = SystemMessage.from_text("sys")
 	user = UserMessage.from_text("hi")
-	# tool call should fall back to ToolCall.id when provider data missing.
-	# orphaned tool_use blocks (no ToolMessages following) get synthetic
-	# error results so anthropic always sees a valid tool_use/tool_result pair.
+	# tool calls fall back to ToolCall.id, and orphaned tool_use blocks get
+	# synthetic error results so anthropic always sees a valid pair.
 	system_text, msgs = _messages_to_anthropic([system, user, assistant])
 	assert system_text == "sys"
 	assert len(msgs) == 3
@@ -969,6 +973,107 @@ def test_openai_chat_completion_to_assistant_message_choices_and_length() -> Non
 	)
 	msg2 = _chat_completion_to_assistant_message(completion2)  # type: ignore[arg-type]
 	assert msg2.finish_reason == "length"
+
+
+def test_openai_non_streaming_keeps_a_refusal_that_stopped_normally() -> None:
+	"""a model-side refusal is content, whatever the finish reason says.
+
+	openai reports one with `finish_reason="stop"` and no text, so reading the
+	refusal only under `content_filter` persists an empty completed turn and
+	records nowhere that the model declined.
+	"""
+	completion = _DummyOpenAICompletion(
+		choices=[
+			_DummyOpenAIChoice(
+				index=0,
+				message=_DummyOpenAIMessage(
+					content=None,
+					refusal="i cannot help with that",
+					tool_calls=[],
+				),
+				finish_reason="stop",
+			)
+		],
+		usage=None,
+	)
+
+	msg = _chat_completion_to_assistant_message(completion)  # type: ignore[arg-type]
+
+	assert msg.refusal == "i cannot help with that"
+	assert msg.finish_reason == "completed"
+
+
+def test_openai_non_streaming_reads_one_choice() -> None:
+	"""several candidates never merge into one chimeric message.
+
+	the adapter sends no `n`, and folding them would concatenate their text
+	while keeping only the last one's tool calls and finish reason.
+	"""
+	completion = _DummyOpenAICompletion(
+		choices=[
+			_DummyOpenAIChoice(
+				index=0,
+				message=_DummyOpenAIMessage(
+					content="first",
+					refusal=None,
+					tool_calls=[],
+				),
+				finish_reason="stop",
+			),
+			_DummyOpenAIChoice(
+				index=1,
+				message=_DummyOpenAIMessage(
+					content="second",
+					refusal=None,
+					tool_calls=[],
+				),
+				finish_reason="length",
+			),
+		],
+		usage=None,
+	)
+
+	msg = _chat_completion_to_assistant_message(completion)  # type: ignore[arg-type]
+
+	assert msg.text == "first"
+	assert msg.finish_reason == "completed"
+
+
+@pytest.mark.asyncio
+async def test_openai_chat_stream_does_not_repeat_a_streamed_refusal() -> None:
+	"""each refusal delta is already its own part; merge appends rather than
+	text-merges, so re-appending the joined text stores it twice."""
+	stream = _DummyAsyncIterator(
+		[
+			_DummyOpenAIChunk(
+				choices=[
+					_DummyOpenAIChunkChoice(
+						index=0,
+						delta=_DummyOpenAIDelta(refusal="i cannot"),
+					)
+				]
+			),
+			_DummyOpenAIChunk(
+				choices=[
+					_DummyOpenAIChunkChoice(
+						index=0,
+						delta=_DummyOpenAIDelta(),
+						finish_reason="content_filter",
+					)
+				]
+			),
+		]
+	)
+
+	accumulated = AssistantMessage()
+	async for delta in _openai_stream_to_assistant_messages(stream):  # type: ignore[arg-type]
+		accumulated = accumulated.merge(delta)
+
+	refusals = [
+		part for part in accumulated.content if isinstance(part, RefusalContent)
+	]
+	assert len(refusals) == 1
+	assert accumulated.refusal == "i cannot"
 
 
 @pytest.mark.asyncio
@@ -1736,9 +1841,8 @@ async def test_anthropic_adapter_generate_once_and_streaming(
 async def test_anthropic_streaming_emits_usage(
 	monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-	# message_start carries prompt-side usage; message_delta finalizes
-	# output usage. the merged stream must surface real token counts so
-	# persistence can record them.
+	# message_start carries prompt-side usage and message_delta finalizes
+	# output usage; the merged stream must surface real counts.
 	class _StartUsage:
 		input_tokens = 42
 		cache_creation_input_tokens = 5
@@ -2019,12 +2123,8 @@ def test_anthropic_messages_orphaned_tool_use_gets_synthetic_result() -> None:
 	assert msgs[2]["content"] == "try again"
 
 
-# --- finish reason mapping ------------------------------------------------
-#
-# every adapter answers the same question ("why did generation end") with the
-# SDK's three values, so each provider's vocabulary needs its own table. a
-# value the table does not know must yield None: guessing here is what let a
-# truncated answer be persisted as a complete turn.
+# finish reason mapping: each provider's vocabulary needs its own table,
+# and an unknown value must yield None rather than be guessed.
 
 
 @pytest.mark.parametrize(
@@ -2125,3 +2225,93 @@ def test_openai_responses_maps_status_and_incomplete_details(
 	)
 	response = SimpleNamespace(status=status, incomplete_details=details)
 	assert resp_mod._map_finish_reason(cast(Any, response)) == expected
+
+
+async def _responses_stream_messages(
+	monkeypatch: pytest.MonkeyPatch,
+	events: list[Any],
+) -> list[AssistantMessage]:
+	"""drive the responses streaming loop over a canned terminal event."""
+	dummy = SimpleNamespace(responses=SimpleNamespace())
+
+	async def _create(**kwargs: Any) -> Any:
+		_ = kwargs
+		return _DummyAsyncIterator(events)
+
+	dummy.responses.create = _create
+	monkeypatch.setattr(BaseOpenAIAdapter, "_get_client", lambda self: dummy)
+	adapter = OpenAIResponsesAdapter()
+	return [
+		message
+		async for message in adapter.generate(
+			[UserMessage.from_text("hi")],
+			"gpt-4o",
+			stream=True,
+		)
+	]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+	("event_type", "status", "incomplete_reason", "expected"),
+	[
+		(OpenAIResponseCompletedEvent, "completed", None, "completed"),
+		(OpenAIResponseIncompleteEvent, "incomplete", "max_output_tokens", "length"),
+		(
+			OpenAIResponseIncompleteEvent,
+			"incomplete",
+			"content_filter",
+			"content_filter",
+		),
+	],
+)
+async def test_openai_responses_streaming_reports_its_terminal_reason(
+	monkeypatch: pytest.MonkeyPatch,
+	event_type: type,
+	status: str,
+	incomplete_reason: str | None,
+	expected: str,
+) -> None:
+	"""a truncated or filtered STREAM says so, not just a non-streamed call.
+
+	every run streams, so an unhandled incomplete event means the one path
+	nobody uses is the only one that reports `length` or `content_filter`.
+	"""
+	details = (
+		SimpleNamespace(reason=incomplete_reason)
+		if incomplete_reason is not None
+		else None
+	)
+	event = event_type.model_construct(
+		response=SimpleNamespace(
+			status=status,
+			incomplete_details=details,
+			usage=SimpleNamespace(input_tokens=1, output_tokens=2, total_tokens=3),
+		)
+	)
+
+	messages = await _responses_stream_messages(monkeypatch, [event])
+
+	assert messages[-1].finish_reason == expected
+	assert messages[-1].usage is not None
+	assert messages[-1].usage.total_tokens == 3
+
+
+@pytest.mark.asyncio
+async def test_openai_responses_streaming_completes_without_usage(
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""a completion that omits usage still reports its reason, and does not
+	read an unbound local."""
+	event = OpenAIResponseCompletedEvent.model_construct(
+		response=SimpleNamespace(
+			status="completed",
+			incomplete_details=None,
+			usage=None,
+		)
+	)
+
+	messages = await _responses_stream_messages(monkeypatch, [event])
+
+	assert messages[-1].finish_reason == "completed"
+	assert messages[-1].usage is None

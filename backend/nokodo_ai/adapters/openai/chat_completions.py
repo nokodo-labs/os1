@@ -436,9 +436,10 @@ async def _openai_stream_to_assistant_messages(
 
 	# --- final chunk: finish reason, usage, content filter refusal ---
 	final_content: list[ContentPart] = []
-	refusal = "".join(refusal_parts)
-	if finish_reason == "content_filter":
-		final_content.append(RefusalContent(reason=refusal or "content filtered"))
+	# streamed refusal deltas were already yielded as their own parts and
+	# merge appends them, so repeating the joined text would duplicate it.
+	if finish_reason == "content_filter" and not refusal_parts:
+		final_content.append(RefusalContent(reason="content filtered"))
 
 	if finish_reason is not None or usage is not None:
 		yield AssistantMessage(
@@ -486,25 +487,23 @@ def _chat_completion_to_assistant_message(
 	content: list[ContentPart] = []
 	tool_calls: list[ToolCall] = []
 	finish_reason: FinishReason | None = None
-	if not completion.choices:
-		pass
-	else:
-		for choice in completion.choices:
-			openai_msg = choice.message
-			tool_calls = _openai_tool_calls_to_tool_calls(openai_msg.tool_calls or [])
+	# one choice: the adapter never sends `n`, and folding candidates would
+	# concatenate their text while keeping only the last one's tool calls.
+	choice = next((c for c in completion.choices if c.index == 0), None)
+	if choice is not None:
+		openai_msg = choice.message
+		tool_calls = _openai_tool_calls_to_tool_calls(openai_msg.tool_calls or [])
 
-			if openai_msg.content is not None:
-				content.append(TextContent(text=openai_msg.content))
-			finish_reason = _map_finish_reason(choice.finish_reason)
-			if choice.finish_reason == "content_filter":
-				if openai_msg.refusal is None:
-					logger.warning(
-						"content filtered but no refusal reason provided by OpenAI"
-					)
-					refusal_reason = "content filtered"
-				else:
-					refusal_reason = openai_msg.refusal
-				content.append(RefusalContent(reason=refusal_reason))
+		if openai_msg.content is not None:
+			content.append(TextContent(text=openai_msg.content))
+		finish_reason = _map_finish_reason(choice.finish_reason)
+		# a model-side refusal arrives with `finish_reason="stop"`, so it is
+		# content whenever set; the fallback only covers the filtered case.
+		if openai_msg.refusal is not None:
+			content.append(RefusalContent(reason=openai_msg.refusal))
+		elif choice.finish_reason == "content_filter":
+			logger.warning("content filtered but no refusal reason provided by OpenAI")
+			content.append(RefusalContent(reason="content filtered"))
 	return AssistantMessage(
 		content=content,
 		tool_calls=tool_calls,
@@ -660,12 +659,8 @@ def _messages_to_openai_chatcompletions(
 						message.tool_call_id,
 					)
 					continue
-				# tool_output + attachments -> the same content-part machinery as
-				# user messages, so image/file attachments survive as content parts
-				# (e.g. image_url) instead of being flattened to text placeholders.
-				# NOTE: the OpenAI spec types tool content as text-only; multimodal
-				# tool content is a de-facto extension (OpenAI's own SDK rejects it;
-				# OpenRouter/cliproxy accept it) — hence the cast.
+				# the OpenAI spec types tool content as text-only; multimodal tool
+				# content is a de-facto extension OpenRouter accepts - hence the cast.
 				tool_parts: list[ContentPart] = [
 					TextContent(text=message.tool_output),
 					*message.attachments,

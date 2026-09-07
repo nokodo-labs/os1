@@ -309,9 +309,10 @@ class Agent[AppContextT = None](Base):
 			tools=[tool.definition for tool in state.tools],
 			tool_choice="none",
 		)
-		if final_response.content or final_response.tool_calls:
-			state.thread.add(final_response)
-			produced.append(final_response)
+		# kept even when empty, exactly like the main loop: a turn the model
+		# genuinely answered with nothing is a message it sent.
+		state.thread.add(final_response)
+		produced.append(final_response)
 		await self._execute_hooks(state, agent_context, app_context, final=True)
 
 		return produced
@@ -399,16 +400,13 @@ class Agent[AppContextT = None](Base):
 			yield AgentDelta(chat=chat_delta, chunk_index=chunk_index)
 			chunk_index += 1
 
-		has_content = bool(final_message.content or final_message.tool_calls)
-		# the terminal delta closes the stream on the same terms as the main
-		# loop: an empty final answer is still an answer that ended, and
-		# withholding its `done` strands every consumer waiting for one.
+		# an empty final answer is still an answer that ended, and withholding
+		# its `done` strands every consumer waiting for one.
 		if terminal_delta is not None:
 			terminal_delta.message.finish_reason = final_message.finish_reason
 			yield AgentDelta(chat=terminal_delta, chunk_index=chunk_index)
 			chunk_index += 1
-		if has_content:
-			state.thread.add(final_message)
+		state.thread.add(final_message)
 
 		await self._execute_hooks(state, agent_context, app_context, final=True)
 		yield AgentDelta.done_sentinel(chunk_index=chunk_index)

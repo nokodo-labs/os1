@@ -42,6 +42,7 @@ from .types import (
 	OpenAIResponse,
 	OpenAIResponseCompletedEvent,
 	OpenAIResponseCreatedEvent,
+	OpenAIResponseFailedEvent,
 	OpenAIResponseFunctionCallArgumentsDeltaEvent,
 	OpenAIResponseFunctionCallArgumentsDoneEvent,
 	OpenAIResponseFunctionCallOutput,
@@ -49,6 +50,7 @@ from .types import (
 	OpenAIResponseFunctionToolCall,
 	OpenAIResponseFunctionToolCallParam,
 	OpenAIResponseFunctionToolParam,
+	OpenAIResponseIncompleteEvent,
 	OpenAIResponseInputContentParam,
 	OpenAIResponseInputImageParam,
 	OpenAIResponseInputItemParam,
@@ -272,6 +274,7 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 		tc_created_at: dict[str, float] = {}
 		tc_metadata: dict[str, JSONObject] = {}
 		tc_names: dict[str, str] = {}
+		usage: Usage | None = None
 
 		run_tracker = RunIdTracker("openai.responses")
 
@@ -348,8 +351,14 @@ class OpenAIResponsesAdapter(BaseOpenAIAdapter, BaseChatAdapter):
 				# we already streamed all fragments; nothing extra to yield
 				continue
 
-			# --- response completed: extract usage and why it ended ---
-			if isinstance(event, OpenAIResponseCompletedEvent):
+			# incomplete is as terminal as completed and the only event carrying
+			# `length` or `content_filter`, without which a truncation looks empty.
+			if isinstance(
+				event,
+				OpenAIResponseCompletedEvent
+				| OpenAIResponseIncompleteEvent
+				| OpenAIResponseFailedEvent,
+			):
 				response_usage = event.response.usage
 				if response_usage:
 					usage = Usage(

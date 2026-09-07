@@ -362,9 +362,8 @@ def _messages_to_google(
 				except json.JSONDecodeError:
 					response_dict = {"result": message.tool_output}
 
-				# attachments -> multimodal functionResponse parts (gemini natively
-				# accepts media nested in a functionResponse), so images survive
-				# instead of being flattened to filename placeholders.
+				# gemini accepts media nested in a functionResponse, so attachments
+				# survive instead of being flattened to filename placeholders.
 				fr_parts: list[GoogleFunctionResponsePart] = []
 				for att in message.attachments:
 					fr_part = _attachment_to_google_function_response_part(att)
@@ -404,10 +403,11 @@ def _response_to_assistant_message(
 		content_parts.append(TextContent(text=response.text))
 
 	# extract function calls from candidates
-	for candidate_index, cand in enumerate(response.candidates or []):
+	seen_tool_calls = 0
+	for cand in response.candidates or []:
 		if cand.content is None:
 			continue
-		for part_index, part in enumerate(cand.content.parts or []):
+		for part in cand.content.parts or []:
 			function_call = part.function_call
 			if function_call is None:
 				continue
@@ -424,13 +424,15 @@ def _response_to_assistant_message(
 			else:
 				raw_args = "{}"
 
-			# create unique provider id for this tool call
-			provider_id = f"c{candidate_index}_p{part_index}"
+			# google supplies no call id, so the order the calls arrive in is
+			# their identity - the same key the streaming path derives.
+			provider_id = f"call_{seen_tool_calls}"
+			seen_tool_calls += 1
 			extra: dict[str, JSONValue] = {}
-			sig = getattr(part, "thought_signature", None)
+			sig = part.thought_signature
 			if isinstance(sig, bytes):
 				extra["thought_signature"] = base64.b64encode(sig).decode("ascii")
-			thought = getattr(part, "thought", None)
+			thought = part.thought
 			if isinstance(thought, bool):
 				extra["thought"] = thought
 			tool_calls.append(
@@ -621,9 +623,9 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 			else None,
 		)
 
-		# per-provider_id state: auto-generated SDK id, name, created_at, metadata
-		tc_sdk_ids: dict[str, str] = {}
-		tc_created_at: dict[str, float] = {}
+		# google emits each function call whole, so identity is the order seen: a
+		# per-chunk position would concatenate two copies of the same arguments.
+		seen_tool_calls = 0
 		final_usage: Usage | None = None
 		final_finish_reason: FinishReason | None = None
 
@@ -662,12 +664,12 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 				)
 
 			# --- tool call deltas ---
-			for candidate_index, cand in enumerate(chunk.candidates or []):
+			for cand in chunk.candidates or []:
 				if cand.finish_reason is not None:
 					final_finish_reason = _map_finish_reason(cand.finish_reason)
 				if cand.content is None:
 					continue
-				for part_index, part in enumerate(cand.content.parts or []):
+				for part in cand.content.parts or []:
 					function_call = part.function_call
 					if function_call is None:
 						continue
@@ -684,53 +686,34 @@ class GoogleGenerateContentAdapter(BaseGoogleAdapter, BaseChatAdapter):
 					else:
 						raw_args = "{}"
 
-					provider_id = f"c{candidate_index}_p{part_index}"
+					provider_id = f"call_{seen_tool_calls}"
+					seen_tool_calls += 1
 					extra_s: dict[str, JSONValue] = {}
-					sig_s = getattr(part, "thought_signature", None)
+					sig_s = part.thought_signature
 					if isinstance(sig_s, bytes):
 						extra_s["thought_signature"] = base64.b64encode(sig_s).decode(
 							"ascii"
 						)
-					thought_s = getattr(part, "thought", None)
+					thought_s = part.thought
 					if isinstance(thought_s, bool):
 						extra_s["thought"] = thought_s
-					metadata = provider_tool_call_metadata(
-						provider=PROVIDER_NAME,
-						tool_call_id=provider_id,
-						**extra_s,
+					yield AssistantMessage(
+						tool_calls=[
+							ToolCall(
+								name=name,
+								arguments=raw_args,
+								created_at=now,
+								updated_at=now,
+								metadata=provider_tool_call_metadata(
+									provider=PROVIDER_NAME,
+									tool_call_id=provider_id,
+									**extra_s,
+								),
+							)
+						],
+						created_at=now,
+						updated_at=now,
 					)
-
-					if provider_id not in tc_sdk_ids:
-						# first delta for this tool call: auto-generate SDK id
-						tc_created_at[provider_id] = now
-						tc = ToolCall(
-							name=name,
-							arguments=raw_args,
-							created_at=now,
-							updated_at=now,
-							metadata=metadata,
-						)
-						tc_sdk_ids[provider_id] = tc.id
-						yield AssistantMessage(
-							tool_calls=[tc],
-							created_at=now,
-							updated_at=now,
-						)
-					else:
-						# subsequent delta: reuse SDK id
-						tc = ToolCall(
-							id=tc_sdk_ids[provider_id],
-							name=name,
-							arguments=raw_args,
-							created_at=tc_created_at[provider_id],
-							updated_at=now,
-							metadata=metadata,
-						)
-						yield AssistantMessage(
-							tool_calls=[tc],
-							created_at=tc_created_at[provider_id],
-							updated_at=now,
-						)
 
 		# emit usage at the end
 		if final_usage is not None or final_finish_reason is not None:

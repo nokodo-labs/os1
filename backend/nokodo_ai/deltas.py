@@ -26,11 +26,15 @@ class ChatModelDelta(Base):
 	"""
 
 	message: AssistantMessage = Field(default_factory=AssistantMessage)
+	"""this chunk of the response being generated."""
 	chunk_index: int = Field(default=0, ge=0)
+	"""position of this delta in its stream, counted from zero."""
 	done: bool = Field(default=False)
+	"""whether this response is finished; the message carries no new content."""
 
 	@classmethod
 	def done_sentinel(cls, chunk_index: int) -> ChatModelDelta:
+		"""build the delta that closes one chat model stream."""
 		return cls(message=AssistantMessage(), chunk_index=chunk_index, done=True)
 
 
@@ -40,15 +44,22 @@ class AgentDelta(Base):
 	agents can yield:
 	- chat model output deltas (AssistantMessage chunks)
 	- tool execution results (ToolMessage)
+	- a terminal sentinel saying the whole run is over
 	"""
 
 	chat: ChatModelDelta | None = Field(default=None)
+	"""chat model output, when this delta carries any."""
 	tool: ToolMessage | None = Field(default=None)
+	"""one tool's result, when this delta carries one."""
 	chunk_index: int = Field(default=0, ge=0)
+	"""position of this delta within one agent run, counted from zero."""
 	done: bool = Field(default=False)
+	"""whether the agent run is over; distinct from ``chat.done``, which ends
+	one response inside it."""
 
 	@classmethod
 	def done_sentinel(cls, chunk_index: int) -> AgentDelta:
+		"""build the delta that closes one agent run."""
 		return cls(chunk_index=chunk_index, done=True)
 
 
