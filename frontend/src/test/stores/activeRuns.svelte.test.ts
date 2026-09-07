@@ -77,4 +77,48 @@ describe('ActiveRunsStore websocket handling', () => {
 		expect(activeRunsStore.state).toBe('idle')
 		expect(activeRunsStore.hasActiveRuns('thread_1')).toBe(false)
 	})
+
+	it('goes red when a run actually fails', () => {
+		dispatch({
+			type: 'run.started',
+			data: { thread_id: 'thread_1', run_id: 'run_1', agent_id: 'agent_1' },
+		})
+		dispatch({
+			type: 'run.error',
+			data: { thread_id: 'thread_1', run_id: 'run_1', reason: 'provider_error' },
+		})
+
+		expect(activeRunsStore.state).toBe('error')
+	})
+
+	it('ignores a run that names no thread', () => {
+		// inline explain/ask runs are ephemeral and thread-less on purpose: no
+		// transcript may resume them, no sidebar row may light up for them, and
+		// their failure is nobody's conversation.
+		dispatch({ type: 'run.started', data: { run_id: 'run_inline', agent_id: 'agent_1' } })
+		dispatch({ type: 'runs.active', data: [{ run_id: 'run_inline', agent_id: 'agent_1' }] })
+
+		expect(activeRunsStore.runs.size).toBe(0)
+		expect(activeRunsStore.activeThreadIds).toEqual([])
+		expect(activeRunsStore.state).toBe('idle')
+
+		dispatch({ type: 'run.error', data: { run_id: 'run_inline', reason: 'provider_error' } })
+
+		expect(activeRunsStore.state).toBe('idle')
+	})
+
+	it('settles quietly when the reader stopped the run', () => {
+		dispatch({
+			type: 'run.started',
+			data: { thread_id: 'thread_1', run_id: 'run_1', agent_id: 'agent_1' },
+		})
+		dispatch({
+			type: 'run.error',
+			data: { thread_id: 'thread_1', run_id: 'run_1', reason: 'cancelled' },
+		})
+
+		// the run is over because the user ended it - nothing failed.
+		expect(activeRunsStore.state).toBe('idle')
+		expect(activeRunsStore.hasActiveRuns('thread_1')).toBe(false)
+	})
 })

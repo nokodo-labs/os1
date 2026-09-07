@@ -138,4 +138,25 @@ describe('createChatState thread delegation', () => {
 
 		expect(state2.thread?.id).toBe('t6')
 	})
+
+	it('re-pins to the bottom when content shrinks under a detached view', () => {
+		const state = createChatState()
+		const container = document.createElement('div')
+		Object.defineProperty(container, 'scrollHeight', { configurable: true, get: () => 1000 })
+		Object.defineProperty(container, 'clientHeight', { configurable: true, get: () => 600 })
+		container.scrollTop = 400
+		state.scrollContainer = container
+		state.autoScroll = false
+
+		// a toolbar slid out under the cursor and the browser clamped scrollTop to
+		// the new bottom: no gesture, no programmatic scroll, view at the bottom.
+		state.onContentResize()
+		expect(state.autoScroll).toBe(true)
+
+		// growth never detaches: only gestures express intent to leave.
+		state.autoScroll = false
+		container.scrollTop = 100
+		state.onContentResize()
+		expect(state.autoScroll).toBe(false)
+	})
 })

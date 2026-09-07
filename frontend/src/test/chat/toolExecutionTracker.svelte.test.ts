@@ -289,7 +289,7 @@ describe('ToolExecutionTracker', () => {
 			{ event: { id: 'calev_1', title: 'planning sync' } }
 		)
 
-		expect(getToolSummary(upcomingExecution)).toEqual({ title: 'found 2 scheduled items' })
+		expect(getToolSummary(upcomingExecution)).toEqual({ title: '2 scheduled items coming up' })
 		expect(getToolSummary(eventExecution)).toEqual({
 			title: 'read planning sync',
 			resourceId: 'calev_1',

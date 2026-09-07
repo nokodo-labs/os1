@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest'
 /** Build a minimal generated search result fixture. */
 function makeSearchResult(overrides: Partial<SearchResult>): SearchResult {
 	return {
-		type: 'reminder',
-		id: 'reminder_1',
+		type: 'reminder_list',
+		id: 'reminder_list_1',
 		title: 'send draft',
 		preview: null,
 		created_at: '2025-01-01T00:00:00.000Z',
@@ -16,37 +16,58 @@ function makeSearchResult(overrides: Partial<SearchResult>): SearchResult {
 }
 
 describe('searchResultToResource', () => {
-	it('uses generic parent references for reminder list routing', () => {
+	it('routes to the container and carries the anchor for a matched reminder', () => {
 		const resource = searchResultToResource(
 			makeSearchResult({
-				parent: { type: 'reminder_list', id: 'reminder_list_1' },
+				anchor: { type: 'reminder', id: 'reminder_1' },
 			})
 		)
 
-		expect(resource.type).toBe('reminder')
-		expect(resource.parent).toEqual({ type: 'reminder_list', id: 'reminder_list_1' })
+		expect(resource.type).toBe('reminder_list')
+		expect(resource.anchor).toEqual({ type: 'reminder', id: 'reminder_1' })
+		expect(resource.href).toBe('/reminders/lists/reminder_list_1?reminder=reminder_1')
+	})
+
+	it('routes to the container alone when the list itself matched', () => {
+		const resource = searchResultToResource(makeSearchResult({ anchor: null }))
+
+		expect(resource.type).toBe('reminder_list')
+		expect(resource.anchor).toBeUndefined()
 		expect(resource.href).toBe('/reminders/lists/reminder_list_1')
 	})
 
-	it('falls back to the reminders route when a reminder parent is missing', () => {
-		const resource = searchResultToResource(makeSearchResult({ parent: null }))
-
-		expect(resource.type).toBe('reminder')
-		expect(resource.parent).toBeUndefined()
-		expect(resource.href).toBe('#')
-	})
-
-	it('keeps calendar event parent context without fabricating a deep link', () => {
+	it('routes a calendar hit to the calendar and carries the matched event', () => {
 		const resource = searchResultToResource(
 			makeSearchResult({
-				type: 'calendar_event',
-				id: 'calendar_event_1',
-				parent: { type: 'calendar', id: 'calendar_1' },
+				type: 'calendar',
+				id: 'calendar_1',
+				anchor: { type: 'calendar_event', id: 'calendar_event_1' },
 			})
 		)
 
-		expect(resource.type).toBe('calendar_event')
-		expect(resource.parent).toEqual({ type: 'calendar', id: 'calendar_1' })
-		expect(resource.href).toBe('#')
+		expect(resource.type).toBe('calendar')
+		expect(resource.anchor).toEqual({ type: 'calendar_event', id: 'calendar_event_1' })
+		expect(resource.href).toBe('/calendar?event=calendar_event_1&calendar=calendar_1')
+	})
+
+	it('routes a calendar hit on the calendar name with no focus', () => {
+		const resource = searchResultToResource(
+			makeSearchResult({ type: 'calendar', id: 'calendar_1', anchor: null })
+		)
+
+		expect(resource.anchor).toBeUndefined()
+		expect(resource.href).toBe('/calendar')
+	})
+
+	it('focuses the matched message when a thread hit came from content', () => {
+		const resource = searchResultToResource(
+			makeSearchResult({
+				type: 'thread',
+				id: 'thread_1',
+				anchor: { type: 'message', id: 'message_1' },
+			})
+		)
+
+		expect(resource.href).toBe('/c/thread_1?message=message_1')
 	})
 })

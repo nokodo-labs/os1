@@ -6,7 +6,7 @@ import {
 	RunFailedError,
 	runThreadStream,
 } from '$lib/chat/streamProcessor'
-import type { ChatContext, StreamDeltaContext } from '$lib/chat/types'
+import type { ApiMessage, ChatContext, StreamDeltaContext } from '$lib/chat/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeApiMessage } from './fixtures'
 
@@ -65,7 +65,7 @@ describe('processDelta steering reconciliation', () => {
 		const msg = makeApiMessage({
 			id: 'msg_server_1',
 			type: 'user',
-			metadata_: {
+			metadata: {
 				steering_state: 'queued',
 				run_id: 'run_1',
 				client_steering_id: 'local-steering-1',
@@ -94,7 +94,7 @@ describe('processDelta steering reconciliation', () => {
 		const msg = makeApiMessage({
 			id: 'msg_server_2',
 			type: 'user',
-			metadata_: {
+			metadata: {
 				steering_state: 'queued',
 				run_id: 'run_1',
 			},
@@ -118,7 +118,7 @@ describe('processDelta steering reconciliation', () => {
 					run_id: 'run_done',
 					agent_id: 'agent_1',
 					message_id: null,
-					parent_id: null,
+					splice: null,
 					delta: { done: true },
 				},
 			},
@@ -147,6 +147,67 @@ describe('processDelta steering reconciliation', () => {
 	})
 })
 
+describe('processDelta splice convergence', () => {
+	function makeSpliceCtx(): ChatContext {
+		const messageTree = new Map<string, ApiMessage>()
+		messageTree.set(
+			'assistant_2',
+			makeApiMessage({ id: 'assistant_2', type: 'assistant', parent_id: 'assistant_1' })
+		)
+		messageTree.set('user_late', makeApiMessage({ id: 'user_late', parent_id: 'assistant_1' }))
+		return {
+			messageTree,
+			messageChildren: new Map<string | null, string[]>(),
+			currentLeafId: 'assistant_2',
+			streamingAssistant: null,
+			rebuildRunBlocks: vi.fn(),
+		} as unknown as ChatContext
+	}
+
+	it('moves traffic the run never read after its new tail', () => {
+		const ctx = makeSpliceCtx()
+		const frame = {
+			event: 'message_created',
+			data: {
+				...makeApiMessage({
+					id: 'assistant_2',
+					type: 'assistant',
+					parent_id: 'assistant_1',
+				}),
+				splice: { parent_id: 'assistant_1', reparent_message_ids: ['user_late'] },
+			},
+		} as unknown as ChatStreamDelta
+
+		const result = processDelta(frame, {} as StreamDeltaContext, ctx)
+
+		expect(result).toBe('continue')
+		expect(ctx.messageTree.get('user_late')?.parent_id).toBe('assistant_2')
+		// the branch follows the moved traffic so it renders after the run tail
+		expect(ctx.currentLeafId).toBe('user_late')
+		expect(ctx.rebuildRunBlocks).toHaveBeenCalled()
+	})
+
+	it('leaves the tree alone when the frame carries no reparent', () => {
+		const ctx = makeSpliceCtx()
+		const frame = {
+			event: 'message_created',
+			data: {
+				...makeApiMessage({
+					id: 'assistant_2',
+					type: 'assistant',
+					parent_id: 'assistant_1',
+				}),
+				splice: { parent_id: 'assistant_1' },
+			},
+		} as unknown as ChatStreamDelta
+
+		processDelta(frame, {} as StreamDeltaContext, ctx)
+
+		expect(ctx.messageTree.get('user_late')?.parent_id).toBe('assistant_1')
+		expect(ctx.currentLeafId).toBe('assistant_2')
+	})
+})
+
 async function* asyncFrom(
 	frames: ChatStreamDelta[]
 ): AsyncGenerator<ChatStreamDelta, void, unknown> {
@@ -159,7 +220,7 @@ const doneFrame: ChatStreamDelta = {
 		run_id: 'run_x',
 		agent_id: 'agent_1',
 		message_id: null,
-		parent_id: null,
+		splice: null,
 		delta: { done: true },
 	},
 } as unknown as ChatStreamDelta
@@ -253,7 +314,7 @@ function chatDelta(messageId: string, text: string, done = false): ChatStreamDel
 			run_id: 'run_x',
 			agent_id: 'agent_1',
 			message_id: messageId,
-			parent_id: null,
+			splice: null,
 			delta: {
 				chat: { message: { content: [{ type: 'text', text }], tool_calls: null }, done },
 			},
@@ -403,7 +464,7 @@ describe('runThreadStream recovery', () => {
 		)
 
 		const persisted = ctx.messageTree.get('msg_1')
-		expect(persisted?.metadata_?.partial).toBe(true)
+		expect(persisted?.metadata?.partial).toBe(true)
 		expect(activeRunsMocks.forgetRun).toHaveBeenCalledWith('run_x')
 	})
 })

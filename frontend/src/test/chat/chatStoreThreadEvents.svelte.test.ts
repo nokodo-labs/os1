@@ -1,7 +1,8 @@
 /**
  * tests for ChatStore thread event handling in chat.svelte.ts.
- * validates that thread.created, thread.updated, thread.deleted, and thread.read
- * events correctly update recentThreads, activeThread, and threadCache.
+ * validates that thread.created, thread.updated, thread.deleted and the
+ * thread.participants.* read receipts correctly update recentThreads,
+ * activeThread, threadCache, unread counts and read cursors.
  *
  * uses .svelte.test.ts so Svelte 5 runes ($state) work in the test runtime.
  */
@@ -60,6 +61,7 @@ vi.mock('$lib/stores/activeRuns.svelte', () => ({
 // --- import the module under test after mocks are set up ---
 
 import { chat } from '$lib/stores/chat.svelte'
+import { STORE_EVENT_TYPES } from '$lib/stores/storeEvents'
 
 /** dispatch one event through the store's handler */
 function dispatch(msg: unknown): void {
@@ -247,18 +249,18 @@ describe('ChatStore thread event handling', () => {
 			expect(updated.random_number).toBeUndefined()
 		})
 
-		it('updates is_archived flag', () => {
-			const thread = makeThread({ id: 't1', is_archived: false })
+		it('updates is_temporary flag', () => {
+			const thread = makeThread({ id: 't1', is_temporary: false })
 			chat.recentThreads = [thread]
 
 			dispatch(
 				makeStreamMessage('thread.updated', {
 					id: 't1',
-					is_archived: true,
+					is_temporary: true,
 				})
 			)
 
-			expect(chat.recentThreads[0].is_archived).toBe(true)
+			expect(chat.recentThreads[0].is_temporary).toBe(true)
 		})
 
 		it('merges into thread cache when cached', () => {
@@ -381,21 +383,139 @@ describe('ChatStore thread event handling', () => {
 		})
 	})
 
-	// -- thread.read --
+	// -- read receipts (thread.participants.added / .updated) --
 
-	describe('thread.read', () => {
-		it('clears unread count for the thread', () => {
-			chat.unreadCounts.set('t1', 5)
+	describe('read receipts', () => {
+		/** the backend fans a read cursor out as a participant-state change. */
+		function receipt(threadId: string, userId: string, cursor: string | null) {
+			return makeStreamMessage('thread.participants.updated', {
+				thread_id: threadId,
+				user_id: userId,
+				kind: 'user',
+				last_read_message_id: cursor,
+			})
+		}
 
-			dispatch(makeStreamMessage('thread.read', { thread_id: 't1' }))
+		it('records another participant cursor', () => {
+			dispatch(receipt('t1', 'user_them', 'msg_2'))
 
-			expect(chat.unreadCounts.has('t1')).toBe(false)
+			expect(chat.threadReadCursors('t1').get('user_them')?.messageId).toBe('msg_2')
 		})
 
-		it('ignores events for unknown threads', () => {
+		it('stamps the arrival, which is the only read time the fanout gives', () => {
+			dispatch(receipt('t1', 'user_them', 'msg_2'))
+			const first = chat.threadReadCursors('t1').get('user_them')?.at
+
+			expect(first).toBeInstanceOf(Date)
+
+			// a repeat of the same cursor is not a new read: the stamp survives
+			dispatch(receipt('t1', 'user_them', 'msg_2'))
+			expect(chat.threadReadCursors('t1').get('user_them')?.at).toBe(first)
+
+			dispatch(receipt('t1', 'user_them', 'msg_5'))
+			expect(chat.threadReadCursors('t1').get('user_them')?.at).not.toBe(first)
+		})
+
+		it('records a cursor arriving as the first participant-state event', () => {
+			dispatch(
+				makeStreamMessage('thread.participants.added', {
+					thread_id: 't1',
+					user_id: 'user_them',
+					kind: 'user',
+					last_read_message_id: 'msg_2',
+				})
+			)
+
+			expect(chat.threadReadCursors('t1').get('user_them')?.messageId).toBe('msg_2')
+		})
+
+		it('advances a cursor in place, keeping other participants', () => {
+			dispatch(receipt('t1', 'user_them', 'msg_2'))
+			dispatch(receipt('t1', 'user_other', 'msg_1'))
+			dispatch(receipt('t1', 'user_them', 'msg_5'))
+
+			expect(chat.threadReadCursors('t1').get('user_them')?.messageId).toBe('msg_5')
+			expect(chat.threadReadCursors('t1').get('user_other')?.messageId).toBe('msg_1')
+		})
+
+		it('keeps cursors per thread', () => {
+			dispatch(receipt('t1', 'user_them', 'msg_2'))
+
+			expect(chat.threadReadCursors('t2').size).toBe(0)
+		})
+
+		it('ignores private mute/pin/archive state, which carries no cursor', () => {
+			dispatch(
+				makeStreamMessage('thread.participants.updated', {
+					thread_id: 't1',
+					user_id: 'user_them',
+					kind: 'user',
+					muted: true,
+					pinned: false,
+					archived: false,
+				})
+			)
+
+			expect(chat.threadReadCursors('t1').size).toBe(0)
+		})
+
+		it('ignores events with no thread or user', () => {
+			dispatch(receipt('', 'user_them', 'msg_2'))
+			dispatch(makeStreamMessage('thread.participants.updated', { thread_id: 't1' }))
+
+			expect(chat.threadReadCursors('t1').size).toBe(0)
+		})
+
+		it('drops cursors when the thread is deleted', () => {
+			dispatch(receipt('t1', 'user_them', 'msg_2'))
+			dispatch(makeStreamMessage('thread.deleted', { id: 't1' }))
+
+			expect(chat.threadReadCursors('t1').size).toBe(0)
+		})
+
+		it('clears unread state when the own cursor moves in another tab', async () => {
+			const sessionMock = await import('$lib/auth/session.svelte')
+			const jwtMock = await import('$lib/auth/jwt')
+			vi.mocked(sessionMock.getAccessToken).mockReturnValue('fake.jwt.token')
+			vi.mocked(jwtMock.getJwtUserId).mockReturnValue('user_me')
+
+			chat.unreadCounts.set('t1', 5)
+			chat.unreadCounts.set('t2', 3)
+
+			dispatch(receipt('t1', 'user_me', 'msg_9'))
+			dispatch(receipt('t2', 'user_them', 'msg_9'))
+
+			expect(chat.unreadCounts.has('t1')).toBe(false)
+			expect(chat.unreadCounts.get('t2')).toBe(3)
+
+			vi.mocked(sessionMock.getAccessToken).mockReturnValue(null)
+			vi.mocked(jwtMock.getJwtUserId).mockReturnValue('user_test')
+		})
+
+		it('clears unread state even when the thread has no messages to point at', async () => {
+			const sessionMock = await import('$lib/auth/session.svelte')
+			const jwtMock = await import('$lib/auth/jwt')
+			vi.mocked(sessionMock.getAccessToken).mockReturnValue('fake.jwt.token')
+			vi.mocked(jwtMock.getJwtUserId).mockReturnValue('user_me')
+
 			chat.unreadCounts.set('t1', 5)
 
-			dispatch(makeStreamMessage('thread.read', { thread_id: 't2' }))
+			dispatch(receipt('t1', 'user_me', null))
+
+			expect(chat.unreadCounts.has('t1')).toBe(false)
+
+			vi.mocked(sessionMock.getAccessToken).mockReturnValue(null)
+			vi.mocked(jwtMock.getJwtUserId).mockReturnValue('user_test')
+		})
+
+		it('no longer listens for the phantom thread.read event', () => {
+			const chatEvents: readonly string[] = STORE_EVENT_TYPES.chat
+			expect(chatEvents).not.toContain('thread.read')
+			expect(chatEvents).toContain('thread.participants.added')
+			expect(chatEvents).toContain('thread.participants.updated')
+
+			chat.unreadCounts.set('t1', 5)
+			dispatch(makeStreamMessage('thread.read', { thread_id: 't1' }))
 
 			expect(chat.unreadCounts.get('t1')).toBe(5)
 		})
@@ -494,7 +614,7 @@ describe('ChatStore thread event handling', () => {
 				task_type: 'custom',
 				status: 'running',
 				progress: 0,
-				metadata_: { task_name: 'thread.maintenance', thread_id: 't1' },
+				metadata: { task_name: 'thread.maintenance', thread_id: 't1' },
 				spawned_thread_id: 't1',
 				created_at: new Date().toISOString(),
 				updated_at: new Date().toISOString(),

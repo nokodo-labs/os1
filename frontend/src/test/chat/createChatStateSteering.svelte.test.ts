@@ -97,14 +97,15 @@ describe('createChatState steering queue reconciliation', () => {
 			createdAt: new Date('2026-05-16T10:00:00.000Z'),
 			message: null,
 			deliveryState: 'sending',
-			input: { text: 'steer me' },
+			input: { type: 'user', content: [{ type: 'text', text: 'steer me' }] },
 		})
 
 		const flush = state.flushPendingSteeringMessages('run_1', 'parent_1')
 		expect(apiMocks.POST).toHaveBeenCalledWith('/v1/runs/{run_id}/steer', {
 			params: { path: { run_id: 'run_1' } },
 			body: {
-				input: { text: 'steer me' },
+				form: 'text',
+				input: { type: 'user', content: [{ type: 'text', text: 'steer me' }] },
 				parent_id: 'parent_1',
 				client_steering_id: 'local-steering-1',
 			},
@@ -117,7 +118,7 @@ describe('createChatState steering queue reconciliation', () => {
 			makeApiMessage({
 				id: 'server_1',
 				thread_id: 'thread_1',
-				metadata_: {
+				metadata: {
 					steering_state: 'queued',
 					run_id: 'run_1',
 					client_steering_id: 'local-steering-1',
@@ -156,7 +157,7 @@ describe('createChatState steering queue reconciliation', () => {
 			createdAt: new Date('2026-05-17T01:51:09.000Z'),
 			message: null,
 			deliveryState: 'sending',
-			input: { text: 'too late' },
+			input: { type: 'user', content: [{ type: 'text', text: 'too late' }] },
 		})
 
 		try {
@@ -169,5 +170,74 @@ describe('createChatState steering queue reconciliation', () => {
 		expect(consoleError).not.toHaveBeenCalled()
 		expect(apiMocks.DELETE).not.toHaveBeenCalled()
 		expect(state.queuedSteeringMessages).toHaveLength(0)
+	})
+})
+
+describe('run failure rendering', () => {
+	beforeEach(() => {
+		resetIdCounter()
+		chat.clear()
+	})
+
+	afterEach(() => {
+		chat.clear()
+	})
+
+	it('drops the transient error bubble once the durable record lands', () => {
+		const state = createChatState()
+		state.setThread(makeThread({ id: 'thread_1' }))
+		state.streamingAssistant = {
+			runId: 'run_1',
+			messageId: 'error-1',
+			content: '',
+			timestamp: new Date(),
+			senderAgentId: 'agent_1',
+			toolCalls: [],
+			isError: true,
+			errorMessage: 'boom',
+		}
+
+		state.recordRunFailure({
+			id: 'event_1',
+			threadId: 'thread_1',
+			agentId: 'agent_1',
+			reason: 'provider_error',
+			runId: 'run_1',
+			anchorMessageId: 'u1',
+			partialMessageId: null,
+			createdAt: new Date(),
+		})
+
+		// the same failure must not render twice: the durable record survives
+		// reload and reaches every participant, so it is the one that stays.
+		expect(state.streamingAssistant).toBeNull()
+	})
+
+	it('keeps an error bubble that belongs to a different run', () => {
+		const state = createChatState()
+		state.setThread(makeThread({ id: 'thread_1' }))
+		state.streamingAssistant = {
+			runId: 'run_other',
+			messageId: 'error-1',
+			content: '',
+			timestamp: new Date(),
+			senderAgentId: 'agent_1',
+			toolCalls: [],
+			isError: true,
+			errorMessage: 'boom',
+		}
+
+		state.recordRunFailure({
+			id: 'event_1',
+			threadId: 'thread_1',
+			agentId: 'agent_1',
+			reason: 'provider_error',
+			runId: 'run_1',
+			anchorMessageId: 'u1',
+			partialMessageId: null,
+			createdAt: new Date(),
+		})
+
+		expect(state.streamingAssistant).not.toBeNull()
 	})
 })

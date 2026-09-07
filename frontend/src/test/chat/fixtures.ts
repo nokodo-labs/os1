@@ -27,7 +27,6 @@ export function makeThread(overrides: Partial<Thread> = {}): Thread {
 		id,
 		title: 'test thread',
 		tags: [],
-		is_archived: false,
 		is_temporary: false,
 		owner_id: uniqueId('user'),
 		current_message_id: null,

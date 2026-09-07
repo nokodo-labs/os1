@@ -1,4 +1,5 @@
 import { buildRunBlocks, getUserRunItemTimestamp } from '$lib/chat/helpers'
+import type { ChatSystemEvent } from '$lib/chat/systemEvents'
 import type { ApiMessage, RunActivityState } from '$lib/chat/types'
 import { describe, expect, it } from 'vitest'
 import { makeApiMessage } from './fixtures'
@@ -17,7 +18,7 @@ function message(overrides: Partial<ApiMessage>): ApiMessage {
 		thread_id: threadId,
 		created_at: at(0),
 		updated_at: at(0),
-		metadata_: { run_id: runId },
+		metadata: { run_id: runId },
 		...overrides,
 	})
 }
@@ -116,7 +117,7 @@ describe('buildRunBlocks', () => {
 			parent_id: 't1',
 			sender_user_id: userId,
 			content: [{ type: 'text', text: 'in Iran I meant' }],
-			metadata_: { run_id: runId, steering_state: 'injected' },
+			metadata: { run_id: runId, steering_state: 'injected' },
 			created_at: at(4),
 		})
 		const secondAssistant = message({
@@ -262,7 +263,7 @@ describe('buildRunBlocks', () => {
 			type: 'user',
 			parent_id: null,
 			sender_user_id: userId,
-			metadata_: { run_id: 'run_1' },
+			metadata: { run_id: 'run_1' },
 			created_at: at(1),
 		})
 		const firstAssistant = message({
@@ -271,7 +272,7 @@ describe('buildRunBlocks', () => {
 			parent_id: 'u1',
 			sender_user_id: null,
 			sender_agent_id: agentId,
-			metadata_: { run_id: 'run_1' },
+			metadata: { run_id: 'run_1' },
 			content: [{ type: 'text', text: 'first done' }],
 			created_at: at(2),
 		})
@@ -280,7 +281,7 @@ describe('buildRunBlocks', () => {
 			type: 'user',
 			parent_id: 'a1',
 			sender_user_id: userId,
-			metadata_: { run_id: 'run_2' },
+			metadata: { run_id: 'run_2' },
 			created_at: at(3),
 		})
 		const secondAssistant = message({
@@ -289,7 +290,7 @@ describe('buildRunBlocks', () => {
 			parent_id: 'u2',
 			sender_user_id: null,
 			sender_agent_id: agentId,
-			metadata_: { run_id: 'run_2' },
+			metadata: { run_id: 'run_2' },
 			content: [{ type: 'text', text: 'second done' }],
 			created_at: at(4),
 		})
@@ -349,7 +350,7 @@ describe('buildRunBlocks', () => {
 			parent_id: 'a1',
 			sender_user_id: null,
 			sender_agent_id: agentId,
-			metadata_: { run_id: 'run_2' },
+			metadata: { run_id: 'run_2' },
 			content: [{ type: 'text', text: 'second run' }],
 			created_at: at(3),
 		})
@@ -597,6 +598,35 @@ describe('buildRunBlocks', () => {
 		expect(result.blocks[0].items.map((item) => item.kind)).toEqual(['optimistic_user'])
 	})
 
+	it('shows the error element while the user message is still optimistic', () => {
+		const result = buildRunBlocks({
+			messages: [],
+			userId,
+			streamingAssistant: {
+				runId,
+				messageId: 'error-1',
+				content: '',
+				timestamp: new Date(at(2)),
+				senderAgentId: agentId,
+				toolCalls: [],
+				isError: true,
+				errorMessage: 'generation failed',
+			},
+			optimisticUserMessage: {
+				text: 'hello there',
+				attachments: [],
+				timestamp: new Date(at(1)),
+			},
+			viewingStreamingBranch: true,
+		})
+
+		expect(result.blocks).toHaveLength(1)
+		expect(result.blocks[0].items.map((item) => item.kind)).toEqual([
+			'optimistic_user',
+			'streaming_assistant',
+		])
+	})
+
 	it('shows the assistant placeholder once the user message is persisted', () => {
 		const persistedUser = message({
 			id: 'u1',
@@ -628,6 +658,240 @@ describe('buildRunBlocks', () => {
 		expect(result.blocks[0].items.map((item) => item.kind)).toEqual([
 			'user',
 			'streaming_assistant',
+		])
+	})
+
+	it('clusters plain messages from one author into one block', () => {
+		const mine = (id: string) =>
+			message({ id, type: 'user', sender_user_id: userId, metadata: {} })
+		const theirs = (id: string) =>
+			message({ id, type: 'user', sender_user_id: 'user_2', metadata: {} })
+
+		const result = buildRunBlocks({
+			messages: [mine('u1'), mine('u2'), theirs('u3'), theirs('u4'), mine('u5')],
+			userId,
+			streamingAssistant: null,
+			optimisticUserMessage: null,
+			viewingStreamingBranch: true,
+		})
+
+		const ids = result.blocks.map((block) =>
+			block.items.map((item) => (item.kind === 'user' ? item.message.id : item.kind))
+		)
+		expect(ids).toEqual([['u1', 'u2'], ['u3', 'u4'], ['u5']])
+	})
+
+	it('a run input message clusters with its author and its answer follows in the block', () => {
+		const plain = message({ id: 'u1', type: 'user', sender_user_id: userId, metadata: {} })
+		const runInput = message({ id: 'u2', type: 'user', sender_user_id: userId })
+		const reply = message({ id: 'a1', type: 'assistant', sender_agent_id: agentId })
+
+		const result = buildRunBlocks({
+			messages: [plain, runInput, reply],
+			userId,
+			streamingAssistant: null,
+			optimisticUserMessage: null,
+			viewingStreamingBranch: true,
+		})
+
+		expect(result.blocks).toHaveLength(1)
+		expect(result.blocks[0].items.map((item) => item.kind)).toEqual([
+			'user',
+			'user',
+			'assistant',
+		])
+	})
+})
+
+describe('buildRunBlocks - inline system rows', () => {
+	function systemEvent(id: string, seconds: number): ChatSystemEvent {
+		return {
+			id,
+			kind: 'member_added',
+			threadId,
+			createdAt: new Date(at(seconds)),
+			actorUserId: userId,
+			actorName: null,
+			subjectId: 'user_2',
+			subjectName: null,
+			level: 'editor',
+			title: null,
+			messageId: null,
+		}
+	}
+
+	function timeline(
+		messages: ApiMessage[],
+		systemEvents: ChatSystemEvent[]
+	): Array<string | undefined> {
+		const result = buildRunBlocks({
+			messages,
+			userId,
+			streamingAssistant: null,
+			optimisticUserMessage: null,
+			viewingStreamingBranch: true,
+			systemEvents,
+		})
+		return result.blocks.flatMap((block) =>
+			block.items.map((item) =>
+				item.kind === 'user'
+					? item.message.id
+					: item.kind === 'system_event'
+						? `system:${item.event.id}`
+						: item.kind
+			)
+		)
+	}
+
+	const first = message({ id: 'u1', type: 'user', sender_user_id: userId, created_at: at(0) })
+	const second = message({ id: 'u2', type: 'user', sender_user_id: userId, created_at: at(20) })
+
+	it('places a row at its own moment in the transcript', () => {
+		expect(timeline([first, second], [systemEvent('ev1', 10)])).toEqual([
+			'u1',
+			'system:ev1',
+			'u2',
+		])
+	})
+
+	it('keeps a row that happened before anything was said at the top', () => {
+		expect(timeline([first, second], [systemEvent('ev1', -5)])).toEqual([
+			'system:ev1',
+			'u1',
+			'u2',
+		])
+	})
+
+	it('keeps a row that arrived after the last message at the tail', () => {
+		expect(timeline([first, second], [systemEvent('ev1', 40)])).toEqual([
+			'u1',
+			'u2',
+			'system:ev1',
+		])
+	})
+
+	it('orders several rows among themselves', () => {
+		expect(
+			timeline([first, second], [systemEvent('later', 15), systemEvent('earlier', 5)])
+		).toEqual(['u1', 'system:earlier', 'system:later', 'u2'])
+	})
+
+	it('breaks a run of one author bubbles rather than sitting inside it', () => {
+		const third = message({
+			id: 'u3',
+			type: 'user',
+			sender_user_id: userId,
+			created_at: at(30),
+		})
+		const result = buildRunBlocks({
+			messages: [first, second, third],
+			userId,
+			streamingAssistant: null,
+			optimisticUserMessage: null,
+			viewingStreamingBranch: true,
+			systemEvents: [systemEvent('ev1', 10)],
+		})
+
+		expect(result.blocks.map((block) => block.items.map((item) => item.kind))).toEqual([
+			['user'],
+			['system_event'],
+			['user', 'user'],
+		])
+	})
+
+	it('renders a chat that has only system rows and nothing said yet', () => {
+		expect(timeline([], [systemEvent('ev1', 0)])).toEqual(['system:ev1'])
+	})
+
+	it('carries no system rows when there are none', () => {
+		expect(timeline([first, second], [])).toEqual(['u1', 'u2'])
+	})
+})
+
+describe('buildRunBlocks - time headers', () => {
+	const HOUR = 3600
+
+	function timeline(messages: ApiMessage[]): Array<string | undefined> {
+		const result = buildRunBlocks({
+			messages,
+			userId,
+			streamingAssistant: null,
+			optimisticUserMessage: null,
+			viewingStreamingBranch: true,
+		})
+		return result.blocks.flatMap((block) =>
+			block.items.map((item) =>
+				item.kind === 'user'
+					? item.message.id
+					: item.kind === 'time_header'
+						? `time:${item.at.toISOString()}`
+						: item.kind
+			)
+		)
+	}
+
+	function said(id: string, seconds: number): ApiMessage {
+		return message({
+			id,
+			type: 'user',
+			sender_user_id: userId,
+			created_at: at(seconds),
+			metadata: {},
+		})
+	}
+
+	it('dates a silence between two messages', () => {
+		expect(timeline([said('u1', 0), said('u2', HOUR)])).toEqual([
+			'u1',
+			`time:${at(HOUR)}`,
+			'u2',
+		])
+	})
+
+	it('leaves a conversation that kept going undated', () => {
+		expect(timeline([said('u1', 0), said('u2', HOUR - 60)])).toEqual(['u1', 'u2'])
+	})
+
+	it('never opens the transcript with one: the top is the caller to date', () => {
+		expect(timeline([said('u1', 0)])).toEqual(['u1'])
+	})
+
+	it('measures the silence from where the last block ENDED, not where it began', () => {
+		// the run answered an hour after the question; the reply a minute later
+		// followed the ANSWER closely, so nothing was waited through.
+		const question = said('u1', 0)
+		const answer = message({
+			id: 'a1',
+			type: 'assistant',
+			sender_agent_id: agentId,
+			content: [{ type: 'text', text: 'here you go' }],
+			created_at: at(HOUR),
+		})
+		const reply = said('u2', HOUR + 60)
+
+		expect(timeline([question, answer, reply])).toEqual(['u1', 'assistant', 'u2'])
+	})
+
+	it('never dates an agent answer, which still carries its own date on top', () => {
+		const question = said('u1', 0)
+		const answer = message({
+			id: 'a1',
+			type: 'assistant',
+			sender_agent_id: agentId,
+			content: [{ type: 'text', text: 'sorry, that took a while' }],
+			created_at: at(4 * HOUR),
+		})
+
+		expect(timeline([question, answer])).toEqual(['u1', 'assistant'])
+	})
+
+	it('dates each silence in a transcript that has several', () => {
+		expect(timeline([said('u1', 0), said('u2', HOUR), said('u3', 3 * HOUR)])).toEqual([
+			'u1',
+			`time:${at(HOUR)}`,
+			'u2',
+			`time:${at(3 * HOUR)}`,
+			'u3',
 		])
 	})
 })
