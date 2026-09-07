@@ -1,24 +1,35 @@
+import type { Component } from 'svelte'
+
 export type ModalId =
 	| 'add-friends'
 	| 'archived-chats'
 	| 'create-group'
 	| 'memories'
-	| 'share-resource'
 	| 'confirm-delete'
 	| 'file-details'
 	| 'note-properties'
 	| 'resource-access'
 
-export type ShareResourcePayload = {
-	resource: 'thread'
-	id: string
-	title: string | null
+/** opt-in switch rendered inside the confirm dialog, above the confirm button. */
+export type ConfirmDeleteToggle = {
+	label: string
+	description?: string
+	/** starting state of the switch. off unless set. */
+	default?: boolean
 }
 
 export type ConfirmDeletePayload = {
 	title: string
 	description?: string
-	onDelete: () => void | boolean | Promise<void | boolean>
+	/** verb for the confirm button, when "delete" is not what happens. */
+	confirmLabel?: string
+	/** verb shown while the action runs. */
+	pendingLabel?: string
+	/** icon for the confirm button, when a trash can is not what happens. */
+	confirmIcon?: Component<{ class?: string }>
+	/** optional opt-in switch. its state is handed to onDelete. */
+	toggle?: ConfirmDeleteToggle
+	onDelete: (toggleOn: boolean) => void | boolean | Promise<void | boolean>
 }
 
 export type FileDetailsPayload = {
@@ -45,7 +56,6 @@ export type ResourceAccessPayload = {
 
 class ModalStore {
 	active = $state<ModalId | null>(null)
-	shareResourcePayload = $state<ShareResourcePayload | null>(null)
 	confirmDeletePayload = $state<ConfirmDeletePayload | null>(null)
 	fileDetailsPayload = $state<FileDetailsPayload | null>(null)
 	notePropertiesPayload = $state<NotePropertiesPayload | null>(null)
@@ -55,7 +65,6 @@ class ModalStore {
 	open(id: 'archived-chats'): void
 	open(id: 'create-group'): void
 	open(id: 'memories'): void
-	open(id: 'share-resource', payload: ShareResourcePayload): void
 	open(id: 'confirm-delete', payload: ConfirmDeletePayload): void
 	open(id: 'file-details', payload: FileDetailsPayload): void
 	open(id: 'note-properties', payload: NotePropertiesPayload): void
@@ -63,18 +72,12 @@ class ModalStore {
 	open(
 		id: ModalId,
 		payload?:
-			| ShareResourcePayload
 			| ConfirmDeletePayload
 			| FileDetailsPayload
 			| NotePropertiesPayload
 			| ResourceAccessPayload
 	): void {
 		this.active = id
-		if (id === 'share-resource') {
-			if (!payload) throw new Error('share-resource modal requires a payload')
-			this.shareResourcePayload = payload as ShareResourcePayload
-			return
-		}
 		if (id === 'confirm-delete') {
 			if (!payload) throw new Error('confirm-delete modal requires a payload')
 			this.confirmDeletePayload = payload as ConfirmDeletePayload
@@ -95,11 +98,9 @@ class ModalStore {
 			this.resourceAccessPayload = payload as ResourceAccessPayload
 			return
 		}
-		this.shareResourcePayload = null
 	}
 	close = () => {
 		this.active = null
-		this.shareResourcePayload = null
 		this.confirmDeletePayload = null
 		this.fileDetailsPayload = null
 		this.notePropertiesPayload = null

@@ -4,8 +4,7 @@
 	import SortIcon from '$lib/components/icons/SortIcon.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import LoadingMoreIndicator from '$lib/components/LoadingMoreIndicator.svelte'
-	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
-	import { DropdownSelect } from '$lib/components/primitives'
+	import { DropdownSelect, Skeleton } from '$lib/components/primitives'
 	import type { Snippet } from 'svelte'
 
 	type SortOption = {
@@ -119,8 +118,8 @@
 	<!-- scrollable list container -->
 	<div bind:this={scrollerEl} class="max-h-[68dvh] min-h-40 overflow-y-auto" onscroll={onScroll}>
 		{#if loading}
-			<div class="flex min-h-40 items-center justify-center py-12">
-				<NokodoLoader className="opacity-70" expanded={false} />
+			<div class="space-y-2">
+				<Skeleton shape="row" count={5} avatar={false} trailing radius="container" />
 			</div>
 		{:else if isEmpty}
 			<EmptyState label={search ? (emptySearchMessage ?? emptyMessage) : emptyMessage} />

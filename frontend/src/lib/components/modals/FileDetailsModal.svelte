@@ -14,6 +14,7 @@
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import Trash from '$lib/components/icons/Trash.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import ModalActions from '$lib/components/modals/ModalActions.svelte'
 	import { resourceAccentStyle } from '$lib/resources/resourceVisuals'
 	import { downloadFile, fetchAuthenticatedBlob, files } from '$lib/stores/files.svelte'
 	import type { FileDetailsPayload, ResourceAccessPayload } from '$lib/stores/modals.svelte'
@@ -105,12 +106,12 @@
 	})
 
 	const genPrompt = $derived(
-		(file?.metadata_ as Record<string, unknown> | undefined)?.prompt as string | undefined
+		(file?.metadata as Record<string, unknown> | undefined)?.prompt as string | undefined
 	)
 	const genAgentId = $derived(
-		(file?.metadata_ as Record<string, unknown> | undefined)?.agent_id as string | undefined
+		(file?.metadata as Record<string, unknown> | undefined)?.agent_id as string | undefined
 	)
-	const isGenerated = $derived(file?.source === 'generated')
+	const isGenerated = $derived(file?.source === 'agent_generated')
 
 	function formatDate(iso: string | null | undefined): string {
 		if (!iso) return '-'
@@ -325,7 +326,7 @@
 				<div
 					class="flex h-11 w-11 shrink-0 items-center justify-center rounded-[15px] border border-[color-mix(in_oklch,var(--accent-primary)_22%,transparent)] bg-[color-mix(in_oklch,var(--accent-primary)_12%,transparent)] text-(--accent-primary)"
 				>
-					<MimeIcon {mimeType} class="h-5 w-5" />
+					<MimeIcon {mimeType} variant="solid" class="h-5 w-5" />
 				</div>
 				<div class="min-w-0 flex-1">
 					<p class="text-foreground/50 text-xs font-medium tracking-[0.12em] uppercase">
@@ -343,84 +344,86 @@
 			</section>
 
 			<!-- action buttons -->
-			<div class="flex flex-wrap items-center gap-2">
-				{#if isPdf}
-					{#if pdfPreviewBlobUrl}
+			<ModalActions>
+				{#snippet leading()}
+					{#if isPdf}
+						{#if pdfPreviewBlobUrl}
+							<button
+								type="button"
+								class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
+								onclick={handlePdfPreviewClick}
+							>
+								<Eye class="size-4" />
+								preview
+							</button>
+						{:else}
+							<button
+								class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
+								disabled
+							>
+								<Eye class="size-4" />
+								{#if isOpeningPreview}<ShimmerText className="inline-block"
+										>preparing</ShimmerText
+									>{:else}preview{/if}
+							</button>
+						{/if}
+					{/if}
+					{#if hasPreview && isImage}
 						<button
-							type="button"
 							class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
-							onclick={handlePdfPreviewClick}
+							onclick={() => (previewOpen = true)}
 						>
-							<Eye class="size-4" />
+							<ArrowsPointingOut class="size-4" />
 							preview
 						</button>
-					{:else}
-						<button
-							class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
-							disabled
-						>
-							<Eye class="size-4" />
-							{#if isOpeningPreview}<ShimmerText className="inline-block"
-									>preparing</ShimmerText
-								>{:else}preview{/if}
-						</button>
 					{/if}
-				{/if}
-				{#if hasPreview && isImage}
-					<button
-						class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
-						onclick={() => (previewOpen = true)}
-					>
-						<ArrowsPointingOut class="size-4" />
-						preview
-					</button>
-				{/if}
-				<button
-					class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
-					onclick={handleDownload}
-					disabled={isDownloading}
-				>
-					<Download class="size-4" />
-					{#if isDownloading}<ShimmerText className="inline-block"
-							>downloading</ShimmerText
-						>{:else}download{/if}
-				</button>
-				{#if file}
-					<button
-						class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
-						onclick={handleShare}
-					>
-						<Share class="size-4" />
-						share
-					</button>
-				{/if}
-				{#if threadId}
-					<button
-						class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
-						onclick={() => {
-							handleClose()
-							void goto(resolve(`/c/${threadId}`))
-						}}
-					>
-						<ChatBubble class="size-4" />
-						view thread
-					</button>
-				{/if}
-				{#if canGenerate}
 					<button
 						class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
-						onclick={() => void generateMaintenance()}
-						disabled={isGeneratingMaintenance}
+						onclick={handleDownload}
+						disabled={isDownloading}
 					>
-						<Sparkles class="size-4" />
-						{#if isGeneratingMaintenance}<ShimmerText className="inline-block"
-								>generating</ShimmerText
-							>{:else}generate missing data{/if}
+						<Download class="size-4" />
+						{#if isDownloading}<ShimmerText className="inline-block"
+								>downloading</ShimmerText
+							>{:else}download{/if}
 					</button>
-				{/if}
+					{#if file}
+						<button
+							class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
+							onclick={handleShare}
+						>
+							<Share class="size-4" />
+							share
+						</button>
+					{/if}
+					{#if threadId}
+						<button
+							class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97]"
+							onclick={() => {
+								handleClose()
+								void goto(resolve(`/c/${threadId}`))
+							}}
+						>
+							<ChatBubble class="size-4" />
+							view thread
+						</button>
+					{/if}
+					{#if canGenerate}
+						<button
+							class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
+							onclick={() => void generateMaintenance()}
+							disabled={isGeneratingMaintenance}
+						>
+							<Sparkles class="size-4" />
+							{#if isGeneratingMaintenance}<ShimmerText className="inline-block"
+									>generating</ShimmerText
+								>{:else}generate missing data{/if}
+						</button>
+					{/if}
+				{/snippet}
 				{#if canDeleteFile}
 					<button
-						class="liquid-glass rounded-pill ml-auto flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm text-red-400 transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
+						class="liquid-glass rounded-pill flex cursor-pointer items-center gap-1.5 px-4 py-2 text-sm text-red-400 transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50"
 						onclick={handleDelete}
 						disabled={isDeleting}
 					>
@@ -429,7 +432,7 @@
 							>{:else}delete{/if}
 					</button>
 				{/if}
-			</div>
+			</ModalActions>
 
 			{#if deleteError}
 				<p class="text-sm text-red-400">{deleteError}</p>
@@ -443,7 +446,9 @@
 
 			<!-- metadata grid -->
 			<div class="min-w-0 rounded-2xl border border-white/8 bg-white/4 p-4">
-				<dl class="grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+				<dl
+					class="grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 text-sm select-text sm:grid-cols-2"
+				>
 					{#if fileAuthorLabel}
 						<div class="min-w-0">
 							<dt class="text-foreground/40 text-xs tracking-wide uppercase">
@@ -515,16 +520,6 @@
 							</dt>
 							<dd class="text-foreground/80 mt-0.5 min-w-0 wrap-break-word">
 								{file.status}
-							</dd>
-						</div>
-					{/if}
-					{#if file.checksum_sha256}
-						<div class="min-w-0 sm:col-span-2">
-							<dt class="text-foreground/40 text-xs tracking-wide uppercase">
-								sha256
-							</dt>
-							<dd class="text-foreground/60 mt-0.5 font-mono text-xs break-all">
-								{file.checksum_sha256}
 							</dd>
 						</div>
 					{/if}

@@ -19,6 +19,7 @@ import type { StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 import { STORE_EVENT_TYPES, storeEventData, subscribeToStoreEvents } from '$lib/stores/storeEvents'
+import { untrack } from 'svelte'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { session } from './session.svelte'
 
@@ -188,20 +189,19 @@ class ResourceAccessStore {
 		ownerId?: string | null
 	): Promise<AccessLevel | null> {
 		const key = resourceKey(resourceType, resourceId)
-		if (ownerId && session.currentUserId === ownerId) {
-			this.#levels.set(key, 'admin')
-			this.#freshLevels.add(key)
-			return 'admin'
-		}
-		if (this.#levels.has(key) && this.#freshLevels.has(key)) {
-			return this.#levels.get(key) ?? null
-		}
+		// the level map, the freshness set and the version stamp are all reactive,
+		// so reading them plainly would subscribe the caller: an $effect calling
+		// ensure() then re-runs into access/resolve on every invalidation, turning
+		// each one into a poll (same shape as the projects one). invalidation marks
+		// stale; views refetch when they next ask.
+		const cached = untrack(() => this.#cachedLevel(key, ownerId))
+		if (cached) return cached.level
 
 		const existing = this.#levelInFlight.get(key)
 		if (existing) return existing
 
-		const version = this.#version
-		const inFlight = this.#fetchCurrentUserLevel(resourceType, resourceId)
+		const version = untrack(() => this.#version)
+		const inFlight = untrack(() => this.#fetchCurrentUserLevel(resourceType, resourceId))
 		this.#levelInFlight.set(key, inFlight)
 		try {
 			const level = await inFlight
@@ -213,6 +213,19 @@ class ResourceAccessStore {
 		} finally {
 			this.#levelInFlight.delete(key)
 		}
+	}
+
+	/** owner shortcut plus cache hit, grouped so ensure() can untrack them together. */
+	#cachedLevel(key: string, ownerId?: string | null): { level: AccessLevel | null } | null {
+		if (ownerId && session.currentUserId === ownerId) {
+			this.#levels.set(key, 'admin')
+			this.#freshLevels.add(key)
+			return { level: 'admin' }
+		}
+		if (this.#levels.has(key) && this.#freshLevels.has(key)) {
+			return { level: this.#levels.get(key) ?? null }
+		}
+		return null
 	}
 
 	/**

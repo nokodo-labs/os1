@@ -4,18 +4,17 @@ import { calendars } from '$lib/stores/calendars.svelte'
 import { chat } from '$lib/stores/chat.svelte'
 import { files } from '$lib/stores/files.svelte'
 import { groups } from '$lib/stores/groups.svelte'
+import { buildReminderListExport, buildReminderListMarkdown } from '$lib/reminders/export'
 import type { ResourceAccessPayload } from '$lib/stores/modals.svelte'
 import { notes } from '$lib/stores/notes.svelte'
 import { projects } from '$lib/stores/projects.svelte'
 import { reminders } from '$lib/stores/reminders.svelte'
-import type { ExportFormat } from './resourceAccessModal'
+import { BASE_EXPORT_OPTION_VALUES, type ExportOptionValues } from './exportOptions'
+import type { ExportFormat } from './shareModal'
 
 type ApiFile = components['schemas']['File']
 type ApiMessage = components['schemas']['Message']
-type ApiReminder = components['schemas']['Reminder']
-type ApiReminderWithSubtasks = components['schemas']['ReminderWithSubtasks']
 type ApiThread = components['schemas']['Thread']
-type ReminderSnapshotItem = ApiReminder | ApiReminderWithSubtasks
 
 export type ResourceSnapshot = {
 	markdown: string
@@ -27,6 +26,8 @@ export type ResourceSnapshotRequest = {
 	title: string
 	url: string
 	threadMessageLimit?: number
+	/** whatever the resource type's export options resolved to */
+	options?: ExportOptionValues
 }
 
 const DEFAULT_THREAD_MESSAGE_LIMIT = 500
@@ -71,51 +72,6 @@ function messageText(message: ApiMessage): string {
 	return contentPartsToText(message.content).trim()
 }
 
-function formatSnapshotDate(value: string | null | undefined): string | null {
-	if (!value) return null
-	return new Date(value).toLocaleString().toLowerCase()
-}
-
-function reminderSubtasks(reminder: ReminderSnapshotItem): ReminderSnapshotItem[] {
-	if (!('subtasks' in reminder)) return []
-	return reminder.subtasks ?? []
-}
-
-function reminderJson(reminder: ReminderSnapshotItem): Record<string, unknown> {
-	return {
-		...reminder,
-		subtasks: reminderSubtasks(reminder).map(reminderJson),
-	}
-}
-
-function appendReminderSnapshot(lines: string[], reminder: ReminderSnapshotItem, depth = 0): void {
-	const indent = '  '.repeat(depth)
-	const checked = reminder.status === 'completed' ? 'x' : ' '
-	lines.push(`${indent}- [${checked}] ${reminder.title}`)
-	const dueAt = formatSnapshotDate(reminder.due_at)
-	const remindAt = formatSnapshotDate(reminder.remind_at)
-
-	const meta = [
-		dueAt ? `due: ${dueAt}` : null,
-		remindAt ? `remind: ${remindAt}` : null,
-		reminder.recurrence ? 'repeats' : null,
-	]
-		.filter(Boolean)
-		.join(' | ')
-	if (meta) lines.push(`${indent}  ${meta}`)
-
-	const description = reminder.description?.trim()
-	if (description) {
-		for (const line of description.split('\n')) {
-			lines.push(`${indent}  ${line}`)
-		}
-	}
-
-	for (const subtask of reminderSubtasks(reminder)) {
-		appendReminderSnapshot(lines, subtask, depth + 1)
-	}
-}
-
 function makeSnapshot(
 	payload: ResourceAccessPayload | null,
 	title: string,
@@ -141,16 +97,19 @@ export async function buildResourceSnapshot({
 	title,
 	url,
 	threadMessageLimit = DEFAULT_THREAD_MESSAGE_LIMIT,
+	options = BASE_EXPORT_OPTION_VALUES,
 }: ResourceSnapshotRequest): Promise<ResourceSnapshot> {
 	if (!payload) return makeSnapshot(payload, title, url, url, {})
 	switch (payload.resourceType) {
 		case 'thread': {
 			const thread = await chat.threadCache.getThread(payload.resourceId)
-			const { messages } = await chat.threadCache.getMessages(
-				payload.resourceId,
-				0,
-				threadMessageLimit
-			)
+			const messages =
+				options.threadScope === 'tree'
+					? await chat.threadCache.getAllMessages(payload.resourceId, threadMessageLimit)
+					: await chat.threadCache.getBranchMessages(
+							payload.resourceId,
+							threadMessageLimit
+						)
 			const lines = [`# ${threadTitle(thread, title)}`, '', `link: ${url}`, '']
 			for (const message of messages) {
 				const text = messageText(message)
@@ -158,6 +117,7 @@ export async function buildResourceSnapshot({
 				lines.push(`## ${message.type}`, '', text, '')
 			}
 			return makeSnapshot(payload, title, url, lines.join('\n'), {
+				export_scope: options.threadScope,
 				thread: thread ? { ...thread } : null,
 				messages: messages.map((message) => ({
 					...message,
@@ -233,28 +193,12 @@ export async function buildResourceSnapshot({
 			const listReminders = await reminders.loadReminders(payload.resourceId, {
 				force: true,
 			})
-			const lines = [
-				`# ${list?.name || title}`,
-				'',
-				list ? `total: ${list.total_count}` : '',
-				list ? `pending: ${list.pending_count}` : '',
-				list ? `completed: ${list.completed_count}` : '',
-				`link: ${url}`,
-			].filter(Boolean)
-			if (listReminders.length > 0) {
-				lines.push('', '## reminders', '')
-				for (const reminder of listReminders) appendReminderSnapshot(lines, reminder)
-			}
-			return makeSnapshot(payload, title, url, lines.join('\n'), {
-				list: list ? { ...list } : null,
-				counts: list
-					? {
-							total: list.total_count,
-							pending: list.pending_count,
-							completed: list.completed_count,
-						}
-					: null,
-				reminders: listReminders.map(reminderJson),
+			const data = buildReminderListExport(list, listReminders)
+			const markdown = buildReminderListMarkdown({ title, url, data })
+			return makeSnapshot(payload, title, url, markdown, {
+				list: data.list,
+				counts: data.counts,
+				reminders: data.reminders,
 			})
 		}
 		case 'calendar': {

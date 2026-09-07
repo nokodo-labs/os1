@@ -4,6 +4,9 @@
 	import FinderFolder from '$lib/components/icons/FinderFolder.svelte'
 	import Info from '$lib/components/icons/Info.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import ModalActions, {
+		modalPrimaryButtonClass,
+	} from '$lib/components/modals/ModalActions.svelte'
 	import { projects } from '$lib/stores/projects.svelte'
 
 	interface Props {
@@ -25,8 +28,6 @@
 		'border-foreground/12 bg-foreground/4 text-foreground/90 placeholder:text-foreground/35 min-h-10 w-full min-w-0 rounded-xl border px-3 py-2 outline-none transition-colors duration-150 focus:border-[color-mix(in_oklch,var(--accent-primary)_48%,transparent)] focus:bg-foreground/6 disabled:cursor-not-allowed disabled:opacity-55'
 	const iconClass = 'h-4 w-4 text-(--accent-primary)'
 	const labelClass = 'text-foreground/60 text-[0.78rem] font-semibold'
-	const actionButtonClass =
-		'rounded-pill inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55'
 	const previewTitle = $derived(name.trim() || 'untitled project')
 	const previewDescription = $derived(description.trim() || 'project')
 
@@ -121,17 +122,13 @@
 				onkeydown={handleKeyDown}
 			></textarea>
 		</div>
-		<div class="flex items-center justify-end gap-2 pt-1">
-			<button
-				type="submit"
-				class="{actionButtonClass} bg-(--accent-primary) text-white hover:brightness-[1.06]"
-				disabled={saving || !name.trim()}
-			>
+		<ModalActions class="pt-1">
+			<button type="submit" class={modalPrimaryButtonClass} disabled={saving || !name.trim()}>
 				<Check class="h-4 w-4" />
 				{#if saving}<ShimmerText className="inline-block">saving</ShimmerText>{:else}<span
 						>save</span
 					>{/if}
 			</button>
-		</div>
+		</ModalActions>
 	</form>
 </BaseModal>

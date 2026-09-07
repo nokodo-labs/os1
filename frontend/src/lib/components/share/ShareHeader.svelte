@@ -9,7 +9,7 @@
 	import UserGroup from '$lib/components/icons/UserGroup.svelte'
 	import type { ResourceAccessPayload } from '$lib/stores/modals.svelte'
 	import type { AccessLevel } from '$lib/stores/resourceAccess.svelte'
-	import { levelLabel, resourceLabel } from './resourceAccessModal'
+	import { levelLabel, resourceLabel } from './shareModal'
 
 	interface Props {
 		panelClass: string

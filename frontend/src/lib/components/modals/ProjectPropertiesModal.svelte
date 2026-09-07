@@ -1,9 +1,10 @@
 <script lang="ts">
-	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
-	import Check from '$lib/components/icons/Check.svelte'
 	import Info from '$lib/components/icons/Info.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import { ModalFormDirty } from '$lib/components/modals/formDirty.svelte'
+	import ModalActions, { modalQuietButtonClass } from '$lib/components/modals/ModalActions.svelte'
+	import ModalSaveButton from '$lib/components/modals/ModalSaveButton.svelte'
 	import {
 		resourceAccentStyle,
 		resourceVisual,
@@ -34,8 +35,7 @@
 		'border-foreground/12 bg-foreground/4 text-foreground/90 placeholder:text-foreground/35 min-h-10 w-full min-w-0 rounded-xl border px-3 py-2 outline-none transition-colors duration-150 focus:border-[color-mix(in_oklch,var(--accent-primary)_48%,transparent)] focus:bg-foreground/6 disabled:cursor-not-allowed disabled:opacity-55'
 	const iconClass = 'h-4 w-4 text-(--accent-primary)'
 	const labelClass = 'text-foreground/60 text-[0.78rem] font-semibold'
-	const actionButtonClass =
-		'rounded-pill inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55'
+	const form = new ModalFormDirty(() => ({ name, description }))
 	const previewTitle = $derived(name.trim() || project?.name || 'untitled project')
 	const projectAccessLevel = $derived(
 		project ? resourceAccess.level('project', project.id, project.owner_id) : null
@@ -95,12 +95,13 @@
 			name = project.name
 			description = project.description ?? ''
 			saving = false
+			form.reset()
 		}
 	})
 
 	async function save(): Promise<void> {
 		if (!project) return
-		if (saving || !canEditProject) return
+		if (saving || !canEditProject || !form.dirty) return
 		if (!name.trim()) return
 		saving = true
 		try {
@@ -221,31 +222,28 @@
 					{/each}
 				</div>
 			</section>
-			<div class="flex items-center gap-2 pt-1 max-[520px]:flex-wrap">
-				{#if project}
-					<button
-						type="button"
-						class="{actionButtonClass} border-foreground/12 text-foreground/80 hover:bg-foreground/6 border bg-transparent"
-						disabled={saving}
-						onclick={shareProject}
-					>
-						<Share class="h-4 w-4" />
-						<span>share</span>
-					</button>
-				{/if}
-				<div class="flex-1"></div>
+			<ModalActions class="pt-1">
+				{#snippet leading()}
+					{#if project}
+						<button
+							type="button"
+							class={modalQuietButtonClass}
+							disabled={saving}
+							onclick={shareProject}
+						>
+							<Share class="h-4 w-4" />
+							<span>share</span>
+						</button>
+					{/if}
+				{/snippet}
 				{#if canEditProject}
-					<button
-						type="submit"
-						class="{actionButtonClass} bg-(--accent-primary) text-white hover:brightness-[1.06]"
-						disabled={saving || !name.trim()}
-					>
-						<Check class="h-4 w-4" />
-						{#if saving}<ShimmerText className="inline-block">saving</ShimmerText
-							>{:else}<span>save</span>{/if}
-					</button>
+					<ModalSaveButton
+						dirty={form.dirty}
+						{saving}
+						blockedReason={name.trim() ? null : 'name is required'}
+					/>
 				{/if}
-			</div>
+			</ModalActions>
 		</form>
 	{/if}
 </BaseModal>

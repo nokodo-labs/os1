@@ -1,95 +1,583 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
-	import { resolve } from '$app/paths'
-	import { page } from '$app/state'
+	import { base } from '$app/paths'
+	import { api } from '$lib/api/client'
+	import ShieldCheck from '$lib/components/icons/ShieldCheck.svelte'
+	import Telegram from '$lib/components/icons/Telegram.svelte'
+	import Whatsapp from '$lib/components/icons/Whatsapp.svelte'
+	import XTwitter from '$lib/components/icons/XTwitter.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
-	import type { ShareResourcePayload } from '$lib/stores/modals.svelte'
+	import { ModalFormDirty } from '$lib/components/modals/formDirty.svelte'
+	import {
+		defaultExportOptionValues,
+		exportOptionsFor,
+		type ExportOptionDefinition,
+		type ExportOptionsBinding,
+		type ExportOptionValues,
+	} from '$lib/components/share/exportOptions'
+	import ShareActions from '$lib/components/share/ShareActions.svelte'
+	import ShareHeader from '$lib/components/share/ShareHeader.svelte'
+	import {
+		queryString,
+		resourceLabel,
+		resourcePath,
+		type ExportFormat,
+		type RuleEntry,
+		type ShareTarget,
+		type UserPick,
+		type UserResult,
+	} from '$lib/components/share/shareModal'
+	import SharePeople from '$lib/components/share/SharePeople.svelte'
+	import {
+		buildResourceSnapshot,
+		cleanSnapshotFilename,
+		exportResourceSnapshot,
+		snapshotExtension,
+		snapshotMimeType,
+	} from '$lib/components/share/shareSnapshots'
+	import { downloadFile, files } from '$lib/stores/files.svelte'
+	import { friends } from '$lib/stores/friends.svelte'
+	import { groups } from '$lib/stores/groups.svelte'
+	import type { ResourceAccessPayload } from '$lib/stores/modals.svelte'
+	import { notifications, showError } from '$lib/stores/notifications.svelte'
+	import {
+		canShareAccessLevel,
+		resourceAccess,
+		type AccessLevel,
+		type AccessRuleCreate,
+		type AccessRuleResponse,
+	} from '$lib/stores/resourceAccess.svelte'
+	import { userDisplayName } from '$lib/utils/resourceAuthors'
 
-	interface ShareResourceModalProps {
+	interface Props {
 		open: boolean
-		payload: ShareResourcePayload | null
+		payload: ResourceAccessPayload | null
 		onClose: () => void
 	}
 
-	let { open, payload, onClose }: ShareResourceModalProps = $props()
+	let { open, payload, onClose }: Props = $props()
 
-	let copied = $state(false)
+	let rules = $state<RuleEntry[]>([])
+	let isSaving = $state(false)
+	let isLoading = $state(false)
+	let saveError = $state<string | null>(null)
+	let workingAction = $state<string | null>(null)
 
-	const canNativeShare = $derived.by((): boolean => {
-		if (!browser) return false
-		return 'share' in navigator
+	let searchQuery = $state('')
+	let searchResults = $state<UserResult[]>([])
+	let searchDebounce: ReturnType<typeof setTimeout> | null = null
+	let rulesLoadKey = ''
+	let rulesLoadVersion = -1
+
+	let dragIndex = $state<number | null>(null)
+	let dragOverIndex = $state<number | null>(null)
+
+	// writable: it resets to the resource type's declared defaults whenever the
+	// modal opens on a different resource, and holds the user's picks in between.
+	let exportOptionValues = $derived<ExportOptionValues>(
+		defaultExportOptionValues(open ? payload?.resourceType : undefined)
+	)
+
+	const currentLevel = $derived(
+		payload ? resourceAccess.level(payload.resourceType, payload.resourceId) : null
+	)
+	const canManageSharing = $derived(canShareAccessLevel(currentLevel))
+	// save replaces the access rules and nothing else, so only the subjects, their
+	// level and their order count as changes. the export panel acts immediately.
+	const form = new ModalFormDirty(() => ({
+		rules: rules.map((rule) => ({
+			subjectUserId: rule.subjectUserId,
+			subjectGroupId: rule.subjectGroupId,
+			subjectRoleId: rule.subjectRoleId,
+			level: rule.level,
+		})),
+	}))
+	const shareTitle = $derived(payload?.title?.trim() || resourceLabel(payload?.resourceType))
+	const sharePath = $derived(
+		payload ? resourcePath(payload.resourceType, payload.resourceId) : '/'
+	)
+	const sharePathWithBase = $derived(`${base}${sharePath}`)
+	const shareUrl = $derived(
+		browser ? new URL(sharePathWithBase, window.location.origin).toString() : sharePathWithBase
+	)
+	const mailHref = $derived(`mailto:?${queryString({ subject: shareTitle, body: shareUrl })}`)
+	const whatsappHref = $derived(
+		`https://wa.me/?${queryString({ text: `${shareTitle} ${shareUrl}` })}`
+	)
+	const telegramHref = $derived(
+		`https://t.me/share/url?${queryString({ url: shareUrl, text: shareTitle })}`
+	)
+	const xHref = $derived(
+		`https://x.com/intent/tweet?${queryString({ url: shareUrl, text: shareTitle })}`
+	)
+	const shareTargets = $derived<ShareTarget[]>([
+		{
+			id: 'whatsapp',
+			label: 'whatsapp',
+			href: whatsappHref,
+			icon: Whatsapp,
+		},
+		{
+			id: 'telegram',
+			label: 'telegram',
+			href: telegramHref,
+			icon: Telegram,
+		},
+		{
+			id: 'x',
+			label: 'x',
+			href: xHref,
+			icon: XTwitter,
+		},
+	])
+	const exportOptions = $derived<ExportOptionsBinding>({
+		definitions: exportOptionsFor(payload?.resourceType),
+		values: exportOptionValues,
+		onchange: setExportOption,
+	})
+	const canNativeShare = $derived(
+		browser && typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+	)
+	const fileMimeType = $derived(
+		payload?.resourceType === 'file' ? (files.get(payload.resourceId)?.mime_type ?? null) : null
+	)
+
+	const filteredGroups = $derived(
+		groups.list.filter(
+			(group) => !searchQuery || group.name.toLowerCase().includes(searchQuery.toLowerCase())
+		)
+	)
+	const filteredFriends = $derived.by(() => {
+		const query = searchQuery.trim().toLowerCase()
+		return friends.list.filter((friend) => {
+			if (rules.some((rule) => rule.subjectUserId === friend.id)) return false
+			if (!query) return true
+			return userLabel(friend).toLowerCase().includes(query)
+		})
 	})
 
-	const shareUrl = $derived.by((): string => {
-		if (!browser) return ''
-		if (!payload) return ''
+	const panelClass =
+		'liquid-glass liquid-glass--frosted rounded-container border-foreground/10 bg-foreground/4 border'
+	const actionButtonClass =
+		'rounded-pill inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55'
+	const quietButtonClass = `${actionButtonClass} border-foreground/12 text-foreground/80 hover:bg-foreground/6 border bg-transparent`
+	const iconBoxClass =
+		'flex h-11 w-11 shrink-0 items-center justify-center rounded-[15px] border border-[color-mix(in_oklch,var(--accent-primary)_22%,transparent)] bg-[color-mix(in_oklch,var(--accent-primary)_12%,transparent)] text-(--accent-primary)'
+	const inputClass =
+		'rounded-pill border-foreground/10 bg-foreground/5 text-foreground/90 placeholder:text-foreground/40 focus:border-foreground/20 focus:bg-foreground/8 w-full border py-2.5 pr-4 pl-10 text-sm transition-colors outline-none'
+	const MAX_CLIPBOARD_SNAPSHOT_CHARS = 120_000
 
-		switch (payload.resource) {
-			case 'thread': {
-				const path = resolve(`/c/${payload.id}`)
-				return new URL(path, page.url.origin).toString()
+	function ruleLocalId(rule: AccessRuleResponse, index: number): string {
+		return (
+			rule.id ??
+			rule.subject_user_id ??
+			rule.subject_group_id ??
+			rule.subject_role_id ??
+			`rule-${index}`
+		)
+	}
+
+	function ruleSubjectLabel(rule: AccessRuleResponse): string {
+		if (rule.subject_user_id) return rule.subject_user_id
+		if (rule.subject_group_id) return rule.subject_group_id
+		if (rule.subject_role_id) return rule.subject_role_id
+		return 'someone'
+	}
+
+	function toRuleEntry(rule: AccessRuleResponse, index: number): RuleEntry {
+		return {
+			localId: ruleLocalId(rule, index),
+			id: rule.id,
+			subjectLabel: ruleSubjectLabel(rule),
+			subjectUserId: rule.subject_user_id ?? null,
+			subjectGroupId: rule.subject_group_id ?? null,
+			subjectRoleId: rule.subject_role_id ?? null,
+			level: rule.level,
+			orderIndex: index,
+		}
+	}
+
+	function makeNewRuleId(subjectType: 'user' | 'group' | 'role', subjectId: string): string {
+		return `new-${subjectType}-${subjectId}`
+	}
+
+	function userLabel(user: UserPick): string {
+		return userDisplayName(user) ?? user.id
+	}
+
+	async function loadRules(): Promise<void> {
+		if (!payload || !canManageSharing) return
+		const key = `${payload.resourceType}:${payload.resourceId}`
+		const version = resourceAccess.version
+		if (rulesLoadKey === key && rulesLoadVersion === version) return
+		isLoading = true
+		try {
+			const fetched = await resourceAccess.ensureRules(
+				payload.resourceType,
+				payload.resourceId
+			)
+			rules = fetched.map(toRuleEntry)
+			form.reset()
+			rulesLoadKey = key
+			rulesLoadVersion = version
+		} finally {
+			isLoading = false
+		}
+	}
+
+	function showSaveError(): void {
+		const message = 'could not save sharing'
+		saveError = message
+		showError(message)
+	}
+
+	async function saveRules(): Promise<void> {
+		if (!payload || !canManageSharing || isSaving || !form.dirty) return
+		isSaving = true
+		saveError = null
+		const body: AccessRuleCreate[] = rules.map((rule, index) => ({
+			subject_user_id: rule.subjectUserId ?? undefined,
+			subject_group_id: rule.subjectGroupId ?? undefined,
+			subject_role_id: rule.subjectRoleId ?? undefined,
+			level: rule.level,
+			order_index: index,
+		}))
+		try {
+			const saved = await resourceAccess.replaceRules(
+				payload.resourceType,
+				payload.resourceId,
+				body
+			)
+			if (!saved) {
+				showSaveError()
+				return
 			}
+			rules = saved.map(toRuleEntry)
+			form.reset()
+			notifications.pushEphemeralToast('success', 'sharing saved')
+			onClose()
+		} catch {
+			showSaveError()
+		} finally {
+			isSaving = false
+		}
+	}
+
+	async function doSearch(query: string): Promise<void> {
+		if (!canManageSharing || !query.trim()) {
+			searchResults = []
+			return
+		}
+		try {
+			const { data } = await api.GET('/v1/users/search', {
+				params: { query: { q: query.trim(), limit: 10 } },
+			})
+			searchResults = data ?? []
+		} catch {
+			searchResults = []
+		}
+	}
+
+	function onSearchInput(event: Event): void {
+		const target = event.currentTarget
+		if (!(target instanceof HTMLInputElement)) return
+		searchQuery = target.value
+		if (searchDebounce) clearTimeout(searchDebounce)
+		searchDebounce = setTimeout(() => void doSearch(searchQuery), 300)
+	}
+
+	function addUserRule(user: UserPick, level: AccessLevel = 'reader'): void {
+		if (rules.some((rule) => rule.subjectUserId === user.id)) return
+		rules = [
+			...rules,
+			{
+				localId: makeNewRuleId('user', user.id),
+				id: null,
+				subjectLabel: userLabel(user),
+				subjectUserId: user.id,
+				subjectGroupId: null,
+				subjectRoleId: null,
+				level,
+				orderIndex: rules.length,
+			},
+		]
+		searchQuery = ''
+		searchResults = []
+	}
+
+	function addGroupRule(groupId: string, label: string, level: AccessLevel = 'reader'): void {
+		if (rules.some((rule) => rule.subjectGroupId === groupId)) return
+		rules = [
+			...rules,
+			{
+				localId: makeNewRuleId('group', groupId),
+				id: null,
+				subjectLabel: label,
+				subjectUserId: null,
+				subjectGroupId: groupId,
+				subjectRoleId: null,
+				level,
+				orderIndex: rules.length,
+			},
+		]
+	}
+
+	function removeRule(index: number): void {
+		rules = rules.filter((_, ruleIndex) => ruleIndex !== index)
+	}
+
+	function setLevel(index: number, level: AccessLevel): void {
+		rules = rules.map((rule, ruleIndex) => (ruleIndex === index ? { ...rule, level } : rule))
+	}
+
+	function onDragStart(event: DragEvent, index: number): void {
+		dragIndex = index
+		if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+	}
+
+	function onDragOver(event: DragEvent, index: number): void {
+		event.preventDefault()
+		dragOverIndex = index
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+	}
+
+	function onDrop(event: DragEvent, toIndex: number): void {
+		event.preventDefault()
+		if (dragIndex === null || dragIndex === toIndex) {
+			dragIndex = null
+			dragOverIndex = null
+			return
+		}
+		const reordered = [...rules]
+		const [moved] = reordered.splice(dragIndex, 1)
+		reordered.splice(toIndex, 0, moved)
+		rules = reordered
+		dragIndex = null
+		dragOverIndex = null
+	}
+
+	function onDragEnd(): void {
+		dragIndex = null
+		dragOverIndex = null
+	}
+
+	function downloadTextFile(filename: string, content: string, mimeType: string): void {
+		const blob = new Blob([content], { type: mimeType })
+		const href = URL.createObjectURL(blob)
+		const anchor = document.createElement('a')
+		anchor.href = href
+		anchor.download = filename
+		document.body.appendChild(anchor)
+		anchor.click()
+		document.body.removeChild(anchor)
+		URL.revokeObjectURL(href)
+	}
+
+	async function copyText(value: string, successMessage: string): Promise<void> {
+		if (value.length > MAX_CLIPBOARD_SNAPSHOT_CHARS) {
+			showError('too large to copy; download instead')
+			return
+		}
+		try {
+			await navigator.clipboard.writeText(value)
+			notifications.pushEphemeralToast('success', successMessage)
+		} catch {
+			showError('could not copy')
+		}
+	}
+
+	async function withWorking(actionId: string, callback: () => Promise<void>): Promise<void> {
+		workingAction = actionId
+		try {
+			await callback()
+		} finally {
+			workingAction = null
+		}
+	}
+
+	async function resourceSnapshot() {
+		return await buildResourceSnapshot({
+			payload,
+			title: shareTitle,
+			url: shareUrl,
+			options: exportOptionValues,
+		})
+	}
+
+	function setExportOption(definition: ExportOptionDefinition, choice: string): void {
+		exportOptionValues = definition.write(exportOptionValues, choice)
+	}
+
+	async function copyLink(): Promise<void> {
+		await copyText(shareUrl, 'link copied')
+	}
+
+	async function copySnapshot(): Promise<void> {
+		await withWorking('copy-snapshot', async () => {
+			await copyText(exportResourceSnapshot(await resourceSnapshot(), 'txt'), 'copied')
+		})
+	}
+
+	async function downloadSnapshot(format: ExportFormat): Promise<void> {
+		await withWorking(`download-snapshot-${format}`, async () => {
+			const content = exportResourceSnapshot(await resourceSnapshot(), format)
+			downloadTextFile(
+				`${cleanSnapshotFilename(shareTitle)}.${snapshotExtension(format)}`,
+				content,
+				snapshotMimeType(format)
+			)
+		})
+	}
+
+	async function printSnapshotPdf(): Promise<void> {
+		if (!browser) return
+		const printWindow = window.open('', '_blank')
+		if (!printWindow) {
+			showError('could not open print view')
+			return
+		}
+		await withWorking('print-snapshot', async () => {
+			const content = exportResourceSnapshot(await resourceSnapshot(), 'txt')
+			printWindow.document.write(
+				'<!doctype html><html><head><title></title><style>body{font-family:system-ui,sans-serif;margin:32px;line-height:1.5}pre{white-space:pre-wrap;font:inherit}</style></head><body><pre></pre></body></html>'
+			)
+			printWindow.document.title = shareTitle
+			printWindow.document.querySelector('pre')?.append(document.createTextNode(content))
+			printWindow.document.close()
+			printWindow.focus()
+			printWindow.print()
+		})
+	}
+
+	async function downloadOriginalFile(): Promise<void> {
+		if (!payload || payload.resourceType !== 'file') return
+		await withWorking('download-file', async () => {
+			await files.load()
+			const file = files.get(payload.resourceId)
+			await downloadFile(payload.resourceId, file?.filename ?? shareTitle)
+		})
+	}
+
+	async function nativeShare(): Promise<void> {
+		if (!canNativeShare) {
+			await copyLink()
+			return
+		}
+		try {
+			await navigator.share({ title: shareTitle, text: shareTitle, url: shareUrl })
+		} catch (error) {
+			if (error instanceof DOMException && error.name === 'AbortError') return
+			showError('could not share')
+		}
+	}
+
+	$effect(() => {
+		const accessKey =
+			open && payload
+				? `${payload.resourceType}:${payload.resourceId}:${resourceAccess.version}`
+				: ''
+		if (!accessKey || !payload) return
+		void resourceAccess.ensure(payload.resourceType, payload.resourceId)
+	})
+
+	// the export panel needs the file's mime type to draw its file-type icon
+	$effect(() => {
+		if (open && payload?.resourceType === 'file') void files.load()
+	})
+
+	$effect(() => {
+		if (open && payload && canManageSharing) {
+			void loadRules()
+			void groups.load()
+			void friends.load()
 		}
 	})
 
-	async function copyLink(): Promise<void> {
-		if (!shareUrl) return
-		await navigator.clipboard.writeText(shareUrl)
-		copied = true
-		window.setTimeout(() => {
-			copied = false
-		}, 1600)
-	}
-
-	async function shareNative(): Promise<void> {
-		if (!shareUrl) return
-		if (!canNativeShare) return
-		const share = (
-			navigator as Navigator & {
-				share: (data: { title?: string; text?: string; url?: string }) => Promise<void>
-			}
-		).share
-		await share({
-			title: payload?.title ?? undefined,
-			url: shareUrl,
-		})
-	}
+	$effect(() => {
+		if (!open) {
+			rules = []
+			form.reset()
+			searchQuery = ''
+			searchResults = []
+			saveError = null
+			workingAction = null
+			dragIndex = null
+			dragOverIndex = null
+			rulesLoadKey = ''
+			rulesLoadVersion = -1
+		}
+	})
 </script>
 
-<BaseModal
-	{open}
-	title="share"
-	description="copy a link to share this"
-	{onClose}
-	widthClassName="max-w-sm"
->
-	<div class="space-y-4">
-		<div class="space-y-1">
-			<div class="text-foreground/60 text-xs font-semibold uppercase">link</div>
-			<div class="rounded-pill border-foreground/10 bg-foreground/5 border px-3 py-2">
-				<div class="text-foreground/80 truncate text-sm" title={shareUrl}>{shareUrl}</div>
-			</div>
-		</div>
+<BaseModal {open} title="share" {onClose} widthClassName="max-w-3xl">
+	<div class="grid gap-3">
+		<ShareHeader
+			{panelClass}
+			{iconBoxClass}
+			resourceType={payload?.resourceType}
+			title={shareTitle}
+			url={shareUrl}
+			{currentLevel}
+		/>
 
-		<div class="flex items-center justify-end gap-2">
-			{#if canNativeShare}
-				<button
-					type="button"
-					class="rounded-pill border-foreground/10 text-foreground/80 hover:bg-foreground/5 border bg-transparent px-4 py-2 text-sm transition-colors duration-150"
-					onclick={() => void shareNative()}
-					disabled={!shareUrl}
+		<ShareActions
+			{panelClass}
+			{mailHref}
+			{shareTargets}
+			{workingAction}
+			{fileMimeType}
+			resourceType={payload?.resourceType}
+			{exportOptions}
+			{copyLink}
+			{nativeShare}
+			{copySnapshot}
+			{downloadSnapshot}
+			{printSnapshotPdf}
+			{downloadOriginalFile}
+		/>
+
+		{#if canManageSharing}
+			<SharePeople
+				{panelClass}
+				{quietButtonClass}
+				{inputClass}
+				{rules}
+				dirty={form.dirty}
+				{searchQuery}
+				{searchResults}
+				{filteredFriends}
+				{filteredGroups}
+				{isLoading}
+				{isSaving}
+				{saveError}
+				{dragIndex}
+				{dragOverIndex}
+				{userLabel}
+				{onSearchInput}
+				{addUserRule}
+				{addGroupRule}
+				{removeRule}
+				{setLevel}
+				{onDragStart}
+				{onDragOver}
+				{onDrop}
+				{onDragEnd}
+				{saveRules}
+			/>
+		{:else}
+			<section class="{panelClass} flex items-start gap-3 p-4">
+				<div
+					class="bg-foreground/10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
 				>
-					share
-				</button>
-			{/if}
-			<button
-				type="button"
-				class="rounded-pill border-foreground/10 bg-foreground/10 text-foreground/90 hover:bg-foreground/15 border px-4 py-2 text-sm transition-colors duration-150 disabled:opacity-60"
-				onclick={() => void copyLink()}
-				disabled={!shareUrl}
-			>
-				{copied ? 'copied' : 'copy link'}
-			</button>
-		</div>
+					<ShieldCheck class="h-4 w-4" />
+				</div>
+				<div>
+					<p class="text-sm font-medium">sharing is managed by someone else</p>
+					<p class="text-foreground/45 mt-1 text-sm">
+						you can still send the link or export what you can view.
+					</p>
+				</div>
+			</section>
+		{/if}
 	</div>
 </BaseModal>

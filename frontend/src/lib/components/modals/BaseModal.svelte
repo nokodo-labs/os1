@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { portal } from '$lib/actions/portal'
+	import { portal } from '$lib/attachments/portal'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import { cubicOut, quintOut } from 'svelte/easing'
 	import { fade, scale } from 'svelte/transition'
@@ -15,6 +15,7 @@
 	let {
 		open,
 		title,
+		description,
 		onClose,
 		widthClassName = 'max-w-xl',
 		children,
@@ -43,7 +44,7 @@
 
 {#if open}
 	<div
-		use:portal
+		{@attach portal()}
 		class="fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4"
 		style="padding-top: max(1.5rem, env(safe-area-inset-top)); padding-bottom: max(1.5rem, env(safe-area-inset-bottom));"
 		role="presentation"
@@ -71,10 +72,13 @@
 				class="relative z-10 flex max-h-[calc(100dvh-3rem)] min-h-0 flex-col sm:max-h-[calc(100dvh-2rem)]"
 			>
 				<header class="flex shrink-0 items-start justify-between gap-3 px-4 pt-4 pb-2">
-					<div class="flex min-h-9 min-w-0 items-center">
-						<div class="text-card-foreground pl-3 text-lg font-semibold">
+					<div class="flex min-h-9 min-w-0 flex-col justify-center gap-1 pl-3">
+						<div class="text-card-foreground text-lg font-semibold">
 							{title}
 						</div>
+						{#if description}
+							<p class="text-muted-foreground text-sm">{description}</p>
+						{/if}
 					</div>
 					<button
 						type="button"

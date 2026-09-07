@@ -1,10 +1,11 @@
 <script lang="ts">
 	import TagEditor from '$lib/components/common/TagEditor.svelte'
-	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
-	import Check from '$lib/components/icons/Check.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
 	import Tag from '$lib/components/icons/Tag.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import { ModalFormDirty } from '$lib/components/modals/formDirty.svelte'
+	import ModalActions, { modalQuietButtonClass } from '$lib/components/modals/ModalActions.svelte'
+	import ModalSaveButton from '$lib/components/modals/ModalSaveButton.svelte'
 	import { resourceAccentStyle, resourceVisual } from '$lib/resources/resourceVisuals'
 	import { modals, type NotePropertiesPayload } from '$lib/stores/modals.svelte'
 	import { notes } from '$lib/stores/notes.svelte'
@@ -36,6 +37,7 @@
 	const noteVisual = resourceVisual('note')
 	const NoteIcon = noteVisual.icon
 	const noteAccentStyle = resourceAccentStyle('note')
+	const form = new ModalFormDirty(() => ({ title, labels }))
 
 	$effect(() => {
 		if (!open) return
@@ -48,6 +50,7 @@
 		labels = [...note.labels]
 		isSaving = false
 		error = null
+		form.reset()
 	})
 
 	$effect(() => {
@@ -73,7 +76,7 @@
 	}
 
 	async function save(): Promise<void> {
-		if (!note || !canEditNote || isSaving) return
+		if (!note || !canEditNote || isSaving || !form.dirty) return
 		isSaving = true
 		error = null
 		try {
@@ -100,8 +103,6 @@
 	const fieldClass = `${panelClass} grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 rounded-[16px] border p-3`
 	const inputClass =
 		'border-foreground/12 bg-foreground/4 text-foreground/90 placeholder:text-foreground/35 min-h-10 w-full min-w-0 rounded-xl border px-3 py-2 outline-none transition-colors duration-150 focus:border-[color-mix(in_oklch,var(--accent-primary)_48%,transparent)] focus:bg-foreground/6 disabled:cursor-not-allowed disabled:opacity-55'
-	const actionButtonClass =
-		'rounded-pill inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55'
 </script>
 
 <BaseModal
@@ -163,31 +164,24 @@
 				<p class="text-destructive text-sm">{error}</p>
 			{/if}
 
-			<div class="flex items-center gap-2 pt-1 max-[520px]:flex-wrap">
-				{#if note}
-					<button
-						type="button"
-						class="{actionButtonClass} border-foreground/12 text-foreground/80 hover:bg-foreground/6 border bg-transparent"
-						disabled={isSaving}
-						onclick={shareNote}
-					>
-						<Share class="h-4 w-4" />
-						<span>share</span>
-					</button>
-				{/if}
-				<div class="flex-1"></div>
+			<ModalActions class="pt-1">
+				{#snippet leading()}
+					{#if note}
+						<button
+							type="button"
+							class={modalQuietButtonClass}
+							disabled={isSaving}
+							onclick={shareNote}
+						>
+							<Share class="h-4 w-4" />
+							<span>share</span>
+						</button>
+					{/if}
+				{/snippet}
 				{#if canEditNote}
-					<button
-						type="submit"
-						class="{actionButtonClass} bg-(--accent-primary) text-white hover:brightness-[1.06]"
-						disabled={isSaving}
-					>
-						<Check class="h-4 w-4" />
-						{#if isSaving}<ShimmerText className="inline-block">saving</ShimmerText
-							>{:else}<span>save</span>{/if}
-					</button>
+					<ModalSaveButton dirty={form.dirty} saving={isSaving} />
 				{/if}
-			</div>
+			</ModalActions>
 		</form>
 	{:else}
 		<div class="text-foreground/65 text-sm">note not found</div>

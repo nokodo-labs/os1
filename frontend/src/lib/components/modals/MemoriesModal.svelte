@@ -366,7 +366,7 @@
 						<!-- display mode -->
 						<div class="flex items-start justify-between gap-3">
 							<div class="min-w-0 flex-1">
-								<p class="text-foreground/80 text-sm leading-relaxed">
+								<p class="text-foreground/80 text-sm leading-relaxed select-text">
 									{memory.content}
 								</p>
 								<p class="text-foreground/50 mt-1.5 text-xs">

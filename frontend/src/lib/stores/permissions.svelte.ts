@@ -16,6 +16,11 @@ class PermissionsStore {
 	#stale = $state(true)
 	readonly stale = $derived(this.#stale)
 
+	/** true once the permission list has loaded at least once. */
+	get hasLoaded(): boolean {
+		return this.list !== null
+	}
+
 	hasPermission = (permission: string): boolean => {
 		if (this.isSuperuser) return true
 		const list = this.list

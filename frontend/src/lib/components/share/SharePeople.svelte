@@ -1,5 +1,4 @@
 <script lang="ts">
-	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import Check from '$lib/components/icons/Check.svelte'
 	import ChevronUpDown from '$lib/components/icons/ChevronUpDown.svelte'
@@ -9,7 +8,9 @@
 	import Trash from '$lib/components/icons/Trash.svelte'
 	import User from '$lib/components/icons/User.svelte'
 	import UserGroup from '$lib/components/icons/UserGroup.svelte'
-	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import ModalActions from '$lib/components/modals/ModalActions.svelte'
+	import ModalSaveButton from '$lib/components/modals/ModalSaveButton.svelte'
+	import { Skeleton } from '$lib/components/primitives'
 	import type { Group } from '$lib/stores/groups.svelte'
 	import type { AccessLevel } from '$lib/stores/resourceAccess.svelte'
 	import {
@@ -18,14 +19,15 @@
 		type RuleEntry,
 		type UserPick,
 		type UserResult,
-	} from './resourceAccessModal'
+	} from './shareModal'
 
 	interface Props {
 		panelClass: string
 		quietButtonClass: string
-		primaryButtonClass: string
 		inputClass: string
 		rules: RuleEntry[]
+		/** the access rules differ from the ones the modal opened with. */
+		dirty: boolean
 		searchQuery: string
 		searchResults: UserResult[]
 		filteredFriends: UserPick[]
@@ -51,9 +53,9 @@
 	let {
 		panelClass,
 		quietButtonClass,
-		primaryButtonClass,
 		inputClass,
 		rules,
+		dirty,
 		searchQuery,
 		searchResults,
 		filteredFriends,
@@ -77,7 +79,7 @@
 	}: Props = $props()
 </script>
 
-<section class="{panelClass} p-5">
+<section class="{panelClass} min-w-0 p-5">
 	<div class="mb-4 flex items-center justify-between gap-3">
 		<div class="flex items-center gap-2">
 			<ShieldCheck class="text-foreground/50 h-4 w-4" />
@@ -128,12 +130,12 @@
 				{#each filteredFriends as friend (friend.id)}
 					<button
 						type="button"
-						class={quietButtonClass}
+						class="{quietButtonClass} max-w-full"
 						onclick={() => addUserRule(friend)}
 					>
-						<User class="h-4 w-4" />
+						<User class="h-4 w-4 shrink-0" />
 						<span class="max-w-36 truncate">{userLabel(friend)}</span>
-						<Plus class="text-foreground/40 h-3.5 w-3.5" />
+						<Plus class="text-foreground/40 h-3.5 w-3.5 shrink-0" />
 					</button>
 				{/each}
 			</div>
@@ -150,14 +152,14 @@
 					{@const alreadyAdded = rules.some((rule) => rule.subjectGroupId === group.id)}
 					<button
 						type="button"
-						class={quietButtonClass}
+						class="{quietButtonClass} max-w-full"
 						onclick={() => addGroupRule(group.id, group.name)}
 						disabled={alreadyAdded}
 					>
-						<UserGroup class="h-4 w-4" />
+						<UserGroup class="h-4 w-4 shrink-0" />
 						<span class="max-w-36 truncate">{group.name}</span>
 						{#if alreadyAdded}
-							<Check class="text-foreground/50 h-3.5 w-3.5" />
+							<Check class="text-foreground/50 h-3.5 w-3.5 shrink-0" />
 						{/if}
 					</button>
 				{/each}
@@ -167,15 +169,13 @@
 
 	<div class="mt-4 flex flex-col gap-1">
 		{#if isLoading}
-			<div class="flex min-h-40 items-center justify-center py-4">
-				<NokodoLoader shimmer />
-			</div>
+			<Skeleton shape="row" count={3} lines={1} trailing height="3.5rem" />
 		{:else if rules.length === 0}
 			<EmptyState label="no one added yet - add people or groups above" compact />
 		{:else}
 			{#each rules as rule, ruleIndex (rule.localId)}
 				<div
-					class="border-foreground/10 bg-foreground/4 flex items-center gap-3 rounded-[18px] border px-3 py-2.5 transition-all {dragOverIndex ===
+					class="border-foreground/10 bg-foreground/4 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-[18px] border px-3 py-2.5 transition-all {dragOverIndex ===
 					ruleIndex
 						? 'border-(--accent-primary)/40 bg-(--accent-primary)/5'
 						: ''} {dragIndex === ruleIndex ? 'opacity-40' : ''}"
@@ -187,7 +187,7 @@
 					role="listitem"
 				>
 					<div
-						class="text-foreground/20 flex cursor-grab flex-col items-center active:cursor-grabbing"
+						class="text-foreground/20 flex shrink-0 cursor-grab flex-col items-center active:cursor-grabbing"
 						aria-hidden="true"
 					>
 						<ChevronUpDown class="h-4 w-4" />
@@ -207,31 +207,34 @@
 						{rule.subjectLabel}
 					</span>
 
-					<div
-						class="border-foreground/10 bg-foreground/5 rounded-pill flex items-center gap-1 border p-1"
-					>
-						{#each SHARE_LEVELS as option (option.value)}
-							<button
-								type="button"
-								class="rounded-pill cursor-pointer px-2.5 py-1 text-xs font-semibold transition-all {rule.level ===
-								option.value
-									? 'bg-(--accent-primary) text-white'
-									: 'text-foreground/40 hover:text-foreground/70'}"
-								onclick={() => setLevel(ruleIndex, option.value)}
-							>
-								{levelLabel(option.value)}
-							</button>
-						{/each}
-					</div>
+					<!-- levels and remove stay together so they wrap as one line when narrow -->
+					<div class="ml-auto flex min-w-0 items-center gap-3">
+						<div
+							class="border-foreground/10 bg-foreground/5 rounded-pill flex min-w-0 items-center gap-1 border p-1"
+						>
+							{#each SHARE_LEVELS as option (option.value)}
+								<button
+									type="button"
+									class="rounded-pill cursor-pointer truncate px-2.5 py-1 text-xs font-semibold transition-all {rule.level ===
+									option.value
+										? 'bg-(--accent-primary) text-white'
+										: 'text-foreground/40 hover:text-foreground/70'}"
+									onclick={() => setLevel(ruleIndex, option.value)}
+								>
+									{levelLabel(option.value)}
+								</button>
+							{/each}
+						</div>
 
-					<button
-						type="button"
-						class="text-foreground/30 cursor-pointer transition-colors hover:text-red-400"
-						onclick={() => removeRule(ruleIndex)}
-						aria-label="remove"
-					>
-						<Trash class="h-4 w-4" />
-					</button>
+						<button
+							type="button"
+							class="text-foreground/30 shrink-0 cursor-pointer transition-colors hover:text-red-400"
+							onclick={() => removeRule(ruleIndex)}
+							aria-label="remove"
+						>
+							<Trash class="h-4 w-4" />
+						</button>
+					</div>
 				</div>
 			{/each}
 		{/if}
@@ -241,14 +244,7 @@
 		<p class="mt-3 text-sm text-red-400">{saveError}</p>
 	{/if}
 
-	<div class="mt-4 flex justify-end gap-2">
-		<button type="button" class={primaryButtonClass} onclick={saveRules} disabled={isSaving}>
-			{#if isSaving}
-				<ShimmerText className="inline-block">saving</ShimmerText>
-			{:else}
-				<Check class="h-4 w-4" />
-				save
-			{/if}
-		</button>
-	</div>
+	<ModalActions class="mt-4">
+		<ModalSaveButton {dirty} saving={isSaving} onclick={saveRules} />
+	</ModalActions>
 </section>

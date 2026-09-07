@@ -7,7 +7,7 @@
 	import Plus from '$lib/components/icons/Plus.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
-	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
+	import { Skeleton } from '$lib/components/primitives'
 	import ResourcesView from '$lib/components/ResourcesView.svelte'
 	import { type ResourceFilterMode, type ResourceItem } from '$lib/components/widgets/types'
 	import {
@@ -229,8 +229,7 @@
 			type: 'reminder',
 			title: reminder.title || 'untitled reminder',
 			subtitle: reminder.description ?? undefined,
-			parent: { type: 'reminder_list', id: reminder.list_id },
-			href: resolve(`/reminders/lists/${reminder.list_id}`),
+			href: resolve('/reminders/lists/[listId]', { listId: reminder.list_id }),
 			updatedAt: new Date(reminder.updated_at).getTime(),
 			createdAt: new Date(reminder.created_at).getTime(),
 			meta: {
@@ -238,6 +237,7 @@
 				due_at: reminder.due_at ?? null,
 				remind_at: reminder.remind_at ?? null,
 				owner_id: reminder.owner_id,
+				list_id: reminder.list_id,
 				parent_label: list?.name ?? null,
 				parent_icon: list?.icon ?? null,
 				parent_color: list?.color ?? null,
@@ -253,7 +253,6 @@
 			type: 'calendar_event',
 			title: event.title || 'untitled event',
 			subtitle: event.description ?? undefined,
-			parent: { type: 'calendar', id: event.calendar_id },
 			href: resolve('/calendar'),
 			updatedAt: new Date(event.updated_at).getTime(),
 			createdAt: new Date(event.created_at).getTime(),
@@ -374,18 +373,18 @@
 		}
 
 		const typeMap: Record<string, SearchResultType[]> = {
-			all: ['thread', 'note', 'reminder', 'calendar_event', 'file'],
+			all: ['thread', 'note', 'reminder_list', 'calendar', 'file'],
 			threads: ['thread'],
 			notes: ['note'],
-			reminders: ['reminder'],
-			calendars: ['calendar_event'],
+			reminders: ['reminder_list'],
+			calendars: ['calendar'],
 			files: ['file'],
 		}
 		const types = typeMap[activeFilter] ?? [
 			'thread',
 			'note',
-			'reminder',
-			'calendar_event',
+			'reminder_list',
+			'calendar',
 			'file',
 		]
 
@@ -673,7 +672,10 @@
 					{#each filterOptions as opt (opt.value)}
 						{@const Icon = opt.icon}
 						{@const styleType = opt.resourceTypes?.[0]}
-						{@const optionStyle = styleType ? resourceAccentStyle(styleType) : ''}
+						{@const optionStyle =
+							styleType && styleType !== 'message'
+								? resourceAccentStyle(styleType)
+								: ''}
 						<button
 							type="button"
 							style={optionStyle}
@@ -701,8 +703,8 @@
 		<!-- results list -->
 		<div class="flex h-[min(34rem,68dvh)] min-h-[min(18rem,52dvh)] flex-col">
 			{#if viewLoading}
-				<div class="flex flex-1 items-center justify-center">
-					<NokodoLoader />
+				<div class="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden pr-1">
+					<Skeleton shape="pill" count={8} />
 				</div>
 			{:else if viewResources.length === 0}
 				<div class="flex flex-1 items-center justify-center">

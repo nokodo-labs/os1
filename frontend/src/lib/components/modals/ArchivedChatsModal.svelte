@@ -3,7 +3,12 @@
 	import { resolve } from '$app/paths'
 	import { api } from '$lib/api/client'
 	import type { components } from '$lib/api/types'
-	import { deleteThread, unarchiveThread as restoreThread } from '$lib/chat/threadActions'
+	import {
+		deleteThread,
+		THREAD_ORIGINATED_TOGGLE,
+		unarchiveThread as restoreThread,
+	} from '$lib/chat/threadActions'
+	import type { DeleteOriginatedOptions } from '$lib/chat/types'
 	import DeleteButton from '$lib/components/DeleteButton.svelte'
 	import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
@@ -81,7 +86,7 @@
 				params: {
 					query: {
 						owner_id: userId,
-						is_archived: true,
+						archived_by: userId,
 						skip,
 						limit: PAGE_SIZE,
 						sort_by: currentSort.sort_by,
@@ -144,10 +149,13 @@
 		}
 	}
 
-	async function deleteArchivedThread(threadId: string): Promise<boolean> {
+	async function deleteArchivedThread(
+		threadId: string,
+		options: DeleteOriginatedOptions
+	): Promise<boolean> {
 		deletingId = threadId
 		try {
-			const status = await deleteThread(threadId)
+			const status = await deleteThread(threadId, options)
 			if (status !== null && status >= 200 && status < 300) {
 				threads = threads.filter((t) => t.id !== threadId)
 				void chat.refreshThreads()
@@ -262,7 +270,9 @@
 							title: 'delete chat?',
 							description: thread.title ?? 'this archived chat will be deleted.',
 						}}
-						onDelete={() => deleteArchivedThread(thread.id)}
+						modalToggle={THREAD_ORIGINATED_TOGGLE}
+						onDelete={(deleteOriginatedResources) =>
+							deleteArchivedThread(thread.id, { deleteOriginatedResources })}
 					/>
 				</div>
 			{/each}

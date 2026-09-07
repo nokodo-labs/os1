@@ -1,6 +1,7 @@
 import type { components } from '$lib/api/types'
 import type { ResourceAccessPayload } from '$lib/stores/modals.svelte'
 import type { AccessLevel } from '$lib/stores/resourceAccess.svelte'
+import type { ExportOptionIcon } from './exportOptions'
 
 export type ShareTargetId = 'whatsapp' | 'telegram' | 'x'
 export type ExportFormat = 'md' | 'txt' | 'json'
@@ -22,7 +23,8 @@ export interface ShareTarget {
 	id: ShareTargetId
 	label: string
 	href: string
-	origin: string
+	/** bundled brand glyph; targets without one fall back to a generic globe */
+	icon?: ExportOptionIcon
 }
 
 export const SHARE_LEVELS: { value: AccessLevel; label: string }[] = [
@@ -86,8 +88,4 @@ export function resourcePath(
 
 export function levelLabel(level: AccessLevel): string {
 	return SHARE_LEVELS.find((option) => option.value === level)?.label ?? 'can view'
-}
-
-export function shareIconFailureKey(targetId: ShareTargetId, url: string): string {
-	return `${targetId}:${url}`
 }
