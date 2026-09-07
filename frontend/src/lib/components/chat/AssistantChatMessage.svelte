@@ -1,14 +1,14 @@
 <script lang="ts">
+	import { swallowclick } from '$lib/attachments/swallowclick'
+	import AgentAvatar from '$lib/components/chat/AgentAvatar.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
 	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte'
-	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import MarkdownRenderer from '$lib/components/markdown/MarkdownRenderer.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import type { Snippet } from 'svelte'
 	import { onMount } from 'svelte'
-	import type { Action } from 'svelte/action'
 	import ChatGptLoadingIndicator from './ChatGptLoadingIndicator.svelte'
 
 	interface Props {
@@ -54,7 +54,6 @@
 	let hasContent = $derived(content.trim().length > 0)
 	let showActions = $state(false)
 	let isHovered = $state(false)
-	let avatarError = $state(false)
 
 	// derived visibility - keeps the template readable.
 	// hover (showActions) reveals actions on any settled message, even while a
@@ -166,21 +165,12 @@
 		return () => document.removeEventListener('touchstart', dismiss)
 	})
 
-	const captureClick: Action = (node) => {
-		const handler = (e: Event) => {
-			if (justRevealed) {
-				e.stopPropagation()
-				e.preventDefault()
-				justRevealed = false
-			}
-		}
-		node.addEventListener('click', handler, { capture: true })
-		return {
-			destroy() {
-				node.removeEventListener('click', handler, { capture: true })
-			},
-		}
-	}
+	const captureClick = swallowclick({
+		when: () => justRevealed,
+		onSwallow: () => {
+			justRevealed = false
+		},
+	})
 </script>
 
 <div
@@ -201,21 +191,7 @@
 		<div
 			class="assistant-avatar border-foreground/10 bg-foreground/5 mt-1 h-10 w-10 shrink-0 overflow-hidden rounded-full border"
 		>
-			{#if avatarUrl && !avatarError}
-				<img
-					src={avatarUrl}
-					alt={modelName}
-					class="h-full w-full object-cover"
-					onerror={() => (avatarError = true)}
-				/>
-			{:else}
-				<div
-					class="flex h-full w-full items-center justify-center"
-					style="background-color: var(--accent-primary);"
-				>
-					<Sparkles variant="solid" class="text-foreground/90 h-5 w-5" />
-				</div>
-			{/if}
+			<AgentAvatar name={modelName} {avatarUrl} class="h-full w-full" />
 		</div>
 	{/if}
 
@@ -239,19 +215,21 @@
 
 		{#if tone === 'error'}
 			<div
-				class="border-destructive/30 bg-destructive/10 rounded-container flex items-start gap-3 border px-4 py-3"
+				class="border-destructive/25 bg-destructive/8 rounded-container flex items-start gap-3 border px-4 py-3"
 			>
 				<div
-					class="bg-destructive/15 text-destructive mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+					class="bg-destructive text-destructive-foreground mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
 				>
 					<ExclamationTriangle class="h-4 w-4" strokeWidth="2" />
 				</div>
 				<div class="min-w-0 flex-1 space-y-0.5">
-					<div class="text-destructive text-sm font-semibold">something went wrong</div>
+					<div class="text-foreground/85 text-sm font-medium">something went wrong</div>
+					<!-- neutral body text: red on a red tint is unreadable, and the
+					chrome already carries the severity -->
 					<MarkdownRenderer
 						{content}
 						{isStreaming}
-						class="assistant-markdown text-destructive/90 **:text-destructive/90! text-[0.9rem] leading-relaxed wrap-break-word"
+						class="assistant-markdown text-foreground/60 **:text-foreground/60! text-[0.9rem] leading-relaxed wrap-break-word select-text"
 					/>
 				</div>
 			</div>
@@ -265,7 +243,7 @@
 			<MarkdownRenderer
 				{content}
 				{isStreaming}
-				class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word"
+				class="assistant-markdown text-[0.95rem] leading-relaxed wrap-break-word select-text"
 			/>
 		{/if}
 
@@ -277,10 +255,10 @@
 		<div class="flex items-center gap-2">
 			{#if siblingCount > 1}
 				<div
-					class="text-foreground/50 mr-1 flex h-6 items-center text-xs font-medium transition-opacity duration-200 select-none
+					class="text-foreground/50 mr-1 flex h-6 items-center text-xs font-medium transition-opacity duration-200 first:-ml-1
                         {branchNavVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}"
 					role="none"
-					use:captureClick
+					{@attach captureClick}
 				>
 					<button
 						class="text-foreground/80 hover:text-foreground flex h-6 w-6 cursor-pointer items-center justify-center transition-transform duration-150 hover:scale-[1.05] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:scale-100"
@@ -305,17 +283,17 @@
 			{/if}
 
 			{#if persistentActions}
-				<div class="flex items-center gap-2" role="none" use:captureClick>
+				<div class="flex items-center gap-2" role="none" {@attach captureClick}>
 					{@render persistentActions()}
 				</div>
 			{/if}
 
 			{#if actions}
 				<div
-					class="flex items-center gap-2 transition-opacity duration-200
+					class="flex items-center gap-2 transition-opacity duration-200 first:-ml-1
                         {actionsVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}"
 					role="none"
-					use:captureClick
+					{@attach captureClick}
 				>
 					{@render actions()}
 				</div>

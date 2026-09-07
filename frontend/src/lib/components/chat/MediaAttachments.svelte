@@ -1,10 +1,10 @@
 <script lang="ts">
 	import type { FileContentPart, MediaContentPart } from '$lib/chat/types'
 	import ImageLightbox from '$lib/components/chat/ImageLightbox.svelte'
-	import Film from '$lib/components/icons/Film.svelte'
 	import Headphone from '$lib/components/icons/Headphone.svelte'
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import MimeIcon from '$lib/components/icons/MimeIcon.svelte'
+	import VideoCamera from '$lib/components/icons/VideoCamera.svelte'
 	import { fetchAuthenticatedBlob } from '$lib/stores/files.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
 	import { onDestroy } from 'svelte'
@@ -127,7 +127,7 @@
 				{/if}
 				{#if video.filename}
 					<div class="text-foreground/50 mt-1 flex items-center gap-1.5 text-xs">
-						<Film class="h-3.5 w-3.5 shrink-0" />
+						<VideoCamera class="h-3.5 w-3.5 shrink-0" />
 						<span class="min-w-0 flex-1 truncate">{video.filename}</span>
 						{#if video.fileId}
 							<button

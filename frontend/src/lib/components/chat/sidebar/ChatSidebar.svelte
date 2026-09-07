@@ -3,7 +3,8 @@
 	import { goto } from '$app/navigation'
 	import { resolve } from '$app/paths'
 	import { page } from '$app/state'
-	import { archiveThread, deleteThread, updateThread } from '$lib/chat/threadActions'
+	import { archiveThread, deleteThread } from '$lib/chat/threadActions'
+	import type { DeleteOriginatedOptions } from '$lib/chat/types'
 	import ChatSidebarChatsSection from '$lib/components/chat/sidebar/ChatSidebarChatsSection.svelte'
 	import ChatSidebarHeader from '$lib/components/chat/sidebar/ChatSidebarHeader.svelte'
 	import ChatSidebarTopActions from '$lib/components/chat/sidebar/ChatSidebarTopActions.svelte'
@@ -16,6 +17,7 @@
 	import { modals } from '$lib/stores/modals.svelte'
 
 	import { session } from '$lib/stores/session.svelte'
+	import type { Attachment } from 'svelte/attachments'
 
 	// SSG-safe query param access
 	const chatParam = $derived(browser ? page.url.searchParams.get('chat') : null)
@@ -44,10 +46,6 @@
 
 	let openThreadMenuId = $state<string | null>(null)
 	let editThread = $state<Thread | null>(null)
-	let editTitle = $state('')
-	let editTags = $state<string[]>([])
-	let isSavingEdit = $state(false)
-	let editError = $state<string | null>(null)
 
 	const sidebarTransitionMs = 300
 
@@ -181,13 +179,15 @@
 
 	function requestEditThread(thread: Thread) {
 		closeThreadMenu()
-		editError = null
 		editThread = thread
 	}
 
-	async function handleDeleteThread(thread: Thread): Promise<boolean> {
+	async function handleDeleteThread(
+		thread: Thread,
+		options: DeleteOriginatedOptions
+	): Promise<boolean> {
 		try {
-			const status = await deleteThread(thread.id)
+			const status = await deleteThread(thread.id, options)
 			if (status !== 204) return false
 
 			sidebar.selectChat(null)
@@ -221,52 +221,6 @@
 		return true
 	}
 
-	$effect(() => {
-		if (!editThread) return
-		editTitle = editThread.title ?? ''
-		editTags = Array.isArray(editThread.tags) ? [...editThread.tags] : []
-	})
-
-	function closeEditModal(): void {
-		if (isSavingEdit) return
-		editThread = null
-		editError = null
-	}
-
-	function saveEditModal(): void {
-		if (isSavingEdit) return
-		void (async () => {
-			if (!editThread) return
-			isSavingEdit = true
-			editError = null
-
-			const threadId = editThread.id
-			const newTitle = editTitle.trim()
-			const newTags = editTags
-
-			const ok = await updateThread(threadId, newTitle, newTags)
-			if (ok) {
-				editThread = null
-			} else {
-				editError = 'could not save changes'
-			}
-
-			isSavingEdit = false
-		})()
-	}
-
-	function shareEditThread(): void {
-		if (!editThread) return
-		const thread = editThread
-		editThread = null
-		editError = null
-		modals.open('resource-access', {
-			resourceType: 'thread',
-			resourceId: thread.id,
-			title: thread.title ?? thread.id,
-		})
-	}
-
 	let routeChatId = $derived.by((): string | null => {
 		const match = page.url.pathname.match(/^\/c\/([^/]+)/)
 		return match?.[1] ?? null
@@ -275,6 +229,29 @@
 	let routeChatIsInSidebar = $derived.by((): boolean => {
 		if (!routeChatId) return false
 		return chat.recentThreads.some((t) => t.id === routeChatId)
+	})
+
+	// a thread opened from search can sit past the loaded pages: pull more in so
+	// the sidebar has a row to scroll to. bounded, since a thread the list never
+	// carries (archived, not solo) would page forever.
+	const REVEAL_PAGE_ATTEMPTS = 3
+	let pagedForThreadId: string | null = null
+
+	async function loadThreadIntoSidebar(threadId: string): Promise<void> {
+		for (let attempt = 0; attempt < REVEAL_PAGE_ATTEMPTS; attempt++) {
+			if (!chat.hasMoreThreads) return
+			await chat.loadMoreThreads()
+			if (chat.recentThreads.some((thread) => thread.id === threadId)) return
+		}
+	}
+
+	$effect(() => {
+		const targetId = routeChatId
+		// wait for the first page: before it lands nothing is in the list yet
+		if (!targetId || !chat.hasLoaded || routeChatIsInSidebar) return
+		if (pagedForThreadId === targetId) return
+		pagedForThreadId = targetId
+		void loadThreadIntoSidebar(targetId)
 	})
 
 	// keep selection synced with the current route.
@@ -288,17 +265,17 @@
 		if (sidebar.selectedChatId !== null) sidebar.selectChat(null)
 	})
 
-	/** svelte action: adds a click listener that expands the collapsed sidebar on desktop. */
-	function expandOnClick(node: HTMLElement) {
+	/** a click on the collapsed rail (not on one of its controls) expands it. */
+	const expandOnClick: Attachment<HTMLElement> = (node) => {
 		const handler = (event: MouseEvent) => {
 			if (device.isMobile) return
 			if (sidebar.isChatSidebarOpen) return
-			const target = event.target as HTMLElement | null
+			const target = event.target instanceof HTMLElement ? event.target : null
 			if (target?.closest('button, [role="button"], a')) return
 			sidebar.openChatSidebar()
 		}
 		node.addEventListener('click', handler)
-		return { destroy: () => node.removeEventListener('click', handler) }
+		return () => node.removeEventListener('click', handler)
 	}
 </script>
 
@@ -315,7 +292,7 @@
 {/if}
 
 <aside
-	class="chat-sidebar border-foreground/14 fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r backdrop-blur-[20px] transition-all duration-300 ease-in-out {sidebar.isChatSidebarOpen
+	class="chat-sidebar border-foreground/14 fixed top-0 left-0 z-50 h-dvh overflow-hidden border-r backdrop-blur-[20px] transition-all duration-300 ease-in-out {sidebar.isChatSidebarOpen
 		? ''
 		: 'group'} {device.isMobile
 		? 'w-full'
@@ -328,7 +305,7 @@
 			: 'translate-x-0'}"
 	style="background-color: var(--accent-bg);"
 	inert={device.isMobile ? !sidebar.isChatSidebarOpen : undefined}
-	use:expandOnClick
+	{@attach expandOnClick}
 >
 	<!-- gradient overlay (replaces ::before pseudo-element) -->
 	<div
@@ -370,10 +347,13 @@
 				isLoggedIn={session.isLoggedIn}
 				threads={chat.recentThreads}
 				selectedChatId={sidebar.selectedChatId}
+				revealThreadId={routeChatId}
 				{openThreadMenuId}
 				isLoadingMoreThreads={chat.isLoadingMoreThreads}
+				hasLoaded={chat.hasLoaded}
+				error={chat.error}
 				hasMoreThreads={chat.hasMoreThreads}
-				onPrefetchThread={(threadId) => chat.threadCache.prefetchThread(threadId)}
+				onPrefetchThread={(threadId) => chat.prefetchThread(threadId)}
 				onOpenThread={openThread}
 				onLoadMoreThreads={() => chat.loadMoreThreads()}
 				onToggleMenu={toggleThreadMenu}
@@ -389,11 +369,5 @@
 <ChatPropertiesModal
 	open={editThread !== null}
 	thread={editThread}
-	bind:title={editTitle}
-	bind:tags={editTags}
-	error={editError}
-	isSaving={isSavingEdit}
-	onClose={closeEditModal}
-	onShare={shareEditThread}
-	onSave={saveEditModal}
+	onClose={() => (editThread = null)}
 />

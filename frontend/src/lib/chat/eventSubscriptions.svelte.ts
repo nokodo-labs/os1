@@ -1,9 +1,12 @@
 /**
  * real-time event subscriptions - single unified listener that dispatches
- * tool, run activity, message, typing, attachment, and citation events by prefix.
+ * tool, run activity, message, attachment, and citation events by prefix.
  *
- * run lifecycle events (runs.active / run.started / run.completed / run.error
- * / run.failed) are NOT handled here - they are owned by the global
+ * typing signals are NOT handled here: they belong to every thread the viewer
+ * can see, not only the open one, so the global `chat` store tracks them.
+ *
+ * run lifecycle events (runs.active / run.started / run.completed / run.error)
+ * are NOT handled here - they are owned by the global
  * `activeRunsStore`, which tracks runs across all threads regardless of which
  * chat page is mounted. this module reacts to that store via `$effect.root`
  * to pick up any run for the current thread and resume its SSE stream.
@@ -17,10 +20,19 @@ import {
 	type StreamMessage,
 } from '$lib/api/streaming/eventStream.svelte'
 import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
+import { isPeopleThread } from '$lib/stores/chat.svelte'
 import { parseToolEvent } from '$lib/tools'
 import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity'
-import { buildMessageChildren, contentPartsToText, type ApiMessage } from './helpers'
+import {
+	buildMessageChildren,
+	contentPartsToText,
+	getRunId,
+	hasRunId,
+	isPlaceholderMessageId,
+	type ApiMessage,
+} from './helpers'
 import { parseRunActivityEvent, RUN_ACTIVITY_EVENT_PREFIX } from './runActivities'
+import { parseRunFailureEvent, RUN_ERROR_EVENT_TYPE } from './runFailures'
 import {
 	getMessageClientSteeringId,
 	getMessageSteeringRunId,
@@ -28,7 +40,8 @@ import {
 	type SteeringState,
 } from './steering'
 import { consumeStream } from './streamProcessor'
-import { getLatestLeaf } from './treeNavigation'
+import { CHAT_SYSTEM_EVENT_TYPES, parseChatSystemEvents } from './systemEvents'
+import { getLatestLeaf, reparentSuccessors } from './treeNavigation'
 import type { ApiCitation, ChatContext } from './types'
 
 /**
@@ -39,15 +52,11 @@ import type { ApiCitation, ChatContext } from './types'
  * returns an unsubscribe function that cleans up all internal state.
  */
 export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () => void {
-	// typing auto-expire timers
-	const typingTimers = new SvelteMap<string, ReturnType<typeof setTimeout>>()
 	// abort controllers for resume streams, keyed by run_id
 	const resumeAborts = new SvelteMap<string, AbortController>()
 	// run ids we've already kicked off a resume for - prevents duplicate
 	// resumes when the store re-emits (e.g. run.started after runs.active).
 	const attemptedResumes = new SvelteSet<string>()
-
-	ctx.typingUsers.clear()
 
 	// tool events
 
@@ -78,6 +87,51 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		ctx.processRunActivityEvent(activityEv)
 	}
 
+	/** apply a durable run failure for this thread. deduped by event id. */
+	function handleRunFailureEvent(ev: StreamEvent): void {
+		if (ev.thread_id !== threadId) return
+		const failure = parseRunFailureEvent({
+			id: ev.id,
+			type: ev.type,
+			data: (ev.data ?? {}) as Record<string, unknown>,
+			created_at: ev.created_at ?? undefined,
+			message_id: ev.message_id ?? undefined,
+		})
+		if (!failure) return
+		ctx.recordRunFailure(failure)
+	}
+
+	/**
+	 * apply an inline system row for this thread.
+	 *
+	 * `thread.updated` names no actor - its `user_id` is the thread owner, not
+	 * whoever renamed it - so only the reader's OWN rename is attributed, and
+	 * anyone else's renders without a name rather than crediting the wrong one.
+	 */
+	function handleSystemEvent(ev: StreamEvent): void {
+		const data = (ev.data ?? {}) as Record<string, unknown>
+		const eventThreadId =
+			ev.thread_id ??
+			(typeof data.thread_id === 'string' ? data.thread_id : null) ??
+			(typeof data.resource_id === 'string' ? data.resource_id : null)
+		if (eventThreadId !== threadId) return
+		const events = parseChatSystemEvents(
+			{
+				id: ev.id,
+				type: ev.type,
+				data,
+				created_at: ev.created_at ?? undefined,
+				message_id: ev.message_id ?? undefined,
+				thread_id: eventThreadId,
+			},
+			{
+				selfActorUserId: isOwnEvent(ev) ? ctx.currentUserId : null,
+				renameRows: ctx.thread ? isPeopleThread(ctx.thread) : false,
+			}
+		)
+		for (const systemEvent of events) ctx.recordSystemEvent(systemEvent)
+	}
+
 	// message events (cross-device sync)
 
 	function seedMessageCitations(msg: ApiMessage): void {
@@ -86,26 +140,65 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		}
 	}
 
-	function mergeOwnAssistantConfirmation(newMsg: ApiMessage): boolean {
-		if (newMsg.type !== 'assistant') return false
-		if (ctx.streamingAssistant?.messageId === newMsg.id) return false
+	/**
+	 * retire the client-side bridge once the run's real message is in the tree.
+	 *
+	 * a bridge stands in for a message the backend had not persisted yet, so the
+	 * moment the real one lands every pointer that named the bridge moves to the
+	 * real id and the placeholder goes away. a live run is left alone: the delta
+	 * path owns its bubble until that run ends or dies.
+	 */
+	function retireBridgeFor(newMsg: ApiMessage): void {
+		const bridge = ctx.streamingAssistant
+		if (!bridge || !isPlaceholderMessageId(bridge.messageId)) return
+		if (ctx.isGenerating && !bridge.isError) return
+		if (bridge.runId && hasRunId(newMsg) && getRunId(newMsg) !== bridge.runId) return
+		if (ctx.streamingLeafId === null || isPlaceholderMessageId(ctx.streamingLeafId)) {
+			ctx.streamingLeafId = newMsg.id
+		}
+		if (
+			ctx.viewingStreamingBranch &&
+			(ctx.currentLeafId === null || isPlaceholderMessageId(ctx.currentLeafId))
+		) {
+			ctx.currentLeafId = newMsg.id
+		}
+		ctx.streamingAssistantParentId = newMsg.id
+		ctx.streamingAssistant = null
+	}
+
+	/**
+	 * apply the canonical message the backend persisted for a run this session
+	 * started - including the partial a failed run leaves behind.
+	 *
+	 * dropping it (which is what "we already rendered our own copy" used to mean)
+	 * left the run's output on whatever id the client had invented, so the leaf
+	 * never reached a message the backend has. the live bubble is the one
+	 * exception: the run stream owns it and upserts the row itself.
+	 */
+	function applyOwnRunMessage(newMsg: ApiMessage): void {
+		const bridge = ctx.streamingAssistant
+		if (bridge?.messageId === newMsg.id && !bridge.isError) return
 		const existing = ctx.messageTree.get(newMsg.id)
-		if (!existing || existing.type !== 'assistant') return false
-		const existingText = contentPartsToText(existing.content).trim()
-		const newText = contentPartsToText(newMsg.content).trim()
-		if (!newText && existingText) return true
-		const confirmed = {
-			...newMsg,
-			parent_id: newMsg.parent_id ?? existing.parent_id,
-		} satisfies ApiMessage
+		if (existing) {
+			const existingText = contentPartsToText(existing.content).trim()
+			const newText = contentPartsToText(newMsg.content).trim()
+			// a late empty confirmation must never blank text already rendered
+			if (!newText && existingText) return
+		}
+		const confirmed = existing
+			? ({
+					...existing,
+					...newMsg,
+					parent_id: newMsg.parent_id ?? existing.parent_id,
+				} satisfies ApiMessage)
+			: newMsg
 		ctx.messageTree.set(confirmed.id, confirmed)
 		seedMessageCitations(confirmed)
-		if (ctx.currentLeafId === existing.id || ctx.streamingLeafId === existing.id) {
+		if (confirmed.parent_id !== null && confirmed.parent_id === ctx.currentLeafId) {
 			ctx.currentLeafId = confirmed.id
-			ctx.streamingLeafId = confirmed.id
 		}
+		retireBridgeFor(confirmed)
 		ctx.rebuildRunBlocks()
-		return true
 	}
 
 	function handleMessageEvent(ev: StreamEvent): void {
@@ -116,10 +209,14 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 		if (ev.type === 'message.created') {
 			if (data.id && typeof data.id === 'string') {
 				const newMsg = data as unknown as ApiMessage
+				// text steering writes steering_state onto the row it creates; an
+				// invocation catch-up writes nothing and only names the ordinary
+				// message it handed over. so the persisted state IS the
+				// discriminator, and a catch-up renders as the message it is.
 				const steeringState = getMessageSteeringState(newMsg)
+				const clientSteeringId = getMessageClientSteeringId(newMsg)
 				if (newMsg.type === 'user' && steeringState === 'queued') {
 					const runId = getMessageSteeringRunId(newMsg)
-					const clientSteeringId = getMessageClientSteeringId(newMsg)
 					const stashed = pendingSteeringStates.get(newMsg.id)
 					if (stashed?.state === 'dropped') {
 						pendingSteeringStates.delete(newMsg.id)
@@ -177,7 +274,7 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 				}
 				if (newMsg.type === 'user' && steeringState === 'dropped') return
 				if (ownEvent && newMsg.type !== 'user') {
-					if (mergeOwnAssistantConfirmation(newMsg)) return
+					applyOwnRunMessage(newMsg)
 					return
 				}
 				// defense-in-depth: if this is a user message that matches the
@@ -208,12 +305,16 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 				) {
 					ctx.streamingAssistantParentId = newMsg.id
 				}
-				// if a steering event arrived before this message.created,
-				// re-apply the stashed state now that the message is known.
+				// if a steering event arrived before this message.created, re-apply
+				// the stashed state now that the message is known - but only onto a
+				// ghost bubble. for an ordinary message a catch-up named, the stash
+				// was run progress, never a restyle.
 				const stashed = pendingSteeringStates.get(newMsg.id)
 				if (stashed) {
-					applySteeringState(newMsg.id, stashed.state, stashed.createdAt)
 					pendingSteeringStates.delete(newMsg.id)
+					if (steeringState != null || ctx.ownsSteeringMessage(newMsg.id)) {
+						applySteeringState(newMsg.id, stashed.state, stashed.createdAt)
+					}
 				}
 				// if the new message extends the current branch, move leaf
 				if (newMsg.parent_id === ctx.currentLeafId) {
@@ -227,18 +328,29 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 				}
 				ctx.rebuildRunBlocks()
 			}
-		} else if (ownEvent) {
-			return
 		} else if (ev.type === 'message.updated') {
 			const msgId = (data.id as string) ?? ev.message_id
-			if (msgId && ctx.messageTree.has(msgId)) {
-				const existing = ctx.messageTree.get(msgId)
-				if (!existing) return
-				const updated = { ...existing, ...data } as ApiMessage
-				ctx.messageTree.set(msgId, updated)
-				seedMessageCitations(updated)
-				ctx.rebuildRunBlocks()
+			if (!msgId || !ctx.messageTree.has(msgId)) return
+			const existing = ctx.messageTree.get(msgId)
+			if (!existing) return
+			// a run's reparent is fanned out from the session that started it, so
+			// the structural move must apply regardless of `ownEvent`.
+			const nextParentId = typeof data.parent_id === 'string' ? data.parent_id : null
+			const reparented =
+				nextParentId !== null && nextParentId !== (existing.parent_id ?? null)
+			const moved = reparented ? reparentSuccessors(ctx, nextParentId, [msgId]) : false
+			if (ownEvent) {
+				// own content was applied optimistically; re-merging would undo a
+				// newer local edit.
+				if (moved) ctx.rebuildRunBlocks()
+				return
 			}
+			const updated = { ...existing, ...data } as ApiMessage
+			ctx.messageTree.set(msgId, updated)
+			seedMessageCitations(updated)
+			ctx.rebuildRunBlocks()
+		} else if (ownEvent) {
+			return
 		} else if (ev.type === 'message.deleted') {
 			const deletedIds = data.deleted_ids as string[] | undefined
 			const parentId = (data.parent_id as string | null | undefined) ?? null
@@ -265,36 +377,6 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 				}
 			}
 			ctx.rebuildRunBlocks()
-		}
-	}
-
-	// typing events
-
-	function handleTypingEvent(ev: StreamEvent): void {
-		const data = (ev.data ?? {}) as Record<string, unknown>
-		if (data.thread_id !== threadId) return
-		if (isOwnEvent(ev)) return
-
-		const userId = data.user_id as string | undefined
-		if (!userId) return
-
-		if (ev.type === 'typing.start' || ev.type === 'typing.user.start') {
-			ctx.typingUsers.add(userId)
-			// auto-expire after 8s if no further typing events arrive
-			const prev = typingTimers.get(userId)
-			if (prev) clearTimeout(prev)
-			typingTimers.set(
-				userId,
-				setTimeout(() => {
-					ctx.typingUsers.delete(userId)
-					typingTimers.delete(userId)
-				}, 8000)
-			)
-		} else if (ev.type === 'typing.stop' || ev.type === 'typing.user.stop') {
-			ctx.typingUsers.delete(userId)
-			const prev = typingTimers.get(userId)
-			if (prev) clearTimeout(prev)
-			typingTimers.delete(userId)
 		}
 	}
 
@@ -415,13 +497,13 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 	): boolean {
 		const existing = ctx.messageTree.get(messageId)
 		if (!existing) return false
-		const prevMeta = (existing.metadata_ ?? {}) as Record<string, unknown>
+		const prevMeta = (existing.metadata ?? {}) as Record<string, unknown>
 		const metadata: Record<string, unknown> = { ...prevMeta, steering_state: state }
 		if (state === 'injected' && createdAt) metadata.steering_injected_at = createdAt
 		if (state === 'dropped' && createdAt) metadata.steering_dropped_at = createdAt
 		ctx.messageTree.set(messageId, {
 			...existing,
-			metadata_: metadata,
+			metadata: metadata,
 		} as ApiMessage)
 		return true
 	}
@@ -523,7 +605,17 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 			}
 			if (nextState === 'dropped') {
 				ctx.removeQueuedSteeringMessage(mid)
-				if (applySteeringState(mid, nextState, steeringCreatedAt)) droppedChanged = true
+				// invocation is server-owned, so this event also fires for an
+				// ordinary message the user wrote and a run was caught up with.
+				// only a ghost bubble may be restyled as dropped; a real message
+				// stays exactly what it is. a catch-up is server-authorized and
+				// cannot be retracted anyway.
+				if (
+					ctx.ownsSteeringMessage(mid) &&
+					applySteeringState(mid, nextState, steeringCreatedAt)
+				) {
+					droppedChanged = true
+				}
 				pendingSteeringStates.set(mid, {
 					state: nextState,
 					runId,
@@ -567,14 +659,16 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 			handleToolEvent(ev as StreamEvent)
 		} else if (ev.type.startsWith('message.')) {
 			handleMessageEvent(ev as StreamEvent)
-		} else if (ev.type.startsWith('typing.')) {
-			handleTypingEvent(ev as StreamEvent)
 		} else if (ev.type.startsWith('citation.')) {
 			handleCitationEvent(ev as StreamEvent)
 		} else if (ev.type.startsWith('run.steering.')) {
 			handleSteeringEvent(ev as StreamEvent)
 		} else if (ev.type.startsWith(RUN_ACTIVITY_EVENT_PREFIX)) {
 			handleRunActivityEvent(ev as StreamEvent)
+		} else if (ev.type === RUN_ERROR_EVENT_TYPE) {
+			handleRunFailureEvent(ev as StreamEvent)
+		} else if ((CHAT_SYSTEM_EVENT_TYPES as readonly string[]).includes(ev.type)) {
+			handleSystemEvent(ev as StreamEvent)
 		}
 	})
 
@@ -603,10 +697,6 @@ export function subscribeToChatEvents(threadId: string, ctx: ChatContext): () =>
 	return () => {
 		unsub()
 		disposeRunWatcher()
-		// cleanup typing timers
-		for (const t of typingTimers.values()) clearTimeout(t)
-		typingTimers.clear()
-		ctx.typingUsers.clear()
 		// cleanup resume aborts
 		for (const ac of resumeAborts.values()) ac.abort()
 		resumeAborts.clear()

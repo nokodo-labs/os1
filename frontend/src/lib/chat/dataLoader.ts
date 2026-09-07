@@ -10,13 +10,29 @@ import { resolveResourceAccessLevels } from '$lib/stores/resourceAccess.svelte'
 import { session } from '$lib/stores/session.svelte'
 import { parseToolCalls, parseToolEvent, parseToolResult } from '$lib/tools'
 import { tick } from 'svelte'
+import {
+	branchPageMessages,
+	branchPagingOf,
+	fetchBranchPage,
+	type BranchPage,
+	type BranchPaging,
+} from './branchPage'
 import { extractAttachmentRefs, getMessageCreatedAt, type ApiMessage } from './helpers'
 import { parseRunActivityEvent } from './runActivities'
+import { parseRunFailureEvent } from './runFailures'
 import { getMessageSteeringRunId, getMessageSteeringState } from './steering'
+import { parseChatSystemEvents } from './systemEvents'
 import type { ChatContext } from './types'
 
 type ApiEvent = components['schemas']['Event']
-const INITIAL_MESSAGE_LIMIT = 120
+type ApiEventPage = components['schemas']['CursorPage_Event_']
+type ThreadUserState = components['schemas']['ThreadUserState']
+
+/** max message ids the by-message-ids endpoint accepts per request */
+const EVENT_MESSAGE_ID_CHUNK = 500
+
+/** max events the by-message-ids endpoint returns per page */
+const EVENT_PAGE_LIMIT = 1000
 
 export class ThreadNotFoundError extends Error {
 	constructor(threadId: string) {
@@ -25,12 +41,58 @@ export class ThreadNotFoundError extends Error {
 	}
 }
 
-function mergeMessages(...groups: ApiMessage[][]): ApiMessage[] {
-	const byId = new Map<string, ApiMessage>()
-	for (const group of groups) {
-		for (const msg of group) byId.set(msg.id, msg)
+/** where a thread page should open. */
+export interface LoadTreeOptions {
+	/**
+	 * message to open at: the endpoint answers with the page holding it. null
+	 * pins the live tail. omitting the options object entirely resolves the
+	 * caller's own last-read message instead.
+	 */
+	anchorMessageId: string | null
+}
+
+/**
+ * apply the true per-message branch counts a page carries.
+ *
+ * `sibling_counts` gives the FULL count for every forked message on the page
+ * even when only the first few branches were carried, so a "1/3" indicator
+ * renders from the page alone.
+ */
+function absorbSiblingCounts(paging: BranchPaging, ctx: ChatContext): void {
+	for (const [parentId, total] of paging.siblingCounts) {
+		ctx.siblingCounts.set(parentId, total)
 	}
-	return Array.from(byId.values())
+}
+
+/**
+ * apply a page's paging state.
+ *
+ * each end is taken only from a page that actually moved that way: a page
+ * loaded while scrolling up always reports messages toward the leaf, but those
+ * are the ones already on screen, not ones still to load.
+ */
+function absorbBranchPaging(
+	paging: BranchPaging,
+	ctx: ChatContext,
+	ends: 'both' | 'root' | 'leaf'
+): void {
+	if (ends !== 'leaf') {
+		ctx.branchCursorTowardRoot = paging.cursorTowardRoot
+		ctx.hasMoreMessages = paging.hasTowardRoot
+	}
+	if (ends !== 'root') {
+		ctx.branchCursorTowardLeaf = paging.cursorTowardLeaf
+		ctx.hasNewerMessages = paging.hasTowardLeaf
+	}
+	absorbSiblingCounts(paging, ctx)
+}
+
+function absorbBranchPage(
+	page: BranchPage,
+	ctx: ChatContext,
+	ends: 'both' | 'root' | 'leaf'
+): void {
+	absorbBranchPaging(branchPagingOf(page), ctx, ends)
 }
 
 /** replay parsed events into the chat context (tools, run activities, attachments) */
@@ -59,7 +121,65 @@ function replayEvents(events: ApiEvent[], ctx: ChatContext): void {
 			ctx.processRunActivityEvent(activityEv)
 			continue
 		}
+
+		const failure = parseRunFailureEvent({
+			id: ev.id,
+			type: ev.type,
+			data: (ev.data ?? {}) as Record<string, unknown>,
+			created_at: ev.created_at ?? undefined,
+			message_id: ev.message_id ?? undefined,
+		})
+		if (failure) {
+			ctx.recordRunFailure(failure)
+			continue
+		}
+
+		// only events the backend anchored to a message reach this route at all,
+		// so what lands here is exactly the system history that survives a reload.
+		for (const systemEvent of parseChatSystemEvents({
+			id: ev.id,
+			type: ev.type,
+			data: (ev.data ?? {}) as Record<string, unknown>,
+			created_at: ev.created_at ?? undefined,
+			message_id: ev.message_id ?? undefined,
+			thread_id: ev.thread_id ?? undefined,
+		})) {
+			ctx.recordSystemEvent(systemEvent)
+		}
 	}
+}
+
+/**
+ * fetch every event page for a chunk of message ids.
+ *
+ * one message can hold unboundedly many events, so a caller that reads only the
+ * first page caches an incomplete set and the cache's "all covered" check then
+ * short-circuits future loads against partial data.
+ */
+async function fetchAllEventPages(
+	threadId: string,
+	messageIds: string[],
+	isCurrent: () => boolean
+): Promise<ApiEvent[] | null> {
+	const events: ApiEvent[] = []
+	let cursor: string | null = null
+
+	do {
+		const { data, error }: { data?: ApiEventPage; error?: unknown } = await api.POST(
+			'/v1/threads/{thread_id}/events/by-message-ids',
+			{
+				params: { path: { thread_id: threadId } },
+				body: { message_ids: messageIds, limit: EVENT_PAGE_LIMIT, cursor },
+			}
+		)
+		if (!isCurrent()) return null
+		if (error || !data) return null
+
+		events.push(...data.items)
+		cursor = data.has_more ? (data.next_cursor ?? null) : null
+	} while (cursor)
+
+	return events
 }
 
 /** fetch and process message-scoped events for a batch of message ids */
@@ -97,31 +217,27 @@ export async function fetchEventsForThread(
 
 	// process all pending IDs
 	while (ctx.eventMessageIdsPending.size > 0) {
-		const batch = Array.from(ctx.eventMessageIdsPending)
+		const pending = Array.from(ctx.eventMessageIdsPending)
 		ctx.eventMessageIdsPending.clear()
 
 		ctx.eventsInFlight = true
 		try {
-			const { data, error } = await api.POST(
-				'/v1/threads/{thread_id}/events/by-message-ids',
-				{
-					params: { path: { thread_id: threadId } },
-					body: { message_ids: batch },
+			for (let start = 0; start < pending.length; start += EVENT_MESSAGE_ID_CHUNK) {
+				const batch = pending.slice(start, start + EVENT_MESSAGE_ID_CHUNK)
+				const events = await fetchAllEventPages(threadId, batch, isCurrent)
+				if (!isCurrent()) return
+				if (events) {
+					replayEvents(events, ctx)
+					// re-read cache state each iteration to avoid stale closure
+					const current = chatStore.threadCache.getCachedEvents(threadId)
+					if (current) {
+						chatStore.threadCache.appendEvents(threadId, events, batch)
+					} else {
+						chatStore.threadCache.setEvents(threadId, events, batch)
+					}
 				}
-			)
-			if (!isCurrent()) return
-			if (!error && data) {
-				const events = data as ApiEvent[]
-				replayEvents(events, ctx)
-				// re-read cache state each iteration to avoid stale closure
-				const current = chatStore.threadCache.getCachedEvents(threadId)
-				if (current) {
-					chatStore.threadCache.appendEvents(threadId, events, batch)
-				} else {
-					chatStore.threadCache.setEvents(threadId, events, batch)
-				}
+				for (const id of batch) ctx.fetchedEventMessageIds.add(id)
 			}
-			for (const id of batch) ctx.fetchedEventMessageIds.add(id)
 		} finally {
 			ctx.eventsInFlight = false
 		}
@@ -177,22 +293,30 @@ export async function loadOlderMessages(threadId: string, ctx: ChatContext): Pro
 	const prevScrollTop = ctx.scrollContainer.scrollTop
 
 	try {
-		const { data, error } = await api.GET('/v1/threads/{thread_id}/messages', {
-			params: {
-				path: { thread_id: threadId },
-				query: { skip: ctx.messageSkip, limit: 120 },
-			},
-		})
-		if (error) return
-		// guard against stale responses arriving after the user navigated away
-		if (threadId !== ctx.thread?.id) return
-		const page = (data ?? []) as ApiMessage[]
-		if (page.length === 0) {
+		const cursor = ctx.branchCursorTowardRoot
+		if (!cursor) {
 			ctx.hasMoreMessages = false
 			return
 		}
+
+		const { page: data, status } = await fetchBranchPage(threadId, { cursor })
+		// 422 means the branch moved under the cursor (a canon switch, or the
+		// boundary message being deleted). that is "reload from the top", not
+		// a fatal error.
+		if (status === 422) {
+			ctx.branchCursorTowardRoot = null
+			void loadTree(threadId, ctx, { anchorMessageId: ctx.currentLeafId })
+			return
+		}
+		if (!data) return
+		// guard against stale responses arriving after the user navigated away
+		if (threadId !== ctx.thread?.id) return
+
+		const page = data.messages
+		absorbBranchPage(data, ctx, 'root')
+		if (page.length === 0) return
 		ctx.messageSkip += page.length
-		ingestMessages(page, ctx)
+		ingestMessages(branchPageMessages(data), ctx)
 
 		await fetchEventsForThread(
 			threadId,
@@ -200,6 +324,10 @@ export async function loadOlderMessages(threadId: string, ctx: ChatContext): Pro
 			ctx,
 			() => threadId === ctx.thread?.id
 		)
+		if (threadId !== ctx.thread?.id) return
+		// rendered blocks are imperative state, not derived from the tree: without
+		// this the page joins the tree and never reaches the screen.
+		ctx.rebuildRunBlocks()
 
 		await tick()
 		// guard again: component may have unmounted during awaits
@@ -214,10 +342,122 @@ export async function loadOlderMessages(threadId: string, ctx: ChatContext): Pro
 	}
 }
 
-/** load the selected branch plus the latest paginated message page for a thread. */
-export async function loadTree(threadId: string, ctx: ChatContext): Promise<boolean> {
+/**
+ * load the next page of newer messages (scroll-down pagination).
+ *
+ * a thread opened at the user's last-read message starts mid-branch, so the
+ * tail is reached by paging down. the new page hangs off the loaded window's
+ * leaf, so the leaf pointer follows it - otherwise the branch walk stops where
+ * the window used to end and the page renders nothing new.
+ */
+export async function loadNewerMessages(threadId: string, ctx: ChatContext): Promise<void> {
+	if (ctx.isLoadingNewerMessages) return
+	if (!ctx.hasNewerMessages) return
+
+	ctx.isLoadingNewerMessages = true
+	try {
+		const cursor = ctx.branchCursorTowardLeaf
+		if (!cursor) {
+			ctx.hasNewerMessages = false
+			return
+		}
+
+		const leafBefore = ctx.currentLeafId
+		const { page: data, status } = await fetchBranchPage(threadId, { cursor })
+		// same cursor contract as scrolling up: a 422 means the branch moved
+		// under it, which is "reload this thread", not a fatal error.
+		if (status === 422) {
+			ctx.branchCursorTowardLeaf = null
+			ctx.hasNewerMessages = false
+			void loadTree(threadId, ctx, { anchorMessageId: ctx.currentLeafId })
+			return
+		}
+		if (!data) return
+		if (threadId !== ctx.thread?.id) return
+
+		const page = data.messages
+		absorbBranchPage(data, ctx, 'leaf')
+		if (page.length === 0) return
+		ingestMessages(branchPageMessages(data), ctx)
+
+		// follow the branch down unless the user moved off it meanwhile
+		const newLeaf = page[page.length - 1].id
+		if (ctx.currentLeafId === leafBefore && ctx.messageTree.has(newLeaf)) {
+			ctx.currentLeafId = newLeaf
+		}
+
+		await fetchEventsForThread(
+			threadId,
+			page.map((m) => m.id),
+			ctx,
+			() => threadId === ctx.thread?.id
+		)
+		if (threadId !== ctx.thread?.id) return
+		ctx.rebuildRunBlocks()
+		await tick()
+		if (threadId !== ctx.thread?.id) return
+		// the page landing reflows the transcript, and a shrink clamps scrollTop
+		// for us. suppress that scroll so it is not read as the reader arriving
+		// at the opposite edge, which would page straight back the other way.
+		ctx.markProgrammaticScroll('auto')
+		ctx.measureScrollable()
+	} finally {
+		ctx.isLoadingNewerMessages = false
+	}
+}
+
+/**
+ * the caller's own per-thread state (read cursor, mute / pin / archive).
+ *
+ * the API exposes no GET for it: the roster carries membership only, and thread
+ * payloads no longer inline it. a PATCH with no fields changes nothing and
+ * answers with the current row, which is the only read available today.
+ */
+async function fetchThreadUserState(threadId: string): Promise<ThreadUserState | null> {
+	const userId = session.currentUserId
+	if (!userId) return null
+	const { data, error } = await api.PATCH(
+		'/v1/threads/{thread_id}/participants/users/{user_id}',
+		{
+			params: { path: { thread_id: threadId, user_id: userId } },
+			body: {},
+		}
+	)
+	if (error || !data) return null
+	return data
+}
+
+/**
+ * the message a thread should open at, or null for the live tail.
+ *
+ * a reader who is caught up gets the tail, which is the page they would have
+ * been given anyway - no anchor, no second request path.
+ */
+function lastReadAnchor(state: ThreadUserState | null, thread: Thread): string | null {
+	const lastRead = state?.last_read_message_id ?? null
+	if (!lastRead || lastRead === thread.current_message_id) return null
+	return lastRead
+}
+
+/**
+ * load the selected branch page for a thread.
+ *
+ * without options the page opens where the user left off: their last-read
+ * message anchors the request and paging then runs in both directions from
+ * there. pass an explicit anchor (or null for the live tail) to override that.
+ */
+export async function loadTree(
+	threadId: string,
+	ctx: ChatContext,
+	options?: LoadTreeOptions
+): Promise<boolean> {
 	const loadToken = ctx.beginThreadLoad(threadId)
 	const isCurrent = () => ctx.isThreadLoadCurrent(threadId, loadToken)
+
+	// a sidebar hover may still be filling the cache for this thread; racing it
+	// fetches the same thread and branch page twice.
+	await chatStore.threadCache.awaitPrefetch(threadId)
+	if (!isCurrent()) return false
 
 	// try cache first for instant load
 	const cachedThread = chatStore.threadCache.get(threadId)
@@ -230,6 +470,7 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 	let messagesPage: ApiMessage[]
 	let pageSize: number
 	let complete: boolean
+	let anchorMessageId: string | null = null
 
 	if (cachedThread && cachedMessages && cacheHasSelectedLeaf) {
 		// use cached data for instant render
@@ -237,18 +478,30 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 		messagesPage = cachedMessages.messages
 		pageSize = cachedMessages.pageSize
 		complete = cachedMessages.complete
+		if (cachedMessages.branch) {
+			absorbBranchPaging(cachedMessages.branch, ctx, 'both')
+		} else {
+			ctx.branchCursorTowardRoot = null
+			ctx.branchCursorTowardLeaf = null
+			ctx.hasNewerMessages = false
+		}
 	} else {
 		// fetch from api. capture timestamp before the request so any
 		// message.* event arriving during the fetch will invalidate this
 		// (potentially partial) result via setMessages's race guard.
 		const fetchStartedAt = Date.now()
-		const {
-			data,
-			error: threadError,
-			response: threadResponse,
-		} = await api.GET('/v1/threads/{thread_id}', {
-			params: { path: { thread_id: threadId } },
-		})
+		// the user-state read needs only the ids, so it rides alongside the thread
+		// request instead of queueing behind it; only the anchor comparison below
+		// needs the thread payload. it is caught so a thread failure still
+		// surfaces exactly as it did when this ran second.
+		const userStatePromise = options ? null : fetchThreadUserState(threadId).catch(() => null)
+		const [{ data, error: threadError, response: threadResponse }, userState] =
+			await Promise.all([
+				api.GET('/v1/threads/{thread_id}', {
+					params: { path: { thread_id: threadId } },
+				}),
+				userStatePromise,
+			])
 		if (!isCurrent()) return false
 		if (threadError) {
 			if (threadResponse?.status === 404) throw new ThreadNotFoundError(threadId)
@@ -272,41 +525,35 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 		}
 		threadData = data
 
-		const [messagesRes, branchRes] = await Promise.all([
-			api.GET('/v1/threads/{thread_id}/messages', {
-				params: {
-					path: { thread_id: threadId },
-					query: { skip: 0, limit: INITIAL_MESSAGE_LIMIT },
-				},
-			}),
-			threadData.current_message_id
-				? api.GET('/v1/threads/{thread_id}/branch', {
-						params: { path: { thread_id: threadId } },
-					})
-				: Promise.resolve({ data: [] as ApiMessage[], error: undefined }),
-		])
-		if (!isCurrent()) return false
+		anchorMessageId = options ? options.anchorMessageId : lastReadAnchor(userState, threadData)
 
-		const { data: msgData, error: msgError } = messagesRes
-		if (msgError) {
-			console.error('failed to load messages', msgError)
+		// the branch page is the ONE message-loading path: it carries the
+		// chain plus the branches hanging off it, so `/messages` (a flat,
+		// branch-blind list) is no longer part of chat rendering.
+		let branchRes = await fetchBranchPage(threadId, anchorMessageId ? { anchorMessageId } : {})
+		if (!isCurrent()) return false
+		// an anchor the thread cannot page - deleted, or a branch abandoned
+		// before the thread was shared - 404s. the live tail always loads.
+		if (!branchRes.page && anchorMessageId) {
+			anchorMessageId = null
+			branchRes = await fetchBranchPage(threadId)
+			if (!isCurrent()) return false
+		}
+
+		if (!branchRes.page) {
+			console.error('failed to load current branch', branchRes.status)
 			ctx.currentLeafId = null
 			ctx.messageSkip = 0
 			ctx.hasMoreMessages = true
 			return false
 		}
 
-		if (branchRes.error) {
-			console.error('failed to load current branch', branchRes.error)
-		}
-
-		const latestPage = (msgData ?? []) as ApiMessage[]
-		const selectedBranch = ((branchRes.data ?? []) as ApiMessage[]).filter(
-			(msg) => msg.thread_id === threadId
-		)
-		messagesPage = mergeMessages(latestPage, selectedBranch)
-		pageSize = latestPage.length
-		complete = latestPage.length < INITIAL_MESSAGE_LIMIT
+		const branchPage = branchRes.page
+		const paging = branchPagingOf(branchPage)
+		absorbBranchPaging(paging, ctx, 'both')
+		messagesPage = branchPageMessages(branchPage)
+		pageSize = branchPage.messages.length
+		complete = !branchPage.has_toward_root
 
 		// cache for future instant loads (race guard: dropped if a
 		// message.* event arrived since fetchStartedAt).
@@ -316,7 +563,8 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 			messagesPage,
 			complete,
 			fetchStartedAt,
-			pageSize
+			pageSize,
+			paging
 		)
 	}
 
@@ -351,6 +599,12 @@ export async function loadTree(threadId: string, ctx: ChatContext): Promise<bool
 	} else {
 		ctx.currentLeafId = null
 	}
+
+	// the view is parked on the anchor, so the page reveals it instead of
+	// pinning to the bottom. the pin stays off until the tail is actually
+	// loaded, or every downward page would drag the reader to the next one.
+	ctx.initialAnchorMessageId = anchorMessageId
+	if (ctx.hasNewerMessages) ctx.autoScroll = false
 
 	await fetchEventsForThread(
 		threadId,
@@ -395,7 +649,14 @@ export function syncCacheAfterRun(ctx: ChatContext): void {
 		allMessages,
 		!ctx.hasMoreMessages,
 		undefined,
-		ctx.messageSkip
+		ctx.messageSkip,
+		{
+			cursorTowardRoot: ctx.branchCursorTowardRoot,
+			cursorTowardLeaf: ctx.branchCursorTowardLeaf,
+			hasTowardRoot: ctx.hasMoreMessages,
+			hasTowardLeaf: ctx.hasNewerMessages,
+			siblingCounts: Array.from(ctx.siblingCounts.entries()),
+		}
 	)
 	// register new message IDs as covered so events cache stays valid.
 	// events from the run arrived via SSE (already processed by toolTracker),

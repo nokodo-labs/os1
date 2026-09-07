@@ -11,6 +11,7 @@ import { api } from '$lib/api/client'
 import type {
 	AttachmentMediaCategory,
 	PendingAttachment,
+	ResourceAttachment,
 	RunModifiers,
 	ToolChoiceValue,
 } from '$lib/chat/types'
@@ -57,6 +58,22 @@ export async function uploadFile(file: File): Promise<PendingAttachment> {
 			category === 'image' || category === 'video' ? URL.createObjectURL(file) : undefined,
 		source: 'upload',
 	}
+}
+
+/** wire refs for composer attachments. */
+export function toResourceRefs(attachments: PendingAttachment[]): ResourceAttachment[] {
+	return attachments.map((a) => ({ type: a.resourceType, id: a.fileId }))
+}
+
+/**
+ * refs for the resources a message ORIGINATED, which is what marks provenance.
+ *
+ * only what the composer created for this send qualifies - an upload. a picked
+ * resource already existed, so it is attached and nothing more: deleting the
+ * message must never take it with it.
+ */
+export function originatedResourceRefs(attachments: PendingAttachment[]): ResourceAttachment[] {
+	return toResourceRefs(attachments.filter((a) => a.source === 'upload'))
 }
 
 /** revoke all preview object URLs from a list of attachments */

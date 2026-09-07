@@ -5,6 +5,8 @@
 
 import { parseToolCalls, parseToolResult, type ToolCall, type ToolResult } from '$lib/tools'
 import { SvelteDate } from 'svelte/reactivity'
+import { needsTimeHeader } from './chatTimestamps'
+import type { ChatSystemEvent } from './systemEvents'
 import type {
 	ApiCitation,
 	ApiMessage,
@@ -16,6 +18,7 @@ import type {
 	ResourceAttachment,
 	RunActivityState,
 	RunBlock,
+	RunFailureEntry,
 	RunItem,
 	StreamingAssistantState,
 } from './types'
@@ -59,19 +62,81 @@ export function contentPartsToText(parts: ApiMessage['content']): string {
 }
 
 /**
+ * ids a run bubble carries before the backend has given it a message.
+ *
+ * they name a bridge, never a message: the backend parses a splice parent as a
+ * typeid, so sending one back is a 422 and poisons every later run on that
+ * branch. nothing carrying one may become a durable leaf.
+ */
+const PLACEHOLDER_MESSAGE_ID_PREFIXES = ['pending-', 'resume-', 'local-steering-']
+
+/** whether an id is a client-side placeholder rather than a persisted message. */
+export function isPlaceholderMessageId(id: string | null | undefined): boolean {
+	if (!id) return false
+	return PLACEHOLDER_MESSAGE_ID_PREFIXES.some((prefix) => id.startsWith(prefix))
+}
+
+/**
+ * the alternatives of one message: the children of its parent of the same kind.
+ *
+ * a user message forks into other user messages, a run's output into other
+ * runs' output. counting across kinds makes a run's own user message look like
+ * an alternative to the answer that run has not produced yet, which flashes a
+ * phantom "2/2" branch badge on brand new messages.
+ */
+export function siblingIdsOfKind(
+	parentId: string | null,
+	kind: 'user' | 'response',
+	messageChildren: ReadonlyMap<string | null, string[]>,
+	messageTree: ReadonlyMap<string, ApiMessage>
+): string[] {
+	const children = messageChildren.get(parentId) ?? []
+	return children.filter((id) => {
+		const message = messageTree.get(id)
+		if (!message) return false
+		return (message.type === 'user') === (kind === 'user')
+	})
+}
+
+/**
+ * how many alternatives the branch switcher steps through at a fork.
+ *
+ * the branch page's own count is the truth - it reports every alternative while
+ * carrying only the first few - so what is loaded is a floor, never the total.
+ *
+ * a shared thread's forks are its sub-threads and count exactly the same way:
+ * thread kind never zeroes this.
+ */
+export function branchAlternativeCount(
+	parentId: string | null,
+	loadedSiblings: readonly string[],
+	siblingCounts: ReadonlyMap<string, number>
+): number {
+	return Math.max(siblingCounts.get(parentId ?? '') ?? 0, loadedSiblings.length)
+}
+
+/**
  * persist the current streaming assistant's partial content into the message
  * tree (marked partial) so a transport failure or stop keeps whatever text was
  * already rendered instead of discarding it. callers typically follow this
  * with a fresh error bubble in a separate placeholder.
+ *
+ * a run that produced nothing has nothing to preserve, and writing an empty
+ * placeholder for it would move the branch leaf onto an id no reload can
+ * resolve - which is how a failed regeneration loses its branch switcher.
  */
 export function finalizeStreamingAssistantAsPartial(ctx: ChatContext): void {
 	const streaming = ctx.streamingAssistant
 	if (!streaming) return
+	// a bridge is not a message. writing one into the tree moves the leaf onto an
+	// id no reload can resolve, and every later splice naming it is a 422.
+	if (isPlaceholderMessageId(streaming.messageId)) return
 	// apply any buffered streamed tokens before snapshotting the partial content
 	ctx.flushStreamingText()
 
 	const existingMessage = ctx.messageTree.get(streaming.messageId)
 	const content = streaming.content.trim() || contentPartsToText(existingMessage?.content).trim()
+	if (!content && streaming.toolCalls.length === 0) return
 	const createdAt = existingMessage?.created_at ?? new SvelteDate().toISOString()
 	const updatedAt = new SvelteDate().toISOString()
 	const parentId = existingMessage?.parent_id ?? ctx.streamingAssistantParentId
@@ -80,8 +145,8 @@ export function finalizeStreamingAssistantAsPartial(ctx: ChatContext): void {
 		[...content.matchAll(/\[\^?(\d+)\]/g)].map((match) => Number(match[1]))
 	)
 	const citedSources = streamCitations?.filter((citation) => citedIndices.has(citation.index))
-	const metadata: NonNullable<ApiMessage['metadata_']> = {
-		...(existingMessage?.metadata_ ?? {}),
+	const metadata: NonNullable<ApiMessage['metadata']> = {
+		...(existingMessage?.metadata ?? {}),
 		partial: true,
 		partial_reason: 'cancelled',
 	}
@@ -99,7 +164,7 @@ export function finalizeStreamingAssistantAsPartial(ctx: ChatContext): void {
 			arguments: toolCall.arguments,
 		})),
 		citations: citedSources?.length ? citedSources : existingMessage?.citations,
-		metadata_: metadata,
+		metadata: metadata,
 		sender_agent_id: streaming.senderAgentId,
 		sender_user_id: null,
 		created_at: createdAt,
@@ -111,6 +176,35 @@ export function finalizeStreamingAssistantAsPartial(ctx: ChatContext): void {
 	ctx.streamingLeafId = finalized.id
 	if (ctx.viewingStreamingBranch) ctx.currentLeafId = finalized.id
 	ctx.streamingAssistantParentId = finalized.id
+}
+
+/**
+ * hand a dead run over to the backend's own events.
+ *
+ * the bridge bubble stays exactly where it is - it holds the text that already
+ * streamed, and blanking it would flash - but it is marked dead so nothing
+ * reads it as a live run. the persisted message and the durable `run.error`
+ * replace it when they arrive over the WS; the client authors neither.
+ */
+export function markRunBridgeFailed(ctx: ChatContext, message: string): void {
+	const bridge = ctx.streamingAssistant
+	if (!bridge) return
+	ctx.flushStreamingText()
+	bridge.isError = true
+	bridge.errorMessage = message
+}
+
+/**
+ * the request never reached the backend: nothing was persisted and no event
+ * will ever arrive, so the bridge goes away and the user's own bubble carries
+ * the outcome instead. the message tree is left untouched.
+ */
+export function markRunNotDelivered(ctx: ChatContext): void {
+	ctx.streamingAssistant = null
+	ctx.streamingLeafId = null
+	if (ctx.optimisticUserMessage) {
+		ctx.optimisticUserMessage = { ...ctx.optimisticUserMessage, deliveryFailed: true }
+	}
 }
 
 // content part extraction
@@ -221,13 +315,13 @@ function isAttachmentRefType(value: unknown): value is ResourceAttachment['type'
  *
  * refs live in two places depending on the message representation:
  * - complete (ORM) messages carry them in the dedicated `attachments` column.
- * - streamed (SDK/delta) messages carry them in `metadata_.attachments`.
+ * - streamed (SDK/delta) messages carry them in `metadata.attachments`.
  *
  * this reads both sources and de-dupes by `type:id`, so callers get one
  * uniform list regardless of which representation produced the message.
  */
 export function extractAttachmentRefs(
-	msg: Pick<ApiMessage, 'attachments' | 'metadata_'>
+	msg: Pick<ApiMessage, 'attachments' | 'metadata'>
 ): ResourceAttachment[] {
 	const seen = new Set<string>()
 	const refs: ResourceAttachment[] = []
@@ -244,7 +338,7 @@ export function extractAttachmentRefs(
 	}
 
 	for (const ref of msg.attachments ?? []) push(ref)
-	const metaRefs = msg.metadata_?.attachments
+	const metaRefs = msg.metadata?.attachments
 	if (Array.isArray(metaRefs)) for (const ref of metaRefs) push(ref)
 
 	return refs
@@ -278,9 +372,16 @@ export function sdkPartsToText(parts: unknown): string {
 /**
  * extract run_id from message metadata, or generate a legacy fallback.
  */
-export function getRunId(msg: Pick<ApiMessage, 'metadata_' | 'id'>): string {
+/** block source for plain conversation messages, which belong to no run. */
+const CONVERSATION_RUN = 'conversation'
+
+export function hasRunId(msg: Pick<ApiMessage, 'metadata'>): boolean {
+	return Boolean(msg.metadata && typeof msg.metadata.run_id === 'string')
+}
+
+export function getRunId(msg: Pick<ApiMessage, 'metadata' | 'id'>): string {
 	const runId =
-		msg.metadata_ && typeof msg.metadata_.run_id === 'string' ? msg.metadata_.run_id : null
+		msg.metadata && typeof msg.metadata.run_id === 'string' ? msg.metadata.run_id : null
 	return runId ?? `legacy-${msg.id}`
 }
 
@@ -288,12 +389,10 @@ export function getRunId(msg: Pick<ApiMessage, 'metadata_' | 'id'>): string {
  * extract the agent id that produced a response message, if known.
  */
 export function getMessageAgentId(
-	msg: Pick<ApiMessage, 'sender_agent_id' | 'metadata_'>
+	msg: Pick<ApiMessage, 'sender_agent_id' | 'metadata'>
 ): string | null {
 	if (typeof msg.sender_agent_id === 'string' && msg.sender_agent_id) return msg.sender_agent_id
-	return msg.metadata_ && typeof msg.metadata_.agent_id === 'string'
-		? msg.metadata_.agent_id
-		: null
+	return msg.metadata && typeof msg.metadata.agent_id === 'string' ? msg.metadata.agent_id : null
 }
 
 /**
@@ -417,6 +516,8 @@ export interface BuildRunBlocksInput {
 	optimisticUserMessage: OptimisticUserMessage | null
 	viewingStreamingBranch: boolean
 	runActivities?: RunActivityState[]
+	runFailures?: RunFailureEntry[]
+	systemEvents?: ChatSystemEvent[]
 }
 
 export interface BuildRunBlocksResult {
@@ -439,6 +540,8 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		optimisticUserMessage,
 		viewingStreamingBranch,
 		runActivities = [],
+		runFailures = [],
+		systemEvents = [],
 	} = input
 
 	const blocks: RunBlock[] = []
@@ -448,6 +551,7 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		block: RunBlock
 		sourceRunId: string
 		sourceAgentId: string | null
+		author?: string | null
 		seenToolCalls: Set<string>
 	}
 	let activeBlock: ActiveBlock | null = null
@@ -465,6 +569,50 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		for (const activity of activitiesByMessage.get(messageId) ?? []) {
 			block.items.push({ kind: 'run_activity', activity })
 		}
+	}
+
+	// a failure renders after its anchor message. only the NEWEST failure per
+	// anchor+agent is shown: retrying re-answers that same anchor, so a stack of
+	// them would offer several buttons that all do the identical thing. the
+	// older ones stay in the event log as history.
+	const failuresByMessage = new Map<string, Map<string, RunFailureEntry>>()
+	for (const failure of runFailures) {
+		if (!failure.anchorMessageId) continue
+		const perAgent = failuresByMessage.get(failure.anchorMessageId) ?? new Map()
+		const existing = perAgent.get(failure.agentId)
+		if (!existing || failure.createdAt.getTime() >= existing.createdAt.getTime()) {
+			perAgent.set(failure.agentId, failure)
+		}
+		failuresByMessage.set(failure.anchorMessageId, perAgent)
+	}
+	const failuresFor = (messageId: string): RunFailureEntry[] => {
+		const perAgent = failuresByMessage.get(messageId)
+		if (!perAgent) return []
+		return [...perAgent.values()].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+	}
+
+	const pushRunFailures = (block: RunBlock, messageId: string): void => {
+		for (const failure of failuresFor(messageId)) {
+			// a failure is the run's own output, so it names the block's agent.
+			// without this the block renders the literal "assistant" fallback,
+			// since a run that died produced no message to identify it by.
+			if (!block.agentId) block.agentId = failure.agentId
+			block.items.push({ kind: 'run_failure', failure })
+		}
+	}
+
+	/**
+	 * anchors whose failures are waiting for the answering agent's block.
+	 *
+	 * the failure describes the ANSWER, so it renders with the response rather
+	 * than inside the user's own block.
+	 */
+	const pendingFailureAnchors: string[] = []
+
+	const flushPendingFailures = (block: RunBlock): void => {
+		if (pendingFailureAnchors.length === 0) return
+		const anchors = pendingFailureAnchors.splice(0, pendingFailureAnchors.length)
+		for (const anchor of anchors) pushRunFailures(block, anchor)
 	}
 
 	const createBlock = (
@@ -513,7 +661,32 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		return activeBlock
 	}
 
+	// a system row is not a message: it sits BETWEEN the bubbles at its own
+	// timestamp, in a block of its own, so a run of one author's bubbles breaks
+	// around it the way imessage breaks around a grey row.
+	const orderedSystemEvents = [...systemEvents].sort(
+		(a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+	)
+	let nextSystemEvent = 0
+	const flushSystemEventsUpTo = (until: Date | null): void => {
+		while (nextSystemEvent < orderedSystemEvents.length) {
+			const event = orderedSystemEvents[nextSystemEvent]
+			if (until && event.createdAt.getTime() > until.getTime()) break
+			nextSystemEvent += 1
+			blocks.push({
+				runId: `system:${event.id}`,
+				agentId: null,
+				startedAt: event.createdAt,
+				title: 'system',
+				items: [{ kind: 'system_event', event }],
+				responseRootId: null,
+			})
+			activeBlock = null
+		}
+	}
+
 	for (const msg of messages) {
+		flushSystemEventsUpTo(getMessageCreatedAt(msg))
 		if (streamingAssistant && msg.id === streamingAssistant.messageId) continue
 
 		// tool results don't contribute visible items to blocks - handle early
@@ -537,23 +710,39 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		const sourceRunId = getRunId(msg)
 
 		if (msg.type === 'user') {
-			if (
-				!activeBlock ||
-				activeBlock.sourceRunId !== sourceRunId ||
-				hasResponseItems(activeBlock.block)
-			) {
+			// consecutive messages from one author cluster into one block, whether or
+			// not any of them started a run. the block follows the latest run so the
+			// answer to its last message lands in the same block.
+			const plain = !hasRunId(msg)
+			const author = msg.sender_user_id ?? null
+			// a long silence is not a cluster, however few words crossed it: the
+			// header that dates it needs a seam between blocks to sit in.
+			const continues =
+				activeBlock !== null &&
+				!hasResponseItems(activeBlock.block) &&
+				activeBlock.author !== undefined &&
+				activeBlock.author === author &&
+				!needsTimeHeader(runBlockLatestAt(activeBlock.block), getMessageCreatedAt(msg))
+			if (continues && activeBlock) {
+				if (!plain) activeBlock.sourceRunId = sourceRunId
+			} else {
 				activeBlock = createBlock(
-					sourceRunId,
+					plain ? CONVERSATION_RUN : sourceRunId,
 					null,
 					getMessageCreatedAt(msg),
 					'assistant',
 					msg.id
 				)
+				activeBlock.author = author
 			}
 			const align: 'left' | 'right' =
 				userId && msg.sender_user_id && msg.sender_user_id !== userId ? 'left' : 'right'
 			activeBlock.block.items.push({ kind: 'user', message: msg, align })
 			pushRunActivities(activeBlock.block, msg.id)
+			// a failure anchored on a user message is the ANSWER's outcome, so it
+			// belongs to the responding agent's block - pushed here it would make
+			// the user's own block look like a response and split it off alone.
+			pendingFailureAnchors.push(msg.id)
 			continue
 		}
 
@@ -564,6 +753,8 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		if (block.responseRootId === null) {
 			block.responseRootId = msg.id
 		}
+
+		flushPendingFailures(block)
 
 		if (msg.type === 'assistant') {
 			const text = contentPartsToText(msg.content).trim()
@@ -576,9 +767,34 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 				}
 			}
 			pushRunActivities(block, msg.id)
+			pushRunFailures(block, msg.id)
 			continue
 		}
 	}
+
+	// a run that never started produced no message to attach to, so its failure
+	// still needs a block of its own - it is the only trace the run left.
+	if (pendingFailureAnchors.length > 0) {
+		const anchors = pendingFailureAnchors.splice(0, pendingFailureAnchors.length)
+		for (const anchor of anchors) {
+			const failures = failuresFor(anchor)
+			if (failures.length === 0) continue
+			const block = createBlock(
+				`failure-${anchor}`,
+				failures[0].agentId,
+				failures[0].createdAt,
+				'assistant',
+				anchor
+			).block
+			for (const failure of failures) {
+				block.items.push({ kind: 'run_failure', failure })
+			}
+		}
+	}
+
+	// anything that happened after the last message - a live arrival, most of
+	// the time - lands at the tail, above whatever is still streaming.
+	flushSystemEventsUpTo(null)
 
 	if (streamingAssistant && viewingStreamingBranch) {
 		const sourceRunId = streamingAssistant.runId ?? `legacy-${streamingAssistant.messageId}`
@@ -625,6 +841,7 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 				text: optimisticUserMessage.text,
 				attachments: optimisticUserMessage.attachments,
 				timestamp: optimisticUserMessage.timestamp,
+				deliveryFailed: optimisticUserMessage.deliveryFailed,
 			})
 		}
 
@@ -647,6 +864,7 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 		const userMessagePending = optimisticUserMessage !== null
 		if (
 			hasStreamingText ||
+			streamingAssistant.isError ||
 			(!userMessagePending &&
 				!hasUnresolvedPreviousToolCalls &&
 				!hasUnresolvedStreamingToolCalls)
@@ -674,44 +892,125 @@ export function buildRunBlocks(input: BuildRunBlocksInput): BuildRunBlocksResult
 			text: optimisticUserMessage.text,
 			attachments: optimisticUserMessage.attachments,
 			timestamp: optimisticUserMessage.timestamp,
+			deliveryFailed: optimisticUserMessage.deliveryFailed,
 		})
 	}
 
 	return {
-		blocks: blocks.filter((block) => block.items.length > 0),
+		blocks: withTimeHeaders(blocks.filter((block) => block.items.length > 0)),
 		toolCalls: collectedToolCalls,
 		toolResults: collectedToolResults,
 	}
 }
 
+/** when one item happened, for the items that happen at a moment at all. */
+function runItemAt(item: RunItem): Date | null {
+	switch (item.kind) {
+		case 'user':
+		case 'assistant':
+			return getMessageCreatedAt(item.message)
+		case 'optimistic_user':
+			return item.timestamp
+		case 'run_activity':
+			return item.activity.startedAt
+		case 'run_failure':
+			return item.failure.createdAt
+		case 'system_event':
+			return item.event.createdAt
+		case 'time_header':
+			return item.at
+		default:
+			return null
+	}
+}
+
+/**
+ * the latest moment a block renders.
+ *
+ * a run that thought for an hour ends where its answer landed, not where the
+ * question was asked, so the next gap is measured from there - otherwise every
+ * long run would be followed by a header nobody waited for.
+ */
+export function runBlockLatestAt(block: RunBlock): Date {
+	let latest = block.startedAt
+	for (const item of block.items) {
+		const at = runItemAt(item)
+		if (at && at.getTime() > latest.getTime()) latest = at
+	}
+	return latest
+}
+
+/**
+ * drop a centered time header wherever the conversation went quiet long enough
+ * to need dating.
+ *
+ * a header is a block of its own for the same reason a system row is: it sits
+ * BETWEEN bubbles and breaks the run around it, the way imessage does. the
+ * transcript's opening stamp is not one of these - see `needsTimeHeader`.
+ */
+export function withTimeHeaders(blocks: RunBlock[]): RunBlock[] {
+	const out: RunBlock[] = []
+	let previous: Date | null = null
+	for (const block of blocks) {
+		// only a bubble that lost its own date needs one hung above it: an agent
+		// answer still carries its date on top, and a system row is prose about
+		// the chat rather than something anyone said.
+		const opensWithBubble =
+			block.items[0]?.kind === 'user' || block.items[0]?.kind === 'optimistic_user'
+		if (opensWithBubble && needsTimeHeader(previous, block.startedAt)) {
+			out.push({
+				runId: `time:${block.runId}`,
+				agentId: null,
+				startedAt: block.startedAt,
+				title: 'time',
+				items: [{ kind: 'time_header', at: block.startedAt }],
+				responseRootId: null,
+			})
+		}
+		out.push(block)
+		previous = runBlockLatestAt(block)
+	}
+	return out
+}
+
 // run block queries
 
-export function getBlockResponseItems(block: RunBlock): Array<
-	Exclude<
-		RunItem,
-		| { kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
-		| {
-				kind: 'optimistic_user'
-				text: string
-				attachments: PendingAttachment[]
-				timestamp: Date
-		  }
-	>
-> {
-	return block.items.filter(
-		(
-			item
-		): item is Exclude<
-			RunItem,
-			| { kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
-			| {
-					kind: 'optimistic_user'
-					text: string
-					attachments: PendingAttachment[]
-					timestamp: Date
-			  }
-		> => item.kind !== 'user' && item.kind !== 'optimistic_user'
-	)
+/** items a run block renders as the agent's response - everything a bubble is not. */
+export type ResponseRunItem = Extract<
+	RunItem,
+	{
+		kind:
+			| 'run_activity'
+			| 'assistant'
+			| 'tool'
+			| 'streaming_assistant'
+			| 'streaming_tool'
+			| 'run_failure'
+	}
+>
+
+const RESPONSE_ITEM_KINDS: ReadonlySet<RunItem['kind']> = new Set([
+	'run_activity',
+	'assistant',
+	'tool',
+	'streaming_assistant',
+	'streaming_tool',
+	'run_failure',
+])
+
+export function getBlockResponseItems(block: RunBlock): ResponseRunItem[] {
+	return block.items.filter((item): item is ResponseRunItem => RESPONSE_ITEM_KINDS.has(item.kind))
+}
+
+/** the system rows a block carries; a system block carries nothing else. */
+export function getBlockSystemEvents(block: RunBlock): ChatSystemEvent[] {
+	return block.items.flatMap((item) => (item.kind === 'system_event' ? [item.event] : []))
+}
+
+/** the moment a header block dates, or null for every other kind of block. */
+export function getBlockTimeHeader(block: RunBlock): Date | null {
+	const item = block.items.find((entry) => entry.kind === 'time_header')
+	return item?.kind === 'time_header' ? item.at : null
 }
 
 export function getBlockFirstAssistant(block: RunBlock): ApiMessage | null {
@@ -768,6 +1067,7 @@ export type ResponseSegment =
 	| { type: 'run_activity'; activity: RunActivityState }
 	| { type: 'streaming_assistant'; item: { kind: 'streaming_assistant' } }
 	| { type: 'tool_group'; toolCallIds: string[] }
+	| { type: 'run_failure'; failure: RunFailureEntry }
 
 /**
  * group consecutive tool/streaming_tool items into tool groups.
@@ -795,6 +1095,8 @@ export function groupResponseItems(items: ResponseItem[]): ResponseSegment[] {
 				segments.push({ type: 'run_activity', activity: item.activity })
 			} else if (item.kind === 'streaming_assistant') {
 				segments.push({ type: 'streaming_assistant', item })
+			} else if (item.kind === 'run_failure') {
+				segments.push({ type: 'run_failure', failure: item.failure })
 			}
 		}
 	}

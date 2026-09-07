@@ -1,10 +1,12 @@
 <script lang="ts">
 	import type { Thread } from '$lib/stores/chat.svelte'
 
+	import type { DeleteOriginatedOptions } from '$lib/chat/types'
 	import EmptyState from '$lib/components/EmptyState.svelte'
 	import FloatingScrollTopButton from '$lib/components/FloatingScrollTopButton.svelte'
 	import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
 	import LoadingMoreIndicator from '$lib/components/LoadingMoreIndicator.svelte'
+	import { Skeleton } from '$lib/components/primitives'
 	import type { ResourceProjectOption } from '$lib/components/widgets/ResourceProjectsMenu.svelte'
 	import { device } from '$lib/stores/device.svelte'
 	import { projects } from '$lib/stores/projects.svelte'
@@ -19,7 +21,12 @@
 		isLoggedIn: boolean
 		threads: Thread[]
 		selectedChatId: string | null
+		/** thread the route opened: the list scrolls to it, even far down the list. */
+		revealThreadId: string | null
 		isLoadingMoreThreads: boolean
+		hasLoaded: boolean
+		/** thread-list load failure, so a stuck fetch does not skeleton forever */
+		error: string | null
 		hasMoreThreads: boolean
 		openThreadMenuId: string | null
 		onPrefetchThread: (threadId: string) => void
@@ -29,7 +36,10 @@
 		onCloseMenu: () => void
 		onRequestEdit: (thread: Thread) => void
 		onArchiveThread: (thread: Thread) => void | boolean | Promise<void | boolean>
-		onDeleteThread: (thread: Thread) => void | boolean | Promise<void | boolean>
+		onDeleteThread: (
+			thread: Thread,
+			options: DeleteOriginatedOptions
+		) => void | boolean | Promise<void | boolean>
 	}
 
 	let {
@@ -37,7 +47,10 @@
 		isLoggedIn,
 		threads,
 		selectedChatId,
+		revealThreadId,
 		isLoadingMoreThreads,
+		hasLoaded,
+		error,
 		hasMoreThreads,
 		openThreadMenuId,
 		onPrefetchThread,
@@ -57,6 +70,8 @@
 
 	let listShellEl = $state<HTMLDivElement | null>(null)
 	let listViewportEl = $state<HTMLElement | null>(null)
+	let threadList = $state<SvelteVirtualList<ChatSidebarRow> | null>(null)
+	let revealedThreadId: string | null = null
 
 	const manageableProjectOptions = $derived.by((): ResourceProjectOption[] =>
 		projects.list
@@ -92,6 +107,20 @@
 		for (const project of projects.list) {
 			void resourceAccess.ensure('project', project.id, project.owner_id)
 		}
+	})
+
+	// the list is virtual, so an open thread far down it is not in the DOM to
+	// scroll to: address it by row index instead
+	$effect(() => {
+		const targetId = revealThreadId
+		if (!targetId || !expandedContentVisible) return
+		if (revealedThreadId === targetId) return
+		const index = threadRows.findIndex((row) => row.kind === 'thread' && row.id === targetId)
+		if (index === -1) return
+		const list = threadList
+		if (!list) return
+		revealedThreadId = targetId
+		void list.scroll({ index, align: 'nearest', shouldThrowOnBounds: false })
 	})
 
 	$effect(() => {
@@ -137,6 +166,39 @@
 				</div>
 				<EmptyState label="log in to see your recent chats" compact class="flex-1" />
 			</div>
+		{:else if threads.length === 0 && !hasLoaded && !error}
+			<!-- mirrors the virtual list's own padding so the rows do not shift in -->
+			<div class="flex min-h-0 flex-1 flex-col overflow-hidden pr-1 pl-2">
+				<div class="mt-2 mb-1 flex items-center gap-2 px-2">
+					<ChatBubble class="text-foreground/70 h-4 w-4 shrink-0" />
+					<h3 class="text-foreground/60 text-xs font-semibold uppercase">chats</h3>
+				</div>
+				<div class="flex w-full flex-col gap-0.5">
+					<Skeleton
+						shape="row"
+						count={6}
+						avatar={false}
+						lines={2}
+						height="3.25rem"
+						radius="container"
+					/>
+				</div>
+			</div>
+		{:else if threads.length === 0 && error}
+			<!-- a failed load shows why, not a skeleton that never resolves -->
+			<div class="relative flex min-h-0 flex-1 flex-col px-3">
+				<div class="mt-2 mb-1 flex items-center gap-2 px-2">
+					<ChatBubble class="text-foreground/70 h-4 w-4 shrink-0" />
+					<h3 class="text-foreground/60 text-xs font-semibold uppercase">chats</h3>
+				</div>
+				<div class="absolute inset-0 flex items-center justify-center px-3">
+					<EmptyState
+						label="could not load chats"
+						description="check your connection - your chats will show up once it is back"
+						compact
+					/>
+				</div>
+			</div>
 		{:else if threads.length === 0}
 			<div class="relative flex min-h-0 flex-1 flex-col px-3">
 				<div class="mt-2 mb-1 flex items-center gap-2 px-2">
@@ -150,6 +212,7 @@
 		{:else}
 			<div bind:this={listShellEl} class="relative min-h-0 w-full flex-1 overflow-hidden">
 				<SvelteVirtualList
+					bind:this={threadList}
 					items={threadRows}
 					defaultEstimatedItemHeight={54}
 					bufferSize={16}
@@ -175,7 +238,7 @@
 							<div
 								class={row.thread.id === lastThreadId && !isLoadingMoreThreads
 									? device.isMobile
-										? 'pb-20'
+										? 'pb-(--safe-area-bottom)'
 										: 'pb-5'
 									: ''}
 							>

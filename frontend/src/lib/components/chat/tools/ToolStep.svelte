@@ -5,19 +5,26 @@
 	import { extractFileParts, extractMediaParts, hasAttachmentParts } from '$lib/chat/helpers'
 	import AttachmentRefs from '$lib/components/chat/AttachmentRefs.svelte'
 	import MediaAttachments from '$lib/components/chat/MediaAttachments.svelte'
+	import DigitRoll from '$lib/components/common/DigitRoll.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte'
 	import Component from '$lib/components/icons/Component.svelte'
-	import { getThinkElapsed, getToolSummary, isResolverTool, type ToolExecution } from '$lib/tools'
+	import {
+		getThinkElapsed,
+		getToolSummary,
+		isResolverTool,
+		THINK_ACTIVE_LABEL,
+		type ToolExecution,
+	} from '$lib/tools'
 	import { parseJsonRecord, readRecordArray, readRecordField } from '$lib/utils/records'
 	import { onDestroy } from 'svelte'
 	import { fade } from 'svelte/transition'
 	import CalendarEventBody from './steps/CalendarEventBody.svelte'
 	import CodeInterpreterBody from './steps/CodeInterpreterBody.svelte'
 	import FetchUrlBody from './steps/FetchUrlBody.svelte'
-	import MemoryRecallBody from './steps/MemoryRecallBody.svelte'
 	import ResourceBody from './steps/ResourceBody.svelte'
 	import WebSearchBody from './steps/WebSearchBody.svelte'
+	import ThinkingVerb from './ThinkingVerb.svelte'
 	import ToolIcon from './ToolIcon.svelte'
 
 	interface Props {
@@ -64,6 +71,9 @@
 		const server = getThinkElapsed(execution)
 		return server ?? null
 	})
+	let isThinking = $derived(name === 'think' && isActive)
+	/** a streamed thought title wins over the rotating verbs. */
+	let rotatesVerbs = $derived(isThinking && summary.title === THINK_ACTIVE_LABEL)
 
 	// collapsible body
 	let calendarResultCount = $derived.by(() => {
@@ -130,9 +140,38 @@
 	}
 </script>
 
+{#snippet titleContent()}
+	{#if rotatesVerbs}
+		<ThinkingVerb className="text-foreground/90" />
+	{:else if isActive}
+		<ShimmerText className="text-foreground/90">{summary.title}</ShimmerText>
+	{:else}
+		<span class="text-foreground/70">{summary.title}</span>
+	{/if}
+	{#if summary.subtitle}
+		<span class="text-foreground/40 max-w-full min-w-0 text-xs wrap-break-word"
+			>{subtitleText(summary.subtitle)}</span
+		>
+	{/if}
+	{#if name === 'think' && thinkDisplay && summary.title !== `thought for ${thinkDisplay}s`}
+		<DigitRoll className="text-foreground/50 text-xs" value={`${thinkDisplay}s`} />
+	{/if}
+	{#if summary.mcpServerName}
+		<span
+			class="bg-foreground/8 text-foreground/55 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px]"
+		>
+			<Component class="h-3 w-3 shrink-0" />
+			{summary.mcpServerName}
+		</span>
+	{/if}
+{/snippet}
+
 <div class="flex items-start gap-2.5 py-1" in:fade={{ duration: 120 }}>
 	<!-- icon column - vertically centered with title row -->
-	<div class="relative mt-px flex h-5 w-6 shrink-0 items-center justify-center">
+	<div
+		class="relative mt-px flex h-5 w-6 shrink-0 items-center justify-center"
+		class:think-breathing={isThinking}
+	>
 		<ToolIcon toolName={name} {isFailed} />
 	</div>
 
@@ -145,27 +184,7 @@
 				class="hover:text-foreground flex min-w-0 cursor-pointer flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-left text-sm transition-colors"
 				onclick={toggleExpand}
 			>
-				{#if isActive}
-					<ShimmerText className="text-foreground/90">{summary.title}</ShimmerText>
-				{:else}
-					<span class="text-foreground/70">{summary.title}</span>
-				{/if}
-				{#if summary.subtitle}
-					<span class="text-foreground/40 max-w-full min-w-0 text-xs wrap-break-word"
-						>{subtitleText(summary.subtitle)}</span
-					>
-				{/if}
-				{#if name === 'think' && thinkDisplay && summary.title !== `thought for ${thinkDisplay}s`}
-					<span class="text-foreground/50 text-xs tabular-nums">{thinkDisplay}s</span>
-				{/if}
-				{#if summary.mcpServerName}
-					<span
-						class="bg-foreground/8 text-foreground/55 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px]"
-					>
-						<Component class="h-3 w-3 shrink-0" />
-						{summary.mcpServerName}
-					</span>
-				{/if}
+				{@render titleContent()}
 				<ChevronRight
 					class="text-foreground/40 h-3 w-3 transition-transform duration-150 {isExpanded
 						? 'rotate-90'
@@ -174,27 +193,7 @@
 			</button>
 		{:else}
 			<div class="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-sm">
-				{#if isActive}
-					<ShimmerText className="text-foreground/90">{summary.title}</ShimmerText>
-				{:else}
-					<span class="text-foreground/70">{summary.title}</span>
-				{/if}
-				{#if summary.subtitle}
-					<span class="text-foreground/40 max-w-full min-w-0 text-xs wrap-break-word"
-						>{subtitleText(summary.subtitle)}</span
-					>
-				{/if}
-				{#if name === 'think' && thinkDisplay && summary.title !== `thought for ${thinkDisplay}s`}
-					<span class="text-foreground/50 text-xs tabular-nums">{thinkDisplay}s</span>
-				{/if}
-				{#if summary.mcpServerName}
-					<span
-						class="bg-foreground/8 text-foreground/55 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px]"
-					>
-						<Component class="h-3 w-3 shrink-0" />
-						{summary.mcpServerName}
-					</span>
-				{/if}
+				{@render titleContent()}
 			</div>
 		{/if}
 
@@ -205,8 +204,6 @@
 					<WebSearchBody {execution} />
 				{:else if name === 'fetch_url'}
 					<FetchUrlBody {execution} />
-				{:else if name === 'memory_recall'}
-					<MemoryRecallBody {execution} />
 				{:else if calendarResultCount > 0 && (name === 'calendar_event_get' || name === 'calendar_event_write')}
 					<CalendarEventBody {execution} />
 				{:else if name === 'code_interpreter'}
@@ -239,3 +236,29 @@
 		{/if}
 	</div>
 </div>
+
+<style>
+	/* a thought in progress breathes on the shimmer's cadence, then settles. */
+	.think-breathing {
+		animation: think-breathe 1.8s ease-in-out infinite;
+		transform-origin: center;
+	}
+
+	@keyframes think-breathe {
+		0%,
+		100% {
+			transform: scale(1) rotate(0deg);
+			opacity: 0.8;
+		}
+		50% {
+			transform: scale(1.08) rotate(-3deg);
+			opacity: 1;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.think-breathing {
+			animation: none;
+		}
+	}
+</style>

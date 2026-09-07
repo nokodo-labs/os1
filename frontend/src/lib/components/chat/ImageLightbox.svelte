@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { portal } from '$lib/actions/portal'
+	import { portal } from '$lib/attachments/portal'
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
@@ -254,7 +254,7 @@
 </script>
 
 {#if open}
-	<div use:portal>
+	<div {@attach portal()}>
 		<div
 			class="fixed inset-0 z-10000 flex items-center justify-center bg-black/85 backdrop-blur-sm"
 			style="touch-action: none; overscroll-behavior: contain;"
@@ -312,7 +312,7 @@
 					bind:this={imgEl}
 					{src}
 					{alt}
-					class="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl select-none"
+					class="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
 					style="transform: scale({scale}) translate({translateX / scale}px, {translateY /
 						scale}px); transition: {isPanning || isPinching
 						? 'none'

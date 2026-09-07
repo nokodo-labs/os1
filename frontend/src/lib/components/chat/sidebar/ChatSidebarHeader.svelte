@@ -54,7 +54,7 @@
 				<div
 					class="text-foreground absolute flex scale-75 items-center justify-center opacity-0 transition-all duration-300 group-hover:scale-100 group-hover:opacity-100"
 				>
-					<Sidebar class="h-4 w-4" />
+					<Sidebar variant="solid" class="h-4 w-4" />
 				</div>
 			{/if}
 		</div>

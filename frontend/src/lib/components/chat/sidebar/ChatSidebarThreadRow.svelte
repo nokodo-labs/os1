@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { api } from '$lib/api/client'
+	import { contextmenu, type ContextMenuAnchor } from '$lib/attachments/contextmenu'
+	import { THREAD_ORIGINATED_TOGGLE } from '$lib/chat/threadActions'
+	import type { DeleteOriginatedOptions } from '$lib/chat/types'
 	import SidebarListItem from '$lib/components/SidebarListItem.svelte'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import type { Thread } from '$lib/stores/chat.svelte'
@@ -10,7 +13,7 @@
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
-	import { MenuItem, PopupMenu } from '$lib/components/primitives'
+	import { MenuItem, MenuSeparator, PopupMenu } from '$lib/components/primitives'
 	import type { ResourceProjectOption } from '$lib/components/widgets/ResourceProjectsMenu.svelte'
 	import ResourceProjectsMenu from '$lib/components/widgets/ResourceProjectsMenu.svelte'
 	import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
@@ -35,7 +38,10 @@
 		onCloseMenu: () => void
 		onRequestEdit: (thread: Thread) => void
 		onArchiveThread: (thread: Thread) => void | boolean | Promise<void | boolean>
-		onDeleteThread: (thread: Thread) => void | boolean | Promise<void | boolean>
+		onDeleteThread: (
+			thread: Thread,
+			options: DeleteOriginatedOptions
+		) => void | boolean | Promise<void | boolean>
 		projectOptions?: ResourceProjectOption[]
 	}
 
@@ -78,6 +84,14 @@
 	)
 
 	let menuButtonEl = $state<HTMLElement | null>(null)
+	let contextAnchor = $state<ContextMenuAnchor | null>(null)
+
+	/** right-click / hold anywhere on the row opens the same menu, at the gesture. */
+	function openContextMenu(anchor: ContextMenuAnchor): void {
+		contextAnchor = anchor
+		menuButtonEl = null
+		if (openThreadMenuId !== thread.id) onToggleMenu(thread.id)
+	}
 
 	$effect(() => {
 		const accessKey = `${thread.id}:${resourceAccess.version}`
@@ -102,7 +116,11 @@
 	}
 </script>
 
-<div class="group/chat relative min-w-0" role="listitem">
+<div
+	class="group/chat relative min-w-0"
+	role="listitem"
+	{@attach contextmenu({ onOpen: openContextMenu, disabled: !hasThreadActions })}
+>
 	<SidebarListItem
 		{selected}
 		radiusClass="rounded-container"
@@ -181,6 +199,7 @@
 					onclick={(e) => {
 						e.stopPropagation()
 						if (!hasThreadActions) return
+						contextAnchor = null
 						if (openThreadMenuId !== thread.id) {
 							menuButtonEl = e.currentTarget as HTMLElement
 						}
@@ -221,11 +240,13 @@
 	<PopupMenu
 		open={hasThreadActions && openThreadMenuId === thread.id}
 		anchorEl={menuButtonEl}
+		anchorPoint={contextAnchor}
 		onClose={onCloseMenu}
 		data-thread-menu
 	>
 		{#if thread}
 			<MenuItem
+				icon={Share}
 				onclick={(e) => {
 					e.stopPropagation()
 					onCloseMenu()
@@ -236,29 +257,28 @@
 					})
 				}}
 			>
-				{#snippet icon()}<Share class="size-full" strokeWidth="2.1" />{/snippet}
 				share
 			</MenuItem>
 		{/if}
 		{#if canEditThread}
 			<MenuItem
+				icon={InfoCircle}
 				onclick={(e) => {
 					e.stopPropagation()
 					onCloseMenu()
 					onRequestEdit(thread)
 				}}
 			>
-				{#snippet icon()}<InfoCircle variant="solid" class="size-full" />{/snippet}
 				properties
 			</MenuItem>
 			<MenuItem
+				icon={ArchiveBox}
 				onclick={(e) => {
 					e.stopPropagation()
 					onCloseMenu()
 					void onArchiveThread(thread)
 				}}
 			>
-				{#snippet icon()}<ArchiveBox variant="solid" class="size-full" />{/snippet}
 				archive
 			</MenuItem>
 			{#if canManageProjects}
@@ -270,16 +290,16 @@
 			{/if}
 		{/if}
 		{#if canDeleteThread}
-			<div class="bg-foreground/15 my-1 h-px w-full"></div>
-			<div class="mt-1">
-				<DeleteButton
-					confirm={true}
-					stopPropagation={true}
-					onTrigger={onCloseMenu}
-					modalText={{ title: 'delete chat?', description: thread.title || 'new chat' }}
-					onDelete={() => onDeleteThread(thread)}
-				/>
-			</div>
+			<MenuSeparator />
+			<DeleteButton
+				confirm={true}
+				stopPropagation={true}
+				onTrigger={onCloseMenu}
+				modalText={{ title: 'delete chat?', description: thread.title || 'new chat' }}
+				modalToggle={THREAD_ORIGINATED_TOGGLE}
+				onDelete={(deleteOriginatedResources) =>
+					onDeleteThread(thread, { deleteOriginatedResources })}
+			/>
 		{/if}
 	</PopupMenu>
 </div>

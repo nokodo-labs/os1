@@ -17,21 +17,21 @@ export class SteeringRunNotFoundError extends Error {
 }
 
 export function getMessageSteeringState(
-	message: Pick<ApiMessage, 'metadata_'>
+	message: Pick<ApiMessage, 'metadata'>
 ): SteeringState | null {
-	const meta = (message.metadata_ ?? {}) as Record<string, unknown>
+	const meta = (message.metadata ?? {}) as Record<string, unknown>
 	const state = meta.steering_state
 	if (state === 'queued' || state === 'injected' || state === 'dropped') return state
 	return null
 }
 
-export function getMessageSteeringRunId(message: Pick<ApiMessage, 'metadata_'>): string | null {
-	const meta = (message.metadata_ ?? {}) as Record<string, unknown>
+export function getMessageSteeringRunId(message: Pick<ApiMessage, 'metadata'>): string | null {
+	const meta = (message.metadata ?? {}) as Record<string, unknown>
 	return typeof meta.run_id === 'string' ? meta.run_id : null
 }
 
-export function getMessageClientSteeringId(message: Pick<ApiMessage, 'metadata_'>): string | null {
-	const meta = (message.metadata_ ?? {}) as Record<string, unknown>
+export function getMessageClientSteeringId(message: Pick<ApiMessage, 'metadata'>): string | null {
+	const meta = (message.metadata ?? {}) as Record<string, unknown>
 	return typeof meta.client_steering_id === 'string' ? meta.client_steering_id : null
 }
 
@@ -51,6 +51,7 @@ export async function steerRun(
 	const { data, error } = await api.POST('/v1/runs/{run_id}/steer', {
 		params: { path: { run_id: runId } },
 		body: {
+			form: 'text',
 			input,
 			parent_id: parentId,
 			client_steering_id: clientSteeringId,

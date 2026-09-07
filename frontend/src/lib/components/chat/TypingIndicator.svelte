@@ -1,43 +1,71 @@
 <script lang="ts">
 	/**
-	 * 3-dot iMessage-style typing indicator.
-	 * shown when other users are typing in the current thread.
+	 * the typing bubble: three dots where the next incoming message will land,
+	 * with the face of whoever is composing beside it. several composers share
+	 * one bubble and stack their faces, the way a group thread reads in iMessage.
 	 */
 
+	import ConversationAvatar from '$lib/components/messages/ConversationAvatar.svelte'
+	import type { ConversationFace } from '$lib/utils/conversationDisplay'
+
 	interface Props {
-		/** set of user IDs currently typing */
-		typingUserIds: ReadonlySet<string>
-		/** optional lookup to show names instead of "someone" */
-		userNameById?: ReadonlyMap<string, string>
+		/** people composing right now: other humans only, never you, never agents */
+		composers: ConversationFace[]
+		/**
+		 * whose typing it is. a group needs the faces; a DM does not - every
+		 * incoming bubble there is already the one other person.
+		 */
+		showFaces?: boolean
 		class?: string
 	}
 
-	let { typingUserIds, userNameById, class: className = '' }: Props = $props()
+	let { composers, showFaces = true, class: className = '' }: Props = $props()
 
-	const isVisible = $derived(typingUserIds.size > 0)
+	/** past a few faces the stack stops reading; the rest are named in the label. */
+	const AVATAR_LIMIT = 3
+	const shownFaces = $derived(composers.slice(0, AVATAR_LIMIT))
+	const isStacked = $derived(shownFaces.length > 1)
 
 	const label = $derived.by(() => {
-		if (typingUserIds.size === 1) {
-			const uid = [...typingUserIds][0]
-			const name = userNameById?.get(uid) ?? 'someone'
-			return `${name} is typing`
-		}
-		return 'others are typing'
+		const names = composers.map((face) => face.label)
+		if (names.length === 0) return ''
+		if (names.length === 1) return `${names[0]} is typing`
+		if (names.length === 2) return `${names[0]} and ${names[1]} are typing`
+		return `${names[0]}, ${names[1]} and ${names.length - 2} others are typing`
 	})
 </script>
 
-{#if isVisible}
+{#if composers.length > 0}
 	<div
-		class="text-foreground/50 flex items-center gap-2 px-3 py-1.5 text-xs {className}"
+		class="flex items-end gap-2 {className}"
 		aria-live="polite"
 		aria-label={label}
+		data-typing-indicator
 	>
-		<span class="typing-dots" aria-hidden="true">
-			<span class="typing-dot"></span>
-			<span class="typing-dot"></span>
-			<span class="typing-dot"></span>
-		</span>
-		<span class="select-none">{label}</span>
+		{#if showFaces}
+			<div class="flex shrink-0 items-end -space-x-2">
+				{#each shownFaces as face (face.id)}
+					<div class="ring-card/80 rounded-full" class:ring-2={isStacked}>
+						<ConversationAvatar
+							faces={[face]}
+							isGroup={false}
+							sizeClass="size-8"
+							textClass="text-xs"
+						/>
+					</div>
+				{/each}
+			</div>
+		{/if}
+		<!-- the incoming bubble's own surface: neutral tint over a heavy blur -->
+		<div
+			class="bg-foreground/10 flex items-center rounded-3xl px-3.5 py-3 backdrop-blur-[40px] [backdrop-saturate:180%]"
+		>
+			<span class="typing-dots text-foreground/70" aria-hidden="true">
+				<span class="typing-dot"></span>
+				<span class="typing-dot"></span>
+				<span class="typing-dot"></span>
+			</span>
+		</div>
 	</div>
 {/if}
 
@@ -45,12 +73,12 @@
 	.typing-dots {
 		display: inline-flex;
 		align-items: center;
-		gap: 3px;
+		gap: 4px;
 	}
 
 	.typing-dot {
-		width: 6px;
-		height: 6px;
+		width: 7px;
+		height: 7px;
 		border-radius: 50%;
 		background: currentColor;
 		opacity: 0.4;
@@ -75,6 +103,13 @@
 		30% {
 			transform: translateY(-4px);
 			opacity: 1;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.typing-dot {
+			animation: none;
+			opacity: 0.6;
 		}
 	}
 </style>

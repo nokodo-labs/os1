@@ -22,6 +22,7 @@ export type {
 export {
 	AUTO_SCROLL_BUFFER_PX,
 	blockHasStreamingAssistant,
+	branchAlternativeCount,
 	buildAgentLookup,
 	buildMessageChildren,
 	buildRunBlocks,
@@ -33,14 +34,18 @@ export {
 	extractMediaParts,
 	getBlockFirstAssistant,
 	getBlockResponseItems,
+	getBlockSystemEvents,
+	getBlockTimeHeader,
 	getMessageCreatedAt,
 	getRunId,
 	getUserRunItemTimestamp,
 	groupResponseItems,
 	hasAttachmentParts,
+	isPlaceholderMessageId,
 	pendingAttachmentsToFileParts,
 	pendingAttachmentsToMediaParts,
 	sdkPartsToText,
+	siblingIdsOfKind,
 	upsertToolCalls,
 	type ApiMessage,
 	type BuildRunBlocksInput,
@@ -63,11 +68,67 @@ export {
 	runActivityKey,
 } from './runActivities'
 
+// durable run failures
+export {
+	isFailureOutstanding,
+	parseRunFailureEvent,
+	RUN_ERROR_EVENT_TYPE,
+	runFailureLabel,
+} from './runFailures'
+
+// inline system rows (membership, renames) + the beginning-of-chat header
+export {
+	beginningOfChatSegments,
+	CHAT_SYSTEM_EVENT_TYPES,
+	parseChatSystemEvents,
+	systemEventSegments,
+	systemEventUserIds,
+	type BeginningOfChatInput,
+	type ChatSystemEvent,
+	type ChatSystemEventKind,
+	type SystemNameResolver,
+	type SystemRowSegment,
+} from './systemEvents'
+
+// transcript time headers + the time a receipt carries
+export {
+	clockTime,
+	dayStamp,
+	formatTimeHeader,
+	needsTimeHeader,
+	receiptStamp,
+	RECEIPT_STAMP_GAP_MS,
+	timeHeaderSegments,
+	TIME_HEADER_GAP_MS,
+} from './chatTimestamps'
+
+// message-author identity, resolved from the thread roster
+export {
+	buildParticipantIndex,
+	composingFaces,
+	resolveMessageAuthor,
+	type MessageAuthor,
+} from './participants'
+
+// read receipts, derived from live read cursors
+export {
+	cursorCoversMessage,
+	messageReadState,
+	messageReceipt,
+	readBy,
+	readCompletedAt,
+	receiptAudience,
+	type MessageReadState,
+	type MessageReceipt,
+	type ReadCursor,
+} from './readReceipts'
+
 // tree navigation
 export {
 	findRunUserMessage,
 	getLatestLeaf,
 	isOnStreamingBranch,
+	reparentSuccessors,
 	switchBranch,
 } from './treeNavigation'
 
@@ -95,6 +156,9 @@ export {
 
 // event subscriptions
 export { sendTypingEvent, subscribeToChatEvents } from './eventSubscriptions.svelte'
+
+// outgoing typing signal
+export { createTypingSignal, TYPING_HEARTBEAT_MS, type TypingSignal } from './typingSignal'
 
 // thread actions
 export { deleteThread, unarchiveThread, updateThread } from './threadActions'

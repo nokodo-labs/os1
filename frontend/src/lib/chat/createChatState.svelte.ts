@@ -14,9 +14,10 @@ import { session } from '$lib/stores/session.svelte'
 import { ToolExecutionTracker } from '$lib/tools'
 import { tick } from 'svelte'
 import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity'
-import { loadOlderMessages, loadTree } from './dataLoader'
+import { loadNewerMessages, loadOlderMessages, loadTree } from './dataLoader'
 import { sendTypingEvent, subscribeToChatEvents } from './eventSubscriptions.svelte'
 import {
+	AUTO_SCROLL_BUFFER_PX,
 	buildAgentLookup,
 	buildMessageChildren,
 	buildRunBlocks,
@@ -24,6 +25,7 @@ import {
 	type RunBlock,
 	type StreamingAssistantState,
 } from './helpers'
+import { buildParticipantIndex, buildThreadAgentIndex } from './participants'
 import { reduceRunActivityEvent, runActivityKey } from './runActivities'
 import {
 	dropSteering as dropSteeringApi,
@@ -31,6 +33,7 @@ import {
 	steerRun as steerRunApi,
 } from './steering'
 import { resumeCreateAndRun } from './streamProcessor'
+import type { ChatSystemEvent } from './systemEvents'
 import { findRunUserMessage, switchBranch } from './treeNavigation'
 import type {
 	ApiCitation,
@@ -40,6 +43,7 @@ import type {
 	QueuedSteeringMessage,
 	RunActivityEvent,
 	RunActivityState,
+	RunFailureEntry,
 } from './types'
 import {
 	deleteUserMessage,
@@ -80,6 +84,15 @@ export function createChatState(): ChatState {
 	let pendingStreamMessageId: string | null = null
 	let streamTextRaf: number | null = null
 
+	// a run that has stopped emitting text is still running, and a bubble frozen
+	// mid-sentence reads as broken. after this long without a token the text
+	// placeholder comes back at the end of what is written so far. long enough
+	// that ordinary between-token pauses never trip it, short enough that a real
+	// stall is admitted while the reader is still looking at it.
+	const STREAM_TEXT_STALL_MS = 2000
+	let streamTextStalled = $state(false)
+	let streamStallTimer: ReturnType<typeof setTimeout> | null = null
+
 	// thread state (activeThread in chatStore is the source of truth)
 	let isThreadLoading = $state(false)
 	let hasLoadedBranch = $state(false)
@@ -90,6 +103,12 @@ export function createChatState(): ChatState {
 	let messageSkip = $state(0)
 	let hasMoreMessages = $state(true)
 	let isLoadingOlderMessages = $state(false)
+	let hasNewerMessages = $state(false)
+	let isLoadingNewerMessages = $state(false)
+	let branchCursorTowardRoot = $state<string | null>(null)
+	let branchCursorTowardLeaf = $state<string | null>(null)
+	let initialAnchorMessageId = $state<string | null>(null)
+	const siblingCounts = new SvelteMap<string, number>()
 
 	// message tree (for branching)
 	const messageTree = new SvelteMap<string, ApiMessage>()
@@ -99,6 +118,10 @@ export function createChatState(): ChatState {
 	let scrollContainer = $state<HTMLElement | null>(null)
 	let inputOverlay = $state<HTMLElement | null>(null)
 	let autoScroll = $state(true)
+	// whether the transcript is actually taller than its viewport. a wheel tick
+	// releases the pin even when there is nothing to scroll, so "not pinned" on
+	// its own is not evidence that a scroll-to-bottom affordance is useful.
+	let canScroll = $state(false)
 	let initialScrollDone = $state(false)
 	let lastThreadId = $state<string | null>(null)
 	let inputOverlayHeight = $state(0)
@@ -109,6 +132,12 @@ export function createChatState(): ChatState {
 	// pin re-evaluation even inside a programmatic window).
 	let programmaticScrollUntil = 0
 	let userScrollUntil = 0
+	// scroll offset the last paging decision saw, so a trigger fires only when
+	// the view actually MOVED toward that edge - a page that lands on an edge
+	// and stays there never re-arms itself.
+	let lastPagingScrollTop = 0
+	// single-flight guard for the viewport backfill below
+	let backfillRunning = false
 	// monotonic request counter for the scroll coalescer: the chain re-runs only
 	// when a genuinely new request arrived (no sticky boolean -> no busy loop).
 	let scrollReqSeq = 0
@@ -126,6 +155,10 @@ export function createChatState(): ChatState {
 	const eventMessageIdsPending = new SvelteSet<string>()
 	let eventsInFlight = $state(false)
 	const runActivities = new SvelteMap<string, RunActivityState>()
+	// keyed by event id: the same failure arrives live and again on reload
+	const runFailures = new SvelteMap<string, RunFailureEntry>()
+	// inline system rows (membership, renames), keyed the same way
+	const systemEvents = new SvelteMap<string, ChatSystemEvent>()
 
 	// citation sources - message-scoped map populated from citation.sources WS events.
 	// keyed by assistant message_id so each message has its own citation set.
@@ -136,9 +169,6 @@ export function createChatState(): ChatState {
 	// last finalized assistant message id - fallback target for late WS citation
 	// events that arrive after the SSE stream has already finalized the message.
 	let citationTargetMessageId: string | null = null
-
-	// typing indicators (other users typing in this thread)
-	const typingUsers = new SvelteSet<string>()
 
 	// abort controller for streaming
 	let runAbortController: AbortController | null = null
@@ -179,10 +209,20 @@ export function createChatState(): ChatState {
 			queuedSteeringMessages.length > 0
 	)
 
-	const agentNameById = $derived(buildAgentLookup(agents.list, (a) => a.name))
-	const agentAvatarById = $derived(
-		buildAgentLookup(agents.list, (a) => a.profile_image_url ?? null)
-	)
+	/** agents in THIS thread; authoritative over the viewer-scoped agent store. */
+	const threadAgentById = $derived(buildThreadAgentIndex(chatStore.activeThread))
+	const agentNameById = $derived.by(() => {
+		const names = buildAgentLookup(agents.list, (a) => a.name)
+		for (const [id, agent] of threadAgentById) names.set(id, agent.name)
+		return names
+	})
+	const agentAvatarById = $derived.by(() => {
+		const avatars = buildAgentLookup(agents.list, (a) => a.profile_image_url ?? null)
+		for (const [id, agent] of threadAgentById) avatars.set(id, agent.avatarUrl)
+		return avatars
+	})
+	/** human identities for this thread, resolved from its participant roster. */
+	const participantById = $derived(buildParticipantIndex(chatStore.activeThread))
 
 	function flushStreamingText(): void {
 		if (streamTextRaf !== null) {
@@ -199,8 +239,27 @@ export function createChatState(): ChatState {
 		pendingStreamMessageId = null
 	}
 
+	/** stop watching for a stall and clear it (stream ended, or swapped bubble). */
+	function resetStreamTextStall(): void {
+		if (streamStallTimer !== null) {
+			clearTimeout(streamStallTimer)
+			streamStallTimer = null
+		}
+		streamTextStalled = false
+	}
+
+	/** a token landed: clear any stall and re-arm the watch for the next one. */
+	function noteStreamingTextChunk(): void {
+		resetStreamTextStall()
+		streamStallTimer = setTimeout(() => {
+			streamStallTimer = null
+			streamTextStalled = true
+		}, STREAM_TEXT_STALL_MS)
+	}
+
 	function appendStreamingText(text: string): void {
 		if (!streamingAssistant || !text) return
+		noteStreamingTextChunk()
 		if (
 			pendingStreamMessageId !== null &&
 			pendingStreamMessageId !== streamingAssistant.messageId
@@ -229,6 +288,8 @@ export function createChatState(): ChatState {
 			optimisticUserMessage,
 			viewingStreamingBranch,
 			runActivities: Array.from(runActivities.values()),
+			runFailures: Array.from(runFailures.values()),
+			systemEvents: Array.from(systemEvents.values()),
 		})
 
 		// apply side effects: register tool calls and results
@@ -251,10 +312,45 @@ export function createChatState(): ChatState {
 		}
 	}
 
+	/**
+	 * whether THIS client queued the message as text steering.
+	 *
+	 * invocation is server-owned, so `run.steering.*` also fires for ordinary
+	 * messages a user simply wrote. only a message the client queued itself is
+	 * a ghost bubble; everything else is run progress and must render normally.
+	 */
+	function ownsSteeringMessage(messageId: string): boolean {
+		if (queuedSteeringById.has(messageId)) return true
+		for (const serverId of queuedSteeringServerIdsByClientId.values()) {
+			if (serverId === messageId) return true
+		}
+		return false
+	}
+
 	/** merge a message-anchored run activity event and refresh visible run blocks. */
 	function processRunActivityEvent(event: RunActivityEvent): void {
 		const key = runActivityKey(event)
 		runActivities.set(key, reduceRunActivityEvent(runActivities.get(key), event))
+		rebuildRunBlocks()
+	}
+
+	/** record a durable run failure. immutable, so a known id is left alone. */
+	function recordRunFailure(failure: RunFailureEntry): void {
+		if (runFailures.has(failure.id)) return
+		runFailures.set(failure.id, failure)
+		// the transient error bubble and this record describe the SAME failure.
+		// the durable one survives reload and reaches every participant, so it
+		// wins; keeping both renders the failure twice.
+		if (streamingAssistant?.isError && streamingAssistant.runId === failure.runId) {
+			streamingAssistant = null
+		}
+		rebuildRunBlocks()
+	}
+
+	/** record an inline system row. immutable, so a known id is left alone. */
+	function recordSystemEvent(event: ChatSystemEvent): void {
+		if (systemEvents.has(event.id)) return
+		systemEvents.set(event.id, event)
 		rebuildRunBlocks()
 	}
 
@@ -365,7 +461,7 @@ export function createChatState(): ChatState {
 		message: ApiMessage,
 		options?: { runId?: string; parentId?: string | null; createdAt?: string | null }
 	): ApiMessage {
-		const meta = (message.metadata_ ?? {}) as Record<string, unknown>
+		const meta = (message.metadata ?? {}) as Record<string, unknown>
 		const runId = options?.runId ?? (typeof meta.run_id === 'string' ? meta.run_id : null)
 		const metadata: Record<string, unknown> = { ...meta, steering_state: 'injected' }
 		if (runId) metadata.run_id = runId
@@ -375,7 +471,7 @@ export function createChatState(): ChatState {
 			parent_id: options?.parentId ?? message.parent_id,
 			created_at: options?.createdAt ?? message.created_at,
 			updated_at: options?.createdAt ?? message.updated_at,
-			metadata_: metadata,
+			metadata: metadata,
 			id: messageId,
 		}
 	}
@@ -406,7 +502,7 @@ export function createChatState(): ChatState {
 			type: 'user',
 			content,
 			tool_calls: [],
-			metadata_: metadata,
+			metadata: metadata,
 			sender_agent_id: null,
 			sender_user_id: currentUserId,
 			created_at: createdAt,
@@ -426,6 +522,11 @@ export function createChatState(): ChatState {
 			messageTree.get(messageId) ??
 			(queued ? queuedMessageFallback(messageId, queued) : null)
 		if (!source) return false
+		// an injected steering message graduates a ghost bubble into the thread.
+		// a message already sitting in the tree that this client never queued is
+		// an ordinary one a server-owned catch-up handed to the run, so marking
+		// it injected would restyle real conversation as steering.
+		if (!queued && !message && messageTree.has(messageId)) return false
 		const injected = injectedMessage(messageId, source, options)
 		queuedSteeringById.delete(messageId)
 		messageTree.set(messageId, injected)
@@ -456,6 +557,13 @@ export function createChatState(): ChatState {
 	const PROGRAMMATIC_SMOOTH_MS = 700
 	const USER_GESTURE_MS = 500
 
+	// how close to each end of the loaded window a reader has to get before the
+	// next page is fetched.
+	const PAGE_UP_TRIGGER_PX = 80
+	const PAGE_DOWN_TRIGGER_PX = 160
+	// pages one viewport backfill may pull before it gives up
+	const BACKFILL_MAX_PAGES = 3
+
 	function nextAnimationFrame(): Promise<void> {
 		return new Promise((resolve) => requestAnimationFrame(() => resolve()))
 	}
@@ -477,28 +585,152 @@ export function createChatState(): ChatState {
 	function onUserScrollGesture(direction: 'up' | 'down' | 'unknown' = 'unknown') {
 		userScrollUntil = performance.now() + USER_GESTURE_MS
 		if (direction === 'up') autoScroll = false
+		// a thread opens parked ON an edge, and a gesture against an edge moves
+		// nothing - so it fires no scroll event at all. the pull is then the only
+		// signal paging ever gets that the reader wants what is past it.
+		const toward = direction === 'unknown' ? restingEdge() : direction
+		if (toward) pageTowardEdge(toward)
+	}
+
+	/** the end the view sits against, when it sits against exactly one. */
+	function restingEdge(): 'up' | 'down' | null {
+		if (!scrollContainer) return null
+		const atTop = scrollContainer.scrollTop <= PAGE_UP_TRIGGER_PX
+		const atBottom = distanceToBottom() <= PAGE_DOWN_TRIGGER_PX
+		if (atTop === atBottom) return null
+		return atTop ? 'up' : 'down'
+	}
+
+	function distanceToBottom(): number {
+		if (!scrollContainer) return 0
+		return (
+			scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight
+		)
+	}
+
+	/**
+	 * fetch the next page toward one end, if the view is sitting at that end.
+	 *
+	 * one page at a time and one direction at a time: a load in flight owns the
+	 * window, so the far edge cannot start a second one under it.
+	 */
+	function pageTowardEdge(direction: 'up' | 'down'): void {
+		if (!scrollContainer) return
+		if (!initialScrollDone) return
+		const threadId = chatStore.activeThread?.id
+		if (!threadId) return
+		if (isLoadingOlderMessages || isLoadingNewerMessages) return
+		if (direction === 'up') {
+			if (!hasMoreMessages) return
+			if (scrollContainer.scrollTop > PAGE_UP_TRIGGER_PX) return
+			void loadOlderMessages(threadId, state)
+			return
+		}
+		if (!hasNewerMessages) return
+		if (distanceToBottom() > PAGE_DOWN_TRIGGER_PX) return
+		void loadNewerMessages(threadId, state)
+	}
+
+	/** re-measure whether the transcript overflows its viewport. */
+	function measureScrollable(): void {
+		if (!scrollContainer) {
+			canScroll = false
+			return
+		}
+		canScroll =
+			scrollContainer.scrollHeight - scrollContainer.clientHeight > AUTO_SCROLL_BUFFER_PX
+	}
+
+	// the bottom of the loaded window is not the bottom of the conversation
+	// while pages toward the leaf are still missing, so the pin stays off until
+	// the tail is there - otherwise every downward page drags the reader along.
+	function canPinToBottom(): boolean {
+		return !hasNewerMessages
+	}
+
+	// content resized without a gesture (a hover toolbar sliding out, a bubble
+	// collapsing): if that left the view at the bottom, the pin is back on.
+	// never detaches - only gestures express intent to leave.
+	function onContentResize(): void {
+		measureScrollable()
+		if (
+			!autoScroll &&
+			canPinToBottom() &&
+			scrollContainer &&
+			computeIsAtBottom(scrollContainer)
+		)
+			autoScroll = true
+		void backfillViewport()
+	}
+
+	/**
+	 * fill the viewport when the loaded window does not.
+	 *
+	 * a page can be shorter than the screen (short messages, a tall display), and
+	 * then no scroll event ever fires: the transcript would sit in a half-empty
+	 * window with no way to ask for more. this is the deliberate way out - one
+	 * page at a time, one direction at a time, re-measuring in between, so it can
+	 * never race the scroll triggers or ping-pong against itself.
+	 */
+	async function backfillViewport(): Promise<void> {
+		if (backfillRunning) return
+		if (!hasLoadedBranch || !scrollContainer) return
+		if (isLoadingOlderMessages || isLoadingNewerMessages) return
+		const threadId = chatStore.activeThread?.id
+		if (!threadId) return
+		measureScrollable()
+		if (canScroll) return
+
+		backfillRunning = true
+		try {
+			for (let page = 0; page < BACKFILL_MAX_PAGES; page += 1) {
+				const container = scrollContainer
+				if (!container || threadId !== chatStore.activeThread?.id) return
+				const heightBefore = container.scrollHeight
+				// toward the leaf first: it appends below the reader instead of
+				// prepending above them, so nothing they are looking at moves.
+				if (hasNewerMessages) await loadNewerMessages(threadId, state)
+				else if (hasMoreMessages) await loadOlderMessages(threadId, state)
+				else return
+				await tick()
+				if (!scrollContainer || threadId !== chatStore.activeThread?.id) return
+				measureScrollable()
+				// filled, or the page added nothing: either way, stop asking.
+				if (canScroll || scrollContainer.scrollHeight <= heightBefore) return
+			}
+		} finally {
+			backfillRunning = false
+		}
 	}
 
 	function handleScroll() {
 		if (!scrollContainer) return
+		measureScrollable()
 		const now = performance.now()
 		// update the pin from position only for genuine user scrolls — never for
 		// our own scrollTo or content reflow (those fall inside the programmatic
 		// window and would otherwise detach the user during streaming/run-end).
 		if (now <= userScrollUntil || now > programmaticScrollUntil) {
-			autoScroll = computeIsAtBottom(scrollContainer)
+			autoScroll = canPinToBottom() && computeIsAtBottom(scrollContainer)
 		}
+
+		const scrollTop = scrollContainer.scrollTop
+		const movedBy = scrollTop - lastPagingScrollTop
+		lastPagingScrollTop = scrollTop
 
 		// avoid runaway paging during initial mount/auto-scroll.
 		// initialScrollDone is set once we have loaded and pinned to bottom.
 		if (!initialScrollDone) return
-		if (scrollContainer.scrollTop <= 80) {
-			const threadId = chatStore.activeThread?.id
-			if (!threadId) return
-			if (!hasMoreMessages) return
-			if (isLoadingOlderMessages) return
-			void loadOlderMessages(threadId, state)
-		}
+		// paging follows the reader, never the layout settling into place. a
+		// thread that opens mid-history parks the view with a programmatic scroll
+		// that lands ON an edge, and a page restore jumps it again - read as
+		// arrivals, those fire both directions before anyone has scrolled. the
+		// test is stricter than the pin's: a gesture window does NOT excuse a
+		// scroll we drove, or the restore right after a scroll-up would page down.
+		if (now <= programmaticScrollUntil) return
+
+		if (movedBy < 0) pageTowardEdge('up')
+		else if (movedBy > 0) pageTowardEdge('down')
 	}
 
 	function scrollToBottom(behavior: 'auto' | 'smooth' = 'auto') {
@@ -562,6 +794,13 @@ export function createChatState(): ChatState {
 		// cannot corrupt the next thread's skip counter
 		messageSkip = 0
 		hasMoreMessages = true
+		hasNewerMessages = false
+		isLoadingNewerMessages = false
+		branchCursorTowardRoot = null
+		branchCursorTowardLeaf = null
+		initialAnchorMessageId = null
+		lastPagingScrollTop = 0
+		siblingCounts.clear()
 		// abort any active stream so the backend run is cancelled
 		runAbortController?.abort()
 		runAbortController = null
@@ -591,6 +830,7 @@ export function createChatState(): ChatState {
 		}
 		pendingStreamText = ''
 		pendingStreamMessageId = null
+		resetStreamTextStall()
 		streamingAssistant = null
 		streamingAssistantParentId = null
 		viewingStreamingBranch = true
@@ -602,6 +842,8 @@ export function createChatState(): ChatState {
 		eventMessageIdsPending.clear()
 		toolTracker.clear()
 		runActivities.clear()
+		runFailures.clear()
+		systemEvents.clear()
 		citationSources.clear()
 	}
 
@@ -651,7 +893,13 @@ export function createChatState(): ChatState {
 			return streamingAssistant
 		},
 		set streamingAssistant(v) {
+			// a different bubble (or none) means the stall watch belongs to a
+			// stream that is over.
+			if (v === null || v.messageId !== streamingAssistant?.messageId) resetStreamTextStall()
 			streamingAssistant = v
+		},
+		get isStreamingTextStalled() {
+			return streamTextStalled
 		},
 		get streamingAssistantParentId() {
 			return streamingAssistantParentId
@@ -682,6 +930,7 @@ export function createChatState(): ChatState {
 		},
 		stageQueuedSteeringMessage,
 		removeQueuedSteeringMessage,
+		ownsSteeringMessage,
 		confirmQueuedSteeringMessage,
 		flushPendingSteeringMessages,
 		injectQueuedSteeringMessage,
@@ -733,6 +982,37 @@ export function createChatState(): ChatState {
 		set isLoadingOlderMessages(v) {
 			isLoadingOlderMessages = v
 		},
+		get hasNewerMessages() {
+			return hasNewerMessages
+		},
+		set hasNewerMessages(v) {
+			hasNewerMessages = v
+		},
+		get isLoadingNewerMessages() {
+			return isLoadingNewerMessages
+		},
+		set isLoadingNewerMessages(v) {
+			isLoadingNewerMessages = v
+		},
+		get branchCursorTowardRoot() {
+			return branchCursorTowardRoot
+		},
+		set branchCursorTowardRoot(v) {
+			branchCursorTowardRoot = v
+		},
+		get branchCursorTowardLeaf() {
+			return branchCursorTowardLeaf
+		},
+		set branchCursorTowardLeaf(v) {
+			branchCursorTowardLeaf = v
+		},
+		get initialAnchorMessageId() {
+			return initialAnchorMessageId
+		},
+		set initialAnchorMessageId(v) {
+			initialAnchorMessageId = v
+		},
+		siblingCounts,
 
 		// scroll
 		get scrollContainer() {
@@ -747,6 +1027,11 @@ export function createChatState(): ChatState {
 		set autoScroll(v) {
 			autoScroll = v
 		},
+		get canScroll() {
+			return canScroll
+		},
+		measureScrollable,
+		onContentResize,
 
 		// tools
 		get toolTracker() {
@@ -768,6 +1053,14 @@ export function createChatState(): ChatState {
 			return runActivities
 		},
 		processRunActivityEvent,
+		get runFailures() {
+			return runFailures
+		},
+		recordRunFailure,
+		get systemEvents() {
+			return systemEvents
+		},
+		recordSystemEvent,
 
 		get citationSources() {
 			return citationSources
@@ -795,11 +1088,6 @@ export function createChatState(): ChatState {
 			}
 		},
 
-		// realtime
-		get typingUsers() {
-			return typingUsers
-		},
-
 		// derived
 		get isTemporaryChat() {
 			return isTemporaryChat
@@ -821,11 +1109,17 @@ export function createChatState(): ChatState {
 			if (streamingAssistant.toolCalls.length === 0) return false
 			return streamingAssistant.toolCalls.some((tc) => toolTracker.isActive(tc.id))
 		},
+		get participantById() {
+			return participantById
+		},
 		get agentNameById() {
 			return agentNameById
 		},
 		get agentAvatarById() {
 			return agentAvatarById
+		},
+		get threadAgentById() {
+			return threadAgentById
 		},
 
 		// page-specific state
@@ -892,10 +1186,10 @@ export function createChatState(): ChatState {
 		},
 
 		// delegated to $lib/chat modules
-		loadTree: (threadId) => loadTree(threadId, state),
+		loadTree: (threadId, options) => loadTree(threadId, state, options),
 		handleSendMessage: (content, modifiers) => handleSendMessage(content, state, modifiers),
-		handleRegenerateMessage: (parentId, prompt) =>
-			handleRegenerateMessage(parentId ?? null, state, prompt),
+		handleRegenerateMessage: (parentId, prompt, agentId) =>
+			handleRegenerateMessage(parentId ?? null, state, prompt, agentId),
 		handleStopGeneration: () => handleStopGeneration(state),
 		handleSaveEditMessage: (messageId, newContent) =>
 			handleSaveEditMessage(messageId, newContent, state),
@@ -903,7 +1197,7 @@ export function createChatState(): ChatState {
 			handleSaveAsCopyMessage(messageId, newContent, state),
 		resumeCreateAndRun: (stream, threadId) => resumeCreateAndRun(stream, threadId, state),
 		requestDeleteUserMessage: (messageId) => requestDeleteUserMessage(messageId, state),
-		deleteUserMessage: (messageId) => deleteUserMessage(messageId, state),
+		deleteUserMessage: (messageId, options) => deleteUserMessage(messageId, state, options),
 		dropSteering: async (runId, messageId) => {
 			if (!state.thread) return
 			const queued = queuedSteeringById.get(messageId)

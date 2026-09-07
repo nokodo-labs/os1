@@ -97,7 +97,7 @@
 				{/if}
 			</div>
 			<pre
-				class="text-foreground/80 max-h-48 overflow-auto px-2.5 py-2 font-mono leading-relaxed whitespace-pre-wrap">{code}</pre>
+				class="text-foreground/80 max-h-48 overflow-auto px-2.5 py-2 font-mono leading-relaxed whitespace-pre-wrap select-text">{code}</pre>
 		</div>
 	{/if}
 
@@ -112,11 +112,11 @@
 			<div class="space-y-0">
 				{#if resultData.stdout}
 					<pre
-						class="text-foreground/80 max-h-48 overflow-auto px-2.5 py-2 font-mono leading-relaxed whitespace-pre-wrap">{resultData.stdout}</pre>
+						class="text-foreground/80 max-h-48 overflow-auto px-2.5 py-2 font-mono leading-relaxed whitespace-pre-wrap select-text">{resultData.stdout}</pre>
 				{/if}
 				{#if resultData.results && resultData.results.length > 0}
 					<pre
-						class="text-foreground/80 max-h-48 overflow-auto px-2.5 py-2 font-mono leading-relaxed whitespace-pre-wrap {resultData.stdout
+						class="text-foreground/80 max-h-48 overflow-auto px-2.5 py-2 font-mono leading-relaxed whitespace-pre-wrap select-text {resultData.stdout
 							? 'border-border border-t'
 							: ''}">{resultData.results
 							.map((r) => (typeof r === 'string' ? r : JSON.stringify(r)))
@@ -124,14 +124,14 @@
 				{/if}
 				{#if resultData.stderr}
 					<pre
-						class="text-muted-foreground max-h-32 overflow-auto px-2.5 py-2 font-mono leading-relaxed whitespace-pre-wrap {resultData.stdout ||
+						class="text-muted-foreground max-h-32 overflow-auto px-2.5 py-2 font-mono leading-relaxed whitespace-pre-wrap select-text {resultData.stdout ||
 						(resultData.results && resultData.results.length > 0)
 							? 'border-border border-t'
 							: ''}">{resultData.stderr}</pre>
 				{/if}
 				{#if resultData.error}
 					<pre
-						class="text-destructive max-h-32 overflow-auto px-2.5 py-2 font-mono leading-relaxed whitespace-pre-wrap {resultData.stdout ||
+						class="text-destructive max-h-32 overflow-auto px-2.5 py-2 font-mono leading-relaxed whitespace-pre-wrap select-text {resultData.stdout ||
 						resultData.stderr ||
 						(resultData.results && resultData.results.length > 0)
 							? 'border-border border-t'

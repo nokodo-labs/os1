@@ -4,12 +4,64 @@ import type { CreateAndRunStreamDelta, StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getJwtUserId } from '$lib/auth/jwt'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
+import {
+	BRANCH_PAGE_LIMIT,
+	branchPageMessages,
+	branchPagingOf,
+	fetchBranchPage,
+	type BranchPaging,
+} from '$lib/chat/branchPage'
+import type { ReadCursor } from '$lib/chat/readReceipts'
 import type { PendingAttachment } from '$lib/chat/types'
 import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 import { STORE_EVENT_TYPES, subscribeToStoreEvents } from '$lib/stores/storeEvents'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 
 export type Thread = components['schemas']['Thread']
+
+type ThreadParticipant = NonNullable<Thread['participants']>[number]
+
+/** 1 writer = normal chat, 2 = DM, more = group chat. a UI distinction only. */
+export type ThreadKind = 'solo' | 'direct' | 'group'
+
+/** writers shape a thread; readers are spectators and do not. */
+function canWrite(participant: ThreadParticipant): boolean {
+	return (
+		participant.is_owner ||
+		participant.access_level === 'editor' ||
+		participant.access_level === 'admin'
+	)
+}
+
+/** distinct users who can write. a writer group's members are not in the payload, so they are not listed here. */
+export function threadWriterUserIds(thread: Thread | null): string[] {
+	const writerIds: string[] = []
+	for (const participant of thread?.participants ?? []) {
+		if (participant.kind !== 'user' || !canWrite(participant)) continue
+		if (!writerIds.includes(participant.user.id)) writerIds.push(participant.user.id)
+	}
+	return writerIds
+}
+
+export function threadWriterCount(thread: Thread): number {
+	return threadWriterUserIds(thread).length
+}
+
+export function threadKind(thread: Thread): ThreadKind {
+	const hasWriterGroup = (thread.participants ?? []).some(
+		(participant) => participant.kind === 'group' && canWrite(participant)
+	)
+	if (hasWriterGroup) return 'group'
+	const writers = threadWriterCount(thread)
+	if (writers <= 1) return 'solo'
+	return writers === 2 ? 'direct' : 'group'
+}
+
+/** a thread is a "people" conversation when more than one user can write in it. */
+export function isPeopleThread(thread: Thread): boolean {
+	return threadKind(thread) !== 'solo'
+}
+
 export type PendingChatStart = { threadId: string; content: string }
 export type PendingCreateAndRun = {
 	threadId: string
@@ -24,10 +76,24 @@ const THREAD_MAINTENANCE_TASK = 'thread.maintenance'
 const CHAT_STREAM_EVENTS = [
 	...STORE_EVENT_TYPES.chat,
 	...STORE_EVENT_TYPES.resourceAccessResource,
+	...STORE_EVENT_TYPES.typing,
 ] as const
+
+/**
+ * how long one typing signal keeps somebody listed as composing.
+ *
+ * the composer re-signals every 3s while there is text (`createTypingSignal`,
+ * `TYPING_HEARTBEAT_MS`), so a live composer always refreshes inside this window
+ * and a signal that stops arriving - tab closed, connection lost, message sent
+ * elsewhere - expires on its own rather than leaving a stuck indicator.
+ */
+const TYPING_TTL_MS = 8000
 
 // cache TTL in milliseconds
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
+/** shared empty result for threads no receipt has been seen for. */
+const NO_CURSORS: ReadonlyMap<string, ReadCursor> = new Map()
 
 interface ThreadCacheEntry {
 	thread: Thread
@@ -42,6 +108,8 @@ interface MessageCacheEntry {
 	pageSize: number
 	/** thread.last_activity_at observed when this message snapshot was written */
 	threadLastActivityAt: string | null
+	/** where this window sits in the branch, so a cache hit can keep paging */
+	branch: BranchPaging | null
 }
 
 type ApiEvent = components['schemas']['Event']
@@ -55,11 +123,16 @@ interface EventCacheEntry {
 	messageIds: Set<string>
 }
 
+/** the flat message list endpoint rejects anything larger and 422s. */
+const MESSAGE_LIST_PAGE_LIMIT = 200
+/** hard stop so a page that stops advancing cannot spin the loop. */
+const MESSAGE_LIST_MAX_PAGES = 50
+
 class ThreadCache {
 	readonly #threadCache = new SvelteMap<string, ThreadCacheEntry>()
 	readonly #messageCache = new SvelteMap<string, MessageCacheEntry>()
 	readonly #eventCache = new SvelteMap<string, EventCacheEntry>()
-	readonly #prefetchInFlight = new SvelteSet<string>()
+	readonly #prefetchInFlight = new SvelteMap<string, Promise<void>>()
 	/**
 	 * per-thread local message-event timestamp. bumped whenever a
 	 * message.* event arrives via WS. used by setMessages to detect
@@ -83,9 +156,12 @@ class ThreadCache {
 		return this.getCachedMessageSnapshot(threadId)?.messages ?? null
 	}
 
-	getCachedMessageSnapshot(
-		threadId: string
-	): { messages: ApiMessage[]; complete: boolean; pageSize: number } | null {
+	getCachedMessageSnapshot(threadId: string): {
+		messages: ApiMessage[]
+		complete: boolean
+		pageSize: number
+		branch: BranchPaging | null
+	} | null {
 		const entry = this.#messageCache.get(threadId)
 		if (!entry || !this.#isFresh(entry.fetchedAt)) return null
 
@@ -103,6 +179,7 @@ class ThreadCache {
 			messages: entry.messages,
 			complete: entry.complete,
 			pageSize: entry.pageSize,
+			branch: entry.branch,
 		}
 	}
 
@@ -120,7 +197,8 @@ class ThreadCache {
 		messages: ApiMessage[],
 		complete: boolean = false,
 		fetchStartedAt?: number,
-		pageSize: number = messages.length
+		pageSize: number = messages.length,
+		branch: BranchPaging | null = null
 	): boolean {
 		// race guard: if any message activity happened since this fetch
 		// started, the result may be missing messages that arrived during
@@ -138,6 +216,7 @@ class ThreadCache {
 			complete,
 			pageSize,
 			threadLastActivityAt: this.#threadActivityKey(threadId),
+			branch,
 		})
 		return true
 	}
@@ -293,38 +372,58 @@ class ThreadCache {
 		return this.#prefetchInFlight.has(threadId)
 	}
 
+	/**
+	 * settle any prefetch already running for this thread.
+	 *
+	 * a hover starts the prefetch and the click that follows starts the loader,
+	 * so without this the two race and fetch the same thread and branch page
+	 * twice - the prefetch always losing.
+	 */
+	async awaitPrefetch(threadId: string): Promise<void> {
+		await this.#prefetchInFlight.get(threadId)
+	}
+
 	async prefetchThread(threadId: string): Promise<void> {
 		if (this.get(threadId) && this.getCachedMessages(threadId)) return
-		if (this.#prefetchInFlight.has(threadId)) return
+		const running = this.#prefetchInFlight.get(threadId)
+		if (running) return running
 
-		this.#prefetchInFlight.add(threadId)
 		const startedAt = Date.now()
-		try {
-			const [threadRes, messagesRes] = await Promise.all([
-				api.GET('/v1/threads/{thread_id}', {
-					params: { path: { thread_id: threadId } },
-				}),
-				api.GET('/v1/threads/{thread_id}/messages', {
-					params: {
-						path: { thread_id: threadId },
-						query: { skip: 0, limit: 120 },
-					},
-				}),
-			])
+		const request = (async () => {
+			try {
+				// the same branch page the thread loader reads back, so a prefetch
+				// warms the cache instead of seeding it with a branch-blind list.
+				const [threadRes, branchRes] = await Promise.all([
+					api.GET('/v1/threads/{thread_id}', {
+						params: { path: { thread_id: threadId } },
+					}),
+					fetchBranchPage(threadId),
+				])
 
-			if (threadRes.data) this.set(threadRes.data)
-			if (messagesRes.data) {
-				this.setMessages(
-					threadId,
-					messagesRes.data,
-					messagesRes.data.length < 120,
-					startedAt
-				)
+				if (threadRes.data) this.set(threadRes.data)
+				const page = branchRes.page
+				if (page) {
+					this.setMessages(
+						threadId,
+						branchPageMessages(page),
+						!page.has_toward_root,
+						startedAt,
+						page.messages.length,
+						branchPagingOf(page)
+					)
+				}
+			} catch (err) {
+				if (dev) console.warn('[ThreadCache] prefetch failed:', threadId, err)
 			}
-		} catch (err) {
-			if (dev) console.warn('[ThreadCache] prefetch failed:', threadId, err)
+		})()
+
+		this.#prefetchInFlight.set(threadId, request)
+		try {
+			await request
 		} finally {
-			this.#prefetchInFlight.delete(threadId)
+			if (this.#prefetchInFlight.get(threadId) === request) {
+				this.#prefetchInFlight.delete(threadId)
+			}
 		}
 	}
 
@@ -341,35 +440,62 @@ class ThreadCache {
 		return data
 	}
 
-	async getMessages(
-		threadId: string,
-		skip: number = 0,
-		limit: number = 120
-	): Promise<{ messages: ApiMessage[]; fromCache: boolean }> {
-		if (skip === 0) {
-			const cached = this.getCachedMessages(threadId)
-			if (cached) return { messages: cached, fromCache: true }
+	/**
+	 * the selected branch, newest `limit` messages, oldest first.
+	 *
+	 * a bounded read for exports and snapshots. it pages the branch rather than
+	 * the flat `/messages` list (which is branch-blind and capped at 200) and
+	 * never writes the message cache: the thread loader owns that entry, and a
+	 * 500-message export would otherwise overwrite the window it is paging.
+	 */
+	async getBranchMessages(threadId: string, limit: number): Promise<ApiMessage[]> {
+		const collected: ApiMessage[] = []
+		let cursor: string | undefined
+
+		while (collected.length < limit) {
+			const { page } = await fetchBranchPage(threadId, {
+				limit: Math.min(BRANCH_PAGE_LIMIT, limit - collected.length),
+				cursor,
+			})
+			if (!page) break
+			// pages walk toward the root, so each one is older than the last
+			collected.unshift(...page.messages)
+			const next = page.has_toward_root ? (page.cursor_toward_root ?? null) : null
+			if (!next) break
+			cursor = next
 		}
 
-		const startedAt = Date.now()
-		const { data, error } = await api.GET('/v1/threads/{thread_id}/messages', {
-			params: {
-				path: { thread_id: threadId },
-				query: { skip, limit },
-			},
-		})
-
-		if (error || !data) return { messages: [], fromCache: false }
-		if (skip === 0) this.setMessages(threadId, data, data.length < limit, startedAt)
-		return { messages: data, fromCache: false }
+		return collected
 	}
 
-	async refreshCached(): Promise<void> {
-		const threadIds = new SvelteSet<string>()
-		for (const threadId of this.#threadCache.keys()) threadIds.add(threadId)
-		for (const threadId of this.#messageCache.keys()) threadIds.add(threadId)
-		for (const threadId of this.#eventCache.keys()) threadIds.add(threadId)
-		await Promise.allSettled([...threadIds].map((threadId) => this.prefetchThread(threadId)))
+	/**
+	 * every message in the thread, abandoned branches included, oldest first.
+	 *
+	 * the branch-blind counterpart to getBranchMessages, for a whole-tree export.
+	 * the flat `/messages` list caps its page at 200, so this walks it with
+	 * skip/limit, and like getBranchMessages it never writes the message cache.
+	 */
+	async getAllMessages(threadId: string, limit: number): Promise<ApiMessage[]> {
+		const collected: ApiMessage[] = []
+
+		for (let page = 0; page < MESSAGE_LIST_MAX_PAGES; page++) {
+			const pageLimit = Math.min(MESSAGE_LIST_PAGE_LIMIT, limit - collected.length)
+			if (pageLimit < 1) break
+
+			const { data, error } = await api.GET('/v1/threads/{thread_id}/messages', {
+				params: {
+					path: { thread_id: threadId },
+					query: { skip: collected.length, limit: pageLimit, sort_dir: 'asc' },
+				},
+			})
+			if (error || !data || data.length === 0) break
+
+			collected.push(...data)
+			// a short page is the last one
+			if (data.length < pageLimit) break
+		}
+
+		return collected
 	}
 }
 
@@ -382,13 +508,37 @@ class ChatStore {
 	isLoadingThreads = $state(false)
 	isLoadingMoreThreads = $state(false)
 	hasMoreThreads = $state(false)
+	hasLoaded = $state(false)
+	/** last thread-list load failure, so the sidebar can stop showing a loader */
+	error = $state<string | null>(null)
 	refreshVersion = $state(0)
 
 	/** unread message counts per thread id (only threads with unread > 0) */
 	readonly unreadCounts = new SvelteMap<string, number>()
 
+	/**
+	 * read cursors per thread: user id -> the message they have read, and when
+	 * this session watched them reach it.
+	 *
+	 * fed only by the live `thread.participants.*` fanout - there is no GET for
+	 * cursors yet (B16), so this is empty on a cold open and fills in as people
+	 * read. absence means UNKNOWN, never unread: see `$lib/chat/readReceipts`.
+	 * for the same reason cursors can silently go stale across a WS gap, which
+	 * is B19's replay problem rather than something to refetch here.
+	 */
+	readonly readCursors = new SvelteMap<string, SvelteMap<string, ReadCursor>>()
+
 	/** thread ids currently handled by a metadata maintenance task */
 	readonly metadataGeneratingThreadIds = new SvelteSet<string>()
+
+	/**
+	 * who is composing right now: thread id -> user id -> when the signal expires.
+	 *
+	 * ephemeral and never fetched: the backend fans typing out to everyone with
+	 * access to the thread and excludes the sender, so this fills in live and
+	 * empties itself through `TYPING_TTL_MS`.
+	 */
+	readonly composingUsers = new SvelteMap<string, SvelteMap<string, number>>()
 
 	/** in-memory drafts keyed by context id (thread id or 'home') */
 	readonly drafts = new SvelteMap<string, string>()
@@ -396,6 +546,14 @@ class ChatStore {
 	#unsubscribe: (() => void) | null = null
 	#threadPaginationLimit = 25
 	#threadPaginationSkip = 0
+	/** expiry timers for live typing signals, keyed `threadId:userId` */
+	#typingTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+	/** id of the signed-in user, or null when there is no usable token */
+	#currentUserId(): string | null {
+		const token = getAccessToken()
+		return token ? getJwtUserId(token) : null
+	}
 
 	#threadMetadataMissing(thread: Thread | null | undefined): boolean {
 		if (!thread) return true
@@ -414,7 +572,7 @@ class ChatStore {
 
 	#threadIdForMaintenanceTask(task: ApiTask | undefined): string | null {
 		if (!task) return null
-		const metadata = task.metadata_ ?? {}
+		const metadata = task.metadata ?? {}
 		if (metadata.task_name !== THREAD_MAINTENANCE_TASK) return null
 		if (typeof task.spawned_thread_id === 'string' && task.spawned_thread_id) {
 			return task.spawned_thread_id
@@ -440,13 +598,124 @@ class ChatStore {
 		this.drafts.delete(key)
 	}
 
+	/** cursors known for a thread this session; empty until receipts arrive. */
+	threadReadCursors = (threadId: string): ReadonlyMap<string, ReadCursor> => {
+		return this.readCursors.get(threadId) ?? NO_CURSORS
+	}
+
+	/** user ids composing in a thread right now; never includes your own. */
+	composingUserIds = (threadId: string): string[] => {
+		const composers = this.composingUsers.get(threadId)
+		if (!composers) return []
+		const now = Date.now()
+		const ids: string[] = []
+		for (const [userId, expiresAt] of composers) {
+			if (expiresAt > now) ids.push(userId)
+		}
+		return ids
+	}
+
+	#forgetComposer = (threadId: string, userId: string): void => {
+		const composers = this.composingUsers.get(threadId)
+		if (composers) {
+			composers.delete(userId)
+			if (composers.size === 0) this.composingUsers.delete(threadId)
+		}
+		const key = `${threadId}:${userId}`
+		const timer = this.#typingTimers.get(key)
+		if (timer) clearTimeout(timer)
+		this.#typingTimers.delete(key)
+	}
+
+	#clearComposing = (): void => {
+		for (const timer of this.#typingTimers.values()) clearTimeout(timer)
+		this.#typingTimers.clear()
+		this.composingUsers.clear()
+	}
+
 	// event stream integration
+
+	/**
+	 * a participant-state change: a shared read cursor, or the subject's own
+	 * private mute/pin/archive flags. only the former carries a cursor, so the
+	 * key's presence - not the event type - decides whether this is a receipt.
+	 */
+	#applyParticipantState = (data: Record<string, unknown>, message: StreamMessage): void => {
+		const threadId =
+			typeof data.thread_id === 'string'
+				? data.thread_id
+				: typeof message.thread_id === 'string'
+					? message.thread_id
+					: null
+		const userId = typeof data.user_id === 'string' ? data.user_id : null
+		if (!threadId || !userId || data.kind !== 'user') return
+		if (!('last_read_message_id' in data)) return
+
+		const cursor =
+			typeof data.last_read_message_id === 'string' ? data.last_read_message_id : null
+		if (cursor) {
+			const cursors = this.readCursors.get(threadId) ?? new SvelteMap<string, ReadCursor>()
+			// the fanout carries no read time, so the arrival IS the only moment
+			// we can honestly name. a repeat of the same cursor is not a new read
+			// and keeps the stamp it already had.
+			const known = cursors.get(userId)
+			if (!known || known.messageId !== cursor) {
+				cursors.set(userId, { messageId: cursor, at: new Date() })
+			}
+			this.readCursors.set(threadId, cursors)
+		}
+
+		// own cursor advancing means another session/tab read the thread.
+		if (userId === this.#currentUserId()) this.unreadCounts.delete(threadId)
+	}
+
+	/**
+	 * somebody else started or stopped composing in a thread.
+	 *
+	 * a start refreshes the expiry rather than stacking, so a composer who keeps
+	 * typing stays listed and one who goes quiet drops out on the timer. only
+	 * people signal: an event without a user id is not a person composing.
+	 */
+	#applyTypingSignal = (data: Record<string, unknown>, message: StreamMessage): void => {
+		const threadId =
+			typeof data.thread_id === 'string'
+				? data.thread_id
+				: typeof message.thread_id === 'string'
+					? message.thread_id
+					: null
+		const userId = typeof data.user_id === 'string' ? data.user_id : null
+		if (!threadId || !userId) return
+		// your own composing is the composer you are looking at, never a bubble.
+		if (userId === this.#currentUserId()) return
+
+		if (message.type === 'typing.stop' || message.type === 'typing.user.stop') {
+			this.#forgetComposer(threadId, userId)
+			return
+		}
+
+		const composers = this.composingUsers.get(threadId) ?? new SvelteMap<string, number>()
+		composers.set(userId, Date.now() + TYPING_TTL_MS)
+		this.composingUsers.set(threadId, composers)
+
+		const key = `${threadId}:${userId}`
+		const previous = this.#typingTimers.get(key)
+		if (previous) clearTimeout(previous)
+		this.#typingTimers.set(
+			key,
+			setTimeout(() => this.#forgetComposer(threadId, userId), TYPING_TTL_MS)
+		)
+	}
 
 	#handleStreamEvent = (message: StreamMessage): void => {
 		const data =
 			message.data && typeof message.data === 'object' && !Array.isArray(message.data)
 				? (message.data as Record<string, unknown>)
 				: {}
+
+		if (message.type.startsWith('typing.')) {
+			this.#applyTypingSignal(data, message)
+			return
+		}
 
 		if (message.type === 'access.updated' || message.type === 'resource.access.updated') {
 			if (data.resource_type !== 'thread' || typeof data.resource_id !== 'string') return
@@ -464,12 +733,13 @@ class ChatStore {
 		if (message.type === 'thread.created') {
 			const thread = data as unknown as Thread
 			if (!thread?.id || thread.is_temporary) return
-			// only show threads owned by the current user in the sidebar.
-			// we still receive thread.created for any thread we have access to,
-			// so the home sidebar must filter by ownership explicitly.
+			// the home sidebar shows only solo chats (owned by the current user
+			// with fewer than two humans). people conversations live in the
+			// messages app, so filter them out here by ownership + human count.
 			const token = getAccessToken()
 			const me = token ? getJwtUserId(token) : null
 			if (me && thread.owner_id && thread.owner_id !== me) return
+			if (isPeopleThread(thread)) return
 			// update cache + prepend to recent threads (dedup)
 			this.threadCache.set(thread)
 			this.#clearMetadataGeneratingIfReady(thread)
@@ -489,7 +759,6 @@ class ChatStore {
 			if (typeof data.updated_at === 'string') patch.updated_at = data.updated_at
 			if (typeof data.last_activity_at === 'string')
 				patch.last_activity_at = data.last_activity_at
-			if (typeof data.is_archived === 'boolean') patch.is_archived = data.is_archived
 			if (typeof data.is_temporary === 'boolean') patch.is_temporary = data.is_temporary
 			if (typeof data.current_message_id === 'string')
 				patch.current_message_id = data.current_message_id
@@ -540,6 +809,7 @@ class ChatStore {
 
 			this.threadCache.invalidateAll(threadId)
 			this.metadataGeneratingThreadIds.delete(threadId)
+			this.readCursors.delete(threadId)
 			this.removeRecentThread(threadId)
 			if (this.activeThread?.id === threadId) {
 				this.activeThread = null
@@ -561,7 +831,7 @@ class ChatStore {
 			if (threadId && this.#threadMetadataMissing(this.#findKnownThread(threadId))) {
 				this.metadataGeneratingThreadIds.add(threadId)
 			}
-		} else if (message.type === 'run.error' || message.type === 'run.failed') {
+		} else if (message.type === 'run.error') {
 			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
 			if (threadId) this.metadataGeneratingThreadIds.delete(threadId)
 		} else if (message.type === 'run.completed') {
@@ -587,10 +857,11 @@ class ChatStore {
 			} else {
 				this.metadataGeneratingThreadIds.delete(threadId)
 			}
-		} else if (message.type === 'thread.read') {
-			// another session/tab marked a thread as read - sync unread state
-			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
-			if (threadId) this.unreadCounts.delete(threadId)
+		} else if (
+			message.type === 'thread.participants.added' ||
+			message.type === 'thread.participants.updated'
+		) {
+			this.#applyParticipantState(data, message)
 		} else if (message.type === 'message.created') {
 			const threadId = (data.thread_id as string) ?? (message.thread_id as string)
 			if (!threadId) return
@@ -651,38 +922,51 @@ class ChatStore {
 		this.isLoadingThreads = false
 		this.isLoadingMoreThreads = false
 		this.hasMoreThreads = false
+		this.hasLoaded = false
+		this.error = null
 		this.#threadPaginationLimit = 25
 		this.#threadPaginationSkip = 0
 		this.drafts.clear()
 		this.unreadCounts.clear()
+		this.readCursors.clear()
 		this.metadataGeneratingThreadIds.clear()
+		this.#clearComposing()
 	}
 
 	invalidate = (): void => {
 		this.threadCache.markAllStale()
 	}
 
+	/**
+	 * re-read what is on screen after a gap in the live stream.
+	 *
+	 * invalidation already marked every cached thread stale, so re-opening one
+	 * refetches on its own - refetching all of them here would fire a branch
+	 * page per cached thread. only the sidebar list, its badges and the open
+	 * thread (through `refreshVersion`, which the thread page watches) are read
+	 * back.
+	 */
 	refreshCached = async (): Promise<void> => {
-		const activeThreadId = this.activeThread?.id ?? null
-		const tasks: Promise<unknown>[] = [
-			this.threadCache.refreshCached(),
-			this.fetchUnreadCounts(),
-		]
-		if (this.recentThreads.length > 0) tasks.push(this.refreshThreads())
-		if (activeThreadId) {
-			tasks.push(
-				this.threadCache.getThread(activeThreadId).then((thread) => {
-					if (thread && this.activeThread?.id === activeThreadId)
-						this.activeThread = thread
-				})
-			)
-		}
-		await Promise.allSettled(tasks)
+		// refreshThreads reads the badges back itself
+		await (this.recentThreads.length > 0 ? this.refreshThreads() : this.fetchUnreadCounts())
 		this.refreshVersion += 1
 	}
 
 	refresh = async (): Promise<void> => {
 		await this.refreshCached()
+	}
+
+	/**
+	 * warm a thread the reader is about to open (sidebar hover).
+	 *
+	 * the prefetch fills the cache with the TAIL page, which is the page a
+	 * caught-up reader gets. a reader with unread messages opens on their
+	 * last-read page instead, so every request the prefetch makes would be
+	 * thrown away - skip it rather than pay for a page nobody reads.
+	 */
+	prefetchThread = async (threadId: string): Promise<void> => {
+		if ((this.unreadCounts.get(threadId) ?? 0) > 0) return
+		await this.threadCache.prefetchThread(threadId)
 	}
 
 	consumePendingChatStart = (threadId: string): string | null => {
@@ -726,8 +1010,12 @@ class ChatStore {
 	}
 
 	fetchUnreadCounts = async (): Promise<void> => {
+		const userId = this.#currentUserId()
+		if (!userId) return
 		try {
-			const { data } = await api.GET('/v1/threads/unread-counts')
+			const { data } = await api.GET('/v1/threads/unread-counts/{user_id}', {
+				params: { path: { user_id: userId } },
+			})
 			this.unreadCounts.clear()
 			if (data) {
 				for (const item of data) {
@@ -743,9 +1031,11 @@ class ChatStore {
 
 	markThreadRead = async (threadId: string): Promise<void> => {
 		if (!threadId) return
+		const userId = this.#currentUserId()
+		if (!userId) return
 		try {
-			await api.POST('/v1/threads/{thread_id}/read', {
-				params: { path: { thread_id: threadId } },
+			await api.POST('/v1/threads/{thread_id}/participants/users/{user_id}/read', {
+				params: { path: { thread_id: threadId, user_id: userId } },
 			})
 		} catch {
 			// silently ignore - WS event will sync state
@@ -766,13 +1056,16 @@ class ChatStore {
 		this.#threadPaginationLimit = limit
 		this.#threadPaginationSkip = 0
 		this.isLoadingThreads = true
+		this.error = null
 
 		try {
-			const { data } = await api.GET('/v1/threads', {
+			const { data, error } = await api.GET('/v1/threads', {
 				params: {
 					query: {
 						owner_id: userId,
-						is_archived: false,
+						not_archived_by: userId,
+						not_invite_pending_for: userId,
+						participant_scope: 'solo',
 						limit,
 						skip: 0,
 						sort_by: 'last_activity_at',
@@ -781,16 +1074,24 @@ class ChatStore {
 				},
 			})
 
-			const threads = data ?? []
-			this.recentThreads = threads
-			for (const thread of threads) {
+			// on failure keep prior threads; an error must not render as empty.
+			if (error || !data) {
+				this.error = 'failed to load chats'
+				return
+			}
+
+			this.recentThreads = data
+			for (const thread of data) {
 				this.threadCache.set(thread)
 				this.#clearMetadataGeneratingIfReady(thread)
 			}
-			this.#threadPaginationSkip = threads.length
-			this.hasMoreThreads = threads.length === limit
+			this.#threadPaginationSkip = data.length
+			this.hasMoreThreads = data.length === limit
+			this.hasLoaded = true
 			// fetch unread counts alongside thread list
 			void this.fetchUnreadCounts()
+		} catch {
+			this.error = 'failed to load chats'
 		} finally {
 			this.isLoadingThreads = false
 		}
@@ -812,7 +1113,9 @@ class ChatStore {
 				params: {
 					query: {
 						owner_id: userId,
-						is_archived: false,
+						not_archived_by: userId,
+						not_invite_pending_for: userId,
+						participant_scope: 'solo',
 						limit,
 						skip,
 						sort_by: 'last_activity_at',

@@ -75,8 +75,29 @@
 		return null
 	})
 
+	// a result without a payload (a delete, say) has no title to show; name the
+	// kind rather than printing a raw resource id at the user.
+	const typeLabel = $derived.by(() => {
+		switch (resourceType) {
+			case 'chat':
+				return 'chat'
+			case 'note':
+				return 'note'
+			case 'reminder':
+				return 'reminder'
+			case 'reminder_list':
+				return 'reminder list'
+			case 'project':
+				return 'project'
+			case 'file':
+				return 'file'
+			case 'calendar_event':
+				return 'calendar event'
+		}
+	})
+
 	const displayTitle = $derived(
-		resultTitle ?? readNonEmptyString(execution.toolCall.arguments.title) ?? resourceId
+		resultTitle ?? readNonEmptyString(execution.toolCall.arguments.title) ?? typeLabel
 	)
 
 	// for file resources, get extra info from files store
@@ -155,6 +176,10 @@
 	</a>
 {:else if resourceType === 'project'}
 	<a href={resolve('/projects/[id]', { id: resourceId })} class={linkClass}>
+		{@render resourceContent()}
+	</a>
+{:else if resourceType === 'calendar_event'}
+	<a href={resolve('/calendar')} class={linkClass}>
 		{@render resourceContent()}
 	</a>
 {:else}

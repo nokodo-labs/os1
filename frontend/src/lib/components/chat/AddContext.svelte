@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api } from '$lib/api/client'
+	import { filedrop } from '$lib/attachments/filedrop'
 	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
 	import ChatBottomPanel from '$lib/components/chat/ChatBottomPanel.svelte'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
@@ -15,8 +15,8 @@
 	import Switch from '$lib/components/primitives/ResolverSwitch.svelte'
 	import ResourceWidget from '$lib/components/widgets/ResourceWidget.svelte'
 	import type { ResourceItem } from '$lib/components/widgets/types'
+	import { mcpServers } from '$lib/stores/mcpServers.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
-	import { session } from '$lib/stores/session.svelte'
 
 	// -- types --
 	type QuickAction = 'none' | 'web_search' | 'think' | 'generate_image'
@@ -94,9 +94,7 @@
 
 	let fileInput = $state<HTMLInputElement | null>(null)
 	let isResourcePickerOpen = $state(false)
-	let mcpServerGroups = $state<McpServerGroup[]>([])
-	let mcpToolsLoaded = $state(false)
-	let mcpToolsLoading = $state(false)
+	let isDropTargetActive = $state(false)
 	const chatAttachmentResourceTypes: ResourceItem['type'][] = [
 		'thread',
 		'note',
@@ -108,6 +106,28 @@
 		'calendar',
 	]
 
+	// only the current user's own servers are toggleable per-request here.
+	// global (admin-managed) servers are wired to agents, not per request.
+	const mcpServerGroups = $derived.by(() => {
+		const groups: McpServerGroup[] = []
+		for (const server of mcpServers.own) {
+			const tools: McpServerTool[] = []
+			for (const tool of server.discovered_tools ?? []) {
+				if (!tool.enabled || !tool.plugin_id) continue
+				tools.push({
+					pluginId: tool.plugin_id,
+					name: tool.name,
+					description: tool.description ?? '',
+					serverName: server.name,
+				})
+			}
+			if (tools.length > 0) {
+				groups.push({ serverId: server.id, serverName: server.name, tools })
+			}
+		}
+		return groups
+	})
+	const mcpToolsLoading = $derived(mcpServers.loading && !mcpServers.hasLoaded)
 	const mcpToolList = $derived(mcpServerGroups.flatMap((group) => group.tools))
 	const selectedMcpTools = $derived(
 		mcpToolList.filter((tool) => extraPluginIds.includes(tool.pluginId))
@@ -156,8 +176,8 @@
 	] as const
 
 	$effect(() => {
-		if (!open || mcpToolsLoaded || mcpToolsLoading) return
-		void loadMcpTools()
+		if (!open) return
+		void mcpServers.load()
 	})
 
 	// -- other handlers --
@@ -175,47 +195,13 @@
 		isResourcePickerOpen = false
 	}
 
+	function handleFilesDropped(files: FileList) {
+		onFileUpload?.(files)
+	}
+
 	function handleAttachmentClick(attachment: NativeAttachment): void {
 		if (attachment.resourceType && attachment.resourceType !== 'file') return
 		modals.open('file-details', { fileId: attachment.id })
-	}
-
-	async function loadMcpTools(): Promise<void> {
-		mcpToolsLoading = true
-		try {
-			const { data, error } = await api.GET('/v1/integrations/mcp/servers')
-			if (error || !data) {
-				mcpServerGroups = []
-				return
-			}
-			// only the current user's own servers are toggleable per-request here.
-			// global (admin-managed) servers are wired to agents, not per request.
-			const currentUserId = session.currentUserId
-			const groups: McpServerGroup[] = []
-			for (const server of data) {
-				if (server.scope !== 'user') continue
-				if (currentUserId !== null && server.owner_user_id !== currentUserId) continue
-				const tools: McpServerTool[] = []
-				for (const tool of server.discovered_tools ?? []) {
-					if (!tool.enabled || !tool.plugin_id) continue
-					tools.push({
-						pluginId: tool.plugin_id,
-						name: tool.name,
-						description: tool.description ?? '',
-						serverName: server.name,
-					})
-				}
-				if (tools.length > 0) {
-					groups.push({ serverId: server.id, serverName: server.name, tools })
-				}
-			}
-			mcpServerGroups = groups
-		} catch {
-			mcpServerGroups = []
-		} finally {
-			mcpToolsLoaded = true
-			mcpToolsLoading = false
-		}
 	}
 
 	function pluginSelected(pluginId: string): boolean {
@@ -235,179 +221,198 @@
 </script>
 
 <ChatBottomPanel {open} {onClose} ariaLabel="add context panel">
-	{#if hasInputContext}
-		<!-- input context section -->
-		<div class="max-h-[30dvh] overflow-y-auto px-4 pt-3 pb-2">
-			<div class="text-foreground/45 mb-3 text-[11px] font-semibold tracking-widest">
-				input context
+	<div
+		class="relative"
+		{@attach filedrop({
+			onDrop: handleFilesDropped,
+			onActiveChange: (active) => (isDropTargetActive = active),
+			disabled: !onFileUpload,
+		})}
+	>
+		{#if isDropTargetActive}
+			<div
+				class="border-(--accent-primary) bg-foreground/8 pointer-events-none absolute inset-2 z-20 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed backdrop-blur-[2px]"
+			>
+				<ArrowUpTray class="size-6 text-(--accent-primary)" />
+				<span class="text-foreground/80 text-sm font-medium">drop files to attach</span>
 			</div>
+		{/if}
 
-			<div class="space-y-1">
-				{#each activeAttachments as attachment (attachment.id)}
-					<div class="group/attachment flex items-center gap-1.5">
-						<div class="min-w-0 flex-1">
-							<ResourceWidget
-								resource={attachment.resource}
-								layout="pill"
-								onclick={() => handleAttachmentClick(attachment)}
+		{#if hasInputContext}
+			<!-- input context section -->
+			<div class="max-h-[30dvh] overflow-y-auto px-4 pt-3 pb-2">
+				<div class="text-foreground/45 mb-3 text-[11px] font-semibold tracking-widest">
+					input context
+				</div>
+
+				<div class="space-y-1">
+					{#each activeAttachments as attachment (attachment.id)}
+						<div class="group/attachment flex items-center gap-1.5">
+							<div class="min-w-0 flex-1">
+								<ResourceWidget
+									resource={attachment.resource}
+									layout="pill"
+									onclick={() => handleAttachmentClick(attachment)}
+								/>
+							</div>
+							{#if attachment.isPending !== false}
+								<button
+									type="button"
+									aria-label="remove attachment"
+									class="text-muted-foreground hover:text-foreground flex size-9 shrink-0 cursor-pointer items-center justify-center border-none bg-transparent transition-all duration-150 hover:scale-[1.05] active:scale-[0.97]"
+									onclick={() => onRemoveAttachment?.(attachment.id)}
+								>
+									<XMark class="h-5 w-5" />
+								</button>
+							{/if}
+						</div>
+					{/each}
+
+					{#each selectedMcpTools as tool (tool.pluginId)}
+						<div class="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
+							<span class="relative flex h-2.5 w-2.5 shrink-0">
+								<span
+									class="relative inline-flex h-2.5 w-2.5 rounded-full bg-cyan-400"
+								></span>
+							</span>
+							<Wrench class="text-foreground/50 h-3.5 w-3.5 shrink-0" />
+							<span class="min-w-0 flex-1 text-left">
+								<span class="text-foreground/80 block truncate text-xs font-medium">
+									{tool.name}
+								</span>
+								<span class="text-foreground/45 block truncate text-[11px]">
+									{tool.serverName}
+								</span>
+							</span>
+							<Switch
+								size="sm"
+								checked={true}
+								onchange={() => onToggleExtraPlugin?.(tool.pluginId)}
 							/>
 						</div>
-						{#if attachment.isPending !== false}
-							<button
-								type="button"
-								aria-label="remove attachment"
-								class="text-muted-foreground hover:text-foreground flex size-9 shrink-0 cursor-pointer items-center justify-center border-none bg-transparent transition-all duration-150 hover:scale-[1.05] active:scale-[0.97]"
-								onclick={() => onRemoveAttachment?.(attachment.id)}
-							>
-								<XMark class="h-5 w-5" />
-							</button>
-						{/if}
-					</div>
-				{/each}
-
-				{#each selectedMcpTools as tool (tool.pluginId)}
-					<div class="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
-						<span class="relative flex h-2.5 w-2.5 shrink-0">
-							<span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-cyan-400"
-							></span>
-						</span>
-						<Wrench class="text-foreground/50 h-3.5 w-3.5 shrink-0" />
-						<span class="min-w-0 flex-1 text-left">
-							<span class="text-foreground/80 block truncate text-xs font-medium">
-								{tool.name}
-							</span>
-							<span class="text-foreground/45 block truncate text-[11px]">
-								{tool.serverName}
-							</span>
-						</span>
-						<Switch
-							size="sm"
-							checked={true}
-							onchange={() => onToggleExtraPlugin?.(tool.pluginId)}
-						/>
-					</div>
-				{/each}
-
-				{#if isUploading}
-					<div class="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
-						<span class="relative flex h-2.5 w-2.5 shrink-0">
-							<span
-								class="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"
-							></span>
-							<span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500"
-							></span>
-						</span>
-						<ArrowUpTray class="text-foreground/50 h-3.5 w-3.5 shrink-0" />
-						<ShimmerText className="text-foreground/60 text-xs font-medium">
-							uploading
-						</ShimmerText>
-					</div>
-				{/if}
-			</div>
-		</div>
-
-		<div class="border-foreground/10 mx-4 my-1 border-t"></div>
-	{/if}
-
-	<!-- add to context -->
-	<div class="px-4 pt-3 pb-2">
-		<div class="text-foreground/45 mb-3 text-[11px] font-semibold tracking-widest">
-			add to context
-		</div>
-		<div class="grid grid-cols-3 gap-2">
-			<button type="button" class="context-action-btn" onclick={() => fileInput?.click()}>
-				<span class="context-action-icon">
-					<ArrowUpTray class="h-5 w-5" />
-				</span>
-				<span class="context-action-label">upload</span>
-			</button>
-			<button
-				type="button"
-				class="context-action-btn"
-				onclick={() => {
-					isResourcePickerOpen = true
-				}}
-			>
-				<span class="context-action-icon">
-					<Folder class="h-5 w-5" />
-				</span>
-				<span class="context-action-label">attach resource</span>
-			</button>
-		</div>
-	</div>
-
-	<div class="border-foreground/10 mx-4 border-t"></div>
-
-	<!-- actions -->
-	<div class="px-4 py-2">
-		<div class="text-foreground/45 pt-1 pb-2 text-[11px] font-semibold tracking-widest">
-			actions
-		</div>
-
-		<div class="space-y-0.5">
-			<div class="px-1 pb-2">
-				<RadioGroup
-					options={quickActionOptions}
-					value={activeQuickAction}
-					onchange={setQuickAction}
-					clearValue="none"
-					class="flex-wrap"
-				/>
-			</div>
-
-			{#if mcpToolsLoading || hasMcpTools}
-				<div
-					class="text-foreground/45 px-3 pt-3 pb-1 text-[11px] font-semibold tracking-widest"
-				>
-					MCP tools
-				</div>
-				{#if mcpToolsLoading}
-					<div class="flex justify-center px-3 py-4">
-						<NokodoLoader />
-					</div>
-				{:else}
-					{#each mcpServerGroups as group (group.serverId)}
-						<div
-							class="text-foreground/55 flex items-center gap-1.5 px-3 pt-2 pb-1 text-[11px] font-medium"
-						>
-							<GlobeAlt class="h-3 w-3 shrink-0" />
-							<span class="truncate">{group.serverName}</span>
-						</div>
-						{#each group.tools as tool (tool.pluginId)}
-							<button
-								type="button"
-								class="rounded-pill hover:bg-foreground/8 flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 transition-colors duration-150"
-								onclick={() => onToggleExtraPlugin?.(tool.pluginId)}
-							>
-								<Wrench class="text-foreground/60 h-5 w-5 shrink-0" />
-								<span class="min-w-0 flex-1 text-left">
-									<span
-										class="text-foreground/80 block truncate text-sm font-medium"
-									>
-										{tool.name}
-									</span>
-									{#if tool.description}
-										<span
-											class="text-foreground/45 mt-0.5 line-clamp-1 text-xs"
-										>
-											{tool.description}
-										</span>
-									{/if}
-								</span>
-								<Switch
-									size="sm"
-									checked={pluginSelected(tool.pluginId)}
-									onchange={() => onToggleExtraPlugin?.(tool.pluginId)}
-								/>
-							</button>
-						{/each}
 					{/each}
-				{/if}
-			{/if}
-		</div>
-	</div>
 
-	<!-- hidden file input -->
+					{#if isUploading}
+						<div class="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
+							<span class="relative flex h-2.5 w-2.5 shrink-0">
+								<span
+									class="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"
+								></span>
+								<span
+									class="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500"
+								></span>
+							</span>
+							<ArrowUpTray class="text-foreground/50 h-3.5 w-3.5 shrink-0" />
+							<ShimmerText className="text-foreground/60 text-xs font-medium">
+								uploading
+							</ShimmerText>
+						</div>
+					{/if}
+				</div>
+			</div>
+
+			<div class="border-foreground/10 mx-4 my-1 border-t"></div>
+		{/if}
+
+		<!-- add to context -->
+		<div class="px-4 pt-3 pb-2">
+			<div class="text-foreground/45 mb-3 text-[11px] font-semibold tracking-widest">
+				add to context
+			</div>
+			<div class="grid grid-cols-3 gap-2">
+				<button type="button" class="context-action-btn" onclick={() => fileInput?.click()}>
+					<span class="context-action-icon">
+						<ArrowUpTray class="h-5 w-5" />
+					</span>
+					<span class="context-action-label">upload</span>
+				</button>
+				<button
+					type="button"
+					class="context-action-btn"
+					onclick={() => {
+						isResourcePickerOpen = true
+					}}
+				>
+					<span class="context-action-icon">
+						<Folder class="h-5 w-5" />
+					</span>
+					<span class="context-action-label">attach resource</span>
+				</button>
+			</div>
+		</div>
+
+		<div class="border-foreground/10 mx-4 border-t"></div>
+
+		<!-- actions -->
+		<div class="px-4 py-2">
+			<div class="text-foreground/45 pt-1 pb-2 text-[11px] font-semibold tracking-widest">
+				actions
+			</div>
+
+			<div class="space-y-0.5">
+				<div class="px-1 pb-2">
+					<RadioGroup
+						options={quickActionOptions}
+						value={activeQuickAction}
+						onchange={setQuickAction}
+						clearValue="none"
+					/>
+				</div>
+
+				{#if mcpToolsLoading || hasMcpTools}
+					<div
+						class="text-foreground/45 px-3 pt-3 pb-1 text-[11px] font-semibold tracking-widest"
+					>
+						MCP tools
+					</div>
+					{#if mcpToolsLoading}
+						<div class="flex justify-center px-3 py-4">
+							<NokodoLoader />
+						</div>
+					{:else}
+						{#each mcpServerGroups as group (group.serverId)}
+							<div
+								class="text-foreground/55 flex items-center gap-1.5 px-3 pt-2 pb-1 text-[11px] font-medium"
+							>
+								<GlobeAlt class="h-3 w-3 shrink-0" />
+								<span class="truncate">{group.serverName}</span>
+							</div>
+							{#each group.tools as tool (tool.pluginId)}
+								<button
+									type="button"
+									class="rounded-pill hover:bg-foreground/8 flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 transition-colors duration-150"
+									onclick={() => onToggleExtraPlugin?.(tool.pluginId)}
+								>
+									<Wrench class="text-foreground/60 h-5 w-5 shrink-0" />
+									<span class="min-w-0 flex-1 text-left">
+										<span
+											class="text-foreground/80 block truncate text-sm font-medium"
+										>
+											{tool.name}
+										</span>
+										{#if tool.description}
+											<span
+												class="text-foreground/45 mt-0.5 line-clamp-1 text-xs"
+											>
+												{tool.description}
+											</span>
+										{/if}
+									</span>
+									<Switch
+										size="sm"
+										checked={pluginSelected(tool.pluginId)}
+										onchange={() => onToggleExtraPlugin?.(tool.pluginId)}
+									/>
+								</button>
+							{/each}
+						{/each}
+					{/if}
+				{/if}
+			</div>
+		</div>
+
+		<!-- hidden file input -->
+	</div>
 </ChatBottomPanel>
 
 {#if open}

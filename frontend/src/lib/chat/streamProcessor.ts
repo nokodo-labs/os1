@@ -8,13 +8,14 @@ import {
 	StreamHttpError,
 	type ChatStreamDelta,
 	type CreateAndRunStreamDelta,
+	type MessageSplice,
 	type RunInput,
 	type UnknownSseEvent,
 } from '$lib/api/streaming/chatStream'
 import type { ToolChoiceValue } from '$lib/chat/types'
 import { activeRunsStore } from '$lib/stores/activeRuns.svelte'
 import { chat as chatStore, type Thread } from '$lib/stores/chat.svelte'
-import { notifications } from '$lib/stores/notifications.svelte'
+import { notifications, showError } from '$lib/stores/notifications.svelte'
 import { selectedAgent } from '$lib/stores/selectedAgent.svelte'
 import { hapticFeedback, throttledHapticFeedback } from '$lib/utils/haptics'
 import { SvelteDate } from 'svelte/reactivity'
@@ -22,6 +23,8 @@ import { syncCacheAfterRun } from './dataLoader'
 import {
 	extractAttachmentRefs,
 	finalizeStreamingAssistantAsPartial,
+	markRunBridgeFailed,
+	markRunNotDelivered,
 	sdkPartsToText,
 	upsertToolCalls,
 	type ApiMessage,
@@ -31,6 +34,7 @@ import {
 	getMessageSteeringRunId,
 	getMessageSteeringState,
 } from './steering'
+import { reparentSuccessors } from './treeNavigation'
 import type { ChatContext, StreamDeltaContext } from './types'
 
 /**
@@ -38,10 +42,29 @@ import type { ChatContext, StreamDeltaContext } from './types'
  * a transport drop so callers can choose never to auto-resume these.
  */
 export class RunFailedError extends Error {
-	constructor(message: string) {
+	/** the run the backend declared dead, when it named one. */
+	readonly runId: string | null
+
+	constructor(message: string, runId: string | null = null) {
 		super(message)
 		this.name = 'RunFailedError'
+		this.runId = runId
 	}
+}
+
+/**
+ * whether the run got far enough for the backend to own its outcome.
+ *
+ * once a run exists the backend persists whatever it produced and broadcasts
+ * `message.created` then `run.error`, so the client waits for those instead of
+ * inventing either. a request that never got that far leaves nothing to
+ * reconcile against - and a 503 is the one HTTP failure where the message DID
+ * commit, so it counts as reached.
+ */
+export function runReachedBackend(error: unknown, ctx: ChatContext): boolean {
+	if (error instanceof RunFailedError) return true
+	if (error instanceof StreamHttpError && error.status === 503) return true
+	return ctx.streamingAssistant?.runId != null
 }
 
 /** outcome of consuming a stream to completion. */
@@ -79,12 +102,17 @@ export function processDelta(
 	ctx: ChatContext
 ): 'done' | 'continue' {
 	switch (delta.event) {
-		case 'error':
-			{
-				const runId = delta.data.run_id ?? ctx.streamingAssistant?.runId
-				if (runId) activeRunsStore.forgetRun(runId)
+		case 'error': {
+			const runId = delta.data.run_id ?? ctx.streamingAssistant?.runId ?? null
+			if (runId) activeRunsStore.forgetRun(runId)
+			// the bridge adopts the run the backend just declared dead, so the
+			// durable `run.error` for it can be matched to this bubble even when
+			// the failure landed before the first delta named a run.
+			if (runId && ctx.streamingAssistant && !ctx.streamingAssistant.runId) {
+				ctx.streamingAssistant.runId = runId
 			}
-			throw new RunFailedError(delta.data.message || 'generation failed')
+			throw new RunFailedError(delta.data.message || 'generation failed', runId)
+		}
 		case 'done':
 			if (ctx.streamingAssistant?.runId) {
 				activeRunsStore.forgetRun(ctx.streamingAssistant.runId)
@@ -92,10 +120,15 @@ export function processDelta(
 			return 'done'
 		case 'message_created': {
 			const msg = delta.data as unknown as ApiMessage
+			// apply the backend's splice: traffic the run never read moves after this
+			// message without waiting for a reload.
+			if (reparentSuccessors(ctx, msg.id, delta.data.splice?.reparent_message_ids)) {
+				ctx.rebuildRunBlocks()
+			}
 			const steeringState = getMessageSteeringState(msg)
+			const clientSteeringId = getMessageClientSteeringId(msg)
 			if (msg.type === 'user' && steeringState === 'queued') {
 				const runId = getMessageSteeringRunId(msg)
-				const clientSteeringId = getMessageClientSteeringId(msg)
 				const confirmed =
 					clientSteeringId && runId
 						? ctx.confirmQueuedSteeringMessage(clientSteeringId, msg.id, runId, msg)
@@ -179,7 +212,7 @@ export function processDelta(
 
 				// resource refs ({type, id}) attached by producer tools live in
 				// the public `attachments` metadata key on the streamed tool message.
-				const attachmentRefs = extractAttachmentRefs({ metadata_: toolMetadata })
+				const attachmentRefs = extractAttachmentRefs({ metadata: toolMetadata })
 
 				if (toolCallId) {
 					ctx.toolTracker.registerResult({
@@ -195,7 +228,7 @@ export function processDelta(
 				// add a tool message entry to the tree so the parent chain
 				// stays intact when the next assistant message references it
 				if (messageId && !ctx.messageTree.has(messageId)) {
-					const deltaParent = typeof env.parent_id === 'string' ? env.parent_id : null
+					const deltaParent = env.splice?.parent_id ?? null
 					const resolvedParent = deltaParent ?? sctx.getAssistantParentId()
 					const now = new SvelteDate().toISOString()
 					ctx.messageTree.set(messageId, {
@@ -207,7 +240,7 @@ export function processDelta(
 						tool_calls: [],
 						tool_call_id: toolCallId,
 						is_error: isError,
-						metadata_: {
+						metadata: {
 							...(toolMetadata ?? {}),
 							...(runId ? { run_id: runId } : {}),
 						},
@@ -257,7 +290,7 @@ export function processDelta(
 					}
 					if (!ctx.messageTree.has(messageId)) {
 						const now = new SvelteDate().toISOString()
-						const deltaParent = typeof env.parent_id === 'string' ? env.parent_id : null
+						const deltaParent = env.splice?.parent_id ?? null
 						const steeringParent = ctx.consumeSteeringParentOverride(runId)
 						const resolvedParent =
 							steeringParent ?? deltaParent ?? sctx.getAssistantParentId()
@@ -276,7 +309,7 @@ export function processDelta(
 							type: 'assistant',
 							content: [],
 							tool_calls: [],
-							metadata_: runId ? { run_id: runId } : undefined,
+							metadata: runId ? { run_id: runId } : undefined,
 							sender_agent_id: senderAgentId,
 							sender_user_id: null,
 							created_at: now,
@@ -329,7 +362,7 @@ export function processDelta(
 					const content = streaming.content.trim()
 					const now = new SvelteDate().toISOString()
 					const existingMessage = ctx.messageTree.get(streaming.messageId)
-					const deltaParent = typeof env.parent_id === 'string' ? env.parent_id : null
+					const deltaParent = env.splice?.parent_id ?? null
 					const resolvedParent =
 						existingMessage?.parent_id ?? deltaParent ?? sctx.getAssistantParentId()
 					const streamCitations = ctx.citationSources.get(streaming.messageId)
@@ -349,7 +382,7 @@ export function processDelta(
 							arguments: tc.arguments,
 						})),
 						citations: citedSources?.length ? citedSources : undefined,
-						metadata_: streaming.runId ? { run_id: streaming.runId } : undefined,
+						metadata: streaming.runId ? { run_id: streaming.runId } : undefined,
 						sender_agent_id: streaming.senderAgentId,
 						sender_user_id: null,
 						created_at: now,
@@ -568,7 +601,7 @@ export async function runThreadStream(
 		agentId: string
 		input: RunInput | null
 		runId: number
-		parentId?: string | null
+		splice?: MessageSplice
 		toolChoice?: ToolChoiceValue | null
 		extraPlugins?: string[]
 	},
@@ -577,7 +610,7 @@ export async function runThreadStream(
 	ctx.runAbortController?.abort()
 	ctx.runAbortController = new AbortController()
 
-	const parentId = opts.parentId ?? ctx.currentLeafId
+	const parentId = opts.splice?.parent_id ?? ctx.currentLeafId
 
 	// when retrying, switch view to parent so new response replaces old branch
 	if (!opts.input) {
@@ -589,7 +622,7 @@ export async function runThreadStream(
 		threadId: opts.threadId,
 		agentId: opts.agentId,
 		input: opts.input,
-		parentId,
+		splice: opts.splice,
 		toolChoice: opts.toolChoice,
 		extraPlugins: opts.extraPlugins,
 		signal: ctx.runAbortController.signal,
@@ -606,8 +639,14 @@ export async function runThreadStream(
 	try {
 		outcome = await consumeStream(stream, consumeOpts, ctx)
 	} catch (err) {
-		// backend-declared failure or intentional abort: do not resume.
-		if (err instanceof RunFailedError || isAbortError(err, ctx)) throw err
+		// backend-declared failure, intentional abort, or the POST itself rejected
+		// (no run to rejoin): do not resume.
+		if (
+			err instanceof RunFailedError ||
+			err instanceof StreamHttpError ||
+			isAbortError(err, ctx)
+		)
+			throw err
 		// transport error before/while streaming: try to rejoin the run, keeping
 		// the original error so an unrecoverable failure surfaces its real cause.
 		await recoverRunStream(consumeOpts, ctx, err)
@@ -727,18 +766,11 @@ export async function resumeCreateAndRun(
 	} catch (e) {
 		console.error('failed to resume create_and_run stream', e)
 		if (runId === ctx.activeRun) {
-			// preserve any streamed text as a partial message in the tree so the
-			// error bubble renders alongside it instead of deleting it.
-			finalizeStreamingAssistantAsPartial(ctx)
-			ctx.streamingAssistant = {
-				runId: ctx.streamingAssistant?.runId ?? null,
-				messageId: `error-${runId}`,
-				content: '',
-				timestamp: new SvelteDate(),
-				senderAgentId: selectedAgent.id,
-				toolCalls: [],
-				isError: true,
-				errorMessage: e instanceof Error ? e.message : 'something went wrong',
+			if (runReachedBackend(e, ctx)) {
+				markRunBridgeFailed(ctx, e instanceof Error ? e.message : 'something went wrong')
+			} else {
+				markRunNotDelivered(ctx)
+				showError('your message was not delivered')
 			}
 		}
 		ctx.rebuildRunBlocks()

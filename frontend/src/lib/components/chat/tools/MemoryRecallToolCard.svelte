@@ -41,7 +41,7 @@
 
 	{#snippet body()}
 		{#if recallQuery}
-			<div class="text-foreground/60 mb-3 text-sm">
+			<div class="text-foreground/60 mb-3 text-sm select-text">
 				<span class="text-foreground/50">searching for:</span>
 				{recallQuery}
 			</div>
@@ -50,7 +50,9 @@
 		{#if memories.length > 0}
 			<div class="space-y-2">
 				{#each memories as memory, idx (idx)}
-					<div class="rounded-pill bg-foreground/5 text-foreground/70 px-3 py-2 text-sm">
+					<div
+						class="rounded-pill bg-foreground/5 text-foreground/70 px-3 py-2 text-sm select-text"
+					>
 						{typeof memory === 'string' ? memory : JSON.stringify(memory)}
 					</div>
 				{/each}

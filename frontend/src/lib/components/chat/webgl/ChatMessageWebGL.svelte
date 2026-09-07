@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { getBackgroundContext } from '$lib/contexts/backgroundContext'
+	import { startFrameLoop } from '$lib/utils/frameLoop'
 	import type { Snippet } from 'svelte'
 	import { onDestroy, onMount } from 'svelte'
 
@@ -22,8 +23,7 @@
 	let containerRef: HTMLDivElement
 	let gl: WebGL2RenderingContext | null = null
 	let program: WebGLProgram | null = null
-	let animationId: number | null = null
-	let startTime = 0
+	let stopFrameLoop: (() => void) | null = null
 	let backgroundTexture: WebGLTexture | null = null
 	let backgroundCanvas: HTMLCanvasElement | null = null
 
@@ -231,8 +231,6 @@ void main() {
 		// Initialize with black texture
 		const blackPixel = new Uint8Array([0, 0, 0, 255])
 		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, blackPixel)
-
-		startTime = performance.now()
 	}
 
 	function resize() {
@@ -251,7 +249,7 @@ void main() {
 		}
 	}
 
-	function animate() {
+	function animate(nowMs: number) {
 		if (!gl || !program) return
 
 		resize()
@@ -262,7 +260,6 @@ void main() {
 
 		// Skip drawing until the galaxy background has been sized
 		if (!backgroundCanvas || backgroundCanvas.width === 0 || backgroundCanvas.height === 0) {
-			animationId = requestAnimationFrame(animate)
 			return
 		}
 
@@ -293,7 +290,7 @@ void main() {
 		const dprLoc = gl.getUniformLocation(program, 'u_dpr')
 		const backgroundLoc = gl.getUniformLocation(program, 'u_background')
 
-		const currentTime = (performance.now() - startTime) * 0.001
+		const currentTime = nowMs * 0.001
 		const dpr = window.devicePixelRatio || 1
 		const rect = containerRef.getBoundingClientRect()
 
@@ -315,8 +312,6 @@ void main() {
 		gl.clearColor(0, 0, 0, 0)
 		gl.clear(gl.COLOR_BUFFER_BIT)
 		gl.drawArrays(gl.TRIANGLES, 0, 6)
-
-		animationId = requestAnimationFrame(animate)
 	}
 
 	onMount(() => {
@@ -330,13 +325,12 @@ void main() {
 		initWebGL()
 		resize()
 		window.addEventListener('resize', resize)
-		animationId = requestAnimationFrame(animate)
+		stopFrameLoop = startFrameLoop(animate)
 	})
 
 	onDestroy(() => {
-		if (animationId !== null) {
-			cancelAnimationFrame(animationId)
-		}
+		stopFrameLoop?.()
+		stopFrameLoop = null
 		window.removeEventListener('resize', resize)
 		gl?.getExtension('WEBGL_lose_context')?.loseContext()
 	})

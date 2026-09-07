@@ -6,20 +6,31 @@
 
 import type {
 	CreateAndRunStreamDelta,
-	ResourceAttachment,
 	RunAttachmentType,
+	RunInput,
 } from '$lib/api/streaming/chatStream'
 import type { components } from '$lib/api/types'
 import type { ResourceItem } from '$lib/components/widgets/types'
 import type { Thread } from '$lib/stores/chat.svelte'
 import type { ToolCall, ToolExecution, ToolExecutionTracker } from '$lib/tools'
 import type { SvelteMap, SvelteSet } from 'svelte/reactivity'
+import type { LoadTreeOptions } from './dataLoader'
+import type { MessageAuthor } from './participants'
+import type { ChatSystemEvent } from './systemEvents'
 
 // --- API types ---
 
 export type ApiMessage = components['schemas']['Message']
 export type ApiCitation = components['schemas']['Citation']
 export type { ResourceAttachment } from '$lib/api/streaming/chatStream'
+
+/**
+ * opt-in for thread/message deletes: also delete the resources that originated
+ * in the deleted messages. attached resources are never deleted.
+ */
+export type DeleteOriginatedOptions = {
+	deleteOriginatedResources?: boolean
+}
 
 // --- content part types ---
 
@@ -67,6 +78,17 @@ export interface RunModifiers {
 	generateImage: boolean
 	extraPlugins: string[]
 	attachments: PendingAttachment[]
+	/**
+	 * message this one answers. a semantic anchor for the quote preview only:
+	 * it never places the message in the tree, which is what `splice` does.
+	 */
+	replyToMessageId?: string | null
+	/**
+	 * agent explicitly armed for THIS send, which turns it into a run instead of
+	 * a plain post. an invocation, never a mention, and never the composer's
+	 * global selection - the user armed exactly one agent for exactly one send.
+	 */
+	invokeAgentId?: string | null
 }
 
 /** structured optimistic user message - mirrors what was sent to the API */
@@ -74,12 +96,16 @@ export interface OptimisticUserMessage {
 	text: string
 	attachments: PendingAttachment[]
 	timestamp: Date
+	/**
+	 * the request never reached the backend, so nothing was persisted and no
+	 * event will ever arrive. transient: the bubble says so instead of waiting
+	 * forever on a reconciliation that cannot come.
+	 */
+	deliveryFailed?: boolean
 }
 
-export interface PendingRunInput {
-	text?: string | null
-	attachments?: ResourceAttachment[]
-}
+/** the exact payload a queued steering message will be re-sent with. */
+export type PendingRunInput = RunInput
 
 export type SteeringState = 'queued' | 'injected' | 'dropped'
 
@@ -130,14 +156,51 @@ export interface RunActivityState extends Omit<RunActivityEvent, 'type' | 'phase
 	endedAt?: Date
 }
 
+/** why a run stopped without answering. closed set - render from it, never
+ * display raw text. */
+export type RunFailureReason = 'cancelled' | 'provider_error' | 'never_started' | 'not_delivered'
+
+/**
+ * a durable `run.error`, anchored to the message the agent was answering.
+ *
+ * immutable: whether it still stands is DERIVED from the conversation (did that
+ * agent answer on that anchor afterwards), never stored. a retry that fails
+ * again appends a second entry rather than rewriting this one.
+ */
+export interface RunFailureEntry {
+	/** event id - the dedupe key, since the same failure arrives live and on reload. */
+	id: string
+	threadId: string
+	agentId: string
+	reason: RunFailureReason
+	/** null when no run ever existed for the agent. */
+	runId: string | null
+	/** message the failure renders under. */
+	anchorMessageId: string | null
+	/** partial output the run produced; renders as a normal message. */
+	partialMessageId: string | null
+	createdAt: Date
+}
+
 export type RunItem =
 	| { kind: 'user'; message: ApiMessage; align: 'left' | 'right' }
-	| { kind: 'optimistic_user'; text: string; attachments: PendingAttachment[]; timestamp: Date }
+	| {
+			kind: 'optimistic_user'
+			text: string
+			attachments: PendingAttachment[]
+			timestamp: Date
+			deliveryFailed?: boolean
+	  }
 	| { kind: 'run_activity'; activity: RunActivityState }
 	| { kind: 'assistant'; message: ApiMessage }
 	| { kind: 'tool'; toolCallId: string }
 	| { kind: 'streaming_assistant' }
 	| { kind: 'streaming_tool'; toolCallId: string }
+	| { kind: 'run_failure'; failure: RunFailureEntry }
+	/** a centered system row; it owns its block, so it never shares one with a bubble. */
+	| { kind: 'system_event'; event: ChatSystemEvent }
+	/** a centered time header, dropped where the conversation went quiet. */
+	| { kind: 'time_header'; at: Date }
 
 export interface RunBlock {
 	runId: string
@@ -190,6 +253,8 @@ export interface ChatContext {
 	runAbortController: AbortController | null
 	stageQueuedSteeringMessage(message: QueuedSteeringMessage): void
 	removeQueuedSteeringMessage(messageId: string): void
+	/** whether this client queued the message as text steering (a ghost bubble). */
+	ownsSteeringMessage(messageId: string): boolean
 	confirmQueuedSteeringMessage(
 		clientSteeringId: string,
 		messageId: string,
@@ -215,10 +280,31 @@ export interface ChatContext {
 	messageSkip: number
 	hasMoreMessages: boolean
 	isLoadingOlderMessages: boolean
+	/** whether the branch continues past the loaded window toward its leaf. */
+	hasNewerMessages: boolean
+	isLoadingNewerMessages: boolean
+
+	/** cursor for the next page toward the branch root; null = root reached.
+	 *
+	 * depth is counted from the branch leaf, so every offset shifts the moment
+	 * anyone appends. scroll with this, never with `skip`.
+	 */
+	branchCursorTowardRoot: string | null
+
+	/** cursor for the next page toward the branch leaf; null = tail reached. */
+	branchCursorTowardLeaf: string | null
+
+	/** message this load opened at, for the view to reveal. null = live tail. */
+	initialAnchorMessageId: string | null
+
+	/** branch alternatives per forked message, from the loaded pages. */
+	readonly siblingCounts: SvelteMap<string, number>
 
 	// scroll
 	readonly scrollContainer: HTMLElement | null
 	autoScroll: boolean
+	/** re-measure overflow after a content or viewport size change. */
+	measureScrollable(): void
 
 	// tools (reactive tracker - no tick counter needed)
 	readonly toolTracker: ToolExecutionTracker
@@ -230,14 +316,19 @@ export interface ChatContext {
 	readonly runActivities: SvelteMap<string, RunActivityState>
 	processRunActivityEvent(event: RunActivityEvent): void
 
+	/** durable run failures, keyed by event id (the dedupe key). */
+	readonly runFailures: SvelteMap<string, RunFailureEntry>
+	recordRunFailure(failure: RunFailureEntry): void
+
+	/** inline system rows, keyed by event id - the same one arrives live and on reload. */
+	readonly systemEvents: SvelteMap<string, ChatSystemEvent>
+	recordSystemEvent(event: ChatSystemEvent): void
+
 	// citations (message-scoped, accumulated from citation.sources WS events)
 	readonly citationSources: SvelteMap<string, ApiCitation[]>
 	citationTargetMessageId: string | null
 	addCitationSources(citations: ApiCitation[]): void
 	flushCitationsToMessage(messageId: string): void
-
-	// realtime
-	readonly typingUsers: SvelteSet<string>
 
 	// derived
 	readonly isTemporaryChat: boolean
@@ -278,12 +369,22 @@ export interface ChatState extends ChatContext {
 	readonly showThreadLoader: boolean
 	readonly hasRenderableMessages: boolean
 	readonly hasActiveStreamingToolCalls: boolean
+	/** no text token has arrived for a while, so the placeholder comes back. */
+	readonly isStreamingTextStalled: boolean
 	readonly agentNameById: Map<string, string>
 	readonly agentAvatarById: Map<string, string | null>
+	/** agents on this thread's roster, keyed by agent id. */
+	readonly threadAgentById: Map<string, MessageAuthor>
+	/** human identities for this thread, keyed by user id. */
+	readonly participantById: Map<string, MessageAuthor>
 
 	// scroll
+	/** whether the transcript overflows its viewport at all. */
+	readonly canScroll: boolean
 	handleScroll(): void
 	scrollToBottom(behavior?: 'auto' | 'smooth'): void
+	/** content height changed with no gesture; re-pins if the view sits at the bottom. */
+	onContentResize(): void
 	// record a genuine user scroll gesture (wheel/touch) so the pin detaches on
 	// scroll-up and re-evaluates from position even during streaming.
 	onUserScrollGesture(direction?: 'up' | 'down' | 'unknown'): void
@@ -296,9 +397,13 @@ export interface ChatState extends ChatContext {
 	getToolExecution(toolCallId: string): ToolExecution | undefined
 
 	// delegated actions
-	loadTree(threadId: string): Promise<boolean>
+	loadTree(threadId: string, options?: LoadTreeOptions): Promise<boolean>
 	handleSendMessage(content: string, modifiers?: RunModifiers): Promise<void>
-	handleRegenerateMessage(parentId?: string | null, prompt?: string | null): Promise<void>
+	handleRegenerateMessage(
+		parentId?: string | null,
+		prompt?: string | null,
+		agentId?: string | null
+	): Promise<void>
 	handleStopGeneration(): void
 	handleSaveEditMessage(messageId: string, newContent: string): Promise<void>
 	handleSaveAsCopyMessage(messageId: string, newContent: string): Promise<void>
@@ -307,7 +412,7 @@ export interface ChatState extends ChatContext {
 		threadId: string
 	): Promise<{ resolvedThreadId: string } | void>
 	requestDeleteUserMessage(messageId: string): void
-	deleteUserMessage(messageId: string): Promise<boolean>
+	deleteUserMessage(messageId: string, options?: DeleteOriginatedOptions): Promise<boolean>
 	dropSteering(runId: string, messageId: string): Promise<void>
 	switchBranch(messageId: string, direction: 'prev' | 'next'): Promise<void>
 	findRunUserMessage(block: RunBlock): string | null

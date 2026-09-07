@@ -36,7 +36,7 @@
 					arguments
 				</h4>
 				<pre
-					class="rounded-pill text-foreground/70 overflow-x-auto bg-black/20 p-2 text-xs">{JSON.stringify(
+					class="rounded-pill text-foreground/70 overflow-x-auto bg-black/20 p-2 text-xs select-text">{JSON.stringify(
 						execution.toolCall.arguments,
 						null,
 						2
@@ -50,7 +50,7 @@
 					result
 				</h4>
 				<pre
-					class="rounded-pill max-h-32 overflow-auto bg-black/20 p-2 text-xs {execution
+					class="rounded-pill max-h-32 overflow-auto bg-black/20 p-2 text-xs select-text {execution
 						.result.isError
 						? 'text-red-300'
 						: 'text-foreground/70'}">{execution.result.output}</pre>
@@ -60,7 +60,7 @@
 		{#if execution.error && !execution.result}
 			<div>
 				<h4 class="mb-1 text-xs font-medium tracking-wide text-red-400 uppercase">error</h4>
-				<p class="text-sm text-red-300">{execution.error}</p>
+				<p class="text-sm text-red-300 select-text">{execution.error}</p>
 			</div>
 		{/if}
 	{/snippet}

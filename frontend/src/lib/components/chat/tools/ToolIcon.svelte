@@ -9,7 +9,6 @@
 	import Component from '$lib/components/icons/Component.svelte'
 	import Document from '$lib/components/icons/Document.svelte'
 	import Eye from '$lib/components/icons/Eye.svelte'
-	import Film from '$lib/components/icons/Film.svelte'
 	import FinderFolder from '$lib/components/icons/FinderFolder.svelte'
 	import GlobeAlt from '$lib/components/icons/GlobeAlt.svelte'
 	import Headphone from '$lib/components/icons/Headphone.svelte'
@@ -18,6 +17,7 @@
 	import Photo from '$lib/components/icons/Photo.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
+	import VideoCamera from '$lib/components/icons/VideoCamera.svelte'
 	import { getNativeToolDefinition, isMcpToolName } from '$lib/tools'
 
 	interface Props {
@@ -55,7 +55,7 @@
 {:else if icon === 'photo'}
 	<Photo class={iconClass} />
 {:else if icon === 'film'}
-	<Film class={iconClass} />
+	<VideoCamera class={iconClass} />
 {:else if icon === 'headphone'}
 	<Headphone class={iconClass} />
 {:else if icon === 'terminal'}

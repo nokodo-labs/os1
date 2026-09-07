@@ -4,13 +4,14 @@
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
 	import Clock from '$lib/components/icons/Clock.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
+	import type { Attachment } from 'svelte/attachments'
 	import { SvelteSet } from 'svelte/reactivity'
 
 	interface SteeringQueueProps {
 		messages: QueuedSteeringMessage[]
 		onDrop?: (runId: string, messageId: string) => Promise<void> | void
-		/** Svelte action applied to each queued row on mount for entrance. */
-		entrance?: (node: HTMLElement) => void
+		/** attached to each queued row on mount for entrance. */
+		entrance?: Attachment<HTMLElement>
 		/** id of the row to hide while an entrance ghost morphs into it; the
 		 *  real bubble is revealed once the morph lands. */
 		hiddenId?: string | null
@@ -46,7 +47,7 @@
 		{#each messages as message (message.id)}
 			<div
 				class="flex max-w-[80%] items-center justify-end gap-2"
-				use:entrance
+				{@attach entrance}
 				style:opacity={message.id === hiddenId ? '0' : undefined}
 			>
 				<span

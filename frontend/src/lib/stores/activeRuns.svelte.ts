@@ -160,16 +160,19 @@ class ActiveRunsStore {
 			if (data.run_id) {
 				this.runs.delete(data.run_id)
 			}
-		} else if (msg.type === 'run.error' || msg.type === 'run.failed') {
+		} else if (msg.type === 'run.error') {
 			const data = (msg.data ?? {}) as {
 				thread_id?: string
 				run_id?: string
+				reason?: string
 			}
 			if (data.run_id) {
 				const run = this.runs.get(data.run_id)
 				const threadId = data.thread_id ?? run?.threadId
 				this.runs.delete(data.run_id)
-				if (threadId) {
+				// stopping is how a run is meant to end when the reader says so,
+				// so it clears the run without turning the status orb red.
+				if (threadId && data.reason !== 'cancelled') {
 					this.errorThreadIds.set(threadId, Date.now())
 					// auto-clear error after 30s
 					const prev = this.#errorTimeouts.get(threadId)

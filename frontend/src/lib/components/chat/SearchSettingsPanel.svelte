@@ -26,8 +26,8 @@
 	const options: SearchTypeOption[] = [
 		{ type: 'thread', label: 'chats', visualType: 'thread' },
 		{ type: 'note', label: 'notes', visualType: 'note' },
-		{ type: 'reminder', label: 'reminders', visualType: 'reminder' },
-		{ type: 'calendar_event', label: 'calendar', visualType: 'calendar_event' },
+		{ type: 'reminder_list', label: 'reminders', visualType: 'reminder' },
+		{ type: 'calendar', label: 'calendar', visualType: 'calendar_event' },
 		{ type: 'file', label: 'files', visualType: 'file' },
 	]
 
@@ -63,6 +63,7 @@
 					onclick={() => toggleType(option.type)}
 				>
 					<Icon
+						variant={selected ? 'solid' : 'outline'}
 						class="h-5 w-5 shrink-0"
 						color={resourceAccentColor(option.visualType)}
 						strokeWidth="2"

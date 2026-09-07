@@ -4,37 +4,61 @@
  */
 
 import { api } from '$lib/api/client'
+import { getJwtUserId } from '$lib/auth/jwt'
+import { getAccessToken } from '$lib/auth/session.svelte'
+import type { DeleteOriginatedOptions } from '$lib/chat/types'
 import { chat } from '$lib/stores/chat.svelte'
+import type { ConfirmDeleteToggle } from '$lib/stores/modals.svelte'
 import { showError } from '$lib/stores/notifications.svelte'
 
+/** opt-in switch offered when confirming a thread delete. */
+export const THREAD_ORIGINATED_TOGGLE: ConfirmDeleteToggle = {
+	label: 'also delete what was created here',
+	description:
+		'notes, reminders, files and events created in this chat get deleted too. anything only attached to it is kept.',
+}
+
 /** delete a thread via API. returns the HTTP status, or null on network error. */
-export async function deleteThread(threadId: string): Promise<number | null> {
+export async function deleteThread(
+	threadId: string,
+	options: DeleteOriginatedOptions = {}
+): Promise<number | null> {
 	const { response } = await api.DELETE('/v1/threads/{thread_id}', {
-		params: { path: { thread_id: threadId } },
+		params: {
+			path: { thread_id: threadId },
+			query: options.deleteOriginatedResources
+				? { delete_originated_resources: true }
+				: undefined,
+		},
 	})
 	return response.status
 }
 
-/** archive a thread via API with optimistic sidebar removal. */
+/** archive state is per-user, so every write is addressed to the caller's participant row. */
+async function setArchived(threadId: string, archived: boolean): Promise<boolean> {
+	const token = getAccessToken()
+	const userId = token ? getJwtUserId(token) : null
+	if (!userId) return false
+
+	const { error } = await api.PATCH('/v1/threads/{thread_id}/participants/users/{user_id}', {
+		params: { path: { thread_id: threadId, user_id: userId } },
+		body: { archived },
+	})
+	return !error
+}
+
+/** archive a thread for the current user (per-user state) with optimistic removal. */
 export async function archiveThread(threadId: string): Promise<boolean> {
 	const previousThread = chat.recentThreads.find((thread) => thread.id === threadId) ?? null
 	if (previousThread) chat.removeRecentThread(threadId)
 
 	try {
-		const { error } = await api.PATCH('/v1/threads/{thread_id}', {
-			params: { path: { thread_id: threadId } },
-			body: { is_archived: true },
-		})
-
-		if (error) {
+		if (!(await setArchived(threadId, true))) {
 			if (previousThread) chat.recentThreads = [previousThread, ...chat.recentThreads]
 			showError('could not archive chat')
 			return false
 		}
 
-		if (chat.activeThread?.id === threadId) {
-			chat.activeThread = { ...chat.activeThread, is_archived: true }
-		}
 		void chat.refreshThreads()
 		return true
 	} catch {
@@ -44,27 +68,47 @@ export async function archiveThread(threadId: string): Promise<boolean> {
 	}
 }
 
-/** unarchive a thread via API and refresh the visible sidebar list. */
+/** unarchive a thread for the current user (per-user state). */
 export async function unarchiveThread(threadId: string): Promise<boolean> {
 	try {
-		const { error } = await api.PATCH('/v1/threads/{thread_id}', {
-			params: { path: { thread_id: threadId } },
-			body: { is_archived: false },
-		})
-
-		if (error) {
+		if (!(await setArchived(threadId, false))) {
 			showError('could not unarchive chat')
 			return false
 		}
 
-		if (chat.activeThread?.id === threadId) {
-			chat.activeThread = { ...chat.activeThread, is_archived: false }
-		}
 		void chat.refreshThreads()
 		return true
 	} catch {
 		showError('could not unarchive chat')
 		return false
+	}
+}
+
+/**
+ * mute or unmute a thread for the current user (per-user state).
+ * returns the resulting flag, or null when the write failed.
+ */
+export async function setThreadMuted(threadId: string, muted: boolean): Promise<boolean | null> {
+	const token = getAccessToken()
+	const userId = token ? getJwtUserId(token) : null
+	if (!userId) return null
+
+	try {
+		const { data, error } = await api.PATCH(
+			'/v1/threads/{thread_id}/participants/users/{user_id}',
+			{
+				params: { path: { thread_id: threadId, user_id: userId } },
+				body: { muted },
+			}
+		)
+		if (error || !data) {
+			showError(muted ? 'could not mute chat' : 'could not unmute chat')
+			return null
+		}
+		return data.muted
+	} catch {
+		showError(muted ? 'could not mute chat' : 'could not unmute chat')
+		return null
 	}
 }
 
