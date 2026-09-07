@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { liquidGlass } from '$lib/liquid-glass/a/action'
+	import { liquidGlass } from '$lib/liquid-glass/a/liquidglass'
 
 	const BG_IMAGE = 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1200&q=80'
 
@@ -58,7 +58,7 @@
 	<div class="pointer-events-none absolute inset-0 z-10 p-6 pt-14">
 		<div class="pointer-events-auto grid gap-3">
 			<div
-				use:liquidGlass={'nav'}
+				{@attach liquidGlass('nav')}
 				class="text-foreground/90 w-full max-w-md rounded-full px-5 py-3 text-sm"
 			>
 				navigation pill
@@ -66,21 +66,21 @@
 			<div class="flex gap-3">
 				<button
 					type="button"
-					use:liquidGlass={'subtle'}
+					{@attach liquidGlass('subtle')}
 					class="text-foreground/85 rounded-2xl px-4 py-2.5 text-xs"
 				>
 					subtle button
 				</button>
 				<button
 					type="button"
-					use:liquidGlass={'heavy'}
+					{@attach liquidGlass('heavy')}
 					class="text-foreground/85 rounded-2xl px-4 py-2.5 text-xs"
 				>
 					heavy button
 				</button>
 			</div>
 			<div
-				use:liquidGlass={'panel'}
+				{@attach liquidGlass('panel')}
 				class="text-foreground/80 max-w-sm rounded-3xl px-5 py-4 text-xs"
 			>
 				<div class="text-foreground/90 font-medium">glass panel</div>
@@ -108,7 +108,7 @@
 		onpointercancel={stopDrag}
 	>
 		<div
-			use:liquidGlass={'heavy'}
+			{@attach liquidGlass('heavy')}
 			class="text-foreground/70 grid h-full w-full place-items-center rounded-3xl text-xs"
 		>
 			drag me
