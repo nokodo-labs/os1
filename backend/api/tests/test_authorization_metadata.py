@@ -18,6 +18,7 @@ from api.models.thread import Thread
 from api.permissions import ResourceType
 from api.tests.factories import create_user
 from api.v1.service.authorization import fetch_bulk_acl_metadata
+from api.v1.service.authorization.metadata import acl_revision_stamp
 from nokodo_ai.utils.typeid import new_typeid
 
 
@@ -132,7 +133,9 @@ async def test_acl_metadata_returns_user_group_and_role_ids(
 		"allowed_user_ids": [str(viewer.id)],
 		"allowed_group_ids": [str(group.id)],
 		"allowed_role_ids": [str(role.id)],
-		"acl_revision": 0,
+		# the stamp folds (kind, id, revision) triples, so a resource with no
+		# ancestors and no revision row still has one: its own ("self", id, 0).
+		"acl_revision": acl_revision_stamp([("self", str(thread.id), 0)]),
 	}
 
 
@@ -159,8 +162,42 @@ async def test_subjectless_rule_is_absent_from_acl_metadata(
 		"allowed_user_ids": [],
 		"allowed_group_ids": [],
 		"allowed_role_ids": [],
-		"acl_revision": 0,
+		"acl_revision": acl_revision_stamp([("self", str(thread.id), 0)]),
 	}
+
+
+def test_the_acl_stamp_is_order_independent_and_identity_sensitive() -> None:
+	"""the two properties the staleness sweep's equality test depends on.
+
+	order independence, because the ancestor walk yields a SET and two runs may
+	visit it in different orders - a stamp that moved with visit order would
+	report every resource stale forever.
+
+	identity sensitivity, because a SUM does not have it: an ancestor swapped
+	for a different one with an equal revision leaves a sum untouched while the
+	flattened principals should have been replaced wholesale. that is a
+	reachable shape - detach a file from thread A and attach it to thread B -
+	and it made the sweep silently agree with a stale payload.
+	"""
+	assert acl_revision_stamp(
+		[("thread", "a", 1), ("project", "b", 2)]
+	) == acl_revision_stamp([("project", "b", 2), ("thread", "a", 1)])
+
+	# the exact collision a sum has: same total, different ancestors.
+	assert acl_revision_stamp([("thread", "a", 3)]) != acl_revision_stamp(
+		[("thread", "b", 3)]
+	)
+	assert acl_revision_stamp(
+		[("thread", "a", 2), ("thread", "b", 1)]
+	) != acl_revision_stamp([("thread", "a", 1), ("thread", "b", 2)])
+
+	# and a plain revision bump still moves it
+	assert acl_revision_stamp([("self", "a", 1)]) != acl_revision_stamp(
+		[("self", "a", 2)]
+	)
+
+	# JSON-safe: the payload field is one integer in every vector store.
+	assert 0 <= acl_revision_stamp([("self", "a", 1)]) < 2**62
 
 
 @pytest.mark.asyncio
@@ -178,6 +215,6 @@ async def test_bulk_acl_metadata_empty_input_and_unknown_id(
 			"allowed_user_ids": [],
 			"allowed_group_ids": [],
 			"allowed_role_ids": [],
-			"acl_revision": 0,
+			"acl_revision": acl_revision_stamp([("self", unknown_id, 0)]),
 		}
 	}

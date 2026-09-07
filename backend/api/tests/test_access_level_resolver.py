@@ -1,4 +1,4 @@
-"""Access level resolver API tests."""
+"""access level resolver API tests."""
 
 import pytest
 from httpx import AsyncClient
@@ -269,7 +269,14 @@ async def test_link_visitor_cannot_list_thread_rules(
 		headers=visitor_headers,
 	)
 	assert single_resp.status_code == 404
-	assert visitor["id"]
+
+	# and never to another person's level, even at READER visibility
+	other_resp = await client.post(
+		f"/v1/threads/{thread_id}/access/resolve",
+		headers=visitor_headers,
+		json={"subject_user_ids": [named["id"]]},
+	)
+	assert other_resp.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -325,13 +332,23 @@ async def test_resolve_conceals_from_strangers_and_refuses_link_visitors(
 
 
 @pytest.mark.asyncio
-async def test_link_only_access_resolves_link_but_not_users_or_rules(
+async def test_link_visitor_resolves_self_but_not_others_or_rules(
 	client: AsyncClient,
 	admin_auth: dict[str, object],
 	user_auth: dict[str, object],
 ) -> None:
+	"""a link visitor learns their OWN level and nothing else about sharing.
+
+	`/access/resolve` answers effective access, so resolving yourself is
+	admitted on identity alone - that is how a link visitor is told what they
+	can do. it does NOT answer configuration: whether a link share exists is
+	read from the rule list under `acl_list_visibility`, which on PROJECT is
+	ADMIN, so a visitor is refused there.
+	"""
+	owner = user_auth["user"]
 	owner_headers = user_auth["headers"]
 	admin_headers = admin_auth["headers"]
+	assert isinstance(owner, dict)
 	assert isinstance(owner_headers, dict)
 	assert isinstance(admin_headers, dict)
 	project_resp = await client.post(
@@ -348,27 +365,27 @@ async def test_link_only_access_resolves_link_but_not_users_or_rules(
 	)
 	assert acl_resp.status_code == 200
 
-	link_resp = await client.post(
+	self_resp = await client.post(
 		f"/v1/projects/{project_id}/access/resolve",
 		headers=visitor_headers,
-		json={"link": True},
+		json={"subject_user_ids": [visitor["id"]]},
 	)
-	assert link_resp.status_code == 200
-	assert link_resp.json() == [
+	assert self_resp.status_code == 200
+	assert self_resp.json() == [
 		{
 			"resource_type": "project",
 			"resource_id": project_id,
-			"subject": "link",
-			"user_id": None,
+			"subject": "user",
+			"user_id": visitor["id"],
 			"level": "reader",
 		}
 	]
-	users_resp = await client.post(
+	others_resp = await client.post(
 		f"/v1/projects/{project_id}/access/resolve",
 		headers=visitor_headers,
-		json={"subject_user_ids": [visitor["id"]], "link": True},
+		json={"subject_user_ids": [visitor["id"], owner["id"]]},
 	)
-	assert users_resp.status_code == 403
+	assert others_resp.status_code == 403
 	rules_resp = await client.get(
 		f"/v1/projects/{project_id}/access/rules",
 		headers=visitor_headers,

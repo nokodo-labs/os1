@@ -43,7 +43,10 @@ DEDUPE_ACCESS_RULES_SQL = str(
 			Path(__file__).parents[1]
 			/ "migrations"
 			/ "versions"
-			/ "20260903_1629-417c7d54364d_access_rule_uniqueness.py"
+			/ (
+				"20260707_0930-8e77a463213f"
+				"_thread_participants_file_links_search_provenance.py"
+			)
 		)
 	)["DEDUPE_ACCESS_RULES_SQL"]
 )
@@ -375,11 +378,48 @@ async def test_duplicate_subjectless_resource_is_rejected_by_database(
 	db_session.add(AccessRule(thread_id=thread.id, level=AccessLevel.READER))
 	await db_session.flush()
 	savepoint = await db_session.begin_nested()
-	db_session.add(AccessRule(thread_id=thread.id, level=AccessLevel.EDITOR))
+	# both rows are READER because a subjectless rule cannot be anything else,
+	# so the uniqueness constraint is what has to reject this one.
+	db_session.add(AccessRule(thread_id=thread.id, level=AccessLevel.READER))
 	with pytest.raises(IntegrityError) as duplicate:
 		await db_session.flush()
 	await savepoint.rollback()
 	assert "uq_access_rule_subject_resource" in str(duplicate.value.orig)
+
+
+@pytest.mark.asyncio
+async def test_a_subjectless_rule_above_reader_is_rejected_by_database(
+	db_session: AsyncSession,
+) -> None:
+	"""the link cap is durable truth, not only an application-level clamp.
+
+	both engines grant a link holder exactly READER, and the rule list
+	serialises the stored level verbatim - so without this constraint a share
+	sheet could report "anyone with the link: admin" while the server grants
+	reader.
+	"""
+	owner = await create_user(db_session, f"alr_{uuid4().hex[:12]}")
+	thread = Thread(owner_id=owner.id, title="link level constraint")
+	db_session.add(thread)
+	await db_session.flush()
+	for level in (AccessLevel.EDITOR, AccessLevel.ADMIN):
+		savepoint = await db_session.begin_nested()
+		db_session.add(AccessRule(thread_id=thread.id, level=level))
+		with pytest.raises(IntegrityError) as violation:
+			await db_session.flush()
+		await savepoint.rollback()
+		assert "ck_access_rules_link_is_reader" in str(violation.value.orig)
+
+	# a named subject at the same level is untouched by the constraint
+	member = await create_user(db_session, f"alm_{uuid4().hex[:12]}")
+	db_session.add(
+		AccessRule(
+			thread_id=thread.id,
+			subject_user_id=member.id,
+			level=AccessLevel.ADMIN,
+		)
+	)
+	await db_session.flush()
 
 
 @pytest.mark.asyncio

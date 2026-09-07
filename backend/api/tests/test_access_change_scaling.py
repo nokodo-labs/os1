@@ -102,9 +102,11 @@ async def test_sharing_costs_the_same_at_any_attachment_count(
 	incremented: list[str] = []
 	locked: list[tuple[str, TypeID]] = []
 
-	async def record_increment(key: str) -> int:
-		incremented.append(key)
-		return 1
+	# the invalidation path issues ONE pipelined multi-increment for the whole
+	# ref set, so round-trips are observed here, not at the per-key `increment`.
+	async def record_increment_many(keys: list[str]) -> bool:
+		incremented.extend(keys)
+		return True
 
 	original_lock = advisory_locks.acquire_resource_write_lock
 
@@ -116,7 +118,9 @@ async def test_sharing_costs_the_same_at_any_attachment_count(
 		locked.append((namespace, resource_id))
 		await original_lock(session, namespace, resource_id)
 
-	monkeypatch.setattr(authorization_cache.cache, "increment", record_increment)
+	monkeypatch.setattr(
+		authorization_cache.cache, "increment_many", record_increment_many
+	)
 	monkeypatch.setattr(
 		"api.v1.service.authorization.changes.acquire_resource_write_lock",
 		record_lock,
@@ -200,11 +204,13 @@ async def test_sharing_one_thread_leaves_another_threads_entries_valid(
 	# resource's version, so entries keyed on it remain addressable.
 	incremented: list[str] = []
 
-	async def record_increment(key: str) -> int:
-		incremented.append(key)
-		return 1
+	async def record_increment_many(keys: list[str]) -> bool:
+		incremented.extend(keys)
+		return True
 
-	monkeypatch.setattr(authorization_cache.cache, "increment", record_increment)
+	monkeypatch.setattr(
+		authorization_cache.cache, "increment_many", record_increment_many
+	)
 	await _share(db_session, shared, owner, member)
 
 	unrelated_key = authorization_cache._accessible_users_version_key(

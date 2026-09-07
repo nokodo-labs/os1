@@ -24,7 +24,11 @@ from api.models.reminder import Reminder, ReminderList
 from api.models.thread import Thread
 from api.models.thread_participant import ThreadParticipant
 from api.models.user import User
-from api.permissions import ResourceType
+from api.permissions import (
+	RESOURCE_MANAGE_PERMISSION,
+	DefaultResourceAccess,
+	ResourceType,
+)
 from api.v1.service.authentication import Principal
 from api.v1.service.authorization import (
 	RESOURCE_CONFIG,
@@ -41,12 +45,18 @@ _LEVELS = (AccessLevel.READER, AccessLevel.EDITOR, AccessLevel.ADMIN)
 _SEEDS = tuple(range(12))
 
 
+#: both link-arm settings are asserted on every case: the arm is where the
+#: two engines are least alike by construction.
+_LINK_ARMS = (False, True)
+
+
 async def _sql_admits(
 	session: AsyncSession,
 	principal: Principal,
 	resource_type: ResourceType,
 	resource_id: TypeID,
 	required_level: AccessLevel,
+	include_link_access: bool = False,
 ) -> bool:
 	"""whether the SQL predicate admits the principal at the required level."""
 	id_col = RESOURCE_CONFIG[resource_type].id_col
@@ -58,6 +68,7 @@ async def _sql_admits(
 					principal,
 					resource_type,
 					required_level,
+					include_link_access=include_link_access,
 				),
 			)
 		)
@@ -70,6 +81,7 @@ async def _python_admits(
 	resource_type: ResourceType,
 	resource_id: TypeID,
 	required_level: AccessLevel,
+	include_link_access: bool = False,
 ) -> bool:
 	"""whether the python resolver admits the principal at the required level."""
 	level = await get_effective_access_level(
@@ -77,8 +89,42 @@ async def _python_admits(
 		principal,
 		resource_type,
 		resource_id,
+		include_link_access=include_link_access,
 	)
 	return level is not None and level_satisfies(level, required_level)
+
+
+async def _assert_engines_agree(
+	session: AsyncSession,
+	principal: Principal,
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	context: str,
+) -> None:
+	"""assert both engines agree on every level, with and without the link arm."""
+	for include_link_access in _LINK_ARMS:
+		for required_level in _LEVELS:
+			sql_answer = await _sql_admits(
+				session,
+				principal,
+				resource_type,
+				resource_id,
+				required_level,
+				include_link_access=include_link_access,
+			)
+			python_answer = await _python_admits(
+				session,
+				principal,
+				resource_type,
+				resource_id,
+				required_level,
+				include_link_access=include_link_access,
+			)
+			assert sql_answer == python_answer, (
+				f"{context} {resource_type.value} level={required_level.value} "
+				f"link={include_link_access} "
+				f"sql={sql_answer} python={python_answer}"
+			)
 
 
 async def _make_user(session: AsyncSession, slug: str) -> User:
@@ -120,9 +166,8 @@ async def test_highest_wins_agrees_between_sql_and_python(
 	db_session.add(thread)
 	await db_session.flush()
 
-	# uniqueness allows one rule per subject, so conflicting levels can only
-	# collide ACROSS subject kinds - which is exactly where last-match-wins and
-	# highest-wins give different answers.
+	# uniqueness allows one rule per subject, so conflicting levels collide only
+	# ACROSS subject kinds - where last-match-wins and highest-wins differ.
 	kinds = [kind for kind in ("user", "group", "link", "other") if rng.random() < 0.7]
 	rng.shuffle(kinds)
 	for order_index, kind in enumerate(kinds):
@@ -134,6 +179,8 @@ async def test_highest_wins_agrees_between_sql_and_python(
 			subject_user_id, subject_group_id = owner.id, None
 		else:
 			subject_user_id, subject_group_id = None, None
+		# link rules stay at READER because `ck_access_rules_link_is_reader` forbids
+		# anything else at the database; the constraint, not a case, pins the cap.
 		level = AccessLevel.READER if kind == "link" else rng.choice(_LEVELS)
 		db_session.add(
 			AccessRule(
@@ -147,17 +194,9 @@ async def test_highest_wins_agrees_between_sql_and_python(
 	await db_session.flush()
 
 	principal = Principal.for_user(subject, group_ids=group_ids)
-	for required_level in _LEVELS:
-		sql_answer = await _sql_admits(
-			db_session, principal, ResourceType.THREAD, thread.id, required_level
-		)
-		python_answer = await _python_admits(
-			db_session, principal, ResourceType.THREAD, thread.id, required_level
-		)
-		assert sql_answer == python_answer, (
-			f"seed={seed} level={required_level.value} "
-			f"sql={sql_answer} python={python_answer}"
-		)
+	await _assert_engines_agree(
+		db_session, principal, ResourceType.THREAD, thread.id, f"seed={seed}"
+	)
 
 
 @pytest.mark.parametrize("seed", _SEEDS)
@@ -210,12 +249,8 @@ async def test_inheritance_agrees_between_sql_and_python_multi_hop(
 			agents.append(agent)
 	await db_session.flush()
 
-	# thread -> message is leaf containment; a FILE attached to that message
-	# reaches the thread through the NON-TRANSITIVE attachment edge, so it
-	# inherits at most READER. the walk does NOT stop there: it keeps following
-	# the thread's TRANSITIVE parents (its projects) and only refuses to cross a
-	# second non-transitive edge. attaching projects to messages exercises that
-	# continuation from the other side.
+	# a file attached to a message reaches the thread through the
+	# NON-TRANSITIVE attachment edge; the walk continues past it regardless.
 	attached_files: list[File] = []
 	for index, thread in enumerate(threads):
 		message = UserMessage(thread_id=thread.id, sender_user_id=owner.id)
@@ -249,10 +284,8 @@ async def test_inheritance_agrees_between_sql_and_python_multi_hop(
 				)
 	await db_session.flush()
 
-	# reminder list -> project is the m2m edge again, reminder -> list is leaf
-	# containment: stacked on the project's own attachment parent this is the
-	# longest chain the link table admits, so the deepest generated paths are
-	# real rather than a flat graph the docstring merely claims is deep.
+	# reminder -> list -> project on the project's own attachment parent is the
+	# longest chain the link table admits, so generated paths are really deep.
 	reminder_lists: list[ReminderList] = []
 	reminders: list[Reminder] = []
 	for index in range(rng.randint(1, 2)):
@@ -313,6 +346,17 @@ async def test_inheritance_agrees_between_sql_and_python_multi_hop(
 					order_index=0,
 				)
 			)
+	# subjectless (link) rules ANYWHERE on the graph: the engines disagree most
+	# easily about whether a link grant on a PARENT reaches a child.
+	for project in projects:
+		if rng.random() < 0.35:
+			db_session.add(AccessRule(project_id=project.id, level=AccessLevel.READER))
+	for thread in threads:
+		if rng.random() < 0.35:
+			db_session.add(AccessRule(thread_id=thread.id, level=AccessLevel.READER))
+	for file in attached_files:
+		if rng.random() < 0.35:
+			db_session.add(AccessRule(file_id=file.id, level=AccessLevel.READER))
 	await db_session.flush()
 
 	principal = Principal.for_user(subject)
@@ -327,17 +371,35 @@ async def test_inheritance_agrees_between_sql_and_python_multi_hop(
 		*((ResourceType.REMINDER, reminder.id) for reminder in reminders),
 	]
 	for resource_type, resource_id in targets:
-		for required_level in _LEVELS:
-			sql_answer = await _sql_admits(
-				db_session, principal, resource_type, resource_id, required_level
-			)
-			python_answer = await _python_admits(
-				db_session, principal, resource_type, resource_id, required_level
-			)
-			assert sql_answer == python_answer, (
-				f"seed={seed} {resource_type.value} level={required_level.value} "
-				f"sql={sql_answer} python={python_answer}"
-			)
+		await _assert_engines_agree(
+			db_session, principal, resource_type, resource_id, f"seed={seed}"
+		)
+
+
+def _transitive_cycle(
+	resource_type: ResourceType,
+	on_path: tuple[ResourceType, ...],
+) -> tuple[ResourceType, ...] | None:
+	"""return a transitive cycle reachable from one type, or None.
+
+	DETECTION, not pruning. a cycle among transitive links makes real INSTANCE
+	chains arbitrarily long - both engines walk instances and bound only on
+	depth - while a walker that skips already-visited TYPES would keep
+	reporting a small number and never notice.
+
+	non-transitive links are excluded on purpose: one non-transitive hop blocks
+	the next, so an edge back to a container through the attachment link can
+	never chain into an unbounded walk.
+	"""
+	for link in PARENT_LINKS_BY_CHILD[resource_type]:
+		if not link.transitive:
+			continue
+		if link.parent_type in on_path:
+			return (*on_path, resource_type, link.parent_type)
+		cycle = _transitive_cycle(link.parent_type, (*on_path, resource_type))
+		if cycle is not None:
+			return cycle
+	return None
 
 
 def _longest_schema_path(
@@ -348,8 +410,12 @@ def _longest_schema_path(
 	"""longest parent chain the link table admits from one resource type.
 
 	walks `RESOURCE_PARENT_LINKS` the way both engines do - refusing a second
-	non-transitive hop - so the bound this returns is what the schema can
-	actually build, not what `MAX_INHERITANCE_DEPTH` permits.
+	non-transitive hop.
+
+	the `on_path` cut keeps this terminating, which means the number is a valid
+	bound only once the graph is known ACYCLIC. the caller establishes that
+	first with `_transitive_cycle`; without it this would happily report 3 for
+	a graph whose instance chains never end.
 	"""
 	best = 0
 	for link in PARENT_LINKS_BY_CHILD[resource_type]:
@@ -372,14 +438,27 @@ def _longest_schema_path(
 def test_the_depth_bound_is_slack_not_a_live_limit() -> None:
 	"""no schema path can reach `MAX_INHERITANCE_DEPTH`, so nothing truncates.
 
-	this is the honest version of a claim the multi-hop test used to make in
-	its docstring: project links do NOT chain, so the deepest path any data can
-	build is a few hops. the bound is a guard against a cyclic or future graph,
-	not a limit reached in practice - and the test below covers that deepest
-	real path instead of a fictional one. if a new link class ever makes the
-	schema deep enough to truncate, this assertion fails and the truncation
-	agreement needs its own test.
+	two halves, and the first is the load-bearing one. a cycle among transitive
+	links would let real data build an unbounded chain, which the depth bound
+	would then truncate - so that is checked by DETECTION, not by a longest-path
+	number that a cycle would silently keep small.
+
+	only once the transitive graph is acyclic does the longest path mean
+	anything, and then it is compared to the bound. today it is 3: project links
+	do not chain, because a project's only parent is the non-transitive
+	attachment edge. so the bound is slack against a future graph rather than a
+	limit reached in practice, and `test_engines_agree_on_the_deepest_schema_path`
+	covers that real deepest path instead of a fictional one.
 	"""
+	for resource_type in ResourceType:
+		cycle = _transitive_cycle(resource_type, ())
+		assert cycle is None, (
+			"the transitive link graph now contains a cycle: "
+			f"{' -> '.join(step.value for step in cycle or ())}. instance chains "
+			"along it are unbounded, so both engines truncate at "
+			f"{MAX_INHERITANCE_DEPTH} and their truncation agreement needs a test"
+		)
+
 	deepest = max(
 		_longest_schema_path(resource_type, False, frozenset())
 		for resource_type in ResourceType
@@ -469,17 +548,85 @@ async def test_engines_agree_on_the_deepest_schema_path(
 		db_session.add(rule)
 		await db_session.flush()
 		for resource_type, resource_id in targets:
-			for required_level in _LEVELS:
-				sql_answer = await _sql_admits(
-					db_session, principal, resource_type, resource_id, required_level
-				)
-				python_answer = await _python_admits(
-					db_session, principal, resource_type, resource_id, required_level
-				)
-				assert sql_answer == python_answer, (
-					f"grant={column} {resource_type.value} "
-					f"level={required_level.value} "
-					f"sql={sql_answer} python={python_answer}"
-				)
+			await _assert_engines_agree(
+				db_session, principal, resource_type, resource_id, f"grant={column}"
+			)
 		await db_session.delete(rule)
 		await db_session.flush()
+
+
+@pytest.mark.parametrize("default_level", _LEVELS)
+@pytest.mark.asyncio
+async def test_engines_agree_on_the_role_defaults_arm(
+	db_session: AsyncSession,
+	default_level: AccessLevel,
+) -> None:
+	"""a principal carrying role defaults resolves identically in both engines.
+
+	the defaults arm is built independently on each side - SQL ORs an
+	`owner_fk IS NOT NULL` term when the principal's merged defaults satisfy
+	the level (`predicates.py`), python reads `role_resource_defaults` directly
+	(`resolve.py`) - and nothing else in this file exercises it, because a
+	principal with no defaults never reaches either branch.
+	"""
+	owner = await _make_user(db_session, "defaults-owner")
+	subject = await _make_user(db_session, "defaults-subject")
+
+	thread = Thread(owner_id=owner.id, title="defaults thread")
+	db_session.add(thread)
+	project = Project(owner_id=owner.id, name=f"defaults {uuid4().hex[:8]}")
+	db_session.add(project)
+	await db_session.flush()
+
+	principal = Principal.for_user(
+		subject,
+		role_resource_defaults=DefaultResourceAccess(
+			thread=default_level, project=default_level
+		),
+	)
+	for resource_type, resource_id in (
+		(ResourceType.THREAD, thread.id),
+		(ResourceType.PROJECT, project.id),
+	):
+		await _assert_engines_agree(
+			db_session,
+			principal,
+			resource_type,
+			resource_id,
+			f"default={default_level.value}",
+		)
+
+
+@pytest.mark.asyncio
+async def test_engines_agree_on_the_operator_arm(
+	db_session: AsyncSession,
+) -> None:
+	"""an operator grant resolves identically in both engines.
+
+	SQL returns `true()` from `resource_access_predicate` and python
+	short-circuits to ADMIN in `get_effective_access_level`. two independent
+	short-circuits reading the same `is_resource_operator`, and the only other
+	place they are compared is by accident.
+	"""
+	owner = await _make_user(db_session, "operator-owner")
+	subject = await _make_user(db_session, "operator-subject")
+
+	thread = Thread(owner_id=owner.id, title="operator thread")
+	db_session.add(thread)
+	project = Project(owner_id=owner.id, name=f"operator {uuid4().hex[:8]}")
+	db_session.add(project)
+	await db_session.flush()
+
+	# an operator on THREAD only: the project stays un-granted, so a predicate
+	# that leaked the override across resource types shows up as a mismatch.
+	principal = Principal.for_user(
+		subject,
+		permissions=frozenset({RESOURCE_MANAGE_PERMISSION[ResourceType.THREAD]}),
+	)
+	for resource_type, resource_id in (
+		(ResourceType.THREAD, thread.id),
+		(ResourceType.PROJECT, project.id),
+	):
+		await _assert_engines_agree(
+			db_session, principal, resource_type, resource_id, "operator"
+		)
