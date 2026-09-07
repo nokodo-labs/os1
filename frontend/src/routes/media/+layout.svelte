@@ -8,15 +8,15 @@
 	let { children }: { children: Snippet } = $props()
 
 	$effect(() => {
-		pageTitleStore.pageTitle = 'research'
+		pageTitleStore.pageTitle = 'media'
 	})
 
 	$effect(() => {
-		accentStore.set('petrol')
+		accentStore.set('seer')
 	})
 
 	$effect(() => {
-		appNavigation.setLastVisited('research', page.url.pathname)
+		appNavigation.setLastVisited('media', page.url.pathname)
 	})
 </script>
 

@@ -69,5 +69,11 @@
 		>
 			chat send harness
 		</a>
+		<a
+			href={resolve('/debug/multi-writer')}
+			class="border-foreground/10 bg-foreground/5 text-foreground/80 hover:border-foreground/20 hover:bg-foreground/8 rounded-xl border px-4 py-3 text-sm transition"
+		>
+			multi-writer transcript
+		</a>
 	</div>
 </div>

@@ -148,7 +148,7 @@
 	}
 
 	function taskMetadata(value: ApiTask | null): Record<string, unknown> {
-		return (value?.metadata_ ?? {}) as Record<string, unknown>
+		return (value?.metadata ?? {}) as Record<string, unknown>
 	}
 
 	function isOpenWebUIImportTask(value: ApiTask | null): boolean {
