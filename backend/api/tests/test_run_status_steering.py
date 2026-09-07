@@ -1134,6 +1134,9 @@ async def test_local_catchup_marks_truncated_history(
 
 	store = RunStore()
 	run_id = TypeID(new_typeid("run"))
+	# the log is bounded at construction, so the window has to shrink before
+	# the run exists rather than between its frames.
+	monkeypatch.setattr(run_status_module, "RUN_LOG_MAX_FRAMES", 1)
 	await store.start_run(
 		run_id,
 		thread_id=None,
@@ -1141,7 +1144,6 @@ async def test_local_catchup_marks_truncated_history(
 		user_id=TypeID(new_typeid("user")),
 	)
 	# publish past the retained window so the catchup really is truncated.
-	monkeypatch.setattr(run_status_module, "RUN_LOG_MAX_FRAMES", 1)
 	await store.publish(run_id, b"dropped")
 	await store.publish(run_id, b"retained")
 

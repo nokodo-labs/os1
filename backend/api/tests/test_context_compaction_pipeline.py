@@ -447,9 +447,8 @@ class TestApplyContextCompaction:
 		self,
 		mock_session: AsyncMock,
 	) -> None:
-		# a hard-protected (read-this-iteration) tool message alone exceeds the
-		# window. prune cannot drop it, so the cascade hits the terminal throw
-		# with the media-specific guidance.
+		# a hard-protected tool message alone exceeds the window, so the cascade
+		# hits the terminal throw with the media-specific guidance.
 		ws = _compaction_settings()
 		protected_tool = ToolMessage(
 			tool_call_id="call_1",
@@ -483,8 +482,7 @@ class TestApplyContextCompaction:
 		mock_session: AsyncMock,
 	) -> None:
 		# the active run-start user message alone exceeds the window and carries
-		# no media. prune protects it, so the cascade hits the generic terminal
-		# throw (not the media-specific one).
+		# no media, so the cascade hits the generic terminal throw.
 		ws = _compaction_settings()
 		run_id = TypeID("run_1")
 		run_start = UserMessage(

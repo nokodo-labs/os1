@@ -107,11 +107,8 @@ def test_project_media_protects_active_tool_media() -> None:
 
 
 def test_project_media_hard_protects_media_at_the_consuming_call() -> None:
-	# the real agentic shape: within ONE user turn the model emits a tool_call,
-	# the tool appends bytes, then the model is called AGAIN to read them. at
-	# that consuming call the thread ends with the byte-carrying tool message.
-	# the hard window must cover this exact moment (the off-by-one risk: the
-	# window expiring on the append turn, before the read).
+	# the consuming call: the thread ends with the byte-carrying tool message,
+	# and the hard window must cover it rather than expire on the append.
 	from nokodo_ai.messages import ToolCall
 
 	consuming_call_thread = [
@@ -152,9 +149,8 @@ def _img(file_id: str, **meta: object) -> ImageContent:
 
 
 def test_project_media_soft_media_stays_native_but_unmarked() -> None:
-	# within ONE agent turn the model fetches twice across iterations. the
-	# earlier fetch is still inside the soft image window (3 iterations) but past
-	# the hard window (the read iteration), so its bytes stay native but unmarked.
+	# the earlier fetch is inside the soft image window (3 iterations) but past
+	# the hard one, so its bytes stay native but unmarked.
 	messages = [
 		_turn_user("analyze these"),  # turn 0
 		_turn_assistant("fetching the first"),  # turn 1, iteration 1
@@ -255,10 +251,8 @@ def _has_decay_marker(message: object) -> bool:
 
 
 def test_project_media_releases_media_past_soft_window() -> None:
-	# media fetched in an earlier agent turn is released regardless of iteration
-	# count: protection only lives inside the current agent turn. bytes are
-	# stripped and an inline decay marker is prepended (recoverable via
-	# file_get).
+	# protection only lives inside the current agent turn: earlier media is
+	# stripped to an inline decay marker, recoverable via file_get.
 	messages = [
 		_turn_user("t0"),  # turn 0
 		_turn_assistant("a0"),  # turn 1
@@ -288,9 +282,8 @@ def test_project_media_releases_modality_unsupported() -> None:
 
 
 def test_project_media_video_window_shorter_than_image() -> None:
-	# video soft window is 1 iteration (read-only), image is 3. both are fetched
-	# one iteration ago within the same agent turn: the video has aged out while
-	# the image survives.
+	# video soft window is 1 iteration, image is 3; fetched one iteration ago,
+	# the video has aged out while the image survives.
 	messages = [
 		_turn_user("look at both"),  # turn 0
 		_turn_assistant("fetching"),  # turn 1, iteration 1
@@ -309,9 +302,8 @@ def test_project_media_video_window_shorter_than_image() -> None:
 
 
 def test_project_media_manifest_marks_active_soft_and_released() -> None:
-	# one released (fetched in an earlier agent turn), plus one soft and one hard
-	# in the CURRENT agent turn at different iterations. the manifest reports
-	# active for both live ones and released for the aged one.
+	# one released plus one soft and one hard in the current agent turn: the
+	# manifest reports active for the live ones and released for the aged one.
 	messages = [
 		_turn_user("t0"),  # turn 0
 		_turn_assistant("a0"),  # turn 1, iteration 1
@@ -367,9 +359,8 @@ def test_project_media_renders_many_user_attachments_as_markers() -> None:
 
 
 def test_project_media_releases_in_turn_image_past_soft_window() -> None:
-	# image soft window is 3 iterations counting the read. fetched at iteration 1
-	# of an agent turn that then runs to iteration 4 (distance 3) WITHOUT the
-	# ball returning to the user: the image ages out inside the same agent turn.
+	# fetched at iteration 1 of a turn that runs to iteration 4 (distance 3):
+	# the image ages out inside the same agent turn.
 	messages = [
 		_turn_user("look at this"),  # turn 0
 		_turn_assistant("fetching"),  # turn 1, iteration 1

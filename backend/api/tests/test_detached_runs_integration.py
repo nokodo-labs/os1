@@ -1,25 +1,31 @@
-"""integration tests for run lifecycle.
+"""integration tests for the run stream lifecycle.
 
-these tests exercise the full service-layer flow:
-	launch_thread_run -> spawn background task -> subscribe stream
-without going through HTTP, but with the real run registry and stream store,
-RunRequest validation, and the real subscribe/publish/cancel machinery.
+these tests exercise the service-layer flow below ``launch_thread_run``:
+	_start_run -> spawn background task -> subscribe stream
+without going through HTTP, but with the real run registry and stream store
+and the real subscribe/publish/cancel machinery.
+
+the launch-path guards above ``_start_run`` - access, the thread load, splice
+validation, the agent slot claim/release cycle and input persistence - are
+covered by the router and launch tests, not here.
 
 what they prove:
 - a run keeps progressing even when the original SSE caller disconnects.
 - multiple concurrent subscribers (multi-tab, multi-participant) all see
   the same frames in the same order.
 - a late subscriber receives the full catchup log + continues live.
-- cancel_run via the store really stops the producer task and releases
-  every subscriber.
+- cancel_run via the store really stops the producer task, releases every
+  subscriber, and delivers the sanitized terminal error frame.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass, field
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.schemas.runs import RunState
 from api.tests.factories import make_principal
@@ -62,7 +68,7 @@ class _FakeAgent:
 		self,
 		thread_id: TypeID,
 		agent_id: TypeID,
-		principal: object,
+		principal: Principal,
 		run_id_override: TypeID,
 		ready_event: asyncio.Event,
 		**_kwargs: object,
@@ -73,7 +79,7 @@ class _FakeAgent:
 		self,
 		thread_id: TypeID,
 		agent_id: TypeID,
-		principal: object,
+		principal: Principal,
 		run_id: TypeID,
 		ready_event: asyncio.Event,
 	) -> None:
@@ -84,7 +90,7 @@ class _FakeAgent:
 				thread_id=thread_id,
 				container_root_id=None,
 				agent_id=agent_id,
-				user_id=getattr(principal, "user_id", TypeID("test-user")),
+				user_id=principal.user.id,
 				persist=True,
 			),
 		)
@@ -92,7 +98,7 @@ class _FakeAgent:
 			run_id=run_id,
 			thread_id=thread_id,
 			agent_id=agent_id,
-			user_id=getattr(principal, "user_id", TypeID("test-user")),
+			user_id=principal.user.id,
 		)
 		# mirror real run_agent: self-attach the current task so cancel_run
 		# works from the very first instant the run is visible.
@@ -120,7 +126,7 @@ class _FakeAgent:
 						t.cancel()
 						try:
 							await t
-						except asyncio.CancelledError, BaseException:
+						except asyncio.CancelledError:
 							pass
 			if self.finish.is_set():
 				break
@@ -284,20 +290,28 @@ async def test_cancel_run_terminates_producer_and_unblocks_subscribers(
 	assert cancelled is True
 
 	# subscriber must terminate (queue gets None sentinel from fail_run broadcast)
-	with pytest.raises(StopAsyncIteration):
-		# pump until exhaustion - we expect the stream to end shortly
-		async def _drain() -> None:
-			async for _ in stream:
-				pass
-			raise StopAsyncIteration
+	async def _drain() -> list[bytes]:
+		return [frame async for frame in stream]
 
-		await asyncio.wait_for(_drain(), timeout=2.0)
+	frames = await asyncio.wait_for(_drain(), timeout=2.0)
+
+	# the contract, not just the unblocking: the terminal frame carries the
+	# closed reason and the run's coordinates, and nothing else.
+	error_frames = [frame for frame in frames if b"event: error" in frame]
+	assert len(error_frames) == 1
+	payload = json.loads(error_frames[0].split(b"data: ", 1)[1])
+	assert payload == {
+		"thread_id": str(thread_id),
+		"agent_id": str(agent_id),
+		"reason": RunFailureReason.CANCELLED.value,
+		"run_id": str(run_id),
+		"partial_message_id": None,
+	}
+	assert frames[-1] == sse_encode(event="done", data={})
 
 	# run is no longer registered
 	assert await run_registry.get_run(run_id) is None
-	# producer task was actually cancelled - state should be FAILED before removal
-	# (already removed; we just confirm the in-memory row is gone above)
-	# additionally: a fresh cancel returns False
+	# a fresh cancel on an already-removed run returns False
 	assert await run_registry.cancel_run(run_id) is False
 
 
@@ -347,9 +361,8 @@ async def test_late_subscriber_after_eviction_closes_cleanly(
 	]
 	assert any(b"event: done" in f for f in frames)
 
-	# after the catchup log expires (DELETE the key to simulate post-grace),
-	# an unknown run yields a lone done frame rather than raising into a
-	# response body that already committed its status line.
+	# after the catchup log expires, an unknown run yields a lone done frame
+	# rather than raising into a response body that already sent its status.
 	from api.redis import redis_client
 	from api.v1.service.runs.bus import _bus, _route_key
 
@@ -430,6 +443,38 @@ async def test_steering_attach_outage_is_recorded_as_unavailable(
 
 	assert recorded == [BUS_UNAVAILABLE_REASON]
 	assert classify_failure(recorded[0]) is RunFailureReason.UNAVAILABLE
+
+
+async def test_a_run_that_never_registers_leaves_no_access_cursor(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+	fake_principal: Principal,
+	thread_id: TypeID,
+	agent_id: TypeID,
+) -> None:
+	"""the cursor is seeded before the run is visible, so it needs its own
+	release: the terminal path only drops it for a run that registered.
+	"""
+	_ = db_session
+	from api.v1.service.runs import access_cursors
+	from api.v1.service.runs import execution as run_execution
+
+	async def _start_fails(**_kwargs: object) -> None:
+		raise RuntimeError("registry is gone")
+
+	monkeypatch.setattr(run_execution.run_registry, "start_run", _start_fails)
+
+	with pytest.raises(RuntimeError, match="registry is gone"):
+		await run_execution.run_agent(
+			thread_id,
+			agent_id,
+			fake_principal,
+			persist=False,
+		)
+
+	# membership, not the value: an absent cursor and one seeded at revision 0
+	# both read back as 0, so only the map itself distinguishes them.
+	assert thread_id not in access_cursors._cursors
 
 
 async def test_remote_subscription_waits_when_route_precedes_first_frame(

@@ -13,6 +13,7 @@ from collections.abc import Callable
 
 import pytest
 from pytest import MonkeyPatch
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import post_commit
@@ -222,6 +223,62 @@ async def test_failing_action_does_not_escape_close() -> None:
 		_ = session
 		raise RuntimeError("action exploded")
 
+	# no explicit assert on purpose: the assertion is that this block exits -
+	# `close()` drains at the end of the `async with`.
 	async with async_session_local() as session:
 		enqueue_post_commit_action(session, boom)
 		await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_an_action_cannot_enqueue_another_action() -> None:
+	"""draining is not re-entrant, and the refusal is at the enqueue.
+
+	a queue that could grow while being drained has no fixed point, so this is
+	a hard error rather than a deferral to a later drain.
+	"""
+	captured: list[Exception] = []
+
+	async def noop(session: AsyncSession) -> None:
+		_ = session
+
+	async def enqueues_more(session: AsyncSession) -> None:
+		try:
+			enqueue_post_commit_action(session, noop)
+		except RuntimeError as exc:
+			captured.append(exc)
+
+	async with async_session_local() as session:
+		enqueue_post_commit_action(session, enqueues_more)
+		await session.commit()
+		await run_post_commit_actions(session)
+
+	assert len(captured) == 1
+	assert "cannot enqueue" in str(captured[0])
+
+
+@pytest.mark.asyncio
+async def test_an_action_that_writes_raises_rather_than_being_discarded() -> None:
+	"""the read-only contract is enforced at the database, not just documented.
+
+	the drain session is rolled back after every action, so a write would
+	otherwise be silently thrown away - the worst shape for a bug, since the
+	action appears to have run.
+	"""
+	errors: list[Exception] = []
+
+	async def writes(session: AsyncSession) -> None:
+		await session.execute(
+			text("UPDATE users SET display_name = display_name WHERE false")
+		)
+
+	async with async_session_local() as session:
+		enqueue_post_commit_action(session, writes)
+		await session.commit()
+		try:
+			await run_post_commit_actions(session)
+		except ExceptionGroup as group:
+			errors.extend(group.exceptions)
+
+	assert len(errors) == 1
+	assert "read-only" in str(errors[0]).lower()

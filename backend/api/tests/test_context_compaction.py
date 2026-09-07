@@ -282,12 +282,8 @@ class TestEnforceCombinedToolBudget:
 
 	def test_over_budget_compacts_oldest_first(self) -> None:
 		"""when combined tool tokens exceed budget, oldest results are compacted."""
-		# context_window=1000, headroom=100 -> budget=900
-		# combined_share=0.20 -> limit=180 tokens
-		# each tool output "x"*300 = ~90 tokens (300/4*1.2)
-		# 4 tool results = ~360 tokens > 180 limit
-		# compacting releases ~75 tokens each (90 - ~15 for notice)
-		# after compacting 3 oldest: ~135 tokens < 180 -> 1 preserved
+		# budget 900, combined_share 0.20 -> 180-token limit; 4 tool results at
+		# ~90 tokens each exceed it, and compacting the 3 oldest leaves 1.
 		big_output = "x" * 300
 		thread = _thread(
 			_sys("s"),
@@ -349,10 +345,8 @@ class TestEnforceCombinedToolBudget:
 
 	def test_compaction_skips_already_compacted_in_loop(self) -> None:
 		"""when over budget and oldest result is already compacted, skip it."""
-		# context_window=500, headroom=50 -> budget=450
-		# combined_share=0.10 -> limit=45 tokens
-		# big_output "x"*300 = ~90 tokens each
-		# 2 non-compacted results + 1 compacted = ~180 non-compacted tokens > 45
+		# budget 450, combined_share 0.10 -> 45-token limit; the 2 non-compacted
+		# results are ~180 tokens, well over it.
 		big_output = "x" * 300
 		thread = _thread(
 			_sys("s"),
@@ -960,9 +954,8 @@ class TestIslandAwareSummarization:
 			next_summarization_batch,
 		)
 
-		# a hard-media island sits between two compressible spans. the oldest
-		# batch must stop at the island instead of jumping past it to grab the
-		# newer compressible span (which would wall off the recoverable gap).
+		# a hard-media island between two compressible spans: the oldest batch must
+		# stop at the island rather than jump past it to the newer span.
 		long = "word " * 40
 		messages: list[Message] = [
 			_user(long, "m0"),

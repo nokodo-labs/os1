@@ -250,9 +250,8 @@ def test_long_running_chat_preserves_protection_under_compaction() -> None:
 			sim.assistant("let me pull that file.", tool_call_id=call_id)
 			sim.fetch(builder(fid, version), call_id=call_id)
 
-			# READ ITERATION: the model is about to consume the fresh bytes. the
-			# file is hard-protected here (distance 0), so compaction must keep
-			# it native and marked no matter how much history piled up.
+			# READ ITERATION: the file is hard-protected here (distance 0), so
+			# compaction must keep it native and marked however much history piled up.
 			sim.compact()
 			sim.assert_protection_invariants()
 			native = _native_file_ids(sim.messages)
@@ -261,9 +260,8 @@ def test_long_running_chat_preserves_protection_under_compaction() -> None:
 				hard_survived_every_read = False
 			assert sum_message_tokens(sim.messages) <= _BUDGET + 4_000
 
-		# the agent reasons over a couple more iterations within the run, then
-		# answers. by the end of the run the file has decayed to soft (and will
-		# be released once the next run starts a new agent turn).
+		# by the end of the run the file has decayed to soft, and is released once
+		# the next run starts a new agent turn.
 		sim.assistant(f"analysis part one {body}")
 		sim.plain_tool("search results", call_id=f"search_{tick}")
 		sim.assistant(f"final answer for {tick}: {body}")
@@ -313,10 +311,8 @@ def test_released_media_is_recoverable_by_refetch() -> None:
 
 
 def test_hard_media_that_busts_budget_reaches_terminal_condition() -> None:
-	# a single agent run reads many large files at once; their native bytes alone
-	# blow the budget. compaction must NOT drop them - instead it reaches the
-	# state the pipeline reports as a clear terminal error (hard media present
-	# and still over budget after everything compressible is gone).
+	# many large files read at once blow the budget on native bytes alone;
+	# compaction must NOT drop them, it must reach the terminal error state.
 	sim = _ChatSim()
 	huge = "word " * 4_000
 
@@ -336,8 +332,7 @@ def test_hard_media_that_busts_budget_reaches_terminal_condition() -> None:
 		sim.messages, sim.ids, _BUDGET, sim.run_id
 	)
 
-	# the hard-protected media tool message is still here, and we are still over
-	# budget: this is exactly the branch where the pipeline raises the explicit
-	# "fetch fewer files / use a larger context window" terminal error.
+	# hard-protected media still present and still over budget: the branch that
+	# raises the "fetch fewer files / larger context window" terminal error.
 	assert find_media_protected_index(sim.messages) is not None
 	assert sum_message_tokens(sim.messages) > _BUDGET

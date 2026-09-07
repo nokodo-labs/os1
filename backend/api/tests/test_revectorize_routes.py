@@ -276,9 +276,8 @@ async def test_vectorize_by_targets_only_stale(
 	assert str(file_current.id) not in dispatched_files
 	# force=True is what makes dispatched file processing actually rebuild.
 	assert forced_flags and all(forced_flags)
-	# the GET preview and the POST rebuild derive from the same selectors:
-	# counts must equal what the rebuild targeted (containment: parallel test
-	# rows can add to the db-scanned sets).
+	# preview and rebuild derive from the same selectors, so counts must equal
+	# what the rebuild targeted; parallel test rows add to the scanned sets.
 	resources = counts["resources"]
 	assert isinstance(resources, dict)
 	assert resources[VectorChunkResourceType.NOTE.value] == 1

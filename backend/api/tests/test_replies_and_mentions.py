@@ -34,7 +34,8 @@ from api.v1.service import threads as thread_service
 from api.v1.service.authentication import Principal
 from api.v1.service.runs.contracts import PersistedRunInput
 from api.v1.service.threads.drafts import MessageDraft
-from api.v1.service.threads.splices import replacement_messages
+from api.v1.service.threads.splices import PreparedPlacement, replacement_messages
+from nokodo_ai.types.sentinels import MissingType
 from nokodo_ai.utils.typeid import TypeID, new_typeid
 
 
@@ -395,6 +396,82 @@ async def test_launch_thread_run_persists_input_before_starting_run(
 	assert isinstance(persisted_input.splice, MessageSplice)
 	# captured at the write, not re-read: the producer never queries it again.
 	assert persisted_input.sdk_message.text == "hello"
+
+
+@pytest.mark.asyncio
+async def test_launch_thread_run_places_input_on_the_head_that_won_the_lock(
+	db_session: AsyncSession,
+	monkeypatch: pytest.MonkeyPatch,
+) -> None:
+	"""the head is re-read under the lock, not carried in from the preflight.
+
+	a writer that commits while the launch queues for the thread lock advances
+	the head; placing against the pre-lock one chains the run's input onto a
+	stale parent and takes the other message off canon - silent loss in a
+	multi-writer thread, where an off-canon message with no branch pointer
+	stops being selected at all.
+	"""
+	from api.v1.service.runs import launch as runs_service
+	from api.v1.service.threads import splices as splices_module
+
+	owner = await _make_user(db_session, "stale_head_owner")
+	principal = Principal.for_user(user=owner, group_ids=(), permissions=frozenset())
+	thread = await _make_thread(db_session, owner, "stale head")
+	first = await _post(db_session, thread.id, principal, "first")
+
+	competing: dict[str, Message] = {}
+	real_prepare = splices_module.prepare_message_placement
+
+	async def _advance_head_then_prepare(
+		session: AsyncSession,
+		target: Thread,
+		requested: MessageSplice | MissingType,
+		message_id: TypeID,
+		principal: Principal,
+		advances_head: bool = True,
+	) -> PreparedPlacement:
+		"""stand in for a writer that commits while the launch holds the lock."""
+		if "competing" not in competing:
+			competing["competing"] = await _post(
+				db_session, thread.id, principal, "competing"
+			)
+		return await real_prepare(
+			session,
+			target,
+			requested,
+			message_id,
+			principal=principal,
+			advances_head=advances_head,
+		)
+
+	monkeypatch.setattr(
+		runs_service, "prepare_message_placement", _advance_head_then_prepare
+	)
+
+	captured: dict[str, object] = {}
+
+	async def _capture_start(**kwargs: object) -> TypeID:
+		captured.update(kwargs)
+		run_id = kwargs["run_id"]
+		assert isinstance(run_id, TypeID)
+		return run_id
+
+	monkeypatch.setattr(runs_service, "_start_run", _capture_start)
+
+	await runs_service.launch_thread_run(
+		db_session,
+		thread.id,
+		TypeID(new_typeid("agent")),
+		principal,
+		input=MessageCreate(content="mine"),
+	)
+
+	persisted_input = captured["persisted_input"]
+	assert isinstance(persisted_input, PersistedRunInput)
+	written = await db_session.get(Message, persisted_input.message_id)
+	assert written is not None
+	assert written.parent_id == competing["competing"].id
+	assert written.parent_id != first.id
 
 
 @pytest.mark.asyncio

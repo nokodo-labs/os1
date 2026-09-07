@@ -1463,9 +1463,8 @@ async def test_open_webui_reimport_repairs_broken_file_filename_and_message_link
 		principal=principal,
 	)
 
-	# simulate a row left broken by an older import: NULL filename and an
-	# unresolvable thread reference (NULL message link). commit so the import's
-	# separate per-chat worker session observes the broken row.
+	# a row left broken by an older import; commit so the import's separate
+	# per-chat worker session observes it.
 	imported = (await db_session.scalars(select(File))).one()
 	imported.filename = None
 	imported.origin_message_id = None
@@ -1542,9 +1541,8 @@ async def test_open_webui_reimport_collapses_duplicate_rows_and_heals_part(
 	canonical = (await db_session.scalars(select(File))).one()
 	message = (await db_session.scalars(select(Message))).one()
 
-	# simulate a duplicate row plus a stale extra content part left by an older
-	# buggy import: a second File row for the same Open WebUI id, and a message
-	# part referencing it. commit so the per-chat worker session observes them.
+	# a duplicate File row for the same Open WebUI id plus a content part
+	# referencing it; commit so the per-chat worker session observes them.
 	deployment = get_deployment("https://open-webui.example.com")
 	duplicate = File(
 		id=TypeID(new_typeid("file")),
