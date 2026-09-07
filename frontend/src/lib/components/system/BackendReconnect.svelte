@@ -68,7 +68,7 @@
 										can't reach the servers
 									</h1>
 									<p class="text-foreground/55 text-sm">
-										your session is intact. we'll reconnect automatically.
+										your session is intact. you'll be reconnected automatically.
 									</p>
 								</div>
 

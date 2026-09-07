@@ -8,11 +8,14 @@ export const DEVICE_MOBILE_BREAKPOINT_PX = 888
  * - mid: capable but not powerful - lighter shaders like lightrays
  * - low: integrated/software GPU, low-end mobile - prefer static color
  */
-export type GpuTier = 'high' | 'mid' | 'low'
+import { classifyRenderer, resolveGpuTier, type GpuClass, type GpuTier } from '$lib/utils/gpuTier'
+
+export type { GpuTier } from '$lib/utils/gpuTier'
 
 export type GpuDiagnostics = {
 	score: number
 	tier: GpuTier
+	gpuClass: GpuClass
 	cores: number
 	memoryGb: number | null
 	isMobile: boolean
@@ -28,6 +31,7 @@ export type GpuDiagnostics = {
 const GPU_DIAGNOSTICS_DEFAULT: GpuDiagnostics = {
 	score: 0,
 	tier: 'mid',
+	gpuClass: 'unknown',
 	cores: 0,
 	memoryGb: null,
 	isMobile: false,
@@ -56,6 +60,8 @@ export const device = $state({
 	height: 0,
 	viewportWidth: 0,
 	viewportHeight: 0,
+	/** visual viewport top offset inside the layout viewport (0 unless the browser scrolled it). */
+	viewportOffsetTop: 0,
 	dpr: 1,
 	breakpointPx: DEVICE_MOBILE_BREAKPOINT_PX,
 	isMobile: preInitMobile,
@@ -100,6 +106,12 @@ export const device = $state({
 	// virtual keyboard state (mobile only)
 	virtualKeyboardOpen: false,
 	virtualKeyboardHeight: 0,
+
+	/**
+	 * layout-viewport height for full-screen fixed layers, held stable across a
+	 * virtual-keyboard open/close (see `ratchetStableViewport`). 0 before init.
+	 */
+	stableViewportHeight: 0,
 })
 
 type Cleanup = () => void
@@ -145,18 +157,23 @@ const IDLE_TIMEOUT_MS = 60_000
 let keyboardBaselineHeight = 0
 let keyboardBaselineWidth = 0
 
-function addMqListener(mq: MediaQueryList, handler: () => void) {
-	if ('addEventListener' in mq) {
+// ratcheting layout viewport for full-screen fixed layers (wallpaper)
+let stableViewport: ViewportSize = { width: 0, height: 0 }
+
+/** safari before 14 exposes only the deprecated listener pair on a media query. */
+type LegacyMediaQueryList = {
+	addListener(listener: (event: MediaQueryListEvent) => void): void
+	removeListener(listener: (event: MediaQueryListEvent) => void): void
+}
+
+function addMqListener(mq: MediaQueryList, handler: () => void): Cleanup {
+	if (typeof mq.addEventListener === 'function') {
 		mq.addEventListener('change', handler)
 		return () => mq.removeEventListener('change', handler)
 	}
-	// older safari
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	;(mq as any).addListener(handler)
-	return () => {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		;(mq as any).removeListener(handler)
-	}
+	const legacy: LegacyMediaQueryList = mq
+	legacy.addListener(handler)
+	return () => legacy.removeListener(handler)
 }
 
 function resetDeviceState() {
@@ -165,6 +182,7 @@ function resetDeviceState() {
 	device.height = 0
 	device.viewportWidth = 0
 	device.viewportHeight = 0
+	device.viewportOffsetTop = 0
 	device.dpr = 1
 	device.isMobile = preInitMobile
 	device.isTouch = preInitTouch
@@ -199,6 +217,7 @@ function resetDeviceState() {
 	device.batteryDischargingTimeSeconds = null
 	device.virtualKeyboardOpen = false
 	device.virtualKeyboardHeight = 0
+	device.stableViewportHeight = 0
 }
 
 /**
@@ -584,15 +603,17 @@ function detectGpuTier(): { tier: GpuTier; diagnostics: GpuDiagnostics } {
 		}
 	}
 
-	let tier: GpuTier = 'mid'
-	if (score >= 5) tier = 'high'
-	else if (score <= -1) tier = 'low'
+	const gpuClass = classifyRenderer(rendererInfo.renderer)
+	const resolved = resolveGpuTier(score, gpuClass)
+	notes.push(...resolved.notes)
+	const tier = resolved.tier
 
 	return {
 		tier,
 		diagnostics: {
 			score,
 			tier,
+			gpuClass,
 			cores,
 			memoryGb: memory,
 			isMobile: device.isMobile,
@@ -607,6 +628,61 @@ function detectGpuTier(): { tier: GpuTier; diagnostics: GpuDiagnostics } {
 	}
 }
 
+/**
+ * how far a layout-viewport-anchored bottom edge sits BELOW the visible bottom.
+ *
+ * client rects and `visualViewport.offsetTop/height` share the layout viewport's
+ * coordinate space, so their difference is the exact overlap. never negative: a
+ * box that already ends above the fold needs no correction.
+ *
+ * android resizes its layout viewport for the keyboard now
+ * (`interactive-widget=resizes-content`), which makes this 0 there; ios ignores
+ * that meta and keeps a full-height layout viewport, so the lift still applies.
+ * caveat: `--app-height` is written from this same `visualViewport.height`, so a
+ * `bottom` measured off a box sized by it matches by construction and reports 0.
+ * this is the safety net for a box that is NOT tracking the visible viewport - a
+ * stale or removed `--app-height`, a shell still sized by `dvh`.
+ */
+export function visualViewportOvershoot(
+	bottom: number,
+	viewportHeight: number,
+	viewportOffsetTop: number
+): number {
+	if (!Number.isFinite(bottom) || !Number.isFinite(viewportHeight)) return 0
+	if (viewportHeight <= 0) return 0
+	const offset = Number.isFinite(viewportOffsetTop) ? viewportOffsetTop : 0
+	return Math.max(0, Math.round(bottom - (offset + viewportHeight)))
+}
+
+/** a viewport size, as a full-screen fixed layer sees it. */
+export interface ViewportSize {
+	width: number
+	height: number
+}
+
+/**
+ * the STABLE height a full-screen fixed layer should hold.
+ *
+ * `interactive-widget=resizes-content` shrinks the LAYOUT viewport while the
+ * keyboard is up, so every `position: fixed; inset: 0` layer resizes with it -
+ * visible reflow behind the app, and the canvas wallpapers re-seed their fields
+ * on each resize. the height therefore ratchets to the tallest seen at the
+ * current width: a keyboard (or url-bar) shrink is ignored, while a rotation or
+ * window resize - which changes the width - starts the ratchet over.
+ *
+ * `hold` is false where nothing can overlay the viewport (desktop), so the layer
+ * tracks the window there exactly as before.
+ */
+export function ratchetStableViewport(
+	previous: ViewportSize,
+	next: ViewportSize,
+	hold: boolean
+): ViewportSize {
+	if (!hold) return { ...next }
+	if (next.width !== previous.width) return { ...next }
+	return { width: next.width, height: Math.max(previous.height, next.height) }
+}
+
 function syncFromWindow(
 	mqMobile: MediaQueryList | null,
 	mqCoarsePointer: MediaQueryList | null,
@@ -616,6 +692,7 @@ function syncFromWindow(
 	device.height = window.innerHeight
 	device.viewportWidth = window.visualViewport?.width ?? window.innerWidth
 	device.viewportHeight = window.visualViewport?.height ?? window.innerHeight
+	device.viewportOffsetTop = window.visualViewport?.offsetTop ?? 0
 	device.dpr = window.devicePixelRatio || 1
 	device.isMobile = mqMobile?.matches ?? window.innerWidth <= device.breakpointPx
 	device.isCoarsePointer = mqCoarsePointer?.matches ?? false
@@ -633,7 +710,9 @@ function syncFromWindow(
 	updateGamepads()
 	updateIdleState(document.hidden)
 
-	// virtual keyboard detection
+	// virtual keyboard detection. android resizes the layout viewport for the
+	// keyboard (`interactive-widget=resizes-content`), so `innerHeight - vvHeight`
+	// is 0 there and the ratcheting baseline below is what detects it.
 	const vvHeight = window.visualViewport?.height ?? window.innerHeight
 
 	// reset baseline on orientation change (width shift > 100px)
@@ -653,6 +732,15 @@ function syncFromWindow(
 	device.virtualKeyboardOpen = kbOpen
 	device.virtualKeyboardHeight = kbOpen ? Math.round(kbDiff) : 0
 
+	// the keyboard now shrinks the layout viewport itself, which would resize
+	// every full-screen fixed layer with it - the wallpaper holds this instead.
+	stableViewport = ratchetStableViewport(
+		stableViewport,
+		{ width: window.innerWidth, height: window.innerHeight },
+		device.isMobile
+	)
+	device.stableViewportHeight = stableViewport.height
+
 	// keep the app shell tied to the visible viewport on mobile.
 	if (device.isMobile) {
 		document.documentElement.style.setProperty('--app-height', `${Math.round(vvHeight)}px`)
@@ -662,6 +750,18 @@ function syncFromWindow(
 }
 
 function scheduleSync(syncNow: () => void) {
+	// a hidden tab does not run rAF, so a queued sync would sit there until the
+	// tab is shown again. nothing is painting either, so there is no frame to
+	// coalesce with: sync inline and drop any frame that was already queued.
+	if (document.hidden) {
+		if (rafId !== null) {
+			window.cancelAnimationFrame(rafId)
+			rafId = null
+		}
+		syncNow()
+		return
+	}
+
 	if (rafId !== null) return
 	rafId = window.requestAnimationFrame(() => {
 		rafId = null
@@ -742,7 +842,14 @@ export function initDevice(): void {
 		scheduleIdleCheck()
 	}
 	const onVisibilityChange = () => {
-		updateIdleState(document.hidden)
+		if (document.hidden) {
+			updateIdleState(true)
+			return
+		}
+		// whatever changed while hidden (window size, --app-height, keyboard) has
+		// to be right for the first frame back, so sync now rather than next rAF.
+		// syncNow refreshes the idle state itself.
+		syncNow()
 	}
 
 	navWithSignals.connection?.addEventListener?.('change', onConnectionChange)
@@ -818,6 +925,7 @@ export function destroyDevice(): void {
 	lastActivityAt = 0
 	keyboardBaselineHeight = 0
 	keyboardBaselineWidth = 0
+	stableViewport = { width: 0, height: 0 }
 	document.documentElement.style.removeProperty('--app-height')
 	resetDeviceState()
 }

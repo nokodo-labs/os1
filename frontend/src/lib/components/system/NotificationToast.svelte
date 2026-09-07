@@ -2,16 +2,18 @@
 	import { cubicOut } from 'svelte/easing'
 	import { fly } from 'svelte/transition'
 
-	import { portal } from '$lib/actions/portal'
+	import { portal } from '$lib/attachments/portal'
+	import { swipe, type SwipeDirection } from '$lib/attachments/swipe'
 	import LiquidGlass from '$lib/components/effects/LiquidGlass.svelte'
-	import AppNotification from '$lib/components/icons/AppNotification.svelte'
 	import CheckCircle from '$lib/components/icons/CheckCircle.svelte'
 	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte'
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
+	import { notificationIcon } from '$lib/resources/notificationVisuals'
 	import { device } from '$lib/stores/device.svelte'
 	import type { EphemeralVariant, ToastItem } from '$lib/stores/notifications.svelte'
-	import { SvelteMap } from 'svelte/reactivity'
+	import type { Attachment } from 'svelte/attachments'
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 
 	interface Props {
 		toasts: ToastItem[]
@@ -26,13 +28,15 @@
 	const AUTO_DISMISS_MS = 12000
 	const ERROR_DISMISS_MS = 5000
 	let dismissTimers = new SvelteMap<string, ReturnType<typeof setTimeout>>()
+	// toasts under a finger: they hold off auto-dismiss until the swipe ends
+	const grabbed = new SvelteSet<string>()
 
 	$effect(() => {
 		const currentIds = new Set(toasts.map((t) => t.id))
 
 		// schedule auto-dismiss for new toasts
 		for (const toast of toasts) {
-			if (!dismissTimers.has(toast.id)) {
+			if (!dismissTimers.has(toast.id) && !grabbed.has(toast.id)) {
 				const ms = toast.type === 'ephemeral' ? ERROR_DISMISS_MS : AUTO_DISMISS_MS
 				dismissTimers.set(
 					toast.id,
@@ -51,10 +55,13 @@
 				dismissTimers.delete(id)
 			}
 		}
+		for (const id of grabbed) {
+			if (!currentIds.has(id)) grabbed.delete(id)
+		}
 	})
 
 	// dismiss animation
-	let dismissing = $state<Record<string, 'up' | 'left' | 'right'>>({})
+	let dismissing = $state<Record<string, SwipeDirection>>({})
 
 	function startDismiss(id: string) {
 		if (dismissing[id]) return
@@ -62,61 +69,45 @@
 		setTimeout(() => onDismiss?.(id), 280)
 	}
 
-	function startSwipeDismiss(id: string, direction: 'up' | 'left' | 'right') {
+	function startSwipeDismiss(id: string, direction: SwipeDirection) {
 		if (dismissing[id]) return
+		// the swipe already flew the toast off-screen, so hand it over right away
 		dismissing[id] = direction
-		if (direction === 'up') {
-			setTimeout(() => onDismiss?.(id), 280)
+		if (direction === 'up' || direction === 'down') {
+			onDismiss?.(id)
 		} else {
-			setTimeout(() => onSwipeDismiss?.(id), 280)
+			onSwipeDismiss?.(id)
 		}
 	}
 
-	// swipe / drag
-	const DRAG_THRESHOLD = 6
+	// swipe: up on mobile (banner at the top), sideways on the desktop stack
 	const SWIPE_THRESHOLD = 50
+	const swipeDirections = $derived<readonly SwipeDirection[]>(
+		device.isMobile ? ['up'] : ['left', 'right']
+	)
 
-	interface Drag {
-		startX: number
-		startY: number
-		dx: number
-		dy: number
-		intent: 'none' | 'horizontal' | 'vertical'
+	function swipeDismiss(id: string): Attachment<HTMLElement> {
+		return swipe({
+			direction: swipeDirections,
+			threshold: SWIPE_THRESHOLD,
+			release: 'fly',
+			onGrab: () => pauseAutoDismiss(id),
+			onRelease: () => resumeAutoDismiss(id),
+			onTrigger: (direction) => startSwipeDismiss(id, direction),
+		})
 	}
 
-	let drags = $state<Record<string, Drag>>({})
-
-	function onPointerDown(id: string, e: PointerEvent) {
-		// pause auto-dismiss while grabbed
+	function pauseAutoDismiss(id: string) {
+		grabbed.add(id)
 		const existing = dismissTimers.get(id)
 		if (existing) {
 			clearTimeout(existing)
 			dismissTimers.delete(id)
 		}
-
-		;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-		drags[id] = {
-			startX: e.clientX,
-			startY: e.clientY,
-			dx: 0,
-			dy: 0,
-			intent: 'none',
-		}
-	}
-
-	function onPointerMove(id: string, e: PointerEvent) {
-		const d = drags[id]
-		if (!d) return
-		d.dx = e.clientX - d.startX
-		d.dy = e.clientY - d.startY
-		if (d.intent === 'none') {
-			if (Math.abs(d.dx) > DRAG_THRESHOLD || Math.abs(d.dy) > DRAG_THRESHOLD) {
-				d.intent = Math.abs(d.dx) > Math.abs(d.dy) ? 'horizontal' : 'vertical'
-			}
-		}
 	}
 
 	function resumeAutoDismiss(id: string) {
+		grabbed.delete(id)
 		if (dismissTimers.has(id) || dismissing[id]) return
 		const toast = toasts.find((t) => t.id === id)
 		const ms = toast?.type === 'ephemeral' ? ERROR_DISMISS_MS : AUTO_DISMISS_MS
@@ -129,39 +120,9 @@
 		)
 	}
 
-	function onPointerUp(id: string) {
-		const d = drags[id]
-		if (!d) return
-
-		const absX = Math.abs(d.dx)
-		const absY = Math.abs(d.dy)
-
-		if (absX < DRAG_THRESHOLD && absY < DRAG_THRESHOLD) {
-			// tap - treat as click then dismiss
-			delete drags[id]
-			onClick?.(id)
-			startDismiss(id)
-			return
-		}
-
-		if (d.intent === 'vertical' && d.dy < -SWIPE_THRESHOLD) {
-			// swipe up → dismiss toast only
-			delete drags[id]
-			startSwipeDismiss(id, 'up')
-		} else if (d.intent === 'horizontal' && absX > SWIPE_THRESHOLD) {
-			// swipe sideways → dismiss notification
-			delete drags[id]
-			startSwipeDismiss(id, d.dx > 0 ? 'right' : 'left')
-		} else {
-			// below threshold - snap back, resume auto-dismiss
-			delete drags[id]
-			resumeAutoDismiss(id)
-		}
-	}
-
-	function onPointerCancel(id: string) {
-		delete drags[id]
-		resumeAutoDismiss(id)
+	function handleTap(id: string) {
+		onClick?.(id)
+		startDismiss(id)
 	}
 
 	function handleButtonDismiss(id: string) {
@@ -169,27 +130,16 @@
 	}
 
 	function toastStyle(id: string): string {
-		const d = drags[id]
 		const dir = dismissing[id]
+		if (!dir) return ''
 
-		if (d && d.intent !== 'none') {
-			const tx = d.intent === 'horizontal' ? d.dx : 0
-			const ty = d.intent === 'vertical' ? Math.min(0, d.dy) : 0
-			const progress = Math.max(Math.abs(d.dx), Math.abs(d.dy)) / (SWIPE_THRESHOLD * 2)
-			const opacity = Math.max(0.4, 1 - progress)
-			return `transform: translate(${tx}px, ${ty}px); opacity: ${opacity}; transition: none;`
+		const transforms: Record<SwipeDirection, string> = {
+			up: 'translateY(-150%)',
+			down: 'translateY(150%)',
+			left: 'translateX(-150%)',
+			right: 'translateX(150%)',
 		}
-
-		if (dir) {
-			const transforms: Record<string, string> = {
-				up: 'translateY(-150%)',
-				left: 'translateX(-150%)',
-				right: 'translateX(150%)',
-			}
-			return `transform: ${transforms[dir]}; opacity: 0; transition: transform 280ms ease-out, opacity 280ms ease-out;`
-		}
-
-		return ''
+		return `transform: ${transforms[dir]}; opacity: 0; transition: transform 280ms ease-out, opacity 280ms ease-out;`
 	}
 	type EphemeralMeta = { tint: string; iconColor: string }
 	function ephemeralMeta(variant: EphemeralVariant | undefined): EphemeralMeta {
@@ -209,23 +159,19 @@
 {#if toasts.length > 0}
 	{#if device.isMobile}
 		<!-- mobile: full-width banners at top -->
-		<div use:portal class="fixed inset-x-0 top-0 z-100 flex flex-col gap-2 px-3 pt-3">
+		<div {@attach portal()} class="fixed inset-x-0 top-0 z-100 flex flex-col gap-2 px-3 pt-3">
 			{#each toasts as toast (toast.id)}
 				{#if toast.type === 'notification'}
+					{@const ToastIcon = notificationIcon(toast.eventType)}
 					<LiquidGlass
-						class="notification-toast flex w-full touch-none items-start gap-3 rounded-2xl px-4 py-3 text-left select-none"
+						{@attach swipeDismiss(toast.id)}
+						class="notification-toast flex w-full items-start gap-3 rounded-2xl px-4 py-3 text-left"
 						style={toastStyle(toast.id)}
 						role="button"
 						tabindex="0"
-						onpointerdown={(e: PointerEvent) => onPointerDown(toast.id, e)}
-						onpointermove={(e: PointerEvent) => onPointerMove(toast.id, e)}
-						onpointerup={() => onPointerUp(toast.id)}
-						onpointercancel={() => onPointerCancel(toast.id)}
+						onclick={() => handleTap(toast.id)}
 						onkeydown={(e: KeyboardEvent) => {
-							if (e.key === 'Enter') {
-								onClick?.(toast.id)
-								startDismiss(toast.id)
-							}
+							if (e.key === 'Enter') handleTap(toast.id)
 						}}
 					>
 						<div
@@ -238,7 +184,7 @@
 									class="h-5 w-5 rounded-full object-cover"
 								/>
 							{:else}
-								<AppNotification class="text-foreground/80 h-4 w-4" />
+								<ToastIcon class="text-foreground/80 h-4 w-4" />
 							{/if}
 						</div>
 						<div class="min-w-0 flex-1">
@@ -261,19 +207,20 @@
 						<XMark
 							class="text-foreground/45 hover:text-foreground/80 mt-0.5 size-5 shrink-0 cursor-pointer transition-all duration-150 hover:scale-[1.05] active:scale-[0.97]"
 							onpointerdown={(e) => e.stopPropagation()}
-							onclick={() => handleButtonDismiss(toast.id)}
+							onclick={(e) => {
+								e.stopPropagation()
+								handleButtonDismiss(toast.id)
+							}}
 						/>
 					</LiquidGlass>
 				{:else}
 					{@const meta = ephemeralMeta(toast.variant)}
 					<LiquidGlass
-						class="notification-toast relative flex w-full touch-none items-start gap-3 overflow-hidden rounded-2xl px-4 py-3 text-left select-none"
+						{@attach swipeDismiss(toast.id)}
+						class="notification-toast relative flex w-full items-start gap-3 overflow-hidden rounded-2xl px-4 py-3 text-left"
 						style={toastStyle(toast.id)}
 						role="alert"
-						onpointerdown={(e: PointerEvent) => onPointerDown(toast.id, e)}
-						onpointermove={(e: PointerEvent) => onPointerMove(toast.id, e)}
-						onpointerup={() => onPointerUp(toast.id)}
-						onpointercancel={() => onPointerCancel(toast.id)}
+						onclick={() => handleTap(toast.id)}
 					>
 						<!-- color tint overlay -->
 						<div
@@ -301,7 +248,10 @@
 						<XMark
 							class="text-foreground/45 hover:text-foreground/80 relative mt-0.5 size-5 shrink-0 cursor-pointer transition-all duration-150 hover:scale-[1.05] active:scale-[0.97]"
 							onpointerdown={(e) => e.stopPropagation()}
-							onclick={() => handleButtonDismiss(toast.id)}
+							onclick={(e) => {
+								e.stopPropagation()
+								handleButtonDismiss(toast.id)
+							}}
 						/>
 					</LiquidGlass>
 				{/if}
@@ -309,24 +259,20 @@
 		</div>
 	{:else}
 		<!-- desktop: top-right stack like macOS -->
-		<div use:portal class="fixed top-6 right-6 z-100 flex w-80 flex-col gap-2">
+		<div {@attach portal()} class="fixed top-6 right-6 z-100 flex w-80 flex-col gap-2">
 			{#each toasts as toast (toast.id)}
 				<div in:fly={{ x: 200, duration: 300, easing: cubicOut }}>
 					{#if toast.type === 'notification'}
+						{@const ToastIcon = notificationIcon(toast.eventType)}
 						<LiquidGlass
-							class="notification-toast flex w-full touch-none items-start gap-3 rounded-2xl px-4 py-3 text-left shadow-lg shadow-black/20 select-none"
+							{@attach swipeDismiss(toast.id)}
+							class="notification-toast flex w-full items-start gap-3 rounded-2xl px-4 py-3 text-left shadow-lg shadow-black/20"
 							style={toastStyle(toast.id)}
 							role="button"
 							tabindex="0"
-							onpointerdown={(e: PointerEvent) => onPointerDown(toast.id, e)}
-							onpointermove={(e: PointerEvent) => onPointerMove(toast.id, e)}
-							onpointerup={() => onPointerUp(toast.id)}
-							onpointercancel={() => onPointerCancel(toast.id)}
+							onclick={() => handleTap(toast.id)}
 							onkeydown={(e: KeyboardEvent) => {
-								if (e.key === 'Enter') {
-									onClick?.(toast.id)
-									startDismiss(toast.id)
-								}
+								if (e.key === 'Enter') handleTap(toast.id)
 							}}
 						>
 							<div
@@ -339,7 +285,7 @@
 										class="h-5 w-5 rounded-full object-cover"
 									/>
 								{:else}
-									<AppNotification class="text-foreground/80 h-4 w-4" />
+									<ToastIcon class="text-foreground/80 h-4 w-4" />
 								{/if}
 							</div>
 							<div class="min-w-0 flex-1">
@@ -362,19 +308,20 @@
 							<XMark
 								class="text-foreground/45 hover:text-foreground/80 mt-0.5 size-5 shrink-0 cursor-pointer transition-all duration-150 hover:scale-[1.05] active:scale-[0.97]"
 								onpointerdown={(e) => e.stopPropagation()}
-								onclick={() => handleButtonDismiss(toast.id)}
+								onclick={(e) => {
+									e.stopPropagation()
+									handleButtonDismiss(toast.id)
+								}}
 							/>
 						</LiquidGlass>
 					{:else}
 						{@const meta = ephemeralMeta(toast.variant)}
 						<LiquidGlass
-							class="notification-toast relative flex w-full touch-none items-start gap-3 overflow-hidden rounded-2xl px-4 py-3 text-left shadow-lg shadow-black/20 select-none"
+							{@attach swipeDismiss(toast.id)}
+							class="notification-toast relative flex w-full items-start gap-3 overflow-hidden rounded-2xl px-4 py-3 text-left shadow-lg shadow-black/20"
 							style={toastStyle(toast.id)}
 							role="alert"
-							onpointerdown={(e: PointerEvent) => onPointerDown(toast.id, e)}
-							onpointermove={(e: PointerEvent) => onPointerMove(toast.id, e)}
-							onpointerup={() => onPointerUp(toast.id)}
-							onpointercancel={() => onPointerCancel(toast.id)}
+							onclick={() => handleTap(toast.id)}
 						>
 							<!-- color tint overlay -->
 							<div
@@ -402,7 +349,10 @@
 							<XMark
 								class="text-foreground/45 hover:text-foreground/80 relative mt-0.5 size-5 shrink-0 cursor-pointer transition-all duration-150 hover:scale-[1.05] active:scale-[0.97]"
 								onpointerdown={(e) => e.stopPropagation()}
-								onclick={() => handleButtonDismiss(toast.id)}
+								onclick={(e) => {
+									e.stopPropagation()
+									handleButtonDismiss(toast.id)
+								}}
 							/>
 						</LiquidGlass>
 					{/if}

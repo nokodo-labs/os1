@@ -13,7 +13,7 @@ export function createSidebarContext() {
 	// sync sidebar_collapsed setting once when settings finish loading
 	$effect.root(() => {
 		$effect(() => {
-			if (!settingsState.ready || initialSidebarSynced) return
+			if (!settingsState.hasLoaded || initialSidebarSynced) return
 			initialSidebarSynced = true
 			const collapsed = settingsState.data?.ui?.sidebar_collapsed ?? true
 			// on mobile, sidebar always starts closed regardless of setting

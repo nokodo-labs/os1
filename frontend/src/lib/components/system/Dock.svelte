@@ -13,9 +13,15 @@
 	import Sparkles from '$lib/components/icons/Sparkles.svelte'
 	import Sun from '$lib/components/icons/Sun.svelte'
 	import XMark from '$lib/components/icons/XMark.svelte'
+	import { Skeleton } from '$lib/components/primitives'
 	import Notification from '$lib/components/system/Notification.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { useTheme, type ThemeMode } from '$lib/contexts/themeContext.svelte'
+	import {
+		buildNotificationRows,
+		groupPosition,
+		NotificationEntrance,
+	} from '$lib/resources/dockNotifications'
 	import { agents } from '$lib/stores/agents.svelte'
 	import {
 		notifications,
@@ -40,19 +46,31 @@
 	type QuickActionId = 'dnd' | 'theme' | 'location' | 'offline'
 	let quickActionOrder = $state<QuickActionId[]>(['dnd', 'theme', 'location', 'offline'])
 
-	type DockNotificationRow =
-		| { kind: 'notification'; id: string; notification: NotificationType }
-		| { kind: 'dismiss-all'; id: 'dismiss-all' }
+	// a failed load keeps the empty state it has always shown, not a stuck skeleton
+	const notificationsPending = $derived(
+		notifications.list.length === 0 && !notifications.hasLoaded && !notifications.error
+	)
 
-	const notificationRows = $derived.by((): DockNotificationRow[] => {
-		const rows: DockNotificationRow[] = notifications.list.map((notification) => ({
-			kind: 'notification',
-			id: notification.id,
-			notification,
-		}))
-		if (notifications.list.length > 0) rows.push({ kind: 'dismiss-all', id: 'dismiss-all' })
-		return rows
+	const notificationRows = $derived.by(() => buildNotificationRows(notifications.list))
+
+	// only a notification that ARRIVES while the dock is mounted animates in; the
+	// batch already there on first load is just the state of the world.  pre, so
+	// the arrival is on the books before the row that carries it is rendered.
+	const entrance = new NotificationEntrance()
+
+	$effect.pre(() => {
+		if (!notifications.hasLoaded) {
+			entrance.reset()
+			return
+		}
+		const ids = notifications.list.map((notification) => notification.id)
+		entrance.seed(ids)
+		entrance.track(ids)
 	})
+
+	function claimEntrance(id: string): boolean {
+		return entrance.claim(id)
+	}
 
 	// -- notification lifecycle --
 
@@ -143,7 +161,7 @@
 		return false
 	}
 
-	type IconComp = Component<{ class?: string }>
+	type IconComp = Component<{ class?: string; variant?: 'outline' | 'solid' }>
 
 	function getActionIcon(id: QuickActionId): IconComp {
 		if (id === 'dnd') return isDnD ? (BellSlash as IconComp) : (Bell as IconComp)
@@ -218,43 +236,73 @@
 			<div class="relative min-h-0 flex-1 overflow-hidden" aria-label="notifications">
 				{#if !session.isLoggedIn}
 					<EmptyState label="log in to see notifications" compact class="h-full" />
+				{:else if notificationsPending}
+					<!-- same horizontal padding as the run below, one card's worth of rows -->
+					<div class="flex w-full flex-col gap-2 px-3 pt-4">
+						<Skeleton shape="row" count={4} lines={2} height="4rem" radius="xl" />
+					</div>
 				{:else if notifications.list.length === 0}
 					<EmptyState label="no notifications" compact class="h-full" />
 				{:else}
+					<!-- one item per day, and NOTHING between items: every gap and
+					     every scrap of padding lives inside an item, because the list
+					     measures items and nothing else - height it cannot see is
+					     height the last row can never be scrolled to. -->
 					<SvelteVirtualList
 						items={notificationRows}
-						defaultEstimatedItemHeight={96}
-						bufferSize={10}
+						defaultEstimatedItemHeight={260}
+						bufferSize={4}
 						containerClass="relative h-full min-h-0 w-full overflow-hidden"
-						viewportClass="dock-notifications-scroll absolute inset-0 w-full overflow-y-auto"
+						viewportClass="dock-notifications-scroll absolute inset-0 w-full overflow-x-hidden overflow-y-auto"
 						contentClass="relative min-h-full w-full"
-						itemsClass="absolute top-0 left-0 flex w-full flex-col gap-2 px-3 py-2"
+						itemsClass="absolute top-0 left-0 flex w-full flex-col px-3"
 					>
 						{#snippet renderItem(row)}
-							{#if row.kind === 'notification'}
-								{@const notif = row.notification}
-								<Notification
-									notification={notif}
-									iconUrl={getNotificationIcon(notif)}
-									imageUrl={getNotificationImage(notif)}
-									title={getNotificationTitle(notif)}
-									body={getNotificationBody(notif)}
-									timestamp={new Date(notif.created_at)}
-									isUnread={!notif.read_at}
-									onMarkRead={handleMarkRead}
-									onDismiss={handleDismiss}
-								/>
-							{:else}
-								<div class="pt-1">
+							{#if row.kind === 'clear-all'}
+								<div class="flex justify-center px-1 pt-3 pb-4">
 									<button
 										type="button"
-										class="interactive-subtle text-muted-foreground hover:text-foreground/80 flex w-full items-center justify-center gap-1.5 py-2 text-xs"
+										class="interactive-subtle rounded-pill text-foreground/45 hover:bg-interactive-hover hover:text-foreground/80 flex items-center gap-1.5 px-3 py-1.5 text-xs"
 										onclick={handleDismissAll}
 									>
 										<XMark class="h-3.5 w-3.5" />
-										dismiss all
+										clear all
 									</button>
 								</div>
+							{:else}
+								<section class="flex min-w-0 flex-col gap-1.5 pt-4">
+									<h2
+										class="text-foreground/45 px-4 text-xs font-medium"
+										data-notification-section
+									>
+										{row.label}
+									</h2>
+									<!-- the messages inbox card surface, verbatim: one frosted
+									     blur region for the whole day rather than one per row. -->
+									<div
+										class="liquid-glass liquid-glass--frosted liquid-glass--clip rounded-3xl"
+										data-notification-group
+									>
+										{#each row.notifications as notif, index (notif.id)}
+											<Notification
+												notification={notif}
+												iconUrl={getNotificationIcon(notif)}
+												imageUrl={getNotificationImage(notif)}
+												title={getNotificationTitle(notif)}
+												body={getNotificationBody(notif)}
+												timestamp={new Date(notif.created_at)}
+												isUnread={!notif.read_at}
+												position={groupPosition(
+													index,
+													row.notifications.length
+												)}
+												{claimEntrance}
+												onMarkRead={handleMarkRead}
+												onDismiss={handleDismiss}
+											/>
+										{/each}
+									</div>
+								</section>
 							{/if}
 						{/snippet}
 					</SvelteVirtualList>
@@ -319,7 +367,7 @@
 								: 'bg-muted/15 text-foreground/60 hover:bg-muted/25'}"
 							onclick={() => toggleAction(actionId)}
 						>
-							<ActionIcon class="h-5 w-5 shrink-0" />
+							<ActionIcon variant="solid" class="h-5 w-5 shrink-0" />
 							<span class="text-sm {active ? 'font-semibold' : 'font-medium'}">
 								{getActionLabel(actionId)}
 							</span>
@@ -387,11 +435,11 @@
 									onclick={() => setThemeMode(modeOpt)}
 								>
 									{#if modeOpt === 'auto'}
-										<Sparkles class="h-5 w-5" />
+										<Sparkles variant="solid" class="h-5 w-5" />
 									{:else if modeOpt === 'light'}
-										<Sun class="h-5 w-5" />
+										<Sun variant="solid" class="h-5 w-5" />
 									{:else}
-										<Moon class="h-5 w-5" />
+										<Moon variant="solid" class="h-5 w-5" />
 									{/if}
 									<span
 										class="text-xs {isSelected

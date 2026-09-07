@@ -25,6 +25,15 @@ export interface SystemChromeContext {
 	readonly island: IslandConfig
 	readonly isDockOpen: boolean
 	readonly layout: LayoutInsets
+	/**
+	 * whether the chat shell - the AI-chat sidebar, its rail and its swipe - is
+	 * part of this view.
+	 *
+	 * the route alone cannot answer this: a conversation and an AI chat share the
+	 * `/c/` route, but a conversation is a different viewing mode that the chat
+	 * sidebar does not list and cannot navigate.
+	 */
+	readonly hasChatShell: boolean
 	setIsland(config: Partial<IslandConfig>): void
 	clearIsland(): void
 	setContextActions(contextActions: Snippet | null): void
@@ -36,6 +45,8 @@ export interface SystemChromeContext {
 	setLayoutInsets(insets: Partial<LayoutInsets>): void
 	/** clear layout insets */
 	clearLayoutInsets(): void
+	/** opt the current view out of (or back into) the chat shell. */
+	setChatShell(enabled: boolean): void
 }
 
 export function createSystemChromeContext(): SystemChromeContext {
@@ -44,6 +55,8 @@ export function createSystemChromeContext(): SystemChromeContext {
 	let isDockOpen = $state(false)
 	let leftWidthClass = $state<string | null>(null)
 	let leftViewTransitionName = $state<string | null>(null)
+	// present by default: only a view that knows it is not an AI chat opts out
+	let hasChatShell = $state(true)
 
 	const context: SystemChromeContext = {
 		get island() {
@@ -60,6 +73,9 @@ export function createSystemChromeContext(): SystemChromeContext {
 				leftWidthClass,
 				leftViewTransitionName,
 			}
+		},
+		get hasChatShell() {
+			return hasChatShell
 		},
 		setIsland(config) {
 			if ('contextActions' in config) contextActions = config.contextActions ?? null
@@ -92,6 +108,9 @@ export function createSystemChromeContext(): SystemChromeContext {
 		clearLayoutInsets() {
 			leftWidthClass = null
 			leftViewTransitionName = null
+		},
+		setChatShell(enabled) {
+			hasChatShell = enabled
 		},
 	}
 

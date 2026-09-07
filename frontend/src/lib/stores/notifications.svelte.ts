@@ -8,12 +8,7 @@ import type { StreamMessage } from '$lib/api/streaming'
 import type { components } from '$lib/api/types'
 import { getJwtUserId } from '$lib/auth/jwt'
 import { getAccessToken } from '$lib/auth/session.svelte'
-import {
-	STORE_EVENT_TYPES,
-	storeEventData,
-	storeEventString,
-	subscribeToStoreEvents,
-} from '$lib/stores/storeEvents'
+import { STORE_EVENT_TYPES, storeEventData, subscribeToStoreEvents } from '$lib/stores/storeEvents'
 import { SvelteDate, SvelteSet } from 'svelte/reactivity'
 
 export type Notification = components['schemas']['Notification']
@@ -29,6 +24,8 @@ export interface ToastItem {
 	variant?: EphemeralVariant
 	/** only set when type === 'notification' - the backing event_id */
 	eventId?: string
+	/** only set when type === 'notification' - the backing event type, picks the app icon */
+	eventType?: string
 	title: string
 	body: string
 	iconUrl?: string | null
@@ -39,32 +36,22 @@ export interface ToastItem {
 const NOTIFICATION_EVENT_TYPES = STORE_EVENT_TYPES.notifications
 const THREAD_EVENT_TYPES = STORE_EVENT_TYPES.threads
 const MESSAGE_EVENT_TYPES = STORE_EVENT_TYPES.messages
-const TYPING_EVENT_TYPES = STORE_EVENT_TYPES.typing
 const RUN_EVENT_TYPES = STORE_EVENT_TYPES.runs
 const FRIEND_EVENT_TYPES = STORE_EVENT_TYPES.friends
 const NOTIFICATIONS_SUBSCRIPTION_TYPES = [
 	...NOTIFICATION_EVENT_TYPES,
 	...THREAD_EVENT_TYPES,
 	...MESSAGE_EVENT_TYPES,
-	...TYPING_EVENT_TYPES,
 	...RUN_EVENT_TYPES,
 	...FRIEND_EVENT_TYPES,
 ] as const
 const NOTIFICATION_EVENT_TYPE_SET = new Set<string>(NOTIFICATION_EVENT_TYPES)
 const THREAD_EVENT_TYPE_SET = new Set<string>(THREAD_EVENT_TYPES)
 const MESSAGE_EVENT_TYPE_SET = new Set<string>(MESSAGE_EVENT_TYPES)
-const TYPING_EVENT_TYPE_SET = new Set<string>(TYPING_EVENT_TYPES)
 const RUN_EVENT_TYPE_SET = new Set<string>(RUN_EVENT_TYPES)
 const FRIEND_EVENT_TYPE_SET = new Set<string>(FRIEND_EVENT_TYPES)
 
 const FRIEND_TOAST_TYPES = ['friend.request_sent', 'friend.request_accepted']
-
-export interface TypingIndicator {
-	threadId: string
-	userId?: string
-	isAgent: boolean
-	startedAt: number
-}
 
 type ThreadEventHandler = (event: StreamMessage) => void
 type MessageEventHandler = (event: StreamMessage) => void
@@ -77,8 +64,8 @@ const notificationEventHandlers = new SvelteSet<NotificationEventHandler>()
 class NotificationsStore {
 	list = $state<Notification[]>([])
 	isLoading = $state(false)
+	hasLoaded = $state(false)
 	error = $state<string | null>(null)
-	typingIndicators = $state<TypingIndicator[]>([])
 	toasts = $state<ToastItem[]>([])
 
 	readonly unreadCount = $derived(this.list.filter((n) => !n.read_at).length)
@@ -89,10 +76,6 @@ class NotificationsStore {
 	#stale = $state(true)
 	readonly stale = $derived(this.#stale)
 	static readonly TOAST_DURATION_MS = 12000
-
-	get initialized(): boolean {
-		return this.#unsubscribe !== null
-	}
 
 	#scheduleRefresh = () => {
 		if (this.#refreshTimer) clearTimeout(this.#refreshTimer)
@@ -127,6 +110,7 @@ class NotificationsStore {
 				id,
 				type: 'notification',
 				eventId,
+				eventType: message.type,
 				title,
 				body,
 				iconUrl,
@@ -151,6 +135,7 @@ class NotificationsStore {
 				id,
 				type: 'notification',
 				eventId,
+				eventType: message.type,
 				title,
 				body: '',
 				iconUrl: null,
@@ -206,30 +191,6 @@ class NotificationsStore {
 			for (const handler of messageEventHandlers) handler(message)
 		}
 
-		if (TYPING_EVENT_TYPE_SET.has(eventType)) {
-			const data = storeEventData(message)
-			const threadId = storeEventString(message, ['thread_id']) ?? ''
-
-			if (eventType === 'typing.user.start') {
-				const userId = (data?.user_id as string) || ''
-				if (
-					!this.typingIndicators.find(
-						(t) => t.threadId === threadId && t.userId === userId
-					)
-				) {
-					this.typingIndicators = [
-						...this.typingIndicators,
-						{ threadId, userId, isAgent: false, startedAt: Date.now() },
-					]
-				}
-			} else if (eventType === 'typing.user.stop') {
-				const userId = (data?.user_id as string) || ''
-				this.typingIndicators = this.typingIndicators.filter(
-					(t) => !(t.threadId === threadId && t.userId === userId)
-				)
-			}
-		}
-
 		// run events are forwarded via the generic stream - no further handling here
 		if (RUN_EVENT_TYPE_SET.has(eventType)) {
 			// no-op: handled by activeRunsStore
@@ -259,8 +220,8 @@ class NotificationsStore {
 		if (this.#refreshTimer) clearTimeout(this.#refreshTimer)
 		this.#refreshTimer = null
 		this.list = []
-		this.typingIndicators = []
 		this.isLoading = false
+		this.hasLoaded = false
 		this.error = null
 		this.#stale = true
 	}
@@ -298,6 +259,7 @@ class NotificationsStore {
 			}
 
 			this.list = Array.isArray(data) ? data : []
+			this.hasLoaded = true
 			this.#stale = false
 		} catch {
 			this.error = 'failed to load notifications'
@@ -388,10 +350,6 @@ class NotificationsStore {
 		} catch {
 			await this.refresh()
 		}
-	}
-
-	getThreadTyping = (threadId: string): TypingIndicator[] => {
-		return this.typingIndicators.filter((t) => t.threadId === threadId)
 	}
 }
 

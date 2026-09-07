@@ -107,6 +107,13 @@ export const accentColors: Record<
 		border: 'rgba(15, 118, 110, 0.24)',
 		shadow: 'rgba(15, 118, 110, 0.28)',
 	},
+	seer: {
+		primary: '#8173f0', // seer (blue-leaning violet)
+		rgb: '129 115 240',
+		bg: 'rgba(129, 115, 240, 0.02)',
+		border: 'rgba(129, 115, 240, 0.2)',
+		shadow: 'rgba(129, 115, 240, 0.25)',
+	},
 }
 
 // selectable accent colors (user-choosable in settings, matches API schema)

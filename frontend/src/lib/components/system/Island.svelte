@@ -24,11 +24,6 @@
 	const chrome = useSystemChrome()
 	const sidebar = useSidebar() as SidebarContext | null
 
-	$effect(() => {
-		if (!browser) return
-		void session.refresh()
-	})
-
 	const chatParam = $derived(browser ? page.url.searchParams.get('chat') : null)
 	const isSearchMode = $derived(browser ? page.url.searchParams.has('search') : false)
 
@@ -90,7 +85,7 @@
 	component="island"
 	tag="header"
 	class="overflow-visible rounded-full px-3 py-3 shadow-[0_32px_64px_rgba(12,10,30,0.45)]"
-	style="view-transition-name: island; --island-control-icon-size: 2.3rem;"
+	style="view-transition-name: island; --island-control-icon-size: 2.3rem; --island-accent: var(--accent-primary, currentColor); --island-motion: 150ms cubic-bezier(0.4, 0, 0.2, 1);"
 	blurRadius={4}
 >
 	<div
@@ -100,10 +95,7 @@
 		<!-- left: context actions (page-injected via chrome.setContextActions) -->
 		<div class="flex h-full min-w-0 items-center">
 			{#if chrome.island.contextActions}
-				<div
-					class="island-context-actions flex h-full min-w-0 items-center"
-					style="color: var(--accent-primary, white);"
-				>
+				<div class="island-context-actions flex h-full min-w-0 items-center">
 					{@render chrome.island.contextActions()}
 				</div>
 			{/if}
@@ -117,7 +109,7 @@
 					role="status"
 					aria-live="polite"
 				>
-					<WifiSlash class="size-3.5" strokeWidth="2.5" />
+					<WifiSlash variant="solid" class="size-3.5" />
 					<span class="text-xs font-medium">offline</span>
 				</div>
 			{:else if chrome.island.pulse}
@@ -132,13 +124,13 @@
 			<!-- PWA: update button (supersedes install) -->
 			{#if showUpdate}
 				<button
-					class="island-pwa-btn flex cursor-pointer items-center justify-center text-amber-400/90 transition-transform duration-300 hover:scale-[1.05] hover:text-amber-300 active:scale-[0.97] disabled:cursor-default disabled:opacity-70 disabled:hover:scale-100"
+					class="island-pwa-btn island-alert flex cursor-pointer items-center justify-center text-amber-400/90 hover:scale-[1.05] hover:text-amber-300 active:scale-[0.97] disabled:cursor-default disabled:opacity-70 disabled:hover:scale-100"
 					onclick={() => void applyUpdate()}
 					disabled={swUpdate.applyingUpdate}
 					aria-busy={swUpdate.applyingUpdate}
 					aria-label="update available"
 				>
-					<ArrowUpCircle class="island-pwa-icon" strokeWidth="2" />
+					<ArrowUpCircle variant="solid" class="island-pwa-icon" />
 					<span
 						class="island-pwa-label text-xs font-medium transition-all duration-300 {labelVisible
 							? 'max-w-20 pr-2.5 pl-1 opacity-100'
@@ -152,11 +144,11 @@
 			<!-- PWA: install button -->
 			{#if showInstall}
 				<button
-					class="island-pwa-btn text-foreground/80 hover:text-foreground flex cursor-pointer items-center justify-center transition-transform duration-300 hover:scale-[1.05] active:scale-[0.97]"
+					class="island-pwa-btn text-foreground/80 hover:text-foreground flex cursor-pointer items-center justify-center hover:scale-[1.05] active:scale-[0.97]"
 					onclick={promptInstall}
 					aria-label="install app"
 				>
-					<Download class="island-pwa-icon" strokeWidth="2" />
+					<Download variant="solid" class="island-pwa-icon" />
 					<span
 						class="island-pwa-label text-xs font-medium transition-all duration-300 {labelVisible
 							? 'max-w-20 pr-2.5 pl-1 opacity-100'
@@ -169,7 +161,7 @@
 
 			{#if !isHomeLayout}
 				<button
-					class="text-foreground/80 hover:text-foreground flex cursor-pointer items-center justify-center transition-transform duration-300 hover:scale-[1.05] active:scale-[0.97]"
+					class="text-foreground/80 hover:text-foreground flex cursor-pointer items-center justify-center hover:scale-[1.05] active:scale-[0.97]"
 					onclick={handleHome}
 					aria-label="home"
 				>
@@ -178,7 +170,7 @@
 			{/if}
 
 			<button
-				class="text-foreground/80 hover:text-foreground flex cursor-pointer items-center justify-center transition-transform duration-300 hover:scale-[1.05] active:scale-[0.97]"
+				class="text-foreground/80 hover:text-foreground flex cursor-pointer items-center justify-center hover:scale-[1.05] active:scale-[0.97]"
 				onclick={() => chrome.toggleDock()}
 				aria-label={chrome.isDockOpen ? 'close dock' : 'open dock'}
 				aria-expanded={chrome.isDockOpen}
@@ -186,7 +178,7 @@
 				<Sidebar variant="solid" class="rotate-180" />
 			</button>
 
-			<UserProfileTrigger user={session.userDisplay} placement="header" isExpanded={false} />
+			<UserProfileTrigger user={session.userDisplay} />
 		</div>
 	</div>
 </LiquidGlass>
@@ -195,7 +187,9 @@
 	/* direct island controls only; composite controls keep their own inner layout */
 	:global(.island-context-actions) {
 		gap: 0;
+		color: var(--island-accent);
 	}
+
 	:global(.island-context-actions > *) {
 		height: 100%;
 	}
@@ -238,5 +232,33 @@
 	:global(.island-pwa-label) {
 		overflow: hidden;
 		white-space: nowrap;
+	}
+
+	/* page-injected context glyphs carry the page accent; the persistent chrome on
+	   the right stays foreground. */
+	:global(.island-context-actions > button) {
+		color: var(--island-accent);
+	}
+
+	/* one motion language for every island control, page-injected ones included.
+	   the scale utilities set the `scale` property, so the transition has to name
+	   it - a `transition-transform` / `transition-colors` list alone leaves the
+	   hover and press sizes snapping. */
+	:global(.island-context-actions button),
+	:global(.island-right-controls button) {
+		transition:
+			scale var(--island-motion),
+			transform var(--island-motion),
+			color var(--island-motion),
+			background-color var(--island-motion),
+			opacity var(--island-motion);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		:global(.island-context-actions button),
+		:global(.island-right-controls button) {
+			scale: 1;
+			transition-duration: 0.01ms;
+		}
 	}
 </style>
