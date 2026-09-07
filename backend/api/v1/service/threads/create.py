@@ -13,9 +13,11 @@ from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.database.post_commit import enqueue_post_commit_action
 from api.models.access_rule import AccessLevel, AccessRule
 from api.models.event import Event, EventScope
 from api.models.event_types import EventType
+from api.models.notification import Notification
 from api.models.thread import Thread
 from api.models.thread_participant import ThreadParticipant
 from api.models.user import User
@@ -31,8 +33,8 @@ from api.v1.service.authorization import (
 	require_permission,
 	require_resource_access,
 )
-from api.v1.service.events import persist_and_fanout_event
-from api.v1.service.notifications import create_notifications
+from api.v1.service.events import fanout_event
+from api.v1.service.notifications import deliver_notification, stage_notifications
 from api.v1.service.projects import load_projects
 from api.v1.service.resource_payload_cache import invalidate_resource_payload_cache
 from api.v1.service.social.friendship import accepted_friend_ids, blocked_user_ids
@@ -186,11 +188,31 @@ async def create_thread(
 		user_id=str(owner_id),
 		thread_id=thread.id,
 	)
-	await persist_and_fanout_event(
-		session, event=event, origin_session_id=origin_session_id
-	)
-	for user_id in pending_ids:
-		await _notify_message_request(session, principal, user_id, thread.id)
+	session.add(event)
+	notifications = [
+		notification
+		for user_id in pending_ids
+		for notification in await _stage_message_request(
+			session, principal, user_id, thread.id
+		)
+	]
+	await session.flush()
+
+	async def fanout_thread_created(db: AsyncSession) -> None:
+		"""deliver what the caller's commit made durable.
+
+		the caller owns the transaction, so this cannot commit its own: a
+		create-and-run refusal has to be able to roll the thread back, and an
+		event committed here would outlive the row it announces. running after
+		the commit keeps the property the fanout needs - the new row is
+		visible to the recipient lookup and to the cache it populates.
+		"""
+		_ = db
+		await fanout_event(event, origin_session_id=origin_session_id)
+		for notification in notifications:
+			await deliver_notification(notification)
+
+	enqueue_post_commit_action(session, fanout_thread_created)
 	await _invalidate_project_payload_caches({project.id for project in projects})
 
 	return thread
@@ -281,13 +303,17 @@ async def _find_dm_thread(
 	return TypeID(row) if row is not None else None
 
 
-async def _notify_message_request(
+async def _stage_message_request(
 	session: AsyncSession,
 	principal: Principal,
 	target_user_id: TypeID,
 	thread_id: TypeID,
-) -> None:
-	"""send a durable "wants to message you" notification to a non-friend."""
+) -> list[Notification]:
+	"""stage a durable "wants to message you" notification for a non-friend.
+
+	staged rather than committed: it belongs to the same transaction as the
+	thread it invites someone to, so a rolled-back creation takes it with it.
+	"""
 	sender_name = principal.subject.display_name or principal.subject.username
 	payload = NotificationPayload(
 		title="new message request",
@@ -296,4 +322,4 @@ async def _notify_message_request(
 		action_url="/messages",
 		data={"thread_id": str(thread_id), "kind": "message_request"},
 	)
-	await create_notifications(session, payload, [target_user_id])
+	return await stage_notifications(session, payload, [target_user_id])

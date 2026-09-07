@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from api.database import async_session_local
 from api.logging import get_logger
-from api.permissions import ResourceType
+from api.permissions import AccessLevel, ResourceType
 from api.v1.service.authorization import list_accessible_user_ids_for_resources
 from api.v1.service.document_sessions import (
 	DocumentParticipant,
@@ -76,7 +76,12 @@ async def handle_join(
 	user_id: TypeID,
 	ws_session_id: str,
 ) -> JoinResult | DocError:
-	"""validate access, join the room, notify peers, return state."""
+	"""validate access, join the room, notify peers, return state.
+
+	joining is deliberately admitted at READER: a reader gets a live read-only
+	view with presence and incoming edits. sending edits is a separate,
+	higher gate - see ``handle_update``, which requires EDITOR.
+	"""
 	parsed = _parse_document_id(document_id)
 	if not parsed:
 		return DocError(error="invalid document_id format")
@@ -148,13 +153,46 @@ async def handle_leave(
 async def handle_update(
 	document_id: str,
 	update_b64: str,
+	user_id: TypeID,
 	ws_session_id: str,
-) -> None:
-	"""apply a Yjs CRDT update and broadcast to all participants."""
+) -> DocError | None:
+	"""apply a Yjs CRDT update and broadcast to all participants.
+
+	two gates, both required. the room is addressable by anyone who knows the
+	document_id, so "the room exists" is not authorization:
+
+	1. the sender must be a participant of this room under this ws session.
+	2. the sender must hold EDITOR on the resource. joining is admitted at
+		READER (a reader gets a live read-only view with presence), so the
+		join gate does not carry this one.
+
+	the level is re-checked per frame rather than captured at join time, so a
+	revoke takes effect on an already-open room.
+	"""
+	parsed = _parse_document_id(document_id)
+	if not parsed:
+		return DocError(error="invalid document_id format")
+
+	participant = await document_session_store.get_participant(
+		document_id, ws_session_id
+	)
+	if participant is None or participant.user_id != user_id:
+		return DocError(error="not a participant of this document")
+
+	resource_type, resource_id = parsed
+	async with async_session_local() as db_session:
+		editors = await list_accessible_user_ids_for_resources(
+			[(resource_type, resource_id)],
+			db_session,
+			required_level=AccessLevel.EDITOR,
+		)
+	if user_id not in editors:
+		return DocError(error="access denied")
+
 	update_bytes = base64.b64decode(update_b64)
 	ok = await document_session_store.apply_update(document_id, update_bytes)
 	if not ok:
-		return
+		return None
 
 	participants = await document_session_store.get_participants(document_id)
 	peer_ids = list({p.user_id for p in participants})
@@ -170,6 +208,7 @@ async def handle_update(
 			None,
 			False,
 		)
+	return None
 
 
 async def handle_awareness(
@@ -177,8 +216,24 @@ async def handle_awareness(
 	awareness_data: dict[str, object],
 	user_id: TypeID,
 	ws_session_id: str,
-) -> None:
-	"""store awareness data and relay to peers."""
+) -> DocError | None:
+	"""store awareness data and relay to peers.
+
+	the same participant gate ``handle_update`` carries, for the same reason:
+	a room is addressable by anyone who knows the document_id. ``update_awareness``
+	already no-ops for a non-participant, but WITHOUT this the broadcast still
+	went out - so a stranger could inject a cursor carrying their user_id and
+	session_id into any open room.
+
+	no EDITOR check: presence is a reader-level capability, which is the whole
+	point of admitting join at READER.
+	"""
+	participant = await document_session_store.get_participant(
+		document_id, ws_session_id
+	)
+	if participant is None or participant.user_id != user_id:
+		return DocError(error="not a participant of this document")
+
 	await document_session_store.update_awareness(
 		document_id,
 		ws_session_id,
@@ -199,6 +254,7 @@ async def handle_awareness(
 			None,
 			False,
 		)
+	return None
 
 
 async def handle_disconnect(

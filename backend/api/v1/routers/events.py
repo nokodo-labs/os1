@@ -174,18 +174,38 @@ async def events_stream(websocket: WebSocket) -> None:
 				update_b64 = data.get("update")
 				if not document_id or not update_b64:
 					continue
-				await handle_update(document_id, update_b64, ws_session_id)
+				update_result = await handle_update(
+					document_id, update_b64, user_id, ws_session_id
+				)
+				if isinstance(update_result, DocError):
+					await websocket.send_json(
+						{
+							"type": "doc.error",
+							"document_id": document_id,
+							"error": update_result.error,
+						}
+					)
+					continue
 			elif msg_type == "doc.awareness":
 				document_id = data.get("document_id")
 				awareness_data = data.get("data")
 				if not document_id or not awareness_data:
 					continue
-				await handle_awareness(
+				awareness_result = await handle_awareness(
 					document_id,
 					awareness_data,
 					user_id,
 					ws_session_id,
 				)
+				if isinstance(awareness_result, DocError):
+					await websocket.send_json(
+						{
+							"type": "doc.error",
+							"document_id": document_id,
+							"error": awareness_result.error,
+						}
+					)
+					continue
 	except WebSocketDisconnect:
 		logger.debug("websocket disconnected for user %s", user_id)
 	except Exception:

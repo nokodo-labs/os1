@@ -144,6 +144,23 @@ class DocumentSessionStore:
 				return []
 			return list(room.participants.values())
 
+	async def get_participant(
+		self,
+		document_id: str,
+		session_id: str,
+	) -> DocumentParticipant | None:
+		"""get one participant, or None when the session is not in the room.
+
+		this is the membership check callers use before accepting a frame: a
+		room is addressable by any client that knows the document_id, so
+		"the room exists" is not authorization.
+		"""
+		async with self._lock:
+			room = self._rooms.get(document_id)
+			if not room:
+				return None
+			return room.participants.get(session_id)
+
 	async def update_awareness(
 		self,
 		document_id: str,
