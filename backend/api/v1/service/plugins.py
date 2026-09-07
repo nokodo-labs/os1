@@ -408,10 +408,8 @@ async def delete_plugin(
 ) -> None:
 	require_permission(principal, ActionPermission.PLUGINS_MANAGE)
 	plugin = await _get_db_plugin(plugin_id, session)
-	# the row is gone for good, so reap the counter rather than leave behind a
-	# key that any ACL mutation created and nothing will ever read again.
-	# enqueued BEFORE the commit: the drop is a post-commit action, and the
-	# commit is what promotes it.
+	# enqueued BEFORE the commit: the drop is a post-commit action and the commit
+	# is what promotes it.
 	enqueue_accessible_users_version_drop(ResourceType.PLUGIN, plugin_id, session)
 	await session.delete(plugin)
 	await session.commit()

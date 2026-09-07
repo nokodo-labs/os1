@@ -194,10 +194,8 @@ class SseFrameBus:
 		could never be shown to be retained, so there is no such stream.
 		"""
 		channel = self._channel(resource_id)
-		# attached, not subscribe: the SUBSCRIBE must land BEFORE the catchup
-		# read, or frames published while it is in flight are lost. a frame
-		# landing in that overlap arrives twice instead, which SSE consumers
-		# tolerate and a gap is not.
+		# attached, not subscribe: the SUBSCRIBE must land BEFORE the catchup read
+		# or frames published in the overlap are lost (a duplicate is tolerable).
 		async with channel.attached() as live:
 			conn = redis_client.get()
 			catchup: list[bytes] = await cast(

@@ -97,9 +97,8 @@ async def events_stream(websocket: WebSocket) -> None:
 
 	user_id = user.id
 
-	# reuse the per-tab session ID the client already generates (sent as
-	# X-Session-ID on HTTP requests). this keeps one identity per browser tab
-	# across both HTTP and WS. fall back to a server-generated ID if missing.
+	# reuse the per-tab session ID the client already sends as X-Session-ID on
+	# HTTP, so a tab keeps one identity across both HTTP and WS.
 	client_sid = websocket.query_params.get("session_id")
 	ws_session_id = client_sid if client_sid else str(new_typeid("ws"))
 

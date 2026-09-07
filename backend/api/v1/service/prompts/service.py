@@ -398,10 +398,8 @@ async def delete_prompt(
 	"""delete a prompt and invalidate prompt caches."""
 	require_permission(principal, ActionPermission.PROMPTS_MANAGE)
 	prompt = await _get_prompt(prompt_id, session)
-	# the row is gone for good, so reap the counter rather than leave behind a
-	# key that any ACL mutation created and nothing will ever read again.
-	# enqueued BEFORE the commit: the drop is a post-commit action, and the
-	# commit is what promotes it.
+	# enqueued BEFORE the commit: the drop is a post-commit action and the commit
+	# is what promotes it.
 	enqueue_accessible_users_version_drop(ResourceType.PROMPT, prompt_id, session)
 	await session.delete(prompt)
 	await session.commit()

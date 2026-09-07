@@ -48,10 +48,8 @@ _bus = SseFrameBus(
 	key_prefix="nokodo-ai:task:",
 	end_marker=b"nokodo-ai:task-end",
 	channel_factory=make_task_channel,
-	# a task can run for hours and its progress is worth reading afterwards,
-	# so the catchup log outlives the stream by a day. it is never shortened
-	# on completion (unlike a run's): a client that was not watching should
-	# still be able to see how it went.
+	# a task can run for hours, so the catchup log outlives the stream by a day
+	# and is never shortened on completion (unlike a run's).
 	log_ttl_seconds=60 * 60 * 24,
 	# progress updates, not token deltas.
 	max_frames=2048,

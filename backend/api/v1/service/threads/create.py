@@ -107,11 +107,8 @@ async def create_thread(
 			ResourceType.GROUP,
 			required_level=AccessLevel.READER,
 		)
-	# reuse an existing 1:1 DM rather than spawning duplicates. the pair lock
-	# makes find-or-create atomic across processes: without it, two concurrent
-	# FIRST-time creations both find nothing (no row exists to row-lock yet)
-	# and both create. the second creator blocks here until the first commits,
-	# then finds and reuses the committed DM.
+	# the pair lock makes find-or-create atomic across processes: on a FIRST
+	# creation there is no row yet to row-lock, so both racers would create one.
 	if len(member_ids) == 1 and not agent_ids and not group_ids:
 		await _acquire_dm_pair_lock(session, owner_id, member_ids[0])
 		existing = await _find_dm_thread(session, owner_id, member_ids[0])

@@ -253,11 +253,8 @@ async def subscribe_run_stream(
 	try:
 		route = await read_run_route(run_id)
 	except RunBusUnavailableError:
-		# the status line is already committed, so this closes the way a
-		# failure does rather than raising a 503 into an open body. "we cannot
-		# tell" is reported as an error, never as a quiet completion, and as
-		# unavailable rather than internal: retrying is the right move, and
-		# calling it a bug would ask the client to report one instead.
+		# the status line is already on the wire, so a 503 cannot be raised
+		# here; the failure goes out as an error frame instead.
 		logger.warning("run bus unreachable while attaching stream for %s", run_id)
 		yield sse_encode(
 			event="error",
@@ -333,9 +330,8 @@ async def _start_run(
 		name=f"agent_run:{run_id}",
 	)
 
-	# the producer is raced against the readiness signal rather than waited out:
-	# a producer that died before announcing readiness has already failed, and
-	# holding the request for the full timeout only delays the 503.
+	# raced against the producer task: one that died before signalling readiness
+	# has already failed, and waiting out the full timeout only delays the 503.
 	ready_wait = asyncio.ensure_future(ready_event.wait())
 	try:
 		await asyncio.wait(
@@ -354,9 +350,8 @@ async def _start_run(
 	try:
 		await task
 	except asyncio.CancelledError:
-		# cancelling `task` above lands here; a cancellation aimed at THIS
-		# caller has to keep propagating rather than be absorbed as the
-		# producer's.
+		# our own `task.cancel()` lands here; a cancellation aimed at THIS caller
+		# must keep propagating rather than be absorbed as the producer's.
 		if current is not None and current.cancelling():
 			raise
 	except Exception:
@@ -477,9 +472,8 @@ async def launch_thread_run(
 	prospective_message_id = new_typeid("msg") if persist and input else None
 	placement: PreparedPlacement | None = None
 	if prospective_message_id is not None:
-		# the slot names the conversation this run answers, and the message
-		# decides which conversation that is - so the placement is derived once
-		# here, under the lock the write also holds, and handed to the write.
+		# placement is derived here, under the same lock the write holds, so the
+		# run's slot and the message agree on which conversation this answers.
 		await acquire_resource_write_lock(session, "thread", thread_id)
 		placement = await prepare_message_placement(
 			session,
@@ -749,9 +743,8 @@ async def create_thread_and_run_stream(
 				override_id=thread_id,
 			)
 		except IntegrityError:
-			# the conflict surfaces on the creation's flush, and the rolled-back
-			# attempt already queued its fanout; without this the retry's commit
-			# would promote and run both sets.
+			# the rolled-back attempt already queued its fanout; without discarding
+			# it the retry's commit would promote and run both sets.
 			discard_uncommitted_post_commit_actions(session)
 			await session.rollback()
 			logger.info("client thread id %s conflicted, generating new id", thread_id)
@@ -771,11 +764,8 @@ async def create_thread_and_run_stream(
 
 	final_thread_id = thread.id
 
-	# the run is launched before the response, on the SAME uncommitted session:
-	# a refusal is an HTTP error the client already handles, and rolls the
-	# thread back with it rather than leaving an empty one nobody asked for.
-	# the input-message write inside commits the thread and the message
-	# together. a stream that opens is a stream that has a run.
+	# launched on the SAME uncommitted session so a refusal rolls the thread back
+	# with it instead of leaving an empty thread nobody asked for.
 	try:
 		run_id = await launch_thread_run(
 			session,
@@ -798,8 +788,7 @@ async def create_thread_and_run_stream(
 		"""announce the new thread, then stream the run already started in it."""
 		yield sse_encode(event="thread_created", data=thread_schema)
 		# the status line and thread_created are already on the wire, so a
-		# failure here closes the way a run failure does rather than truncating
-		# the body with neither an error nor a done.
+		# failure here has to close as error + done rather than truncate.
 		try:
 			async for chunk in subscribe_run_stream(run_id, principal.user.id):
 				yield chunk

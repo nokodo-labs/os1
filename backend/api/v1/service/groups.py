@@ -256,10 +256,8 @@ async def delete_group(
 		await resource_refs_for_subject("group", group_id, session),
 		session,
 	)
-	# two different key sets, so these do not race: the call above bumps every
-	# resource this group is a SUBJECT of, while the drop below reaps the
-	# group's own counter as a RESOURCE. a group cannot grant access to itself
-	# (`ck_access_rules_no_self_group`), so the sets cannot overlap.
+	# these do not race: the bump covers resources this group is a SUBJECT of, the
+	# drop its own counter as a RESOURCE, and a group cannot grant access to itself.
 	await enqueue_accessible_users_invalidation_for_subject("group", group_id, session)
 	# the row is gone for good, so reap the counter rather than leave behind a
 	# key that any ACL mutation created and nothing will ever read again.

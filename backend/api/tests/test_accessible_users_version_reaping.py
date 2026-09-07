@@ -29,9 +29,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _DROP_CALL = "enqueue_accessible_users_version_drop"
 
 #: the delete function for each ACL-typed resource, as (module path, function).
-#: hand-maintained because there is no registry of them - which is precisely
-#: why the completeness of this mapping is asserted against `RESOURCE_CONFIG`
-#: below rather than trusted.
+#: hand-maintained; completeness is asserted against `RESOURCE_CONFIG` below.
 _DELETE_SITES: dict[ResourceType, tuple[str, str]] = {
 	ResourceType.THREAD: ("api/v1/service/threads/core.py", "execute_thread_deletion"),
 	ResourceType.PROJECT: ("api/v1/service/projects.py", "delete_project"),
@@ -49,11 +47,8 @@ _DELETE_SITES: dict[ResourceType, tuple[str, str]] = {
 	),
 }
 
-#: TASK is an ACL type with NO single-instance delete anywhere - no service
-#: function, no router endpoint. its rows go only by ORM cascade from a
-#: parent. there is therefore no site to reap from; if a task delete is ever
-#: added, `test_every_acl_resource_type_has_a_known_delete_site` fails until
-#: this exemption is revisited.
+#: TASK has no single-instance delete anywhere; its rows go only by ORM cascade
+#: from a parent, so there is no site to reap from.
 _NO_DELETE_PATH: frozenset[ResourceType] = frozenset({ResourceType.TASK})
 
 
