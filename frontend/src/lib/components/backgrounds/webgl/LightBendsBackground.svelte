@@ -1,11 +1,11 @@
 <script lang="ts">
+	import { startWallpaperLoop } from '$lib/components/backgrounds/wallpaperLoop'
 	import { setBackgroundContext } from '$lib/contexts/backgroundContext'
 	import { createOnceCallback } from '$lib/utils/once'
-	import { onDestroy, onMount, untrack, type Snippet } from 'svelte'
+	import { onDestroy, onMount, untrack } from 'svelte'
 	import * as THREE from 'three'
 
 	interface Props {
-		children?: Snippet
 		onReady?: () => void
 		rotation?: number
 		speed?: number
@@ -21,7 +21,6 @@
 	}
 
 	let {
-		children,
 		onReady,
 		rotation = 45,
 		speed = 0.2,
@@ -48,7 +47,7 @@
 	let camera: THREE.OrthographicCamera | null = null
 	let geometry: THREE.PlaneGeometry | null = null
 	let material: THREE.ShaderMaterial | null = null
-	let rafId: number | null = null
+	let stopFrameLoop: (() => void) | null = null
 	let resizeObserver: ResizeObserver | null = null
 	let canvasEl: HTMLCanvasElement | null = null
 	let pointerMoveHandler: ((event: PointerEvent) => void) | null = null
@@ -62,7 +61,6 @@
 	const rotationVector = new THREE.Vector2(1, 0)
 	const rotationOrigin = new THREE.Vector2(0, 0)
 	const subscribers: Array<() => void> = []
-	const clock = new THREE.Clock()
 
 	setBackgroundContext({
 		getCanvas: () => canvasEl,
@@ -310,15 +308,11 @@ void main() {
 			}
 			container.addEventListener('pointerleave', pointerLeaveHandler)
 
-			clock.stop()
-			clock.start()
-			clock.getDelta()
-
 			let didRender = false
-			const loop = () => {
+			const loop = (nowMs: number, dtMs: number) => {
 				if (!renderer || !scene || !camera || !material) return
-				const dt = clock.getDelta()
-				const elapsed = clock.elapsedTime
+				const dt = dtMs / 1000
+				const elapsed = nowMs / 1000
 				material.uniforms.uTime.value = elapsed
 				const deg: number = (rotationRef.value % 360) + autoRotateRef.value * elapsed
 				const rad = THREE.MathUtils.degToRad(deg)
@@ -332,10 +326,9 @@ void main() {
 					didRender = true
 					signalReady()
 				}
-				rafId = requestAnimationFrame(loop)
 			}
 
-			rafId = requestAnimationFrame(loop)
+			stopFrameLoop = startWallpaperLoop(loop)
 		} catch (error) {
 			console.error('Failed to initialize LightBends background:', error)
 			signalReady()
@@ -343,7 +336,8 @@ void main() {
 	})
 
 	onDestroy(() => {
-		if (rafId !== null) cancelAnimationFrame(rafId)
+		stopFrameLoop?.()
+		stopFrameLoop = null
 		if (resizeObserver) resizeObserver.disconnect()
 		if (windowResizeCleanup) windowResizeCleanup()
 		const container = containerRef
@@ -371,7 +365,6 @@ void main() {
 		pointerLeaveHandler = null
 		windowResizeCleanup = null
 		resizeObserver = null
-		clock.stop()
 	})
 
 	$effect(() => {
@@ -383,8 +376,4 @@ void main() {
 	})
 </script>
 
-<div class="absolute inset-0 overflow-hidden" bind:this={containerRef}>
-	<div class="relative z-10 h-full w-full">
-		{@render children?.()}
-	</div>
-</div>
+<div class="absolute inset-0 overflow-hidden" bind:this={containerRef}></div>

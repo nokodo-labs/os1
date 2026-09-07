@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { startWallpaperLoop } from '$lib/components/backgrounds/wallpaperLoop'
 	import { onDestroy, onMount } from 'svelte'
 
 	type GLShaderType =
@@ -9,7 +10,9 @@
 	let canvasRef: HTMLCanvasElement
 	let gl: WebGL2RenderingContext | null = null
 	let program: WebGLProgram | null = null
-	let animationId: number | null = null
+	let stopFrameLoop: (() => void) | null = null
+	// the shader reads an absolute clock, so keep the loop's origin to offset it
+	let loopOriginMs = 0
 	let resizeObserver: ResizeObserver | null = null
 	let pointerTarget = { x: 0.5, y: 0.5 }
 	let pointerSmooth = { x: 0.5, y: 0.5 }
@@ -209,7 +212,7 @@ void main() {
 		}
 	}
 
-	function animate(time: number) {
+	function animate(nowMs: number) {
 		if (!gl || !program) return
 
 		gl.useProgram(program)
@@ -217,7 +220,7 @@ void main() {
 		pointerSmooth.x += (pointerTarget.x - pointerSmooth.x) * 0.045
 		pointerSmooth.y += (pointerTarget.y - pointerSmooth.y) * 0.045
 
-		const seconds = time * 0.001
+		const seconds = (loopOriginMs + nowMs) * 0.001
 		const width = canvasRef.width
 		const height = canvasRef.height
 
@@ -243,8 +246,6 @@ void main() {
 
 		gl.clear(gl.COLOR_BUFFER_BIT)
 		gl.drawArrays(gl.TRIANGLES, 0, 6)
-
-		animationId = requestAnimationFrame(animate)
 	}
 
 	function handlePointerMove(event: PointerEvent) {
@@ -278,13 +279,13 @@ void main() {
 
 		const rect = containerRef.getBoundingClientRect()
 		resize(rect.width, rect.height)
-		animationId = requestAnimationFrame(animate)
+		loopOriginMs = performance.now()
+		stopFrameLoop = startWallpaperLoop(animate)
 	})
 
 	onDestroy(() => {
-		if (animationId !== null) {
-			cancelAnimationFrame(animationId)
-		}
+		stopFrameLoop?.()
+		stopFrameLoop = null
 		resizeObserver?.disconnect()
 		containerRef?.removeEventListener('pointermove', handlePointerMove)
 		containerRef?.removeEventListener('pointerleave', handlePointerLeave)

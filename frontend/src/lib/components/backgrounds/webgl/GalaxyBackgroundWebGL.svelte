@@ -1,11 +1,10 @@
 <script lang="ts">
+	import { startWallpaperLoop } from '$lib/components/backgrounds/wallpaperLoop'
 	import { setBackgroundContext } from '$lib/contexts/backgroundContext'
 	import { createOnceCallback } from '$lib/utils/once'
-	import type { Snippet } from 'svelte'
 	import { onDestroy, onMount } from 'svelte'
 
 	interface Props {
-		children?: Snippet
 		onReady?: () => void
 		// galaxy uniforms
 		focalX?: number
@@ -18,10 +17,11 @@
 		glowIntensity?: number
 		twinkleIntensity?: number
 		rotationSpeed?: number
+		backgroundColor?: string
+		starColor?: string
 	}
 
 	let {
-		children,
 		onReady,
 		focalX = 0.5,
 		focalY = 0.5,
@@ -33,6 +33,8 @@
 		glowIntensity = 0.3,
 		twinkleIntensity = 0.3,
 		rotationSpeed = 0.1,
+		backgroundColor = '#000000',
+		starColor = '#ffffff',
 	}: Props = $props()
 
 	const signalReady = createOnceCallback(() => onReady?.())
@@ -41,15 +43,23 @@
 		| WebGL2RenderingContext['VERTEX_SHADER']
 		| WebGL2RenderingContext['FRAGMENT_SHADER']
 
+	function hexToRgb(hex: string): [number, number, number] {
+		const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+		if (!m) return [1, 1, 1]
+		return [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255]
+	}
+
 	let containerRef: HTMLDivElement
 	let canvasRef: HTMLCanvasElement
 	let gl: WebGL2RenderingContext | null = null
 	let program: WebGLProgram | null = null
-	let animationId: number | null = null
+	let stopFrameLoop: (() => void) | null = null
+	// the shader reads an absolute clock, so keep the loop's origin to offset it
+	let loopOriginMs = 0
 	let resizeObserver: ResizeObserver | null = null
 	let subscribers: Array<() => void> = []
 
-	// Expose canvas to children via context
+	// Expose canvas to consumers via context
 	setBackgroundContext({
 		getCanvas: () => canvasRef,
 		getCanvasDimensions: () => ({
@@ -91,6 +101,8 @@ uniform float u_speed;
 uniform float u_glow_intensity;
 uniform float u_twinkle_intensity;
 uniform float u_rotation_speed;
+uniform vec3 u_background_color;
+uniform vec3 u_star_color;
 
 #define NUM_LAYER 4.0
 #define MAT45 mat2(0.7071, -0.7071, 0.7071, 0.7071)
@@ -184,7 +196,10 @@ void main() {
 		col += StarLayer(uv * scale + i * 453.32) * fade;
 	}
 
-	fragColor = vec4(col, 1.0);
+	// star mass paints between the two palette colors. black -> white reduces to
+	// the additive original, since the framebuffer clamped it to [0,1] anyway
+	vec3 mass = clamp(col, 0.0, 1.0);
+	fragColor = vec4(mix(u_background_color, u_star_color, mass), 1.0);
 }`
 
 	function createShader(context: WebGL2RenderingContext, type: GLShaderType, source: string) {
@@ -258,12 +273,12 @@ void main() {
 		}
 	}
 
-	function animate(time: number) {
+	function animate(nowMs: number) {
 		if (!gl || !program) return
 
 		gl.useProgram(program)
 
-		const seconds = time * 0.001
+		const seconds = (loopOriginMs + nowMs) * 0.001
 
 		gl.uniform1f(gl.getUniformLocation(program, 'u_time'), seconds)
 		gl.uniform2f(
@@ -282,11 +297,14 @@ void main() {
 		gl.uniform1f(gl.getUniformLocation(program, 'u_twinkle_intensity'), twinkleIntensity)
 		gl.uniform1f(gl.getUniformLocation(program, 'u_rotation_speed'), rotationSpeed)
 
+		const bg = hexToRgb(backgroundColor)
+		gl.uniform3f(gl.getUniformLocation(program, 'u_background_color'), bg[0], bg[1], bg[2])
+		const star = hexToRgb(starColor)
+		gl.uniform3f(gl.getUniformLocation(program, 'u_star_color'), star[0], star[1], star[2])
+
 		gl.clear(gl.COLOR_BUFFER_BIT)
 		gl.drawArrays(gl.TRIANGLES, 0, 6)
 		gl.flush()
-
-		animationId = requestAnimationFrame(animate)
 	}
 
 	onMount(() => {
@@ -306,8 +324,12 @@ void main() {
 
 			const rect = containerRef.getBoundingClientRect()
 			resize(rect.width, rect.height)
-			animationId = requestAnimationFrame((time) => {
-				animate(time)
+			loopOriginMs = performance.now()
+			let didRender = false
+			stopFrameLoop = startWallpaperLoop((nowMs) => {
+				animate(nowMs)
+				if (didRender) return
+				didRender = true
 				signalReady()
 			})
 		} catch (error) {
@@ -317,9 +339,8 @@ void main() {
 	})
 
 	onDestroy(() => {
-		if (animationId !== null) {
-			cancelAnimationFrame(animationId)
-		}
+		stopFrameLoop?.()
+		stopFrameLoop = null
 		resizeObserver?.disconnect()
 		if (gl) {
 			gl.getExtension('WEBGL_lose_context')?.loseContext()
@@ -329,11 +350,6 @@ void main() {
 
 <div class="webgl-galaxy" bind:this={containerRef}>
 	<canvas bind:this={canvasRef}></canvas>
-
-	<!-- Slotted content rendered on top of galaxy -->
-	<div class="content-layer">
-		{@render children?.()}
-	</div>
 </div>
 
 <style>
@@ -350,12 +366,5 @@ void main() {
 		height: 100%;
 		display: block;
 		pointer-events: none;
-	}
-
-	.content-layer {
-		position: relative;
-		width: 100%;
-		height: 100%;
-		z-index: 1;
 	}
 </style>

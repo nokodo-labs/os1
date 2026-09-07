@@ -1,11 +1,10 @@
 <script lang="ts">
+	import { startWallpaperLoop } from '$lib/components/backgrounds/wallpaperLoop'
 	import { createOnceCallback } from '$lib/utils/once'
 	import { Mesh, Program, Renderer, Triangle } from 'ogl'
-	import type { Snippet } from 'svelte'
 	import { untrack } from 'svelte'
 
 	interface Props {
-		children?: Snippet
 		onReady?: () => void
 		timeSpeed?: number
 		colorBalance?: number
@@ -32,7 +31,6 @@
 	}
 
 	let {
-		children,
 		onReady,
 		timeSpeed = 0.25,
 		colorBalance = 0.0,
@@ -230,19 +228,15 @@ void main(){
 		ro.observe(containerRef)
 		setSize()
 
-		let raf = 0
-		const t0 = performance.now()
-		function loop(t: number) {
-			;(program.uniforms.iTime as { value: number }).value = (t - t0) * 0.001
+		const stopFrameLoop = startWallpaperLoop((nowMs) => {
+			;(program.uniforms.iTime as { value: number }).value = nowMs * 0.001
 			renderer.render({ scene: mesh })
-			raf = requestAnimationFrame(loop)
-		}
-		raf = requestAnimationFrame(loop)
+		})
 		signalReady()
 
 		return () => {
 			programRef = null
-			cancelAnimationFrame(raf)
+			stopFrameLoop()
 			ro.disconnect()
 			gl.getExtension('WEBGL_lose_context')?.loseContext()
 		}
@@ -282,9 +276,4 @@ void main(){
 <div class="absolute inset-0 overflow-hidden" bind:this={containerRef}>
 	<canvas class="pointer-events-none absolute inset-0 block h-full w-full" bind:this={canvasRef}
 	></canvas>
-	{#if children}
-		<div class="relative z-1 h-full w-full">
-			{@render children()}
-		</div>
-	{/if}
 </div>

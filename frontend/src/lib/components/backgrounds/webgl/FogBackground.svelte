@@ -1,11 +1,14 @@
 <script lang="ts">
-	import { ensureVanta } from '$lib/components/backgrounds/webgl/vantaLoader'
+	import {
+		ensureVanta,
+		pauseVantaWhileHidden,
+		syncVantaFrameLoop,
+		type VantaEffect,
+	} from '$lib/components/backgrounds/webgl/vantaLoader'
 	import { createOnceCallback } from '$lib/utils/once'
-	import type { Snippet } from 'svelte'
 	import { onDestroy, onMount } from 'svelte'
 
 	interface Props {
-		children?: Snippet
 		onReady?: () => void
 		mouseControls?: boolean
 		touchControls?: boolean
@@ -22,7 +25,6 @@
 	}
 
 	let {
-		children,
 		onReady,
 		mouseControls = true,
 		touchControls = true,
@@ -40,8 +42,9 @@
 	const signalReady = createOnceCallback(() => onReady?.())
 
 	let containerRef: HTMLDivElement
-	let vantaEffect: { destroy?: () => void } | null = null
+	let vantaEffect: VantaEffect | null = null
 	let initToken = 0
+	const stopVisibilitySync = pauseVantaWhileHidden(() => vantaEffect)
 
 	$effect(() => {
 		void [
@@ -95,6 +98,7 @@
 			}
 
 			vantaEffect = effect
+			syncVantaFrameLoop(effect)
 			signalReady()
 		})().catch((error) => {
 			console.error('failed to initialize fog background:', error)
@@ -111,17 +115,13 @@
 	})
 
 	onDestroy(() => {
+		stopVisibilitySync()
 		vantaEffect?.destroy?.()
 		vantaEffect = null
 	})
 </script>
 
 <div class="vanta-bg" bind:this={containerRef}></div>
-{#if children}
-	<div class="relative z-1 h-full w-full">
-		{@render children()}
-	</div>
-{/if}
 
 <style>
 	.vanta-bg {

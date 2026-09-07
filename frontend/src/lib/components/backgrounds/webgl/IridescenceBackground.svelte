@@ -1,11 +1,10 @@
 <script lang="ts">
+	import { startWallpaperLoop } from '$lib/components/backgrounds/wallpaperLoop'
 	import { createOnceCallback } from '$lib/utils/once'
 	import { Mesh, Program, Renderer, Triangle } from 'ogl'
-	import type { Snippet } from 'svelte'
 	import { untrack } from 'svelte'
 
 	interface Props {
-		children?: Snippet
 		onReady?: () => void
 		color?: [number, number, number]
 		speed?: number
@@ -14,7 +13,6 @@
 	}
 
 	let {
-		children,
 		onReady,
 		color = [1, 1, 1],
 		speed = 1.0,
@@ -114,13 +112,12 @@ void main() {
 		ro.observe(containerRef)
 		resize()
 
-		let raf = 0
-		function update(t: number) {
-			raf = requestAnimationFrame(update)
-			program.uniforms.uTime.value = t * 0.001
+		// the shader reads an absolute clock, so offset the loop clock by its origin
+		const loopOriginMs = performance.now()
+		const stopFrameLoop = startWallpaperLoop((nowMs) => {
+			program.uniforms.uTime.value = (loopOriginMs + nowMs) * 0.001
 			renderer.render({ scene: mesh })
-		}
-		raf = requestAnimationFrame(update)
+		})
 		signalReady()
 
 		function handleMouseMove(e: MouseEvent) {
@@ -136,7 +133,7 @@ void main() {
 
 		return () => {
 			programRef = null
-			cancelAnimationFrame(raf)
+			stopFrameLoop()
 			ro.disconnect()
 			containerRef.removeEventListener('mousemove', handleMouseMove)
 			gl.getExtension('WEBGL_lose_context')?.loseContext()
@@ -155,9 +152,4 @@ void main() {
 <div class="absolute inset-0 overflow-hidden" bind:this={containerRef}>
 	<canvas class="pointer-events-none absolute inset-0 block h-full w-full" bind:this={canvasRef}
 	></canvas>
-	{#if children}
-		<div class="relative z-1 h-full w-full">
-			{@render children()}
-		</div>
-	{/if}
 </div>

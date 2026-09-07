@@ -1,31 +1,78 @@
 <script lang="ts">
-	import { untrack, type Snippet } from 'svelte'
-	import { BACKGROUND_DEFAULTS } from './backgroundDefaults'
+	import { device } from '$lib/stores/device.svelte'
+	import { untrack } from 'svelte'
+	import { BACKGROUND_DEFAULTS, BACKGROUND_RENDERER } from './backgroundDefaults'
+	import DitherBackground from './css/DitherBackground.svelte'
+	import DotsBackground from './css/DotsBackground.svelte'
+	import OrbGlowBackground from './css/OrbGlowBackground.svelte'
 	import StaticBackground from './StaticBackground.svelte'
+	import AsciiOrbBackground from './canvas/AsciiOrbBackground.svelte'
 	import Clouds2Background from './webgl/Clouds2Background.svelte'
 	import CloudsBackground from './webgl/CloudsBackground.svelte'
+	import ConstellationsBackground from './canvas/ConstellationsBackground.svelte'
 	import DarkVeilBackground from './webgl/DarkVeilBackground.svelte'
+	import EmbersBackground from './canvas/EmbersBackground.svelte'
 	import FogBackground from './webgl/FogBackground.svelte'
 	import GalaxyBackgroundWebGL from './webgl/GalaxyBackgroundWebGL.svelte'
 	import GrainientBackground from './webgl/GrainientBackground.svelte'
 	import IridescenceBackground from './webgl/IridescenceBackground.svelte'
+	import LensGrainBackground from './webgl/LensGrainBackground.svelte'
 	import LightBendsBackground from './webgl/LightBendsBackground.svelte'
 	import LightRaysBackground from './webgl/LightRaysBackground.svelte'
+	import PerlinFlowBackground from './canvas/PerlinFlowBackground.svelte'
+	import PetalsBackground from './canvas/PetalsBackground.svelte'
+	import RainBackground from './canvas/RainBackground.svelte'
 	import SilkBackground from './webgl/SilkBackground.svelte'
+	import SparklesBackground from './canvas/SparklesBackground.svelte'
+	import SynapseBackground from './canvas/SynapseBackground.svelte'
 
+	// every wallpaper that ships as a light/dark pair lists both siblings here:
+	// they are independent, separately selectable wallpapers sharing one renderer.
 	export type BackgroundType =
 		| 'galaxy'
+		| 'galaxy-light'
 		| 'darkveil'
+		| 'darkveil-light'
 		| 'lightbends'
+		| 'lightbends-light'
 		| 'lightrays'
+		| 'lightrays-light'
 		| 'silk'
+		| 'silk-light'
 		| 'fog'
+		| 'fog-light'
 		| 'clouds'
 		| 'clouds-dark'
 		| 'clouds2'
 		| 'clouds2-dark'
 		| 'grainient'
+		| 'grainient-dark'
 		| 'iridescence'
+		| 'iridescence-dark'
+		| 'asciiorb'
+		| 'asciiorb-light'
+		| 'lensgrain'
+		| 'lensgrain-light'
+		| 'dither'
+		| 'dither-light'
+		| 'orbglow'
+		| 'orbglow-light'
+		| 'dots'
+		| 'dots-dark'
+		| 'synapse'
+		| 'synapse-light'
+		| 'rain'
+		| 'rain-light'
+		| 'constellations'
+		| 'constellations-light'
+		| 'perlin-flow'
+		| 'perlin-flow-light'
+		| 'petals'
+		| 'petals-light'
+		| 'sparkles'
+		| 'sparkles-dark'
+		| 'embers'
+		| 'embers-light'
 		| 'static'
 		| 'none'
 
@@ -71,6 +118,7 @@
 
 		// Silk options
 		silkColor?: string
+		silkBackgroundColor?: string
 		silkSpeed?: number
 
 		// DarkVeil options
@@ -95,6 +143,8 @@
 		galaxyGlowIntensity?: number
 		galaxyTwinkleIntensity?: number
 		galaxyRotationSpeed?: number
+		galaxyBackgroundColor?: string
+		galaxyStarColor?: string
 
 		// Fog options
 		fogHighlightColor?: number
@@ -167,22 +217,145 @@
 		iridescenceSpeed?: number
 		iridescenceAmplitude?: number
 		iridescenceMouseReact?: boolean
+
+		// AsciiOrb options
+		asciiOrbColor?: string
+		asciiOrbBackgroundColor?: string
+		asciiOrbFontSize?: number
+		asciiOrbRadius?: number
+		asciiOrbZoom?: number
+		asciiOrbSpin?: number
+		asciiOrbTilt?: number
+		asciiOrbWire?: number
+		asciiOrbLatitudes?: number
+		asciiOrbLongitudes?: number
+		asciiOrbShape?: 'sphere' | 'cube'
+		asciiOrbCubeScale?: number
+		asciiOrbMorphDuration?: number
+		asciiOrbBuildDuration?: number
+
+		// LensGrain options
+		lensGrainColor?: string
+		lensGrainBackgroundColor?: string
+		lensGrainDensity?: number
+		lensGrainOpacity?: number
+		lensGrainSize?: number
+		lensGrainAnimated?: boolean
+		lensGrainVignetteColor?: string
+		lensGrainVignetteOpacity?: number
+
+		// Dither options
+		ditherColor?: string
+		ditherAccentColor?: string
+		ditherGlowStrength?: number
+		ditherGlowSpread?: number
+		ditherDotStrength?: number
+		ditherDotSize?: number
+
+		// OrbGlow options
+		orbGlowColor?: string
+		orbGlowHaloColor?: string
+		orbGlowBackgroundColor?: string
+		orbGlowCoreOpacity?: number
+		orbGlowHaloOpacity?: number
+		orbGlowRadius?: number
+		orbGlowFollowPointer?: boolean
+		orbGlowDrift?: number
+		orbGlowEasing?: number
+
+		// Dots options (odysseus)
+		dotsColor?: string
+		dotsBackgroundColor?: string
+		dotsIntensity?: number
+		dotsSpacing?: number
+		dotsStrength?: number
+		dotsDotSize?: number
+
+		// Synapse options (odysseus)
+		synapseColor?: string
+		synapseBackgroundColor?: string
+		synapseIntensity?: number
+		synapseGrid?: number
+		synapseGridStrength?: number
+		synapseMaxPulses?: number
+		synapseSpawnChance?: number
+		synapseSpeedMin?: number
+		synapseSpeedMax?: number
+		synapseTrailLength?: number
+
+		// Rain options (odysseus)
+		rainColor?: string
+		rainBackgroundColor?: string
+		rainIntensity?: number
+		rainSize?: number
+		rainMaxDrops?: number
+		rainSpawnChance?: number
+
+		// Constellations options (odysseus)
+		constellationsColor?: string
+		constellationsBackgroundColor?: string
+		constellationsIntensity?: number
+		constellationsStarCount?: number
+		constellationsConnectDistance?: number
+		constellationsDriftSpeed?: number
+		constellationsTwinkleSpeed?: number
+
+		// PerlinFlow options (odysseus)
+		perlinFlowColor?: string
+		perlinFlowBackgroundColor?: string
+		perlinFlowIntensity?: number
+		perlinFlowParticleCount?: number
+		perlinFlowFadeAlpha?: number
+		perlinFlowNoiseScale?: number
+		perlinFlowTimeScale?: number
+		perlinFlowSpeed?: number
+		perlinFlowDotRadius?: number
+		perlinFlowLifeDecay?: number
+
+		// Petals options (odysseus)
+		petalsColor?: string
+		petalsBackgroundColor?: string
+		petalsIntensity?: number
+		petalsSize?: number
+		petalsCount?: number
+		petalsFallSpeed?: number
+
+		// Sparkles options (odysseus)
+		sparklesColor?: string
+		sparklesBackgroundColor?: string
+		sparklesIntensity?: number
+		sparklesSize?: number
+		sparklesCount?: number
+		sparklesTwinkleSpeed?: number
+
+		// Embers options (odysseus)
+		embersColor?: string
+		embersBackgroundColor?: string
+		embersIntensity?: number
+		embersSize?: number
+		embersCount?: number
+		embersFadeAlpha?: number
+		embersSparkChance?: number
+		embersBurstChance?: number
+		embersBurstSize?: number
 	}
 
 	interface Props {
 		type: BackgroundType
 		config?: BackgroundConfig
-		children?: Snippet
-		onReady?: () => void
+		onReady?: (bg: BackgroundType) => void
 	}
 
-	let { type = 'galaxy', config = {}, children, onReady }: Props = $props()
+	let { type = 'galaxy', config = {}, onReady }: Props = $props()
 
-	let readySent = $state(false)
+	// readiness is keyed on the currently painted background so onReady fires
+	// once per settled background (re-armed across transitions), letting callers
+	// gate on the FINAL background rather than the first one that ever rendered.
+	let readyBg = $state<BackgroundType | null>(null)
 	function signalReady() {
-		if (readySent) return
-		readySent = true
-		onReady?.()
+		if (readyBg === currentBg) return
+		readyBg = currentBg
+		onReady?.(currentBg)
 	}
 
 	// Transition state for smooth swapping
@@ -190,6 +363,11 @@
 	currentBg = untrack(() => type)
 	let previousBg = $state<BackgroundType | null>(null)
 	let isTransitioning = $state(false)
+
+	// both siblings of a light/dark pair paint through the same component, so the
+	// template branches on the renderer while the config stays per wallpaper
+	const currentRenderer = $derived(BACKGROUND_RENDERER[currentBg])
+	const previousRenderer = $derived(previousBg === null ? null : BACKGROUND_RENDERER[previousBg])
 
 	// merge centralized defaults with the caller-supplied override so every
 	// prop always has a sensible value without inline || fallbacks in the template
@@ -216,18 +394,29 @@
 	})
 
 	$effect(() => {
-		if (readySent) return
-		if (currentBg === 'static' || currentBg === 'none') {
+		if (currentRenderer === 'static' || currentRenderer === 'none') {
 			signalReady()
 		}
 	})
+
+	// the wallpaper holds ONE size across virtual-keyboard open/close: android
+	// shrinks the layout viewport for the keyboard now
+	// (`interactive-widget=resizes-content`), and a fixed layer that follows it
+	// reflows on every toggle - the canvas renderers re-seed their fields on each
+	// resize. the ratcheted height still follows rotation and window resizes, and
+	// is 0 until the device store syncs, where the `inset-0` stretch takes over.
+	const layerHeight = $derived(
+		device.stableViewportHeight > 0 ? `${device.stableViewportHeight}px` : null
+	)
 </script>
 
-<!-- Background layers - positioned absolutely -->
-<div class="fixed inset-0 -z-10">
+<!-- wallpaper layer only. the app shell is a sibling (see routes/+layout.svelte) so it
+     never lives inside this stacking context. anchored top and clipped: it paints edge
+     to edge behind a viewport the keyboard has shrunk. -->
+<div class="fixed inset-0 -z-10 overflow-hidden" style:height={layerHeight}>
 	{#if previousBg && isTransitioning}
 		<div class="absolute inset-0" style="opacity: 1; transition: opacity 300ms ease-in-out;">
-			{#if previousBg === 'galaxy'}
+			{#if previousRenderer === 'galaxy'}
 				<GalaxyBackgroundWebGL
 					focalX={resolvedConfig.galaxyFocalX}
 					focalY={resolvedConfig.galaxyFocalY}
@@ -239,8 +428,10 @@
 					glowIntensity={resolvedConfig.galaxyGlowIntensity}
 					twinkleIntensity={resolvedConfig.galaxyTwinkleIntensity}
 					rotationSpeed={resolvedConfig.galaxyRotationSpeed}
+					backgroundColor={resolvedConfig.galaxyBackgroundColor}
+					starColor={resolvedConfig.galaxyStarColor}
 				/>
-			{:else if previousBg === 'darkveil'}
+			{:else if previousRenderer === 'darkveil'}
 				<DarkVeilBackground
 					hueShift={resolvedConfig.darkveilHueShift}
 					noiseIntensity={resolvedConfig.darkveilNoiseIntensity}
@@ -252,7 +443,7 @@
 					tintColor={resolvedConfig.darkveilTintColor}
 					backgroundColor={resolvedConfig.darkveilBackgroundColor}
 				/>
-			{:else if previousBg === 'lightbends'}
+			{:else if previousRenderer === 'lightbends'}
 				<LightBendsBackground
 					colors={resolvedConfig.lightBendsColors}
 					speed={resolvedConfig.lightBendsSpeed}
@@ -265,7 +456,7 @@
 					parallax={resolvedConfig.lightBendsParallax}
 					noise={resolvedConfig.lightBendsNoise}
 				/>
-			{:else if previousBg === 'lightrays'}
+			{:else if previousRenderer === 'lightrays'}
 				<LightRaysBackground
 					raysOrigin={resolvedConfig.raysOrigin}
 					raysColor={resolvedConfig.raysColor}
@@ -281,9 +472,13 @@
 					noiseAmount={resolvedConfig.raysNoiseAmount}
 					distortion={resolvedConfig.raysDistortion}
 				/>
-			{:else if previousBg === 'silk'}
-				<SilkBackground color={resolvedConfig.silkColor} speed={resolvedConfig.silkSpeed} />
-			{:else if previousBg === 'fog'}
+			{:else if previousRenderer === 'silk'}
+				<SilkBackground
+					color={resolvedConfig.silkColor}
+					backgroundColor={resolvedConfig.silkBackgroundColor}
+					speed={resolvedConfig.silkSpeed}
+				/>
+			{:else if previousRenderer === 'fog'}
 				<FogBackground
 					mouseControls={resolvedConfig.fogMouseControls}
 					touchControls={resolvedConfig.fogTouchControls}
@@ -298,7 +493,7 @@
 					speed={resolvedConfig.fogSpeed}
 					zoom={resolvedConfig.fogZoom}
 				/>
-			{:else if previousBg === 'clouds' || previousBg === 'clouds-dark'}
+			{:else if previousRenderer === 'clouds'}
 				<CloudsBackground
 					mouseControls={resolvedConfig.cloudsMouseControls}
 					touchControls={resolvedConfig.cloudsTouchControls}
@@ -313,7 +508,7 @@
 					sunlightColor={resolvedConfig.cloudsSunlightColor}
 					speed={resolvedConfig.cloudsSpeed}
 				/>
-			{:else if previousBg === 'clouds2' || previousBg === 'clouds2-dark'}
+			{:else if previousRenderer === 'clouds2'}
 				<Clouds2Background
 					mouseControls={resolvedConfig.clouds2MouseControls}
 					touchControls={resolvedConfig.clouds2TouchControls}
@@ -328,7 +523,7 @@
 					lightColor={resolvedConfig.clouds2LightColor}
 					backgroundColor={resolvedConfig.clouds2BackgroundColor}
 				/>
-			{:else if previousBg === 'grainient'}
+			{:else if previousRenderer === 'grainient'}
 				<GrainientBackground
 					timeSpeed={resolvedConfig.grainientTimeSpeed}
 					colorBalance={resolvedConfig.grainientColorBalance}
@@ -353,21 +548,154 @@
 					color2={resolvedConfig.grainientColor2}
 					color3={resolvedConfig.grainientColor3}
 				/>
-			{:else if previousBg === 'iridescence'}
+			{:else if previousRenderer === 'iridescence'}
 				<IridescenceBackground
 					color={resolvedConfig.iridescenceColor}
 					speed={resolvedConfig.iridescenceSpeed}
 					amplitude={resolvedConfig.iridescenceAmplitude}
 					mouseReact={resolvedConfig.iridescenceMouseReact}
 				/>
-			{:else if previousBg === 'static'}
+			{:else if previousRenderer === 'asciiorb'}
+				<AsciiOrbBackground
+					color={resolvedConfig.asciiOrbColor}
+					backgroundColor={resolvedConfig.asciiOrbBackgroundColor}
+					fontSize={resolvedConfig.asciiOrbFontSize}
+					radius={resolvedConfig.asciiOrbRadius}
+					zoom={resolvedConfig.asciiOrbZoom}
+					spin={resolvedConfig.asciiOrbSpin}
+					tilt={resolvedConfig.asciiOrbTilt}
+					wire={resolvedConfig.asciiOrbWire}
+					latitudes={resolvedConfig.asciiOrbLatitudes}
+					longitudes={resolvedConfig.asciiOrbLongitudes}
+					shape={resolvedConfig.asciiOrbShape}
+					cubeScale={resolvedConfig.asciiOrbCubeScale}
+					morphDuration={resolvedConfig.asciiOrbMorphDuration}
+					buildDuration={resolvedConfig.asciiOrbBuildDuration}
+				/>
+			{:else if previousRenderer === 'lensgrain'}
+				<LensGrainBackground
+					color={resolvedConfig.lensGrainColor}
+					backgroundColor={resolvedConfig.lensGrainBackgroundColor}
+					density={resolvedConfig.lensGrainDensity}
+					opacity={resolvedConfig.lensGrainOpacity}
+					size={resolvedConfig.lensGrainSize}
+					animated={resolvedConfig.lensGrainAnimated}
+					vignetteColor={resolvedConfig.lensGrainVignetteColor}
+					vignetteOpacity={resolvedConfig.lensGrainVignetteOpacity}
+				/>
+			{:else if previousRenderer === 'dither'}
+				<DitherBackground
+					color={resolvedConfig.ditherColor}
+					accentColor={resolvedConfig.ditherAccentColor}
+					glowStrength={resolvedConfig.ditherGlowStrength}
+					glowSpread={resolvedConfig.ditherGlowSpread}
+					dotStrength={resolvedConfig.ditherDotStrength}
+					dotSize={resolvedConfig.ditherDotSize}
+				/>
+			{:else if previousRenderer === 'orbglow'}
+				<OrbGlowBackground
+					color={resolvedConfig.orbGlowColor}
+					haloColor={resolvedConfig.orbGlowHaloColor}
+					backgroundColor={resolvedConfig.orbGlowBackgroundColor}
+					coreOpacity={resolvedConfig.orbGlowCoreOpacity}
+					haloOpacity={resolvedConfig.orbGlowHaloOpacity}
+					radius={resolvedConfig.orbGlowRadius}
+					followPointer={resolvedConfig.orbGlowFollowPointer}
+					drift={resolvedConfig.orbGlowDrift}
+					easing={resolvedConfig.orbGlowEasing}
+				/>
+			{:else if previousRenderer === 'dots'}
+				<DotsBackground
+					color={resolvedConfig.dotsColor}
+					backgroundColor={resolvedConfig.dotsBackgroundColor}
+					intensity={resolvedConfig.dotsIntensity}
+					spacing={resolvedConfig.dotsSpacing}
+					strength={resolvedConfig.dotsStrength}
+					dotSize={resolvedConfig.dotsDotSize}
+				/>
+			{:else if previousRenderer === 'synapse'}
+				<SynapseBackground
+					color={resolvedConfig.synapseColor}
+					backgroundColor={resolvedConfig.synapseBackgroundColor}
+					intensity={resolvedConfig.synapseIntensity}
+					grid={resolvedConfig.synapseGrid}
+					gridStrength={resolvedConfig.synapseGridStrength}
+					maxPulses={resolvedConfig.synapseMaxPulses}
+					spawnChance={resolvedConfig.synapseSpawnChance}
+					speedMin={resolvedConfig.synapseSpeedMin}
+					speedMax={resolvedConfig.synapseSpeedMax}
+					trailLength={resolvedConfig.synapseTrailLength}
+				/>
+			{:else if previousRenderer === 'rain'}
+				<RainBackground
+					color={resolvedConfig.rainColor}
+					backgroundColor={resolvedConfig.rainBackgroundColor}
+					intensity={resolvedConfig.rainIntensity}
+					size={resolvedConfig.rainSize}
+					maxDrops={resolvedConfig.rainMaxDrops}
+					spawnChance={resolvedConfig.rainSpawnChance}
+				/>
+			{:else if previousRenderer === 'constellations'}
+				<ConstellationsBackground
+					color={resolvedConfig.constellationsColor}
+					backgroundColor={resolvedConfig.constellationsBackgroundColor}
+					intensity={resolvedConfig.constellationsIntensity}
+					starCount={resolvedConfig.constellationsStarCount}
+					connectDistance={resolvedConfig.constellationsConnectDistance}
+					driftSpeed={resolvedConfig.constellationsDriftSpeed}
+					twinkleSpeed={resolvedConfig.constellationsTwinkleSpeed}
+				/>
+			{:else if previousRenderer === 'perlin-flow'}
+				<PerlinFlowBackground
+					color={resolvedConfig.perlinFlowColor}
+					backgroundColor={resolvedConfig.perlinFlowBackgroundColor}
+					intensity={resolvedConfig.perlinFlowIntensity}
+					particleCount={resolvedConfig.perlinFlowParticleCount}
+					fadeAlpha={resolvedConfig.perlinFlowFadeAlpha}
+					noiseScale={resolvedConfig.perlinFlowNoiseScale}
+					timeScale={resolvedConfig.perlinFlowTimeScale}
+					speed={resolvedConfig.perlinFlowSpeed}
+					dotRadius={resolvedConfig.perlinFlowDotRadius}
+					lifeDecay={resolvedConfig.perlinFlowLifeDecay}
+				/>
+			{:else if previousRenderer === 'petals'}
+				<PetalsBackground
+					color={resolvedConfig.petalsColor}
+					backgroundColor={resolvedConfig.petalsBackgroundColor}
+					intensity={resolvedConfig.petalsIntensity}
+					size={resolvedConfig.petalsSize}
+					count={resolvedConfig.petalsCount}
+					fallSpeed={resolvedConfig.petalsFallSpeed}
+				/>
+			{:else if previousRenderer === 'sparkles'}
+				<SparklesBackground
+					color={resolvedConfig.sparklesColor}
+					backgroundColor={resolvedConfig.sparklesBackgroundColor}
+					intensity={resolvedConfig.sparklesIntensity}
+					size={resolvedConfig.sparklesSize}
+					count={resolvedConfig.sparklesCount}
+					twinkleSpeed={resolvedConfig.sparklesTwinkleSpeed}
+				/>
+			{:else if previousRenderer === 'embers'}
+				<EmbersBackground
+					color={resolvedConfig.embersColor}
+					backgroundColor={resolvedConfig.embersBackgroundColor}
+					intensity={resolvedConfig.embersIntensity}
+					size={resolvedConfig.embersSize}
+					count={resolvedConfig.embersCount}
+					fadeAlpha={resolvedConfig.embersFadeAlpha}
+					sparkChance={resolvedConfig.embersSparkChance}
+					burstChance={resolvedConfig.embersBurstChance}
+					burstSize={resolvedConfig.embersBurstSize}
+				/>
+			{:else if previousRenderer === 'static'}
 				<StaticBackground color={resolvedConfig.color} image={resolvedConfig.image} />
 			{/if}
 		</div>
 	{/if}
 
 	<div class="absolute inset-0" style="opacity: 1; transition: opacity 300ms ease-in-out;">
-		{#if currentBg === 'galaxy'}
+		{#if currentRenderer === 'galaxy'}
 			<GalaxyBackgroundWebGL
 				focalX={resolvedConfig.galaxyFocalX}
 				focalY={resolvedConfig.galaxyFocalY}
@@ -379,11 +707,11 @@
 				glowIntensity={resolvedConfig.galaxyGlowIntensity}
 				twinkleIntensity={resolvedConfig.galaxyTwinkleIntensity}
 				rotationSpeed={resolvedConfig.galaxyRotationSpeed}
+				backgroundColor={resolvedConfig.galaxyBackgroundColor}
+				starColor={resolvedConfig.galaxyStarColor}
 				onReady={signalReady}
-			>
-				{#if children}{@render children()}{/if}
-			</GalaxyBackgroundWebGL>
-		{:else if currentBg === 'darkveil'}
+			/>
+		{:else if currentRenderer === 'darkveil'}
 			<DarkVeilBackground
 				hueShift={resolvedConfig.darkveilHueShift}
 				noiseIntensity={resolvedConfig.darkveilNoiseIntensity}
@@ -395,10 +723,8 @@
 				tintColor={resolvedConfig.darkveilTintColor}
 				backgroundColor={resolvedConfig.darkveilBackgroundColor}
 				onReady={signalReady}
-			>
-				{#if children}{@render children()}{/if}
-			</DarkVeilBackground>
-		{:else if currentBg === 'lightbends'}
+			/>
+		{:else if currentRenderer === 'lightbends'}
 			<LightBendsBackground
 				colors={resolvedConfig.lightBendsColors}
 				speed={resolvedConfig.lightBendsSpeed}
@@ -411,10 +737,8 @@
 				parallax={resolvedConfig.lightBendsParallax}
 				noise={resolvedConfig.lightBendsNoise}
 				onReady={signalReady}
-			>
-				{#if children}{@render children()}{/if}
-			</LightBendsBackground>
-		{:else if currentBg === 'lightrays'}
+			/>
+		{:else if currentRenderer === 'lightrays'}
 			<LightRaysBackground
 				raysOrigin={resolvedConfig.raysOrigin}
 				raysColor={resolvedConfig.raysColor}
@@ -430,18 +754,15 @@
 				noiseAmount={resolvedConfig.raysNoiseAmount}
 				distortion={resolvedConfig.raysDistortion}
 				onReady={signalReady}
-			>
-				{#if children}{@render children()}{/if}
-			</LightRaysBackground>
-		{:else if currentBg === 'silk'}
+			/>
+		{:else if currentRenderer === 'silk'}
 			<SilkBackground
 				color={resolvedConfig.silkColor}
+				backgroundColor={resolvedConfig.silkBackgroundColor}
 				speed={resolvedConfig.silkSpeed}
 				onReady={signalReady}
-			>
-				{#if children}{@render children()}{/if}
-			</SilkBackground>
-		{:else if currentBg === 'fog'}
+			/>
+		{:else if currentRenderer === 'fog'}
 			<FogBackground
 				mouseControls={resolvedConfig.fogMouseControls}
 				touchControls={resolvedConfig.fogTouchControls}
@@ -456,10 +777,8 @@
 				speed={resolvedConfig.fogSpeed}
 				zoom={resolvedConfig.fogZoom}
 				onReady={signalReady}
-			>
-				{#if children}{@render children()}{/if}
-			</FogBackground>
-		{:else if currentBg === 'clouds'}
+			/>
+		{:else if currentRenderer === 'clouds'}
 			<CloudsBackground
 				mouseControls={resolvedConfig.cloudsMouseControls}
 				touchControls={resolvedConfig.cloudsTouchControls}
@@ -474,28 +793,8 @@
 				sunlightColor={resolvedConfig.cloudsSunlightColor}
 				speed={resolvedConfig.cloudsSpeed}
 				onReady={signalReady}
-			>
-				{#if children}{@render children()}{/if}
-			</CloudsBackground>
-		{:else if currentBg === 'clouds-dark'}
-			<CloudsBackground
-				mouseControls={resolvedConfig.cloudsMouseControls}
-				touchControls={resolvedConfig.cloudsTouchControls}
-				gyroControls={resolvedConfig.cloudsGyroControls}
-				minHeight={resolvedConfig.cloudsMinHeight}
-				minWidth={resolvedConfig.cloudsMinWidth}
-				skyColor={resolvedConfig.cloudsSkyColor}
-				cloudColor={resolvedConfig.cloudsCloudColor}
-				cloudShadowColor={resolvedConfig.cloudsCloudShadowColor}
-				sunColor={resolvedConfig.cloudsSunColor}
-				sunGlareColor={resolvedConfig.cloudsSunGlareColor}
-				sunlightColor={resolvedConfig.cloudsSunlightColor}
-				speed={resolvedConfig.cloudsSpeed}
-				onReady={signalReady}
-			>
-				{#if children}{@render children()}{/if}
-			</CloudsBackground>
-		{:else if currentBg === 'clouds2'}
+			/>
+		{:else if currentRenderer === 'clouds2'}
 			<Clouds2Background
 				mouseControls={resolvedConfig.clouds2MouseControls}
 				touchControls={resolvedConfig.clouds2TouchControls}
@@ -510,28 +809,8 @@
 				lightColor={resolvedConfig.clouds2LightColor}
 				backgroundColor={resolvedConfig.clouds2BackgroundColor}
 				onReady={signalReady}
-			>
-				{#if children}{@render children()}{/if}
-			</Clouds2Background>
-		{:else if currentBg === 'clouds2-dark'}
-			<Clouds2Background
-				mouseControls={resolvedConfig.clouds2MouseControls}
-				touchControls={resolvedConfig.clouds2TouchControls}
-				gyroControls={resolvedConfig.clouds2GyroControls}
-				minHeight={resolvedConfig.clouds2MinHeight}
-				minWidth={resolvedConfig.clouds2MinWidth}
-				scale={resolvedConfig.clouds2Scale}
-				speed={resolvedConfig.clouds2Speed}
-				texturePath={resolvedConfig.clouds2TexturePath}
-				skyColor={resolvedConfig.clouds2SkyColor}
-				cloudColor={resolvedConfig.clouds2CloudColor}
-				lightColor={resolvedConfig.clouds2LightColor}
-				backgroundColor={resolvedConfig.clouds2BackgroundColor}
-				onReady={signalReady}
-			>
-				{#if children}{@render children()}{/if}
-			</Clouds2Background>
-		{:else if currentBg === 'grainient'}
+			/>
+		{:else if currentRenderer === 'grainient'}
 			<GrainientBackground
 				timeSpeed={resolvedConfig.grainientTimeSpeed}
 				colorBalance={resolvedConfig.grainientColorBalance}
@@ -556,27 +835,162 @@
 				color2={resolvedConfig.grainientColor2}
 				color3={resolvedConfig.grainientColor3}
 				onReady={signalReady}
-			>
-				{#if children}{@render children()}{/if}
-			</GrainientBackground>
-		{:else if currentBg === 'iridescence'}
+			/>
+		{:else if currentRenderer === 'iridescence'}
 			<IridescenceBackground
 				color={resolvedConfig.iridescenceColor}
 				speed={resolvedConfig.iridescenceSpeed}
 				amplitude={resolvedConfig.iridescenceAmplitude}
 				mouseReact={resolvedConfig.iridescenceMouseReact}
 				onReady={signalReady}
-			>
-				{#if children}{@render children()}{/if}
-			</IridescenceBackground>
-		{:else if currentBg === 'static'}
-			<StaticBackground color={resolvedConfig.color} image={resolvedConfig.image}>
-				{#if children}{@render children()}{/if}
-			</StaticBackground>
-		{:else if currentBg === 'none' && children}
-			<div class="relative z-1">
-				{@render children()}
-			</div>
+			/>
+		{:else if currentRenderer === 'asciiorb'}
+			<AsciiOrbBackground
+				color={resolvedConfig.asciiOrbColor}
+				backgroundColor={resolvedConfig.asciiOrbBackgroundColor}
+				fontSize={resolvedConfig.asciiOrbFontSize}
+				radius={resolvedConfig.asciiOrbRadius}
+				zoom={resolvedConfig.asciiOrbZoom}
+				spin={resolvedConfig.asciiOrbSpin}
+				tilt={resolvedConfig.asciiOrbTilt}
+				wire={resolvedConfig.asciiOrbWire}
+				latitudes={resolvedConfig.asciiOrbLatitudes}
+				longitudes={resolvedConfig.asciiOrbLongitudes}
+				shape={resolvedConfig.asciiOrbShape}
+				cubeScale={resolvedConfig.asciiOrbCubeScale}
+				morphDuration={resolvedConfig.asciiOrbMorphDuration}
+				buildDuration={resolvedConfig.asciiOrbBuildDuration}
+				onReady={signalReady}
+			/>
+		{:else if currentRenderer === 'lensgrain'}
+			<LensGrainBackground
+				color={resolvedConfig.lensGrainColor}
+				backgroundColor={resolvedConfig.lensGrainBackgroundColor}
+				density={resolvedConfig.lensGrainDensity}
+				opacity={resolvedConfig.lensGrainOpacity}
+				size={resolvedConfig.lensGrainSize}
+				animated={resolvedConfig.lensGrainAnimated}
+				vignetteColor={resolvedConfig.lensGrainVignetteColor}
+				vignetteOpacity={resolvedConfig.lensGrainVignetteOpacity}
+				onReady={signalReady}
+			/>
+		{:else if currentRenderer === 'dither'}
+			<DitherBackground
+				color={resolvedConfig.ditherColor}
+				accentColor={resolvedConfig.ditherAccentColor}
+				glowStrength={resolvedConfig.ditherGlowStrength}
+				glowSpread={resolvedConfig.ditherGlowSpread}
+				dotStrength={resolvedConfig.ditherDotStrength}
+				dotSize={resolvedConfig.ditherDotSize}
+				onReady={signalReady}
+			/>
+		{:else if currentRenderer === 'orbglow'}
+			<OrbGlowBackground
+				color={resolvedConfig.orbGlowColor}
+				haloColor={resolvedConfig.orbGlowHaloColor}
+				backgroundColor={resolvedConfig.orbGlowBackgroundColor}
+				coreOpacity={resolvedConfig.orbGlowCoreOpacity}
+				haloOpacity={resolvedConfig.orbGlowHaloOpacity}
+				radius={resolvedConfig.orbGlowRadius}
+				followPointer={resolvedConfig.orbGlowFollowPointer}
+				drift={resolvedConfig.orbGlowDrift}
+				easing={resolvedConfig.orbGlowEasing}
+				onReady={signalReady}
+			/>
+		{:else if currentRenderer === 'dots'}
+			<DotsBackground
+				color={resolvedConfig.dotsColor}
+				backgroundColor={resolvedConfig.dotsBackgroundColor}
+				intensity={resolvedConfig.dotsIntensity}
+				spacing={resolvedConfig.dotsSpacing}
+				strength={resolvedConfig.dotsStrength}
+				dotSize={resolvedConfig.dotsDotSize}
+				onReady={signalReady}
+			/>
+		{:else if currentRenderer === 'synapse'}
+			<SynapseBackground
+				color={resolvedConfig.synapseColor}
+				backgroundColor={resolvedConfig.synapseBackgroundColor}
+				intensity={resolvedConfig.synapseIntensity}
+				grid={resolvedConfig.synapseGrid}
+				gridStrength={resolvedConfig.synapseGridStrength}
+				maxPulses={resolvedConfig.synapseMaxPulses}
+				spawnChance={resolvedConfig.synapseSpawnChance}
+				speedMin={resolvedConfig.synapseSpeedMin}
+				speedMax={resolvedConfig.synapseSpeedMax}
+				trailLength={resolvedConfig.synapseTrailLength}
+				onReady={signalReady}
+			/>
+		{:else if currentRenderer === 'rain'}
+			<RainBackground
+				color={resolvedConfig.rainColor}
+				backgroundColor={resolvedConfig.rainBackgroundColor}
+				intensity={resolvedConfig.rainIntensity}
+				size={resolvedConfig.rainSize}
+				maxDrops={resolvedConfig.rainMaxDrops}
+				spawnChance={resolvedConfig.rainSpawnChance}
+				onReady={signalReady}
+			/>
+		{:else if currentRenderer === 'constellations'}
+			<ConstellationsBackground
+				color={resolvedConfig.constellationsColor}
+				backgroundColor={resolvedConfig.constellationsBackgroundColor}
+				intensity={resolvedConfig.constellationsIntensity}
+				starCount={resolvedConfig.constellationsStarCount}
+				connectDistance={resolvedConfig.constellationsConnectDistance}
+				driftSpeed={resolvedConfig.constellationsDriftSpeed}
+				twinkleSpeed={resolvedConfig.constellationsTwinkleSpeed}
+				onReady={signalReady}
+			/>
+		{:else if currentRenderer === 'perlin-flow'}
+			<PerlinFlowBackground
+				color={resolvedConfig.perlinFlowColor}
+				backgroundColor={resolvedConfig.perlinFlowBackgroundColor}
+				intensity={resolvedConfig.perlinFlowIntensity}
+				particleCount={resolvedConfig.perlinFlowParticleCount}
+				fadeAlpha={resolvedConfig.perlinFlowFadeAlpha}
+				noiseScale={resolvedConfig.perlinFlowNoiseScale}
+				timeScale={resolvedConfig.perlinFlowTimeScale}
+				speed={resolvedConfig.perlinFlowSpeed}
+				dotRadius={resolvedConfig.perlinFlowDotRadius}
+				lifeDecay={resolvedConfig.perlinFlowLifeDecay}
+				onReady={signalReady}
+			/>
+		{:else if currentRenderer === 'petals'}
+			<PetalsBackground
+				color={resolvedConfig.petalsColor}
+				backgroundColor={resolvedConfig.petalsBackgroundColor}
+				intensity={resolvedConfig.petalsIntensity}
+				size={resolvedConfig.petalsSize}
+				count={resolvedConfig.petalsCount}
+				fallSpeed={resolvedConfig.petalsFallSpeed}
+				onReady={signalReady}
+			/>
+		{:else if currentRenderer === 'sparkles'}
+			<SparklesBackground
+				color={resolvedConfig.sparklesColor}
+				backgroundColor={resolvedConfig.sparklesBackgroundColor}
+				intensity={resolvedConfig.sparklesIntensity}
+				size={resolvedConfig.sparklesSize}
+				count={resolvedConfig.sparklesCount}
+				twinkleSpeed={resolvedConfig.sparklesTwinkleSpeed}
+				onReady={signalReady}
+			/>
+		{:else if currentRenderer === 'embers'}
+			<EmbersBackground
+				color={resolvedConfig.embersColor}
+				backgroundColor={resolvedConfig.embersBackgroundColor}
+				intensity={resolvedConfig.embersIntensity}
+				size={resolvedConfig.embersSize}
+				count={resolvedConfig.embersCount}
+				fadeAlpha={resolvedConfig.embersFadeAlpha}
+				sparkChance={resolvedConfig.embersSparkChance}
+				burstChance={resolvedConfig.embersBurstChance}
+				burstSize={resolvedConfig.embersBurstSize}
+				onReady={signalReady}
+			/>
+		{:else if currentRenderer === 'static'}
+			<StaticBackground color={resolvedConfig.color} image={resolvedConfig.image} />
 		{/if}
 	</div>
 </div>

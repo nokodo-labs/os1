@@ -1,9 +1,7 @@
 <script lang="ts">
 	import { setBackgroundContext } from '$lib/contexts/backgroundContext'
-	import type { Snippet } from 'svelte'
 
 	interface Props {
-		children?: Snippet
 		color?: string
 		image?: string
 		imagePosition?: string
@@ -11,7 +9,6 @@
 	}
 
 	let {
-		children,
 		color = '#000000',
 		image,
 		imagePosition = 'center',
@@ -40,9 +37,4 @@
 	})
 </script>
 
-<div class="absolute inset-0 overflow-hidden" style={backgroundStyle()}>
-	<!-- Slotted content rendered on top of background -->
-	<div class="relative z-1 h-full w-full">
-		{@render children?.()}
-	</div>
-</div>
+<div class="absolute inset-0 overflow-hidden" style={backgroundStyle()}></div>

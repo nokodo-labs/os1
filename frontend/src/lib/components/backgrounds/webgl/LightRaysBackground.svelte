@@ -1,7 +1,7 @@
 <script lang="ts">
+	import { startWallpaperLoop } from '$lib/components/backgrounds/wallpaperLoop'
 	import { setBackgroundContext } from '$lib/contexts/backgroundContext'
 	import { createOnceCallback } from '$lib/utils/once'
-	import type { Snippet } from 'svelte'
 	import { onDestroy, onMount } from 'svelte'
 
 	export type RaysOrigin =
@@ -15,7 +15,6 @@
 		| 'bottom-left'
 
 	interface Props {
-		children?: Snippet
 		onReady?: () => void
 		raysOrigin?: RaysOrigin
 		raysColor?: string
@@ -34,7 +33,6 @@
 	}
 
 	let {
-		children,
 		onReady,
 		raysOrigin = 'top-center',
 		raysColor = '#ffffff',
@@ -58,16 +56,15 @@
 	let canvasRef: HTMLCanvasElement
 	let gl: WebGL2RenderingContext | null = null
 	let program: WebGLProgram | null = null
-	let animationId: number | null = null
+	let stopFrameLoop: (() => void) | null = null
 	let resizeObserver: ResizeObserver | null = null
 	let intersectionObserver: IntersectionObserver | null = null
-	let startTime = 0
 	let subscribers: Array<() => void> = []
 	let mouseRef = { x: 0.5, y: 0.5 }
 	let smoothMouseRef = { x: 0.5, y: 0.5 }
 	let isVisible = $state(false)
 
-	// Expose canvas to children via context
+	// Expose canvas to consumers via context
 	setBackgroundContext({
 		getCanvas: () => canvasRef,
 		getCanvasDimensions: () => ({
@@ -281,12 +278,12 @@ void main() {
 		}
 	}
 
-	function animate() {
+	function animate(nowMs: number) {
 		if (!gl || !program || !isVisible) return
 
 		resize()
 
-		const elapsed = (performance.now() - startTime) / 1000
+		const elapsed = nowMs / 1000
 
 		// Smooth mouse lerp
 		const smoothing = 0.92
@@ -354,8 +351,6 @@ void main() {
 		}
 
 		gl.drawArrays(gl.TRIANGLES, 0, 6)
-
-		animationId = requestAnimationFrame(animate)
 	}
 
 	function handleMouseMove(e: MouseEvent) {
@@ -375,12 +370,11 @@ void main() {
 					const entry = entries[0]
 					isVisible = entry.isIntersecting
 
-					if (isVisible && !animationId) {
-						startTime = performance.now()
-						animate()
-					} else if (!isVisible && animationId !== null) {
-						cancelAnimationFrame(animationId)
-						animationId = null
+					if (isVisible && !stopFrameLoop) {
+						stopFrameLoop = startWallpaperLoop(animate)
+					} else if (!isVisible && stopFrameLoop) {
+						stopFrameLoop()
+						stopFrameLoop = null
 					}
 				},
 				{ threshold: 0.1 }
@@ -448,9 +442,8 @@ void main() {
 
 			// Initial resize and start animation if visible
 			resize()
-			if (isVisible) {
-				startTime = performance.now()
-				animate()
+			if (isVisible && !stopFrameLoop) {
+				stopFrameLoop = startWallpaperLoop(animate)
 			}
 			requestAnimationFrame(() => signalReady())
 		} catch (error) {
@@ -460,10 +453,8 @@ void main() {
 	})
 
 	onDestroy(() => {
-		if (animationId !== null) {
-			cancelAnimationFrame(animationId)
-			animationId = null
-		}
+		stopFrameLoop?.()
+		stopFrameLoop = null
 
 		if (resizeObserver) {
 			resizeObserver.disconnect()
@@ -501,9 +492,4 @@ void main() {
 		bind:this={canvasRef}
 		style="background-color: {transparent ? 'transparent' : backgroundColor};"
 	></canvas>
-
-	<!-- Slotted content rendered on top of background -->
-	<div class="relative z-1 h-full w-full">
-		{@render children?.()}
-	</div>
 </div>

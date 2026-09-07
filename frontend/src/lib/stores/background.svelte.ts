@@ -11,6 +11,10 @@
  *        low   -> static (uses resolved static color)
  *   3. manual mode -> user preference `appearance.background`
  *
+ * the GPU tier also paces every animated wallpaper: `wallpaperMaxFps` is the
+ * single frame cap all wallpaper loops read, and a tier that cannot animate
+ * (low) resolves any animated selection to `static`.
+ *
  * auth pages should use `background.setPage` / `background.clearPage`
  * inside an `$effect` with an if/else pattern (no cleanup return) to
  * avoid race conditions with the BackgroundManager transition guard.
@@ -22,13 +26,19 @@ import type {
 } from '$lib/components/backgrounds/BackgroundManager.svelte'
 import {
 	BACKGROUND_LUMINANCE,
+	BACKGROUND_RENDERER,
 	colorLuminance,
 	type BackgroundLuminance,
+	type BackgroundRenderer,
 } from '$lib/components/backgrounds/backgroundDefaults'
 import { device } from '$lib/stores/device.svelte'
-import { preferences } from '$lib/stores/preferences.svelte'
+import {
+	preferences,
+	type BackgroundType as PersistedBackgroundType,
+} from '$lib/stores/preferences.svelte'
 import { settingsState } from '$lib/stores/settings.svelte'
 import { debounce } from '$lib/utils'
+import type { GpuTier } from '$lib/utils/gpuTier'
 
 // constants
 
@@ -43,9 +53,26 @@ const TIER_BACKGROUNDS: Record<string, BackgroundType> = {
 	low: 'static',
 }
 
+/** map GPU tier -> wallpaper frame cap. 0 means animated wallpapers are off. */
+const TIER_MAX_FPS: Record<GpuTier, number> = {
+	high: 120,
+	mid: 30,
+	low: 0,
+}
+
+/** renderers that paint once and never run a frame loop - both siblings included */
+const NON_ANIMATED_RENDERERS: readonly BackgroundRenderer[] = ['static', 'dither', 'dots', 'none']
+
+/** true when a wallpaper animates (and so needs a frame budget) */
+export function isAnimatedBackground(type: BackgroundType): boolean {
+	return !NON_ANIMATED_RENDERERS.includes(BACKGROUND_RENDERER[type])
+}
+
 // internal reactive state
 
 let pageOverride = $state<BackgroundType | null>(null)
+// debug tooling opts its override out of the low-tier clamp
+let pageOverrideAllowsAnimated = $state(false)
 let pageConfigOverride = $state<BackgroundConfig | null>(null)
 // instant local static color while the picker is dragged; API persist is debounced
 let staticColorDraft = $state<string | null>(null)
@@ -57,13 +84,22 @@ const _auth = $derived.by(
 		(settingsState.data?.ui?.auth_pages_background as BackgroundType) ?? DEFAULT_BACKGROUND
 )
 
+const _wallpaperMaxFps = $derived(TIER_MAX_FPS[device.gpuTier])
+
+/** a tier with no frame budget paints a static background, whatever was picked */
+function clampAnimated(bg: BackgroundType): BackgroundType {
+	return _wallpaperMaxFps === 0 && isAnimatedBackground(bg) ? 'static' : bg
+}
+
 const _resolved = $derived.by((): BackgroundType => {
-	if (pageOverride !== null) return pageOverride
+	if (pageOverride !== null) {
+		return pageOverrideAllowsAnimated ? pageOverride : clampAnimated(pageOverride)
+	}
 
 	const isAuto = preferences.data.appearance.autoBackground ?? true
-	if (isAuto) return TIER_BACKGROUNDS[device.gpuTier] ?? DEFAULT_BACKGROUND
+	if (isAuto) return clampAnimated(TIER_BACKGROUNDS[device.gpuTier] ?? DEFAULT_BACKGROUND)
 
-	return preferences.data.appearance.background ?? DEFAULT_BACKGROUND
+	return clampAnimated(preferences.data.appearance.background ?? DEFAULT_BACKGROUND)
 })
 
 const _resolvedStaticColor = $derived(
@@ -109,6 +145,16 @@ export const background = {
 		return _resolvedLuminance
 	},
 
+	/** frame cap every animated wallpaper runs at. 0 = this device cannot animate */
+	get wallpaperMaxFps() {
+		return _wallpaperMaxFps
+	},
+
+	/** whether animated wallpapers may run (and be offered) on this device */
+	get allowsAnimated() {
+		return _wallpaperMaxFps > 0
+	},
+
 	/** auth background from admin settings - use with `setPage` in auth pages */
 	get auth() {
 		return _auth
@@ -139,7 +185,8 @@ export const background = {
 		void preferences.updateWallpaper({ autoBackground: enabled })
 	},
 
-	setBackground(bg: BackgroundType) {
+	/** only backgrounds the API can store; debug-only ones go through `setPage` */
+	setBackground(bg: PersistedBackgroundType) {
 		void preferences.updateWallpaper({ background: bg })
 	},
 
@@ -161,14 +208,19 @@ export const background = {
 	 *   else background.clearPage()
 	 * })
 	 * ```
+	 *
+	 * `allowAnimated` keeps an animated override on a tier that cannot animate -
+	 * only debug tooling, which must be able to show every wallpaper, sets it.
 	 */
-	setPage(bg: BackgroundType) {
+	setPage(bg: BackgroundType, options: { allowAnimated?: boolean } = {}) {
 		pageOverride = bg
+		pageOverrideAllowsAnimated = options.allowAnimated ?? false
 	},
 
 	/** clear the per-page override */
 	clearPage() {
 		pageOverride = null
+		pageOverrideAllowsAnimated = false
 	},
 
 	/** set a per-page background config override */

@@ -1,25 +1,25 @@
 <script lang="ts">
+	import { startWallpaperLoop } from '$lib/components/backgrounds/wallpaperLoop'
 	import { setBackgroundContext } from '$lib/contexts/backgroundContext'
 	import { createOnceCallback } from '$lib/utils/once'
-	import type { Snippet } from 'svelte'
 	import { onDestroy, onMount } from 'svelte'
 
 	interface Props {
-		children?: Snippet
 		onReady?: () => void
 		speed?: number
 		scale?: number
 		color?: string
+		backgroundColor?: string
 		noiseIntensity?: number
 		rotation?: number
 	}
 
 	let {
-		children,
 		onReady,
 		speed = 5,
 		scale = 1,
 		color = '#7B7481',
+		backgroundColor = '#000000',
 		noiseIntensity = 1.5,
 		rotation = 0,
 	}: Props = $props()
@@ -30,12 +30,11 @@
 	let canvasRef: HTMLCanvasElement
 	let gl: WebGL2RenderingContext | null = null
 	let program: WebGLProgram | null = null
-	let animationId: number | null = null
+	let stopFrameLoop: (() => void) | null = null
 	let resizeObserver: ResizeObserver | null = null
-	let startTime = 0
 	let subscribers: Array<() => void> = []
 
-	// Expose canvas to children via context
+	// Expose canvas to consumers via context
 	setBackgroundContext({
 		getCanvas: () => canvasRef,
 		getCanvasDimensions: () => ({
@@ -69,6 +68,7 @@ in vec3 vPosition;
 
 uniform float uTime;
 uniform vec3 uColor;
+uniform vec3 uBackgroundColor;
 uniform float uSpeed;
 uniform float uScale;
 uniform float uRotation;
@@ -105,7 +105,9 @@ void main() {
 	                                 0.02 * tOffset) +
 	                         sin(20.0 * (tex.x + tex.y - 0.1 * tOffset)));
 
-	vec4 col = vec4(uColor, 1.0) * vec4(pattern) - rnd / 15.0 * uNoiseIntensity;
+	// a black background reduces to the original uColor * pattern
+	vec3 weave = mix(uBackgroundColor, uColor, pattern);
+	vec4 col = vec4(weave, 1.0) - rnd / 15.0 * uNoiseIntensity;
 	col.a = 1.0;
 	fragColor = col;
 }`
@@ -176,12 +178,12 @@ void main() {
 		}
 	}
 
-	function animate() {
+	function animate(nowMs: number) {
 		if (!gl || !program) return
 
 		resize()
 
-		const elapsed = (performance.now() - startTime) / 1000
+		const elapsed = nowMs / 1000
 		// Match the original React implementation's time scale (0.1x)
 		const scaledTime = elapsed * 0.1
 
@@ -197,6 +199,7 @@ void main() {
 		const uRotation = gl.getUniformLocation(program, 'uRotation')
 		const uNoiseIntensity = gl.getUniformLocation(program, 'uNoiseIntensity')
 		const uColor = gl.getUniformLocation(program, 'uColor')
+		const uBackgroundColor = gl.getUniformLocation(program, 'uBackgroundColor')
 
 		gl.uniform1f(uTime, scaledTime)
 		gl.uniform1f(uSpeed, speed)
@@ -207,9 +210,10 @@ void main() {
 		const rgb = hexToRgb(color)
 		gl.uniform3f(uColor, rgb.r, rgb.g, rgb.b)
 
-		gl.drawArrays(gl.TRIANGLES, 0, 6)
+		const bg = hexToRgb(backgroundColor)
+		gl.uniform3f(uBackgroundColor, bg.r, bg.g, bg.b)
 
-		animationId = requestAnimationFrame(animate)
+		gl.drawArrays(gl.TRIANGLES, 0, 6)
 	}
 
 	onMount(() => {
@@ -254,15 +258,13 @@ void main() {
 		resizeObserver = new ResizeObserver(() => resize())
 		resizeObserver.observe(containerRef)
 
-		startTime = performance.now()
-		animate()
+		stopFrameLoop = startWallpaperLoop(animate)
 		requestAnimationFrame(() => signalReady())
 	})
 
 	onDestroy(() => {
-		if (animationId !== null) {
-			cancelAnimationFrame(animationId)
-		}
+		stopFrameLoop?.()
+		stopFrameLoop = null
 
 		if (resizeObserver) {
 			resizeObserver.disconnect()
@@ -277,9 +279,4 @@ void main() {
 <div class="absolute inset-0 overflow-hidden" bind:this={containerRef}>
 	<canvas class="pointer-events-none absolute inset-0 block h-full w-full" bind:this={canvasRef}
 	></canvas>
-
-	<!-- Slotted content rendered on top of background -->
-	<div class="relative z-1 h-full w-full">
-		{@render children?.()}
-	</div>
 </div>

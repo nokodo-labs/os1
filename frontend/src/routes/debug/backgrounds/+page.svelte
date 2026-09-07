@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { browser } from '$app/environment'
 	import { resolve } from '$app/paths'
+	import {
+		BACKGROUND_DEFAULTS,
+		BACKGROUND_RENDERER,
+		BACKGROUND_TYPES,
+		BACKGROUND_VARIANT,
+		type BackgroundRenderer,
+	} from '$lib/components/backgrounds/backgroundDefaults'
 	import type {
 		BackgroundConfig,
 		BackgroundType,
@@ -12,23 +19,13 @@
 	const STORAGE_SELECTED = 'debug:backgrounds:selected'
 	const STORAGE_CONFIG = 'debug:backgrounds:config'
 
-	const backgrounds: BackgroundType[] = [
-		'galaxy',
-		'darkveil',
-		'lightbends',
-		'lightrays',
-		'silk',
-		'fog',
-		'clouds',
-		'clouds-dark',
-		'clouds2',
-		'clouds2-dark',
-		'grainient',
-		'iridescence',
-		'static',
-		'none',
-	]
-	const backgroundOptions = backgrounds.map((value) => ({ value, label: value }))
+	const backgroundOptions = BACKGROUND_TYPES.map((value) => ({
+		value,
+		label:
+			BACKGROUND_VARIANT[value] === null ? value : `${value} (${BACKGROUND_VARIANT[value]})`,
+	}))
+
+	const asciiOrbShapes = ['sphere', 'cube'] as const
 
 	const DEFAULT_CONFIG: BackgroundConfig = {
 		color: '#171717',
@@ -56,6 +53,7 @@
 		raysNoiseAmount: 0.0,
 		raysDistortion: 0.0,
 		silkColor: '#7B7481',
+		silkBackgroundColor: '#000000',
 		silkSpeed: 5,
 		darkveilHueShift: 0,
 		darkveilNoiseIntensity: 0,
@@ -134,14 +132,113 @@
 		galaxyGlowIntensity: 0.3,
 		galaxyTwinkleIntensity: 0.3,
 		galaxyRotationSpeed: 0.1,
+		galaxyBackgroundColor: '#000000',
+		galaxyStarColor: '#ffffff',
 		iridescenceColor: [1, 1, 1],
 		iridescenceSpeed: 1.0,
 		iridescenceAmplitude: 0.1,
 		iridescenceMouseReact: true,
+		asciiOrbColor: '#ffe6cb',
+		asciiOrbBackgroundColor: '#041c1c',
+		asciiOrbFontSize: 8,
+		asciiOrbRadius: 0.135,
+		asciiOrbZoom: 3,
+		asciiOrbSpin: 0.18,
+		asciiOrbTilt: 0.55,
+		asciiOrbWire: 0.2,
+		asciiOrbLatitudes: 19,
+		asciiOrbLongitudes: 30,
+		asciiOrbShape: 'sphere',
+		asciiOrbCubeScale: 1.8,
+		asciiOrbMorphDuration: 0.65,
+		asciiOrbBuildDuration: 1.45,
+		lensGrainColor: '#eaeaea',
+		lensGrainBackgroundColor: '#041c1c',
+		lensGrainDensity: 0.11,
+		lensGrainOpacity: 0.25,
+		lensGrainSize: 1,
+		lensGrainAnimated: true,
+		lensGrainVignetteColor: '#ffbd38',
+		lensGrainVignetteOpacity: 0.22,
+		ditherColor: '#170d02',
+		ditherAccentColor: '#ffac02',
+		ditherGlowStrength: 6,
+		ditherGlowSpread: 55,
+		ditherDotStrength: 4,
+		ditherDotSize: 3,
+		orbGlowColor: '#ffc878',
+		orbGlowHaloColor: '#ff8c50',
+		orbGlowBackgroundColor: '#0c0d10',
+		orbGlowCoreOpacity: 0.35,
+		orbGlowHaloOpacity: 0.1,
+		orbGlowRadius: 45,
+		orbGlowFollowPointer: true,
+		orbGlowDrift: 0.06,
+		orbGlowEasing: 4,
+		dotsColor: '#5a5248',
+		dotsBackgroundColor: '#f0ebe3',
+		dotsIntensity: 1,
+		dotsSpacing: 20,
+		dotsStrength: 5,
+		dotsDotSize: 1,
+		synapseColor: '#0ff0fc',
+		synapseBackgroundColor: '#0a0a0f',
+		synapseIntensity: 1,
+		synapseGrid: 24,
+		synapseGridStrength: 3.5,
+		synapseMaxPulses: 20,
+		synapseSpawnChance: 0.12,
+		synapseSpeedMin: 2,
+		synapseSpeedMax: 22,
+		synapseTrailLength: 12,
+		rainColor: '#ffffff',
+		rainBackgroundColor: '#0d1117',
+		rainIntensity: 0.5,
+		rainSize: 1,
+		rainMaxDrops: 130,
+		rainSpawnChance: 0.6,
+		constellationsColor: '#64d2ff',
+		constellationsBackgroundColor: '#0b1a2c',
+		constellationsIntensity: 1,
+		constellationsStarCount: 50,
+		constellationsConnectDistance: 120,
+		constellationsDriftSpeed: 0.15,
+		constellationsTwinkleSpeed: 0.01,
+		perlinFlowColor: '#00ff41',
+		perlinFlowBackgroundColor: '#000000',
+		perlinFlowIntensity: 0.8,
+		perlinFlowParticleCount: 200,
+		perlinFlowFadeAlpha: 0.02,
+		perlinFlowNoiseScale: 0.004,
+		perlinFlowTimeScale: 0.0008,
+		perlinFlowSpeed: 1,
+		perlinFlowDotRadius: 1,
+		perlinFlowLifeDecay: 0.001,
+		petalsColor: '#f5a0c0',
+		petalsBackgroundColor: '#2b1b2e',
+		petalsIntensity: 1,
+		petalsSize: 1,
+		petalsCount: 30,
+		petalsFallSpeed: 1,
+		sparklesColor: '#ff8cb8',
+		sparklesBackgroundColor: '#fff0f5',
+		sparklesIntensity: 1,
+		sparklesSize: 1,
+		sparklesCount: 35,
+		sparklesTwinkleSpeed: 1,
+		embersColor: '#e94560',
+		embersBackgroundColor: '#1a1a2e',
+		embersIntensity: 1,
+		embersSize: 1,
+		embersCount: 60,
+		embersFadeAlpha: 0.18,
+		embersSparkChance: 0.003,
+		embersBurstChance: 0.015,
+		embersBurstSize: 5,
 	}
 
-	// keys belonging to each background - used to filter the output snippet
-	const BG_KEYS: Record<BackgroundType, (keyof BackgroundConfig)[]> = {
+	// keys belonging to each renderer - used to filter the output snippet
+	const BG_KEYS: Record<BackgroundRenderer, (keyof BackgroundConfig)[]> = {
 		galaxy: [
 			'galaxyFocalX',
 			'galaxyFocalY',
@@ -153,6 +250,8 @@
 			'galaxyGlowIntensity',
 			'galaxyTwinkleIntensity',
 			'galaxyRotationSpeed',
+			'galaxyBackgroundColor',
+			'galaxyStarColor',
 		],
 		darkveil: [
 			'darkveilHueShift',
@@ -192,7 +291,7 @@
 			'raysNoiseAmount',
 			'raysDistortion',
 		],
-		silk: ['silkColor', 'silkSpeed'],
+		silk: ['silkColor', 'silkBackgroundColor', 'silkSpeed'],
 		fog: [
 			'fogHighlightColor',
 			'fogMidtoneColor',
@@ -221,35 +320,7 @@
 			'cloudsMinHeight',
 			'cloudsMinWidth',
 		],
-		'clouds-dark': [
-			'cloudsSkyColor',
-			'cloudsCloudColor',
-			'cloudsCloudShadowColor',
-			'cloudsSunColor',
-			'cloudsSunGlareColor',
-			'cloudsSunlightColor',
-			'cloudsSpeed',
-			'cloudsMouseControls',
-			'cloudsTouchControls',
-			'cloudsGyroControls',
-			'cloudsMinHeight',
-			'cloudsMinWidth',
-		],
 		clouds2: [
-			'clouds2SkyColor',
-			'clouds2CloudColor',
-			'clouds2LightColor',
-			'clouds2BackgroundColor',
-			'clouds2Scale',
-			'clouds2Speed',
-			'clouds2TexturePath',
-			'clouds2MouseControls',
-			'clouds2TouchControls',
-			'clouds2GyroControls',
-			'clouds2MinHeight',
-			'clouds2MinWidth',
-		],
-		'clouds2-dark': [
 			'clouds2SkyColor',
 			'clouds2CloudColor',
 			'clouds2LightColor',
@@ -293,6 +364,127 @@
 			'iridescenceAmplitude',
 			'iridescenceMouseReact',
 		],
+		asciiorb: [
+			'asciiOrbColor',
+			'asciiOrbBackgroundColor',
+			'asciiOrbFontSize',
+			'asciiOrbRadius',
+			'asciiOrbZoom',
+			'asciiOrbSpin',
+			'asciiOrbTilt',
+			'asciiOrbWire',
+			'asciiOrbLatitudes',
+			'asciiOrbLongitudes',
+			'asciiOrbShape',
+			'asciiOrbCubeScale',
+			'asciiOrbMorphDuration',
+			'asciiOrbBuildDuration',
+		],
+		lensgrain: [
+			'lensGrainColor',
+			'lensGrainBackgroundColor',
+			'lensGrainDensity',
+			'lensGrainOpacity',
+			'lensGrainSize',
+			'lensGrainAnimated',
+			'lensGrainVignetteColor',
+			'lensGrainVignetteOpacity',
+		],
+		dither: [
+			'ditherColor',
+			'ditherAccentColor',
+			'ditherGlowStrength',
+			'ditherGlowSpread',
+			'ditherDotStrength',
+			'ditherDotSize',
+		],
+		orbglow: [
+			'orbGlowColor',
+			'orbGlowHaloColor',
+			'orbGlowBackgroundColor',
+			'orbGlowCoreOpacity',
+			'orbGlowHaloOpacity',
+			'orbGlowRadius',
+			'orbGlowFollowPointer',
+			'orbGlowDrift',
+			'orbGlowEasing',
+		],
+		dots: [
+			'dotsColor',
+			'dotsBackgroundColor',
+			'dotsIntensity',
+			'dotsSpacing',
+			'dotsStrength',
+			'dotsDotSize',
+		],
+		synapse: [
+			'synapseColor',
+			'synapseBackgroundColor',
+			'synapseIntensity',
+			'synapseGrid',
+			'synapseGridStrength',
+			'synapseMaxPulses',
+			'synapseSpawnChance',
+			'synapseSpeedMin',
+			'synapseSpeedMax',
+			'synapseTrailLength',
+		],
+		rain: [
+			'rainColor',
+			'rainBackgroundColor',
+			'rainIntensity',
+			'rainSize',
+			'rainMaxDrops',
+			'rainSpawnChance',
+		],
+		constellations: [
+			'constellationsColor',
+			'constellationsBackgroundColor',
+			'constellationsIntensity',
+			'constellationsStarCount',
+			'constellationsConnectDistance',
+			'constellationsDriftSpeed',
+			'constellationsTwinkleSpeed',
+		],
+		'perlin-flow': [
+			'perlinFlowColor',
+			'perlinFlowBackgroundColor',
+			'perlinFlowIntensity',
+			'perlinFlowParticleCount',
+			'perlinFlowFadeAlpha',
+			'perlinFlowNoiseScale',
+			'perlinFlowTimeScale',
+			'perlinFlowSpeed',
+			'perlinFlowDotRadius',
+			'perlinFlowLifeDecay',
+		],
+		petals: [
+			'petalsColor',
+			'petalsBackgroundColor',
+			'petalsIntensity',
+			'petalsSize',
+			'petalsCount',
+			'petalsFallSpeed',
+		],
+		sparkles: [
+			'sparklesColor',
+			'sparklesBackgroundColor',
+			'sparklesIntensity',
+			'sparklesSize',
+			'sparklesCount',
+			'sparklesTwinkleSpeed',
+		],
+		embers: [
+			'embersColor',
+			'embersBackgroundColor',
+			'embersIntensity',
+			'embersSize',
+			'embersCount',
+			'embersFadeAlpha',
+			'embersSparkChance',
+			'embersBurstChance',
+			'embersBurstSize',
+		],
 		static: ['color'],
 		none: [],
 	}
@@ -318,10 +510,24 @@
 	let selected = $state<BackgroundType>('clouds2')
 	let config = $state<BackgroundConfig>(DEFAULT_CONFIG)
 
+	// both siblings of a pair share one renderer, so panels and the snippet key on it
+	const renderer = $derived(BACKGROUND_RENDERER[selected])
+
+	function isBackgroundType(value: string): value is BackgroundType {
+		return BACKGROUND_TYPES.some((bg) => bg === value)
+	}
+
+	/** picking a wallpaper loads its own palette, so a variant shows as it ships */
+	function selectBackground(value: string): void {
+		if (!isBackgroundType(value)) return
+		selected = value
+		config = { ...config, ...BACKGROUND_DEFAULTS[value] }
+	}
+
 	if (browser) {
 		const rawSelected = localStorage.getItem(STORAGE_SELECTED)
-		if (rawSelected && backgrounds.includes(rawSelected as BackgroundType)) {
-			selected = rawSelected as BackgroundType
+		if (rawSelected && isBackgroundType(rawSelected)) {
+			selected = rawSelected
 		}
 		const rawConfig = localStorage.getItem(STORAGE_CONFIG)
 		if (rawConfig) {
@@ -335,7 +541,8 @@
 	}
 
 	$effect(() => {
-		background.setPage(selected)
+		// a debug tool has to show every wallpaper, tier caps included
+		background.setPage(selected, { allowAnimated: true })
 	})
 
 	$effect(() => {
@@ -354,7 +561,7 @@
 	})
 
 	const configSnippet = $derived.by(() => {
-		const keys = BG_KEYS[selected]
+		const keys = BG_KEYS[renderer]
 		if (keys.length === 0) return `'${selected}': {},`
 		const lines = keys
 			.filter((k) => config[k] !== undefined)
@@ -467,15 +674,13 @@
 			<DropdownSelect
 				options={backgroundOptions}
 				value={selected}
-				onchange={(value) => {
-					selected = value as BackgroundType
-				}}
+				onchange={selectBackground}
 				ariaLabel="background"
 				buttonClass="rounded-lg px-3 py-2"
 			/>
 		</div>
 
-		{#if selected === 'static'}
+		{#if renderer === 'static'}
 			<div class="border-foreground/10 bg-foreground/5 rounded-2xl border p-4">
 				<div class="text-foreground/60 mb-2 text-xs">color</div>
 				<input
@@ -484,7 +689,7 @@
 					oninput={(e) => setString('color', e.currentTarget.value)}
 				/>
 			</div>
-		{:else if selected === 'galaxy'}
+		{:else if renderer === 'galaxy'}
 			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
 				<div class="text-foreground/60 text-xs">focal X</div>
 				<input
@@ -576,8 +781,20 @@
 					value={config.galaxyRotationSpeed ?? 0.1}
 					oninput={(e) => setNumber('galaxyRotationSpeed', e.currentTarget.value)}
 				/>
+				<div class="text-foreground/60 text-xs">background color</div>
+				<input
+					type="color"
+					value={config.galaxyBackgroundColor || '#000000'}
+					oninput={(e) => setString('galaxyBackgroundColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">star color</div>
+				<input
+					type="color"
+					value={config.galaxyStarColor || '#ffffff'}
+					oninput={(e) => setString('galaxyStarColor', e.currentTarget.value)}
+				/>
 			</div>
-		{:else if selected === 'darkveil'}
+		{:else if renderer === 'darkveil'}
 			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
 				<div class="text-foreground/60 text-xs">hue shift (deg)</div>
 				<input
@@ -655,7 +872,7 @@
 					oninput={(e) => setString('darkveilBackgroundColor', e.currentTarget.value)}
 				/>
 			</div>
-		{:else if selected === 'lightbends'}
+		{:else if renderer === 'lightbends'}
 			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
 				<div class="text-foreground/60 text-xs">speed</div>
 				<input
@@ -780,7 +997,7 @@
 					}}>+ add color</button
 				>
 			</div>
-		{:else if selected === 'lightrays'}
+		{:else if renderer === 'lightrays'}
 			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
 				<div class="text-foreground/60 text-xs">origin</div>
 				<DropdownSelect
@@ -887,13 +1104,19 @@
 					oninput={(e) => setString('raysBackgroundColor', e.currentTarget.value)}
 				/>
 			</div>
-		{:else if selected === 'silk'}
+		{:else if renderer === 'silk'}
 			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
 				<div class="text-foreground/60 text-xs">color</div>
 				<input
 					type="color"
 					value={config.silkColor || '#7B7481'}
 					oninput={(e) => setString('silkColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">background color</div>
+				<input
+					type="color"
+					value={config.silkBackgroundColor || '#000000'}
+					oninput={(e) => setString('silkBackgroundColor', e.currentTarget.value)}
 				/>
 				<div class="text-foreground/60 text-xs">speed</div>
 				<input
@@ -905,7 +1128,7 @@
 					oninput={(e) => setNumber('silkSpeed', e.currentTarget.value)}
 				/>
 			</div>
-		{:else if selected === 'fog'}
+		{:else if renderer === 'fog'}
 			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
 				<div class="text-foreground/60 text-xs">mouse controls</div>
 				<input
@@ -993,7 +1216,7 @@
 					oninput={(e) => setNumber('fogZoom', e.currentTarget.value)}
 				/>
 			</div>
-		{:else if selected === 'clouds'}
+		{:else if renderer === 'clouds'}
 			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
 				<div class="text-foreground/60 text-xs">mouse controls</div>
 				<input
@@ -1075,7 +1298,7 @@
 					oninput={(e) => setNumber('cloudsSpeed', e.currentTarget.value)}
 				/>
 			</div>
-		{:else if selected === 'clouds2'}
+		{:else if renderer === 'clouds2'}
 			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
 				<div class="text-foreground/60 text-xs">mouse controls</div>
 				<input
@@ -1161,175 +1384,7 @@
 					oninput={(e) => setColor('clouds2BackgroundColor', e.currentTarget.value)}
 				/>
 			</div>
-		{:else if selected === 'clouds-dark'}
-			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
-				<div class="text-foreground/60 text-xs">mouse controls</div>
-				<input
-					type="checkbox"
-					checked={config.cloudsMouseControls ?? true}
-					onchange={(e) => setBoolean('cloudsMouseControls', e.currentTarget.checked)}
-				/>
-				<div class="text-foreground/60 text-xs">touch controls</div>
-				<input
-					type="checkbox"
-					checked={config.cloudsTouchControls ?? true}
-					onchange={(e) => setBoolean('cloudsTouchControls', e.currentTarget.checked)}
-				/>
-				<div class="text-foreground/60 text-xs">gyro controls</div>
-				<input
-					type="checkbox"
-					checked={config.cloudsGyroControls ?? false}
-					onchange={(e) => setBoolean('cloudsGyroControls', e.currentTarget.checked)}
-				/>
-				<div class="text-foreground/60 text-xs">min height</div>
-				<input
-					type="number"
-					min="1"
-					step="1"
-					value={config.cloudsMinHeight ?? 200}
-					oninput={(e) => setNumber('cloudsMinHeight', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">min width</div>
-				<input
-					type="number"
-					min="1"
-					step="1"
-					value={config.cloudsMinWidth ?? 200}
-					oninput={(e) => setNumber('cloudsMinWidth', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">sky color</div>
-				<input
-					type="color"
-					value={toHex(config.cloudsSkyColor)}
-					oninput={(e) => setColor('cloudsSkyColor', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">cloud color</div>
-				<input
-					type="color"
-					value={toHex(config.cloudsCloudColor)}
-					oninput={(e) => setColor('cloudsCloudColor', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">cloud shadow color</div>
-				<input
-					type="color"
-					value={toHex(config.cloudsCloudShadowColor)}
-					oninput={(e) => setColor('cloudsCloudShadowColor', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">sun color</div>
-				<input
-					type="color"
-					value={toHex(config.cloudsSunColor)}
-					oninput={(e) => setColor('cloudsSunColor', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">sun glare color</div>
-				<input
-					type="color"
-					value={toHex(config.cloudsSunGlareColor)}
-					oninput={(e) => setColor('cloudsSunGlareColor', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">sunlight color</div>
-				<input
-					type="color"
-					value={toHex(config.cloudsSunlightColor)}
-					oninput={(e) => setColor('cloudsSunlightColor', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">speed</div>
-				<input
-					type="range"
-					min="0"
-					max="3"
-					step="0.01"
-					value={config.cloudsSpeed || 1}
-					oninput={(e) => setNumber('cloudsSpeed', e.currentTarget.value)}
-				/>
-			</div>
-		{:else if selected === 'clouds2-dark'}
-			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
-				<div class="text-foreground/60 text-xs">mouse controls</div>
-				<input
-					type="checkbox"
-					checked={config.clouds2MouseControls ?? true}
-					onchange={(e) => setBoolean('clouds2MouseControls', e.currentTarget.checked)}
-				/>
-				<div class="text-foreground/60 text-xs">touch controls</div>
-				<input
-					type="checkbox"
-					checked={config.clouds2TouchControls ?? true}
-					onchange={(e) => setBoolean('clouds2TouchControls', e.currentTarget.checked)}
-				/>
-				<div class="text-foreground/60 text-xs">gyro controls</div>
-				<input
-					type="checkbox"
-					checked={config.clouds2GyroControls ?? false}
-					onchange={(e) => setBoolean('clouds2GyroControls', e.currentTarget.checked)}
-				/>
-				<div class="text-foreground/60 text-xs">min height</div>
-				<input
-					type="number"
-					min="1"
-					step="1"
-					value={config.clouds2MinHeight ?? 200}
-					oninput={(e) => setNumber('clouds2MinHeight', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">min width</div>
-				<input
-					type="number"
-					min="1"
-					step="1"
-					value={config.clouds2MinWidth ?? 200}
-					oninput={(e) => setNumber('clouds2MinWidth', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">texture path (empty disables noise)</div>
-				<input
-					class="border-foreground/15 w-full rounded-lg border bg-black/40 px-3 py-2 text-sm"
-					type="text"
-					value={config.clouds2TexturePath || ''}
-					oninput={(e) => setString('clouds2TexturePath', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">scale</div>
-				<input
-					type="range"
-					min="0.1"
-					max="5"
-					step="0.01"
-					value={config.clouds2Scale || 1}
-					oninput={(e) => setNumber('clouds2Scale', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">speed</div>
-				<input
-					type="range"
-					min="0"
-					max="3"
-					step="0.01"
-					value={config.clouds2Speed || 1}
-					oninput={(e) => setNumber('clouds2Speed', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">sky color</div>
-				<input
-					type="color"
-					value={toHex(config.clouds2SkyColor)}
-					oninput={(e) => setColor('clouds2SkyColor', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">cloud color</div>
-				<input
-					type="color"
-					value={toHex(config.clouds2CloudColor)}
-					oninput={(e) => setColor('clouds2CloudColor', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">light color</div>
-				<input
-					type="color"
-					value={toHex(config.clouds2LightColor)}
-					oninput={(e) => setColor('clouds2LightColor', e.currentTarget.value)}
-				/>
-				<div class="text-foreground/60 text-xs">background color</div>
-				<input
-					type="color"
-					value={toHex(config.clouds2BackgroundColor)}
-					oninput={(e) => setColor('clouds2BackgroundColor', e.currentTarget.value)}
-				/>
-			</div>
-		{:else if selected === 'grainient'}
+		{:else if renderer === 'grainient'}
 			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
 				<div class="text-foreground/60 text-xs">color 1</div>
 				<input
@@ -1518,7 +1573,7 @@
 					oninput={(e) => setNumber('grainientZoom', e.currentTarget.value)}
 				/>
 			</div>
-		{:else if selected === 'iridescence'}
+		{:else if renderer === 'iridescence'}
 			{@const iColor = config.iridescenceColor ?? [1, 1, 1]}
 			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
 				<div class="text-foreground/60 text-xs">
@@ -1595,6 +1650,834 @@
 					type="checkbox"
 					checked={config.iridescenceMouseReact ?? true}
 					onchange={(e) => setBoolean('iridescenceMouseReact', e.currentTarget.checked)}
+				/>
+			</div>
+		{:else if renderer === 'asciiorb'}
+			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
+				<div class="text-foreground/60 text-xs">shape</div>
+				<DropdownSelect
+					options={asciiOrbShapes.map((shape) => ({ value: shape, label: shape }))}
+					value={config.asciiOrbShape ?? 'sphere'}
+					onchange={(value) => setString('asciiOrbShape', value)}
+					ariaLabel="ascii orb shape"
+					buttonClass="rounded-lg px-3 py-2"
+				/>
+				<div class="text-foreground/60 text-xs">glyph color</div>
+				<input
+					type="color"
+					value={config.asciiOrbColor ?? '#ffe6cb'}
+					oninput={(e) => setString('asciiOrbColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">background color</div>
+				<input
+					type="color"
+					value={config.asciiOrbBackgroundColor ?? '#041c1c'}
+					oninput={(e) => setString('asciiOrbBackgroundColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">font size</div>
+				<input
+					type="range"
+					min="6"
+					max="24"
+					step="1"
+					value={config.asciiOrbFontSize ?? 8}
+					oninput={(e) => setNumber('asciiOrbFontSize', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">radius</div>
+				<input
+					type="range"
+					min="0.05"
+					max="0.4"
+					step="0.005"
+					value={config.asciiOrbRadius ?? 0.135}
+					oninput={(e) => setNumber('asciiOrbRadius', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">zoom</div>
+				<input
+					type="range"
+					min="0.25"
+					max="12"
+					step="0.05"
+					value={config.asciiOrbZoom ?? 3}
+					oninput={(e) => setNumber('asciiOrbZoom', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">spin</div>
+				<input
+					type="range"
+					min="0"
+					max="0.6"
+					step="0.01"
+					value={config.asciiOrbSpin ?? 0.18}
+					oninput={(e) => setNumber('asciiOrbSpin', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">tilt</div>
+				<input
+					type="range"
+					min="-1.5"
+					max="1.5"
+					step="0.01"
+					value={config.asciiOrbTilt ?? 0.55}
+					oninput={(e) => setNumber('asciiOrbTilt', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">wire</div>
+				<input
+					type="range"
+					min="0.01"
+					max="0.5"
+					step="0.005"
+					value={config.asciiOrbWire ?? 0.2}
+					oninput={(e) => setNumber('asciiOrbWire', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">latitudes</div>
+				<input
+					type="range"
+					min="4"
+					max="60"
+					step="1"
+					value={config.asciiOrbLatitudes ?? 19}
+					oninput={(e) => setNumber('asciiOrbLatitudes', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">longitudes</div>
+				<input
+					type="range"
+					min="4"
+					max="80"
+					step="1"
+					value={config.asciiOrbLongitudes ?? 30}
+					oninput={(e) => setNumber('asciiOrbLongitudes', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">cube scale</div>
+				<input
+					type="range"
+					min="0.8"
+					max="3.5"
+					step="0.01"
+					value={config.asciiOrbCubeScale ?? 1.8}
+					oninput={(e) => setNumber('asciiOrbCubeScale', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">morph duration</div>
+				<input
+					type="range"
+					min="0.05"
+					max="2"
+					step="0.01"
+					value={config.asciiOrbMorphDuration ?? 0.65}
+					oninput={(e) => setNumber('asciiOrbMorphDuration', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">build duration</div>
+				<input
+					type="range"
+					min="0.1"
+					max="6"
+					step="0.05"
+					value={config.asciiOrbBuildDuration ?? 1.45}
+					oninput={(e) => setNumber('asciiOrbBuildDuration', e.currentTarget.value)}
+				/>
+			</div>
+		{:else if renderer === 'lensgrain'}
+			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
+				<div class="text-foreground/60 text-xs">grain color</div>
+				<input
+					type="color"
+					value={config.lensGrainColor ?? '#eaeaea'}
+					oninput={(e) => setString('lensGrainColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">background color</div>
+				<input
+					type="color"
+					value={config.lensGrainBackgroundColor ?? '#041c1c'}
+					oninput={(e) => setString('lensGrainBackgroundColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">density</div>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.01"
+					value={config.lensGrainDensity ?? 0.11}
+					oninput={(e) => setNumber('lensGrainDensity', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">opacity</div>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.01"
+					value={config.lensGrainOpacity ?? 0.25}
+					oninput={(e) => setNumber('lensGrainOpacity', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">size</div>
+				<input
+					type="range"
+					min="0.1"
+					max="10"
+					step="0.1"
+					value={config.lensGrainSize ?? 1}
+					oninput={(e) => setNumber('lensGrainSize', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">animated</div>
+				<input
+					type="checkbox"
+					checked={config.lensGrainAnimated ?? true}
+					onchange={(e) => setBoolean('lensGrainAnimated', e.currentTarget.checked)}
+				/>
+				<div class="text-foreground/60 text-xs">vignette color</div>
+				<input
+					type="color"
+					value={config.lensGrainVignetteColor ?? '#ffbd38'}
+					oninput={(e) => setString('lensGrainVignetteColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">vignette opacity</div>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.01"
+					value={config.lensGrainVignetteOpacity ?? 0.22}
+					oninput={(e) => setNumber('lensGrainVignetteOpacity', e.currentTarget.value)}
+				/>
+			</div>
+		{:else if renderer === 'dither'}
+			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
+				<div class="text-foreground/60 text-xs">base color</div>
+				<input
+					type="color"
+					value={config.ditherColor ?? '#170d02'}
+					oninput={(e) => setString('ditherColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">accent color</div>
+				<input
+					type="color"
+					value={config.ditherAccentColor ?? '#ffac02'}
+					oninput={(e) => setString('ditherAccentColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">glow strength (%)</div>
+				<input
+					type="range"
+					min="0"
+					max="40"
+					step="0.5"
+					value={config.ditherGlowStrength ?? 6}
+					oninput={(e) => setNumber('ditherGlowStrength', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">glow spread (%)</div>
+				<input
+					type="range"
+					min="10"
+					max="100"
+					step="1"
+					value={config.ditherGlowSpread ?? 55}
+					oninput={(e) => setNumber('ditherGlowSpread', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">dot strength (%)</div>
+				<input
+					type="range"
+					min="0"
+					max="30"
+					step="0.5"
+					value={config.ditherDotStrength ?? 4}
+					oninput={(e) => setNumber('ditherDotStrength', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">dot size (px)</div>
+				<input
+					type="range"
+					min="2"
+					max="12"
+					step="1"
+					value={config.ditherDotSize ?? 3}
+					oninput={(e) => setNumber('ditherDotSize', e.currentTarget.value)}
+				/>
+			</div>
+		{:else if renderer === 'orbglow'}
+			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
+				<div class="text-foreground/60 text-xs">core color</div>
+				<input
+					type="color"
+					value={config.orbGlowColor ?? '#ffc878'}
+					oninput={(e) => setString('orbGlowColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">halo color</div>
+				<input
+					type="color"
+					value={config.orbGlowHaloColor ?? '#ff8c50'}
+					oninput={(e) => setString('orbGlowHaloColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">background color</div>
+				<input
+					type="color"
+					value={config.orbGlowBackgroundColor ?? '#0c0d10'}
+					oninput={(e) => setString('orbGlowBackgroundColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">core opacity</div>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.01"
+					value={config.orbGlowCoreOpacity ?? 0.35}
+					oninput={(e) => setNumber('orbGlowCoreOpacity', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">halo opacity</div>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.01"
+					value={config.orbGlowHaloOpacity ?? 0.1}
+					oninput={(e) => setNumber('orbGlowHaloOpacity', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">radius (vmin)</div>
+				<input
+					type="range"
+					min="10"
+					max="120"
+					step="1"
+					value={config.orbGlowRadius ?? 45}
+					oninput={(e) => setNumber('orbGlowRadius', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">follow pointer</div>
+				<input
+					type="checkbox"
+					checked={config.orbGlowFollowPointer ?? true}
+					onchange={(e) => setBoolean('orbGlowFollowPointer', e.currentTarget.checked)}
+				/>
+				<div class="text-foreground/60 text-xs">idle drift</div>
+				<input
+					type="range"
+					min="0"
+					max="0.4"
+					step="0.005"
+					value={config.orbGlowDrift ?? 0.06}
+					oninput={(e) => setNumber('orbGlowDrift', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">easing</div>
+				<input
+					type="range"
+					min="0.2"
+					max="20"
+					step="0.1"
+					value={config.orbGlowEasing ?? 4}
+					oninput={(e) => setNumber('orbGlowEasing', e.currentTarget.value)}
+				/>
+			</div>
+		{:else if renderer === 'dots'}
+			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
+				<div class="text-foreground/60 text-xs">dot color</div>
+				<input
+					type="color"
+					value={config.dotsColor ?? '#5a5248'}
+					oninput={(e) => setString('dotsColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">background color</div>
+				<input
+					type="color"
+					value={config.dotsBackgroundColor ?? '#f0ebe3'}
+					oninput={(e) => setString('dotsBackgroundColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">intensity</div>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.05"
+					value={config.dotsIntensity ?? 1}
+					oninput={(e) => setNumber('dotsIntensity', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">spacing (px)</div>
+				<input
+					type="range"
+					min="6"
+					max="80"
+					step="1"
+					value={config.dotsSpacing ?? 20}
+					oninput={(e) => setNumber('dotsSpacing', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">strength (%)</div>
+				<input
+					type="range"
+					min="0"
+					max="40"
+					step="0.5"
+					value={config.dotsStrength ?? 5}
+					oninput={(e) => setNumber('dotsStrength', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">dot size (px)</div>
+				<input
+					type="range"
+					min="0.5"
+					max="6"
+					step="0.5"
+					value={config.dotsDotSize ?? 1}
+					oninput={(e) => setNumber('dotsDotSize', e.currentTarget.value)}
+				/>
+			</div>
+		{:else if renderer === 'synapse'}
+			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
+				<div class="text-foreground/60 text-xs">pulse color</div>
+				<input
+					type="color"
+					value={config.synapseColor ?? '#0ff0fc'}
+					oninput={(e) => setString('synapseColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">background color</div>
+				<input
+					type="color"
+					value={config.synapseBackgroundColor ?? '#0a0a0f'}
+					oninput={(e) => setString('synapseBackgroundColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">intensity</div>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.05"
+					value={config.synapseIntensity ?? 1}
+					oninput={(e) => setNumber('synapseIntensity', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">grid size (px)</div>
+				<input
+					type="range"
+					min="8"
+					max="80"
+					step="1"
+					value={config.synapseGrid ?? 24}
+					oninput={(e) => setNumber('synapseGrid', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">grid strength (%)</div>
+				<input
+					type="range"
+					min="0"
+					max="20"
+					step="0.5"
+					value={config.synapseGridStrength ?? 3.5}
+					oninput={(e) => setNumber('synapseGridStrength', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">max pulses</div>
+				<input
+					type="range"
+					min="1"
+					max="120"
+					step="1"
+					value={config.synapseMaxPulses ?? 20}
+					oninput={(e) => setNumber('synapseMaxPulses', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">spawn chance / frame</div>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.01"
+					value={config.synapseSpawnChance ?? 0.12}
+					oninput={(e) => setNumber('synapseSpawnChance', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">speed min (px/frame)</div>
+				<input
+					type="range"
+					min="0.5"
+					max="30"
+					step="0.5"
+					value={config.synapseSpeedMin ?? 2}
+					oninput={(e) => setNumber('synapseSpeedMin', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">speed max (px/frame)</div>
+				<input
+					type="range"
+					min="0.5"
+					max="60"
+					step="0.5"
+					value={config.synapseSpeedMax ?? 22}
+					oninput={(e) => setNumber('synapseSpeedMax', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">trail length (px)</div>
+				<input
+					type="range"
+					min="2"
+					max="60"
+					step="1"
+					value={config.synapseTrailLength ?? 12}
+					oninput={(e) => setNumber('synapseTrailLength', e.currentTarget.value)}
+				/>
+			</div>
+		{:else if renderer === 'rain'}
+			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
+				<div class="text-foreground/60 text-xs">streak color</div>
+				<input
+					type="color"
+					value={config.rainColor ?? '#ffffff'}
+					oninput={(e) => setString('rainColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">background color</div>
+				<input
+					type="color"
+					value={config.rainBackgroundColor ?? '#0d1117'}
+					oninput={(e) => setString('rainBackgroundColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">
+					intensity (also drives speed + spawn rate)
+				</div>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.05"
+					value={config.rainIntensity ?? 0.5}
+					oninput={(e) => setNumber('rainIntensity', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">size</div>
+				<input
+					type="range"
+					min="0.2"
+					max="3"
+					step="0.05"
+					value={config.rainSize ?? 1}
+					oninput={(e) => setNumber('rainSize', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">max drops</div>
+				<input
+					type="range"
+					min="10"
+					max="500"
+					step="10"
+					value={config.rainMaxDrops ?? 130}
+					oninput={(e) => setNumber('rainMaxDrops', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">spawn chance / frame</div>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.05"
+					value={config.rainSpawnChance ?? 0.6}
+					oninput={(e) => setNumber('rainSpawnChance', e.currentTarget.value)}
+				/>
+			</div>
+		{:else if renderer === 'constellations'}
+			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
+				<div class="text-foreground/60 text-xs">star color</div>
+				<input
+					type="color"
+					value={config.constellationsColor ?? '#64d2ff'}
+					oninput={(e) => setString('constellationsColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">background color</div>
+				<input
+					type="color"
+					value={config.constellationsBackgroundColor ?? '#0b1a2c'}
+					oninput={(e) =>
+						setString('constellationsBackgroundColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">intensity</div>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.05"
+					value={config.constellationsIntensity ?? 1}
+					oninput={(e) => setNumber('constellationsIntensity', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">star count (pair cost is quadratic)</div>
+				<input
+					type="range"
+					min="5"
+					max="200"
+					step="5"
+					value={config.constellationsStarCount ?? 50}
+					oninput={(e) => setNumber('constellationsStarCount', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">connect distance (px)</div>
+				<input
+					type="range"
+					min="20"
+					max="400"
+					step="5"
+					value={config.constellationsConnectDistance ?? 120}
+					oninput={(e) =>
+						setNumber('constellationsConnectDistance', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">drift speed</div>
+				<input
+					type="range"
+					min="0"
+					max="2"
+					step="0.05"
+					value={config.constellationsDriftSpeed ?? 0.15}
+					oninput={(e) => setNumber('constellationsDriftSpeed', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">twinkle speed</div>
+				<input
+					type="range"
+					min="0"
+					max="0.1"
+					step="0.002"
+					value={config.constellationsTwinkleSpeed ?? 0.01}
+					oninput={(e) => setNumber('constellationsTwinkleSpeed', e.currentTarget.value)}
+				/>
+			</div>
+		{:else if renderer === 'perlin-flow'}
+			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
+				<div class="text-foreground/60 text-xs">particle color</div>
+				<input
+					type="color"
+					value={config.perlinFlowColor ?? '#00ff41'}
+					oninput={(e) => setString('perlinFlowColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">background color (also the trail fade)</div>
+				<input
+					type="color"
+					value={config.perlinFlowBackgroundColor ?? '#000000'}
+					oninput={(e) => setString('perlinFlowBackgroundColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">intensity</div>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.05"
+					value={config.perlinFlowIntensity ?? 0.8}
+					oninput={(e) => setNumber('perlinFlowIntensity', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">particle count</div>
+				<input
+					type="range"
+					min="20"
+					max="1000"
+					step="10"
+					value={config.perlinFlowParticleCount ?? 200}
+					oninput={(e) => setNumber('perlinFlowParticleCount', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">fade alpha (lower = longer trails)</div>
+				<input
+					type="range"
+					min="0.005"
+					max="0.3"
+					step="0.005"
+					value={config.perlinFlowFadeAlpha ?? 0.02}
+					oninput={(e) => setNumber('perlinFlowFadeAlpha', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">noise scale</div>
+				<input
+					type="range"
+					min="0.0005"
+					max="0.02"
+					step="0.0005"
+					value={config.perlinFlowNoiseScale ?? 0.004}
+					oninput={(e) => setNumber('perlinFlowNoiseScale', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">time scale</div>
+				<input
+					type="range"
+					min="0"
+					max="0.01"
+					step="0.0002"
+					value={config.perlinFlowTimeScale ?? 0.0008}
+					oninput={(e) => setNumber('perlinFlowTimeScale', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">speed</div>
+				<input
+					type="range"
+					min="0.1"
+					max="5"
+					step="0.1"
+					value={config.perlinFlowSpeed ?? 1}
+					oninput={(e) => setNumber('perlinFlowSpeed', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">dot radius (px)</div>
+				<input
+					type="range"
+					min="0.5"
+					max="5"
+					step="0.5"
+					value={config.perlinFlowDotRadius ?? 1}
+					oninput={(e) => setNumber('perlinFlowDotRadius', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">life decay / frame</div>
+				<input
+					type="range"
+					min="0.0002"
+					max="0.02"
+					step="0.0002"
+					value={config.perlinFlowLifeDecay ?? 0.001}
+					oninput={(e) => setNumber('perlinFlowLifeDecay', e.currentTarget.value)}
+				/>
+			</div>
+		{:else if renderer === 'petals'}
+			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
+				<div class="text-foreground/60 text-xs">petal color</div>
+				<input
+					type="color"
+					value={config.petalsColor ?? '#f5a0c0'}
+					oninput={(e) => setString('petalsColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">background color</div>
+				<input
+					type="color"
+					value={config.petalsBackgroundColor ?? '#2b1b2e'}
+					oninput={(e) => setString('petalsBackgroundColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">intensity</div>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.05"
+					value={config.petalsIntensity ?? 1}
+					oninput={(e) => setNumber('petalsIntensity', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">size</div>
+				<input
+					type="range"
+					min="0.2"
+					max="3"
+					step="0.05"
+					value={config.petalsSize ?? 1}
+					oninput={(e) => setNumber('petalsSize', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">count</div>
+				<input
+					type="range"
+					min="5"
+					max="200"
+					step="5"
+					value={config.petalsCount ?? 30}
+					oninput={(e) => setNumber('petalsCount', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">fall speed</div>
+				<input
+					type="range"
+					min="0.1"
+					max="5"
+					step="0.1"
+					value={config.petalsFallSpeed ?? 1}
+					oninput={(e) => setNumber('petalsFallSpeed', e.currentTarget.value)}
+				/>
+			</div>
+		{:else if renderer === 'sparkles'}
+			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
+				<div class="text-foreground/60 text-xs">sparkle color</div>
+				<input
+					type="color"
+					value={config.sparklesColor ?? '#ff8cb8'}
+					oninput={(e) => setString('sparklesColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">background color</div>
+				<input
+					type="color"
+					value={config.sparklesBackgroundColor ?? '#fff0f5'}
+					oninput={(e) => setString('sparklesBackgroundColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">intensity</div>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.05"
+					value={config.sparklesIntensity ?? 1}
+					oninput={(e) => setNumber('sparklesIntensity', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">size</div>
+				<input
+					type="range"
+					min="0.2"
+					max="3"
+					step="0.05"
+					value={config.sparklesSize ?? 1}
+					oninput={(e) => setNumber('sparklesSize', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">count</div>
+				<input
+					type="range"
+					min="5"
+					max="250"
+					step="5"
+					value={config.sparklesCount ?? 35}
+					oninput={(e) => setNumber('sparklesCount', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">twinkle speed</div>
+				<input
+					type="range"
+					min="0.1"
+					max="5"
+					step="0.1"
+					value={config.sparklesTwinkleSpeed ?? 1}
+					oninput={(e) => setNumber('sparklesTwinkleSpeed', e.currentTarget.value)}
+				/>
+			</div>
+		{:else if renderer === 'embers'}
+			<div class="border-foreground/10 bg-foreground/5 space-y-3 rounded-2xl border p-4">
+				<div class="text-foreground/60 text-xs">ember color</div>
+				<input
+					type="color"
+					value={config.embersColor ?? '#e94560'}
+					oninput={(e) => setString('embersColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">background color</div>
+				<input
+					type="color"
+					value={config.embersBackgroundColor ?? '#1a1a2e'}
+					oninput={(e) => setString('embersBackgroundColor', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">intensity</div>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.05"
+					value={config.embersIntensity ?? 1}
+					oninput={(e) => setNumber('embersIntensity', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">size</div>
+				<input
+					type="range"
+					min="0.2"
+					max="3"
+					step="0.05"
+					value={config.embersSize ?? 1}
+					oninput={(e) => setNumber('embersSize', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">count</div>
+				<input
+					type="range"
+					min="10"
+					max="300"
+					step="5"
+					value={config.embersCount ?? 60}
+					oninput={(e) => setNumber('embersCount', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">fade alpha (lower = longer trails)</div>
+				<input
+					type="range"
+					min="0.02"
+					max="0.6"
+					step="0.01"
+					value={config.embersFadeAlpha ?? 0.18}
+					oninput={(e) => setNumber('embersFadeAlpha', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">spark chance / frame</div>
+				<input
+					type="range"
+					min="0"
+					max="0.05"
+					step="0.001"
+					value={config.embersSparkChance ?? 0.003}
+					oninput={(e) => setNumber('embersSparkChance', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">burst chance / frame</div>
+				<input
+					type="range"
+					min="0"
+					max="0.2"
+					step="0.005"
+					value={config.embersBurstChance ?? 0.015}
+					oninput={(e) => setNumber('embersBurstChance', e.currentTarget.value)}
+				/>
+				<div class="text-foreground/60 text-xs">burst size</div>
+				<input
+					type="range"
+					min="1"
+					max="30"
+					step="1"
+					value={config.embersBurstSize ?? 5}
+					oninput={(e) => setNumber('embersBurstSize', e.currentTarget.value)}
 				/>
 			</div>
 		{/if}

@@ -1,11 +1,10 @@
 <script lang="ts">
+	import { startWallpaperLoop } from '$lib/components/backgrounds/wallpaperLoop'
 	import { setBackgroundContext } from '$lib/contexts/backgroundContext'
 	import { createOnceCallback } from '$lib/utils/once'
-	import type { Snippet } from 'svelte'
 	import { onDestroy, onMount } from 'svelte'
 
 	interface Props {
-		children?: Snippet
 		onReady?: () => void
 		hueShift?: number
 		noiseIntensity?: number
@@ -19,7 +18,6 @@
 	}
 
 	let {
-		children,
 		onReady,
 		hueShift = 0,
 		noiseIntensity = 0,
@@ -44,12 +42,11 @@
 	}
 	let gl: WebGL2RenderingContext | null = null
 	let program: WebGLProgram | null = null
-	let animationId: number | null = null
+	let stopFrameLoop: (() => void) | null = null
 	let resizeObserver: ResizeObserver | null = null
-	let startTime = 0
 	let subscribers: Array<() => void> = []
 
-	// Expose canvas to children via context
+	// Expose canvas to consumers via context
 	setBackgroundContext({
 		getCanvas: () => canvasRef,
 		getCanvasDimensions: () => ({
@@ -199,12 +196,12 @@ void main(){
 		}
 	}
 
-	function animate() {
+	function animate(nowMs: number) {
 		if (!gl || !program) return
 
 		resize()
 
-		const currentTime = (performance.now() - startTime) / 1000
+		const currentTime = nowMs / 1000
 
 		const bc = hexToRgb(backgroundColor)
 		gl.clearColor(bc[0], bc[1], bc[2], 1)
@@ -236,8 +233,6 @@ void main(){
 		gl.uniform3f(bgLoc, bg[0], bg[1], bg[2])
 
 		gl.drawArrays(gl.TRIANGLES, 0, 6)
-
-		animationId = requestAnimationFrame(animate)
 	}
 
 	onMount(() => {
@@ -282,15 +277,13 @@ void main(){
 		resizeObserver = new ResizeObserver(() => resize())
 		resizeObserver.observe(containerRef)
 
-		startTime = performance.now()
-		animate()
+		stopFrameLoop = startWallpaperLoop(animate)
 		requestAnimationFrame(() => signalReady())
 	})
 
 	onDestroy(() => {
-		if (animationId !== null) {
-			cancelAnimationFrame(animationId)
-		}
+		stopFrameLoop?.()
+		stopFrameLoop = null
 
 		if (resizeObserver) {
 			resizeObserver.disconnect()
@@ -308,9 +301,4 @@ void main(){
 		style="background-color: {backgroundColor}"
 		bind:this={canvasRef}
 	></canvas>
-
-	<!-- Slotted content rendered on top of background -->
-	<div class="relative z-1 h-full w-full">
-		{@render children?.()}
-	</div>
 </div>
