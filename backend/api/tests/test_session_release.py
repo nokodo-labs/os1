@@ -197,3 +197,24 @@ async def test_release_is_a_no_op_without_an_app_context() -> None:
 	"""filters run without one in tests and in agent-less paths."""
 	async with releasing_session(None):
 		pass
+
+
+async def test_every_registered_callback_goes_through_an_app_base() -> None:
+	"""the seam is a property of the BOUNDARY, not of any one implementation.
+
+	proving the bases release says nothing about a callback that subclasses the
+	SDK interface directly and never reaches one - which is exactly how a
+	filter shipped in every run once bypassed it.
+	"""
+	from api.v1.service.chat.filters import FILTER_REGISTRY
+	from api.v1.service.chat.hooks import HOOK_REGISTRY
+	from api.v1.service.chat.tools.registry import TOOL_REGISTRY
+	from api.v1.service.runs.steering import SteeringFilter
+
+	registered_filters = [*FILTER_REGISTRY.values(), SteeringFilter(claim=AsyncMock())]
+	for filter_ in registered_filters:
+		assert isinstance(filter_, Filter), filter_.name
+	for hook in HOOK_REGISTRY.values():
+		assert isinstance(hook, Hook), hook.name
+	for tool in TOOL_REGISTRY.values():
+		assert isinstance(tool, Tool), tool.name

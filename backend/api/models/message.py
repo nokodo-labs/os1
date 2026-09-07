@@ -5,7 +5,16 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from pydantic import TypeAdapter, ValidationError
-from sqlalchemy import Boolean, ForeignKey, Index, String, Text, event, text
+from sqlalchemy import (
+	Boolean,
+	CheckConstraint,
+	ForeignKey,
+	Index,
+	String,
+	Text,
+	event,
+	text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -82,6 +91,11 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 			postgresql_ops={"search_text": "gin_trgm_ops"},
 			postgresql_where=text("search_text IS NOT NULL"),
 		),
+		CheckConstraint(
+			"finish_reason IS NULL OR finish_reason IN "
+			"('completed', 'length', 'content_filter')",
+			name="ck_messages_finish_reason",
+		),
 	)
 
 	thread_id: Mapped[TypeID] = mapped_column(
@@ -142,7 +156,11 @@ class Message(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base):
 	tool_calls: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
 	"""tool calls an assistant message requested."""
 	finish_reason: Mapped[SDKFinishReason | None] = mapped_column(String(50))
-	"""why generation stopped, for an assistant message."""
+	"""why generation stopped, for an assistant message.
+
+	constrained to the SDK's set at the column, so a bad value fails at the
+	write that produces it rather than at every later read.
+	"""
 	usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 	"""provider token counts, matching the SDK's ``Usage`` shape."""
 	citations: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
@@ -318,19 +336,18 @@ class AssistantMessage(Message):
 	def to_sdk(self) -> SDKAssistantMessage:
 		"""convert this row into the message the model reads.
 
-		historical rows can hold values the current schema rejects, so each is
-		repaired or dropped rather than failing the whole conversation load.
+		a historical tool call the current schema rejects is repaired rather
+		than failing the whole conversation load. ``finish_reason`` needs no
+		such repair: the column constrains it, so an unknown value cannot be
+		written in the first place.
 		"""
 		tool_calls: list[SDKToolCall] = []
 		for raw in self.tool_calls or []:
 			try:
 				tool_calls.append(SDKToolCall.model_validate(raw))
 			except ValidationError:
-				# a persisted tool result still references this call by id, and
-				# every provider rejects a tool result with no matching call.
-				# so the id survives as a placeholder even when nothing else
-				# about the call does - dropping one side of a pair is the one
-				# option that always breaks the next run on this branch.
+				# providers reject a tool result with no matching call, so the id
+				# survives as a placeholder even when nothing else about the call does.
 				placeholder = _placeholder_tool_call(raw)
 				if placeholder is not None:
 					tool_calls.append(placeholder)
@@ -372,11 +389,8 @@ class ToolMessage(Message):
 				attachments.append(part)
 		tool_call_id = self.tool_call_id
 		if not tool_call_id:
-			# same repair as a malformed tool call: a historical row must not
-			# break loading the conversation it sits in. the id is synthesized
-			# from the row so the result is at least self-consistent; it pairs
-			# with no call, and the adapters drop an unpaired result on the way
-			# to the provider.
+			# a historical row must not break loading its conversation; the
+			# synthesized id pairs with no call, and adapters drop unpaired results.
 			tool_call_id = f"tool_call_{self.id}"
 			logger.warning(
 				"repairing historical tool message with no tool_call_id",

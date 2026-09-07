@@ -1,5 +1,7 @@
 """base filter class for sdk-compatible filters."""
 
+from typing import final
+
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.session_release import releasing_session
 from nokodo_ai.agents import AgentIterationState
@@ -16,6 +18,7 @@ class Filter(SDKFilter[AppContext]):
 	final so the borrowed connection is always returned.
 	"""
 
+	@final
 	async def process(
 		self,
 		state: AgentIterationState[AppContext],

@@ -1,5 +1,7 @@
 """base hook class for sdk-compatible hooks."""
 
+from typing import final
+
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.session_release import releasing_session
 from nokodo_ai.agents import AgentIterationSnapshot
@@ -14,6 +16,7 @@ class Hook(SDKHook[AppContext]):
 	final so the borrowed connection is always returned.
 	"""
 
+	@final
 	async def execute(
 		self,
 		state: AgentIterationSnapshot[AppContext],

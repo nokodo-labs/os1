@@ -1,5 +1,7 @@
 """base tool class for sdk-compatible tools."""
 
+from typing import final
+
 from api.v1.service.chat.context import AppContext
 from api.v1.service.chat.session_release import releasing_session
 from nokodo_ai.agents import AgentIterationSnapshot
@@ -15,6 +17,7 @@ class Tool(SDKTool[AppContext]):
 	final so the borrowed connection is always returned.
 	"""
 
+	@final
 	async def call(
 		self,
 		__state__: AgentIterationSnapshot[AppContext],

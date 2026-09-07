@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.message import Message, MessageType
+from api.models.thread import Thread
+from api.models.user import User
 from nokodo_ai.messages import AssistantMessage as SDKAssistantMessage
 from nokodo_ai.messages import ToolMessage as SDKToolMessage
 from nokodo_ai.utils.typeid import TypeID, new_typeid
@@ -106,6 +110,42 @@ def test_message_to_sdk_rejects_an_unknown_finish_reason() -> None:
 
 	with pytest.raises(ValidationError):
 		assistant.to_sdk()
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_finish_reason_fails_at_the_write(
+	db_session: AsyncSession,
+) -> None:
+	"""the column constrains the value, so no read ever has to cope with a bad one.
+
+	failing here is the point: a row that got past the write would make every
+	later load of its conversation raise, forever.
+	"""
+	owner = User(
+		email="finish_reason_check@example.com",
+		username="finish_reason_check",
+		hashed_password="password",
+		is_active=True,
+	)
+	db_session.add(owner)
+	await db_session.flush()
+	thread = Thread(owner_id=owner.id)
+	db_session.add(thread)
+	await db_session.flush()
+
+	message_cls = Message.__mapper__.polymorphic_map[MessageType.ASSISTANT].class_
+	db_session.add(
+		message_cls(
+			thread_id=thread.id,
+			type=MessageType.ASSISTANT,
+			content=[],
+			tool_calls=[],
+			finish_reason="stop",
+		)
+	)
+
+	with pytest.raises(IntegrityError):
+		await db_session.flush()
 
 
 def test_malformed_tool_call_keeps_its_id_so_its_result_stays_paired() -> None:
