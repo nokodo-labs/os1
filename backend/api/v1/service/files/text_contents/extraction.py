@@ -36,9 +36,8 @@ logger = logging.getLogger(__name__)
 FileContentChunk = ContentChunk
 _AUTO_LOCAL_LOADERS = ("plain", "markitdown")
 
-# provider responses that mean the input itself is unusable. retrying never
-# helps, so the file is marked permanently skipped instead of flooding the
-# worker with tracebacks and endless re-dispatches.
+# provider responses that mean the input itself is unusable: retrying never
+# helps, so the file is marked permanently skipped.
 _PERMANENT_PROVIDER_STATUS = frozenset({400, 413, 415, 422})
 _PERMANENT_EXTRACTION_TEXT_MARKERS = (
 	"truncated",
@@ -47,9 +46,8 @@ _PERMANENT_EXTRACTION_TEXT_MARKERS = (
 	"unsupported image",
 )
 
-# document text density thresholds: a document loader that returns too little
-# text (or too sparse for its size) is treated as scanned, so model extraction
-# is tried instead.
+# density thresholds: a loader returning too little text for the file size
+# is treated as scanned, so model extraction is tried instead.
 _MIN_DOCUMENT_TEXT_CHARS = 40
 _MIN_DOCUMENT_TEXT_DENSITY_BYTES = 64 * 1024
 _MIN_DOCUMENT_TEXT_CHARS_PER_KIB = 4.0

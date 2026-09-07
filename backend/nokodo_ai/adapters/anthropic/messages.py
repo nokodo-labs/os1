@@ -332,9 +332,8 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 
 		run_tracker = RunIdTracker("anthropic.messages")
 
-		# prompt-side usage is reported once on message_start; output usage
-		# accumulates and is finalized on message_delta. we carry the input
-		# counts forward so the final usage delta is complete.
+		# prompt-side usage arrives once on message_start and output usage is
+		# finalized on message_delta, so the input counts are carried forward.
 		input_tokens = 0
 		cache_creation_input_tokens: int | None = None
 		cache_read_input_tokens: int | None = None
@@ -354,9 +353,8 @@ class AnthropicMessagesAdapter(BaseAnthropicAdapter, BaseChatAdapter):
 					yield meta_chunk
 				continue
 
-			# --- message_delta: carries final output token usage and stop
-			# reason. emit a usage-only delta so the merged assistant message
-			# (and its persistence) records real provider token counts.
+			# message_delta carries the final output usage, emitted as a usage-only
+			# delta so the merged message records real provider token counts.
 			if isinstance(event, AnthropicRawMessageDeltaEvent):
 				output_tokens = event.usage.output_tokens or 0
 				yield AssistantMessage(

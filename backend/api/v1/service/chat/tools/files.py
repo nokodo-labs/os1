@@ -208,11 +208,8 @@ class FileGetTool(Tool):
 				citation_source(CitationSource.FILE, f.id, f.filename)
 			)
 
-			# media files attach natively when requested and the model supports
-			# the modality; otherwise metadata + description only. native bytes
-			# are hydrated later by the file_resolve filter. the updated_at stamp
-			# lets the projection layer tell distinct renditions of a mutable
-			# file apart.
+			# media attaches natively only when requested and the modality is
+			# supported; the updated_at stamp lets the projection tell renditions apart.
 			mime = f.mime_type or ""
 			category = classify_media(mime)
 			if category in ("image", "audio", "video"):

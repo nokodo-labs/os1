@@ -116,15 +116,10 @@ class SemanticChunkerAdapter(BaseChunkerAdapter):
 		return _chunks_from_ranges(normalized, ranges, text.metadata)
 
 
-# ---------------------------------------------------------------------------
 # sentence splitting
-# ---------------------------------------------------------------------------
 
-# naive regex splitter: splits on whitespace after terminal punctuation.
-# known limitation: breaks on abbreviations ("dr.", "u.s."), decimal numbers,
-# and other non-terminal uses of punctuation. good enough for v1; a proper
-# sentencizer (e.g. spacy, pysbd) can be swapped in here later without
-# touching the rest of the algorithm.
+# naive splitter on whitespace after terminal punctuation; it breaks on
+# abbreviations and decimals, so a real sentencizer can replace it here.
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
 
@@ -144,9 +139,7 @@ def _split_sentences(text: str) -> list[tuple[str, int, int]]:
 	return sentences
 
 
-# ---------------------------------------------------------------------------
 # embedding windows
-# ---------------------------------------------------------------------------
 
 
 def _build_windows(
@@ -163,9 +156,7 @@ def _build_windows(
 	return windows
 
 
-# ---------------------------------------------------------------------------
 # vector math
-# ---------------------------------------------------------------------------
 
 
 def _cosine_distance(a: list[float], b: list[float]) -> float:
@@ -192,9 +183,7 @@ def _percentile(values: list[float], p: float) -> float:
 	return sorted_vals[low] * (1.0 - frac) + sorted_vals[low + 1] * frac
 
 
-# ---------------------------------------------------------------------------
 # segment operations
-# ---------------------------------------------------------------------------
 
 
 def _enforce_token_budget(

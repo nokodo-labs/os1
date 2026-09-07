@@ -29,9 +29,7 @@ from api.storage.base import FileInfo, StorageBackend
 from api.storage.local import LocalStorageBackend
 
 
-# ---------------------------------------------------------------------------
 # helpers
-# ---------------------------------------------------------------------------
 
 
 def _sha256(data: bytes) -> str:
@@ -46,9 +44,7 @@ async def _collect(stream: AsyncIterator[bytes]) -> bytes:
 	return b"".join(parts)
 
 
-# ---------------------------------------------------------------------------
 # FileInfo dataclass
-# ---------------------------------------------------------------------------
 
 
 class TestFileInfo:
@@ -80,9 +76,7 @@ class TestFileInfo:
 		assert info.checksum_sha256 == "deadbeef" * 8
 
 
-# ---------------------------------------------------------------------------
 # StorageBackend ABC
-# ---------------------------------------------------------------------------
 
 
 class TestStorageBackendABC:
@@ -167,9 +161,7 @@ class TestStorageBackendABC:
 		assert result == expected
 
 
-# ---------------------------------------------------------------------------
 # LocalStorageBackend
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture()
@@ -330,9 +322,7 @@ class TestLocalStorageBackend:
 		assert not await local_backend.exists("fail.bin")
 
 
-# ---------------------------------------------------------------------------
 # storage registry
-# ---------------------------------------------------------------------------
 
 
 class TestStorageRegistry:
@@ -385,9 +375,7 @@ class TestStorageRegistry:
 		assert len(_BACKENDS) == 0
 
 
-# ---------------------------------------------------------------------------
 # configured backend set
-# ---------------------------------------------------------------------------
 
 
 class TestConfiguredBackends:
@@ -459,9 +447,7 @@ class TestConfiguredBackends:
 		assert configure_storage_backends in runtime._settings_reload_hooks
 
 
-# ---------------------------------------------------------------------------
 # storage settings validation
-# ---------------------------------------------------------------------------
 
 
 class TestStorageSettingsValidation:

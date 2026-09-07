@@ -160,9 +160,8 @@ async def run_memory_post_processing_task(
 		await context.update(progress=progress, stage=stage)
 
 	await context.update(progress=10, stage="starting memory processing")
-	# resolve message_id before processing so newly created memories get
-	# source_message_id set; wait_message_reference is a quick poll if the
-	# message is already committed.
+	# resolved before processing so new memories get source_message_id set;
+	# wait_message_reference is a quick poll once the message is committed.
 	if message_id is None and message_ref is not None:
 		message_id = await wait_message_reference(message_ref)
 	async with async_session_local() as session:

@@ -124,9 +124,8 @@ class GooglePredictImageAdapter(BaseGoogleAdapter, BaseImageAdapter):
 	) -> ImageGenerationResult:
 		client: AsyncClient = self._client
 
-		# cast required: google genai SDK typing bug - RawReferenceImage
-		# and MaskReferenceImage are not subclasses of _ReferenceImageAPI
-		# despite being accepted at runtime by edit_image().
+		# cast required: RawReferenceImage/MaskReferenceImage are not typed as
+		# _ReferenceImageAPI subclasses despite edit_image() accepting them.
 		ref_images: list[_ReferenceImageAPIOrDict] = [
 			cast(
 				_ReferenceImageAPIOrDict,

@@ -81,9 +81,8 @@ class CitationIndexFilter(Filter):
 
 		entries = app_context.citations
 
-		# resolve the next-citation-index floor from persisted metadata.
-		# this tells us where new indices should start even when the
-		# original citations aren't in the loaded window.
+		# the floor comes from persisted metadata so new indices start correctly
+		# even when the original citations are outside the loaded window.
 		nci = await _resolve_nci(thread, app_context.session)
 
 		# rebuild individual citation entries from persisted citations

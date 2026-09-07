@@ -91,9 +91,8 @@ class FileResolveFilter(Filter):
 		changed = False
 
 		for msg_idx, msg in enumerate(new_messages):
-			# native bytes only ever live on tool messages. the attachments
-			# projection has already rewritten any user/assistant media to text
-			# references, so hydration is restricted to tool messages.
+			# native bytes only live on tool messages: the attachments projection
+			# already rewrote user/assistant media to text references.
 			if isinstance(msg, SDKToolMessage):
 				new_atts = list(msg.attachments)
 				msg_changed = False

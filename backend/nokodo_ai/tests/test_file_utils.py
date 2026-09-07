@@ -56,9 +56,8 @@ def test_corrected_upgrades_generic_declared() -> None:
 
 
 def test_corrected_keeps_specific_office_doc() -> None:
-	# zip-container office docs all share the PK signature and puremagic
-	# only guesses between them, so a correctly declared specific type must
-	# never be overridden by an ambiguous detection.
+	# zip-container office docs share the PK signature and puremagic only
+	# guesses, so a correctly declared specific type is never overridden.
 	xlsx_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 	assert corrected_mime_type(xlsx_mime, b"PK\x03\x04\x14\x00\x06\x00") is None
 

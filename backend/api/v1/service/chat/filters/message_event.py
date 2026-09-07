@@ -44,9 +44,8 @@ class MessageEventFilter(Filter):
 		if app_context is None or app_context.thread_id is None:
 			return state
 
-		# an event renders inline iff it carries a message_id anchor. that is the
-		# single signal: membership (acl) + agent add/remove anchor to the head,
-		# while user-state updates carry no anchor and are skipped here.
+		# an event renders inline iff it carries a message_id anchor; user-state
+		# updates carry none and are skipped here.
 		stmt = (
 			select(Event)
 			.where(

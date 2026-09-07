@@ -300,9 +300,8 @@ async def _import_one_chat_worker(
 	"""
 	local = ImportSummary(deployment_origin=deployment_origin)
 	file_ids = _chat_owui_file_ids(chat)
-	# resolve the pinned project before opening this worker session so a worker
-	# never holds two pool connections at once (its own session plus the cache's
-	# dedicated session), which keeps fan-out deadlock-free near the pool limit.
+	# resolved before the worker session opens so a worker never holds two pool
+	# connections at once, which keeps fan-out deadlock-free near the limit.
 	pinned_project_id: TypeID | None = None
 	if _chat_pinned(chat):
 		try:
@@ -495,10 +494,8 @@ async def _import_chats_streaming(
 	try:
 		await _produce()
 	finally:
-		# the producer's own finally enqueues one sentinel per consumer, so
-		# every consumer drains remaining committed work and exits cleanly even
-		# when the fetch pool short-circuited on a fatal error. awaiting here
-		# guarantees that, then any fatal fetch error re-raises after cleanup.
+		# the producer's finally enqueues one sentinel per consumer, so awaiting
+		# here drains them even when the fetch pool short-circuited on an error.
 		await asyncio.gather(*consumers)
 
 
@@ -539,10 +536,8 @@ async def import_from_open_webui(
 	write_concurrency = settings.integrations.open_webui.db_write_concurrency
 
 	async with OpenWebUIClient(origin=origin, credential=credential) as client:
-		# phase 1: fetch all API data concurrently.
-		# list_* calls are independent HTTP requests to the OWUI server and
-		# typically dominate wall time, especially bulk chat export or large
-		# memory/note lists.
+		# phase 1: fetch all API data concurrently - the list_* calls are
+		# independent HTTP requests and typically dominate wall time.
 		await _report_progress(progress_callback, 10, "fetching data from open webui")
 
 		_coro_keys: list[str] = []
@@ -639,9 +634,8 @@ async def import_from_open_webui(
 					summary=summary,
 				)
 			except Exception as exc:
-				# rollback-and-continue: close-time discard never sees this, so
-				# the actions the rolled-back folder writes queued have to go
-				# now or the next commit would promote and run them.
+				# rollback-and-continue: the rolled-back writes queued actions that
+				# have to go now, or the next commit would promote and run them.
 				discard_uncommitted_post_commit_actions(session)
 				await session.rollback()
 				logger.exception("failed to import Open WebUI folders")
@@ -713,10 +707,8 @@ async def import_from_open_webui(
 				)
 			await _report_progress(progress_callback, 85, "chats imported")
 
-		# phase 3: write memories and notes sequentially through the main session.
-		# each batch is committed independently so a notes failure leaves memories
-		# durable. using the caller's session avoids opening extra pool connections,
-		# which prevents connection exhaustion on deployments near max_connections.
+		# phase 3: memories and notes go sequentially through the caller's session,
+		# each batch committed on its own and with no extra pool connection.
 		if include_memories or include_notes:
 			_mem_notes_start = 85 if include_chats else 25
 			_what = (

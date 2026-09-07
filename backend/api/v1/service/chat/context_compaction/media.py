@@ -48,20 +48,12 @@ from nokodo_ai.utils.typeid import TypeID
 
 log = logging.getLogger(__name__)
 
-# metadata flag set on a tool message that carries HARD-protected native
-# media (the read iteration). the compaction layer must never prune or
-# summarize these. this is the one-way signal from media -> compaction.
-# soft-window media stays native but is NOT marked, so compaction may drop it
-# under budget pressure (it is recoverable via file_get).
-#
-# deliberately unprefixed: this is PUBLIC metadata. it reveals nothing about
-# the backend and a client rendering the transcript benefits from knowing a
-# part is pinned, so it does not belong in the private namespace.
+# marks a tool message carrying hard-protected native media; compaction
+# must never prune it. deliberately unprefixed - this is public metadata.
 MEDIA_PROTECTED_METADATA_KEY = "media_protected"
 
-# hard protection window in agent-loop ITERATIONS. the read iteration (the
-# first model call that actually sees freshly fetched bytes) is distance 0 and
-# is never cut; only it is hard-protected.
+# hard protection window in agent-loop ITERATIONS: only the read iteration
+# (distance 0, the first call that sees fresh bytes) is hard-protected.
 _HARD_PROTECTION_ITERATIONS = 1
 
 
@@ -259,9 +251,8 @@ def _protection_iterations(
 	return settings.image_decay_iterations
 
 
-# inline marker that replaces released native media bytes. tool-message media
-# uses this id-less form because the tool call that produced the result already
-# names the file it fetched, so repeating the id would be redundant.
+# inline marker replacing released native media bytes. id-less because the
+# tool call that produced the result already names the file.
 _DECAY_MARKER = "[native media attachment unloaded]"
 
 
@@ -289,9 +280,8 @@ def project_attachments(
 	"""
 	turn_indices = compute_turn_indices(messages)
 	iteration_indices = compute_iteration_indices(messages)
-	# the agent turn the upcoming model call belongs to. if the thread ends on a
-	# user message the next call starts a fresh agent turn that has no live media
-	# yet, so nothing from earlier agent turns stays protected.
+	# the agent turn the upcoming model call belongs to: a thread ending on a
+	# user message starts a fresh turn, so nothing earlier stays protected.
 	current_agent_turn: int | None = None
 	current_iteration = 0
 	if messages and isinstance(messages[-1], (SDKAssistantMessage, SDKToolMessage)):
@@ -309,10 +299,8 @@ def project_attachments(
 		if prev is None or occ.message_index >= prev.message_index:
 			latest_tool[occ.file_id] = occ
 
-	# a tool occurrence is a true duplicate only when a newer occurrence of the
-	# same file carries the same content signature. distinct renditions (the
-	# file changed between fetches) are kept so the model does not silently
-	# lose a version it may have reasoned about.
+	# a duplicate needs the same content signature: distinct renditions are
+	# kept so the model does not silently lose a version it reasoned about.
 	def _is_superseded(occ: _MediaOccurrence) -> bool:
 		for other in occurrences:
 			if not other.on_tool_message or other.file_id != occ.file_id:
@@ -323,9 +311,8 @@ def project_attachments(
 				return True
 		return False
 
-	# decide the native set: media in the CURRENT agent turn, within its
-	# iteration window, modality-ok, not superseded. the hard set is the read
-	# iteration (distance 0), which compaction must never cut.
+	# native set: media in the current agent turn, within its iteration window,
+	# modality-ok, not superseded. the hard set is the read iteration.
 	active_indices: dict[TypeID, _MediaOccurrence] = {}
 	hard_protected_files: set[TypeID] = set()
 	released_indices: set[tuple[int, int]] = set()

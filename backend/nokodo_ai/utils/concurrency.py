@@ -14,9 +14,8 @@ from collections.abc import Awaitable, Callable, Iterable
 from typing import Literal, overload
 
 
-# default in-flight ceiling for the helpers below. chosen to be generous for
-# fast local work while still capping pathological fan-outs. callers that talk
-# to a rate-limited provider should pass a smaller limit explicitly.
+# default in-flight ceiling: generous for fast local work, still a cap on
+# pathological fan-outs. rate-limited callers should pass a smaller limit.
 DEFAULT_CONCURRENCY = 100
 
 

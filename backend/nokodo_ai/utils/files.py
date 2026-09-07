@@ -25,9 +25,8 @@ _GENERIC_DECLARED_MIME = frozenset(
 	}
 )
 
-# detected mime prefixes whose signatures are authoritative enough to override
-# a conflicting specific declared type. image and pdf mislabeling is what breaks
-# downstream model APIs, and these signatures are unambiguous.
+# detected mime prefixes whose signatures override a conflicting declared
+# type: image and pdf mislabeling breaks model APIs and these are exact.
 _TRUSTED_OVERRIDE_PREFIXES = ("image/", "application/pdf")
 
 

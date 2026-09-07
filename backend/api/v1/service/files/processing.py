@@ -48,10 +48,8 @@ from nokodo_ai.utils.typeid import TypeID
 
 logger = logging.getLogger(__name__)
 
-# file sources the content pipeline ingests as primary content. derivatives the
-# pipeline itself emits (text_extraction, thumbnail) are excluded so it never
-# reprocesses its own outputs. this is a kind filter, independent of who may
-# see a file (access rules own that).
+# file sources the content pipeline ingests as primary content; its own
+# derivatives are excluded so it never reprocesses its outputs.
 CONTENT_PIPELINE_SOURCES = frozenset(
 	{
 		FileSource.USER_UPLOADED,
@@ -183,9 +181,8 @@ async def process_file_description(
 		batch = await load_file_content_chunks_reusing_stored_text(file, session)
 		await session.commit()
 
-		# phase 2: external I/O - no Postgres connection held
-		# build_file_description and embed_texts both use process-level caches
-		# and open their own short-lived sessions if the cache is cold.
+		# phase 2: external I/O, no Postgres connection held - the calls below
+		# open their own short-lived sessions when their caches are cold.
 		description = await build_file_description(
 			file, batch.chunks, full_content=batch.content
 		)

@@ -140,17 +140,6 @@ def _file_id_from_context(context: TaskContext) -> TypeID:
 	return TypeID(file_id_value)
 
 
-# retroactive file maintenance backfill
-#
-# some files end up persisted without their deferred processing done. imports
-# are the usual cause: they persist files but defer content vectorization and
-# description generation so a bulk import does not stampede the embedding and
-# chat model providers into rate limits (see the Open WebUI import service).
-# the sweep below drains that backlog in bounded batches, dispatching one
-# unified `file.process` task per due file so provider spend stays paced. all
-# knobs come from `settings.tasks.file_maintenance`.
-
-
 async def run_file_maintenance_backfill_sweep(
 	batch_size: int | None = None,
 	respect_enabled: bool = True,
@@ -165,6 +154,12 @@ async def run_file_maintenance_backfill_sweep(
 	one backlog is drained per run, capped at the batch size: files that never
 	recorded a content fingerprint or never got a description. files with an
 	active processing task are skipped so a slow run is not piled onto.
+
+	imports are the usual source of that backlog: they persist files but defer
+	vectorization and description generation so a bulk import does not stampede
+	the embedding and chat model providers into rate limits. draining in bounded
+	batches keeps provider spend paced; the knobs live in
+	`settings.tasks.file_maintenance`.
 
 	args:
 		batch_size: override the configured batch size for this run.

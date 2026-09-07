@@ -30,13 +30,8 @@ from .utils.tokens import CHARS_PER_TOKEN, estimate_tokens
 type Message = UserMessage | AssistantMessage | ToolMessage | SystemMessage
 
 
-# interim native-media token heuristics. these intentionally avoid counting
-# base64 length (a 780 KB image is ~1.06M base64 chars, which the text
-# heuristic turns into ~266K bogus tokens). a follow-up measurement module
-# will replace these rough constants with empirically derived numbers.
-#
-# images: vision models cost roughly a fixed band of tokens per image,
-# largely independent of file size, so use a flat estimate.
+# native-media token heuristics that deliberately avoid counting base64
+# length; vision models cost a roughly fixed band per image.
 _IMAGE_TOKENS = 1024
 # time-based and document media scale with payload size; these divisors map
 # raw decoded bytes to an approximate token cost per category.

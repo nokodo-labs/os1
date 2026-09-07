@@ -99,11 +99,8 @@ def _set_rst_on_close(fileno: int) -> None:
 
 
 if sys.platform == "win32":
-	# the suite opens and closes short-lived Postgres/redis connections per
-	# test; on Windows each graceful close parks its ephemeral port in
-	# TIME_WAIT (~2 min), and repeated full runs exhaust the 16k-port dynamic
-	# range (WinError 10055). RST-on-close frees the port immediately. tests
-	# only, throwaway connections only, so the dropped FIN handshake is safe.
+	# on Windows each graceful close parks its ephemeral port in TIME_WAIT and
+	# full runs exhaust the dynamic range (WinError 10055); RST frees it at once.
 
 	@event.listens_for(Engine, "connect")
 	def _pg_rst_on_close(dbapi_connection: Any, connection_record: object) -> None:
@@ -157,9 +154,8 @@ if sys.platform == "win32":
 	def _socketpair_rst(
 		*args: Any, **kwargs: Any
 	) -> tuple[socket.socket, socket.socket]:
-		# windows emulates socketpair() over loopback TCP, and every asyncio
-		# event loop builds its self-pipe from one; retry absorbs transient
-		# AFD buffer exhaustion (10055) under connect bursts.
+		# windows emulates socketpair() over loopback TCP; the retry absorbs
+		# transient AFD buffer exhaustion (10055) under connect bursts.
 		for attempt in range(_CONNECT_RETRIES):
 			try:
 				pair = _orig_socketpair(*args, **kwargs)
@@ -217,10 +213,8 @@ def _api_test_env_defaults() -> Generator[None]:
 	monkeypatch = pytest.MonkeyPatch()
 	if not os.getenv("OPENAI_API_KEY"):
 		monkeypatch.setenv("OPENAI_API_KEY", "test")
-	# unconditional: backend/.env and dev shells carry a live qdrant URL, and a
-	# leaked live URL makes every adapter rebuild dial a real gRPC channel pool
-	# (socket churn + isolation leak). e2e tests that want a vectorstore pin
-	# :memory: themselves.
+	# unconditional: a live qdrant URL leaking in from .env makes every adapter
+	# rebuild dial a real gRPC channel pool. e2e tests pin :memory: themselves.
 	monkeypatch.setenv("NOKODO__ASSETS__VECTOR_DATABASE__QDRANT__URL", ":memory:")
 	monkeypatch.setenv("NOKODO__SECURITY__AUTO_SIGNUP_ROLE_IDS", "[]")
 
@@ -1011,22 +1005,13 @@ async def _create_async_engine_with_fallback(url: URL) -> AsyncEngine:
 	candidates = _deduplicate_urls(candidates)
 	errors: list[Exception] = []
 	for candidate in candidates:
-		# a small bounded pool, not NullPool. NullPool opens a fresh socket per
-		# operation; across the whole suite that churn exhausts the Windows
-		# ephemeral TCP port range (connections linger in TIME_WAIT) and raises
-		# "Address already in use". a QueuePool reuses connections so socket
-		# churn stays low, while a low pool_size + max_overflow caps each
-		# worker's connections so workers * pool-total stays under the server's
-		# max_connections at any -n concurrency. the import fan-out is bounded
-		# separately (see _api_test_cap_import_write_concurrency) so a single
-		# test never needs more than this pool provides.
+		# a small bounded pool, not NullPool: NullPool's socket churn exhausts the
+		# Windows ephemeral port range, and the cap bounds workers * pool total.
 		engine = create_async_engine(
 			candidate.render_as_string(hide_password=False),
 			echo=False,
-			# overflow connections are torn down on check-in, so a small
-			# pool_size with overflow churns a socket per burst; a fixed-size
-			# pool with no overflow keeps the same 7-connection cap while
-			# reusing every connection for the engine's lifetime.
+			# overflow connections are torn down on check-in; a fixed-size pool with
+			# no overflow keeps the cap while reusing connections for the engine's life.
 			pool_size=7,
 			max_overflow=0,
 			pool_timeout=30,

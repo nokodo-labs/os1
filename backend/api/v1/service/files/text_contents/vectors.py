@@ -302,10 +302,8 @@ async def vectorize_file_content(
 	acl_metadata = (
 		await fetch_bulk_acl_metadata([str(file.id)], ResourceType.FILE, session)
 	)[str(file.id)]
-	# TODO(contextualized-embeddings): route on embedding_token_capacity().
-	# unlimited capacity (voyage-context-4) embeds the file's whole chunk
-	# list as one document call; finite capacity groups chunks into
-	# capacity-sized calls. replaces the filename/description prefix here.
+	# TODO(contextualized-embeddings): route on embedding_token_capacity() -
+	# unlimited capacity embeds the whole chunk list as one document call.
 	texts = [_content_embedding_text(file, chunk) for chunk in chunks]
 	embeddings = await embed_texts(texts, session, input_type="document")
 	vector_chunks = [

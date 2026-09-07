@@ -24,9 +24,8 @@ class BaseGoogleAdapter(BaseClientAdapter[AsyncClient]):
 	)
 
 	def _get_client(self) -> AsyncClient:
-		# google-genai doesn't accept a generic request timeout in the same
-		# way openai/anthropic do. keep BaseApiAdapter.timeout for consistency,
-		# but don't pass it to the client.
+		# google-genai takes no generic request timeout, so BaseApiAdapter.timeout
+		# is kept for consistency but never passed to the client.
 
 		if self.use_vertex_ai:
 			if self.project is None or self.project.strip() == "":

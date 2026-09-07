@@ -106,9 +106,8 @@ class StaleBy(StrEnum):
 
 logger = logging.getLogger(__name__)
 
-# acl fields live on chunks but are owned by acl sync, not the resource
-# content; they are excluded from the vectorization fingerprint so an acl
-# change never reads as a stale vector.
+# acl fields live on chunks but are owned by acl sync, so they are
+# excluded from the fingerprint and never read as a stale vector.
 _FINGERPRINT_EXCLUDED_METADATA = frozenset(
 	{
 		"allowed_user_ids",
@@ -538,10 +537,8 @@ async def vectorize_resources[T](
 		plans.append((resource, rid, resource_fingerprint(spec, resource), pieces))
 	if not plans:
 		return 0
-	# TODO(contextualized-embeddings): route on embedding_token_capacity().
-	# unlimited capacity (voyage-context-4) embeds each resource's ordered
-	# pieces as ONE document call; finite capacity groups pieces into
-	# capacity-sized calls instead of flattening into independent texts.
+	# TODO(contextualized-embeddings): route on embedding_token_capacity() -
+	# unlimited capacity embeds each resource's ordered pieces as ONE call.
 	flat_texts = [piece.embed_text for _, _, _, pieces in plans for piece in pieces]
 	embeddings = await embed_texts(flat_texts, session, input_type="document")
 	chunks: list[Chunk] = []
@@ -568,10 +565,8 @@ async def vectorize_resources[T](
 	return len(plans)
 
 
-# ACL sync
-# DB -> qdrant metadata sync for resource types that use per-chunk ACL fields.
-# ACL principal resolution lives in authorization.metadata; this layer only
-# patches vectorstore payloads.
+# ACL sync: DB -> qdrant metadata for types with per-chunk ACL fields.
+# principal resolution lives in authorization.metadata.
 
 
 async def sync_resource_refs_vector_acl(

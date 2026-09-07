@@ -23,10 +23,8 @@ from nokodo_ai.types.json import JSONObject
 from nokodo_ai.utils.typeid import TypeID
 
 
-# -- plugin id format --
-# canonical MCP plugin id format, owned by the schema layer. the service-layer
-# `ids` module re-exports these so serialization and tool resolution share one
-# source of truth and clients never reconstruct ids by hand.
+# canonical MCP plugin id format, owned by the schema layer. the
+# service-layer `ids` module re-exports it so clients never rebuild ids.
 MCP_TOOL_PREFIX = "mcp:tool:"
 MCP_SERVER_TOOLS_PREFIX = "mcp:server:"
 MCP_SERVER_TOOLS_SUFFIX = ":tools"
@@ -42,10 +40,8 @@ def mcp_server_tools_plugin_id(server_id: str) -> str:
 	return f"{MCP_SERVER_TOOLS_PREFIX}{server_id}{MCP_SERVER_TOOLS_SUFFIX}"
 
 
-# -- tool result metadata keys --
-# stamped onto MCP tool-call results so clients can attribute an inline tool
-# call to its MCP server (server name + clean tool name) without reconstructing
-# anything from the normalized tool name. the frontend mirrors these keys.
+# stamped onto MCP tool-call results so clients can attribute a tool call
+# to its server without parsing the normalized name. the frontend mirrors it.
 MCP_RESULT_SERVER_NAME_KEY = "mcp_server_name"
 MCP_RESULT_TOOL_NAME_KEY = "mcp_tool_name"
 

@@ -40,8 +40,8 @@ def test_models_can_be_imported_before_schemas() -> None:
 def test_runs_invocation_imports_cold() -> None:
 	"""``runs.invocation`` must reach threads and run siblings at module scope.
 
-	it sits above threads and run internals, so a cycle here is the signal that the layering is
-	wrong. a lazy import inside a function would hide exactly that.
+	it sits above threads and run internals, so a cycle here is the signal that
+	the layering is wrong. a lazy import inside a function would hide exactly that.
 	"""
 	result = _import_cold("import api.v1.service.runs.invocation")
 	assert result.returncode == 0, result.stderr

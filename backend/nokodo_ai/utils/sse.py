@@ -14,9 +14,8 @@ from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 
-# SSE comment frame emitted when the source is idle. comment lines (leading
-# ':') are ignored by every spec-compliant client, so this only keeps the
-# connection warm without reaching application code.
+# SSE comment frame for an idle source: leading-':' lines are ignored by
+# spec-compliant clients, so it only keeps the connection warm.
 _SSE_PING = b": ping\n\n"
 
 
@@ -45,11 +44,6 @@ def sse_encode(
 	else:
 		payload = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
 	return f"event: {event}\ndata: {payload}\n\n".encode()
-
-
-def sse_error(message: str) -> bytes:
-	"""shorthand for encoding an error event."""
-	return sse_encode(event="error", data={"message": message})
 
 
 def sse_done() -> bytes:

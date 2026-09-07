@@ -296,8 +296,7 @@ def prepare_generated_message(
 	backend-owned stamps into the private half. real metadata rides through.
 	"""
 	# unfold first: the folded keys are `_`-prefixed, so filtering after the
-	# split would miss all but `attachments` and let identity mirrors and
-	# column projections reach the private half of the column.
+	# split would let identity mirrors reach the private half of the column.
 	persisted = to_persisted_metadata(sdk_msg.metadata)
 	draft = MessageDraft.from_sdk_message(
 		sdk_msg.model_copy(update={"metadata": persisted}),

@@ -59,9 +59,8 @@ class SummaryRangeStaleError(RuntimeError):
 	"""raised when an async summary target no longer matches the active branch."""
 
 
-# max chars to send to the condensation model. computed from
-# DEFAULT_CONTEXT_WINDOW (128K tokens) at ~4 chars/token, leaving
-# 30% headroom for the system prompt and response.
+# max chars for the condensation model: DEFAULT_CONTEXT_WINDOW at ~4
+# chars/token, leaving 30% headroom for the system prompt and response.
 _MAX_CONDENSATION_INPUT_CHARS = int(DEFAULT_CONTEXT_WINDOW * 4 * 0.70)
 
 _SUMMARY_POSITIONAL_PREFIX = (

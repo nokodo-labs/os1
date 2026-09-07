@@ -22,10 +22,8 @@ class VoyageAIEmbeddingsAdapter(BaseVoyageAIAdapter, BaseEmbeddingAdapter):
 			kwargs["input_type"] = input_type
 
 		result = await self._client.embed(texts, model=model, **kwargs)
-		# voyageai exposes embeddings as list[list[float]] | list[list[int]]
-		# because quantized output_dtype modes return ints. we never request
-		# quantization, so the values are always floats. explicit float()
-		# call satisfies the type checker without a cast.
+		# voyageai types embeddings as float or int lists because of quantized
+		# modes; we never quantize, so float() satisfies the checker without cast.
 		return [[float(v) for v in e] for e in result.embeddings]
 
 	def count_tokens(self, texts: list[str], model: str) -> list[int]:

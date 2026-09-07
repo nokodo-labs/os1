@@ -295,9 +295,8 @@ async def search_stream(
 			seen.add(key)
 			deduped.append(item)
 
-	# TODO: reranking hook — when a reranker is available in the SDK, call it
-	# here on `deduped[:limit]` before yielding. reranking normalises scores
-	# across resource types and makes cross-type ordering meaningful.
+	# TODO: reranking hook - call a reranker here on `deduped[:limit]` before
+	# yielding, to normalise scores across resource types.
 
 	for item in deduped[:limit]:
 		yield item
@@ -574,9 +573,8 @@ async def _stale_acl_resource_refs(
 			chunks_by_ref.setdefault(resource_ref, []).append(chunk)
 	if not chunks_by_ref:
 		return []
-	# the stamp aggregates the resource's own revision with its ancestors', so a
-	# rule change on any ancestor makes the expected value differ and repairs
-	# every descendant chunk without the ACL write having walked the subtree.
+	# the stamp folds the resource's revision with every ancestor's identity
+	# and revision, so any ancestor change repairs descendants with no walk.
 	ids_by_type: dict[ResourceType, list[str]] = {}
 	for resource_type, resource_id in chunks_by_ref:
 		ids_by_type.setdefault(resource_type, []).append(str(resource_id))

@@ -371,9 +371,8 @@ async def _hybrid_search_reminders(
 		)
 	)
 	text_query = query_text if need_sparse else None
-	# reminder access is inherited from the parent list (not on the chunk), so
-	# the vector layer only narrows by resource type + structured filters; the
-	# SQL leg below is the authoritative ACL gate.
+	# reminder access is inherited from the parent list, not stamped on the
+	# chunk, so the SQL leg below is the authoritative ACL gate.
 	query_filter = with_conditions(
 		resource_types_filter([VectorChunkResourceType.REMINDER]),
 		_reminder_search_conditions(filters),

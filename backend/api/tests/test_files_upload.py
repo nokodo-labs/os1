@@ -20,18 +20,14 @@ from api.v1.service.files import delete_content, read_content, store_file
 from nokodo_ai.utils.typeid import new_typeid
 
 
-# ---------------------------------------------------------------------------
 # helpers
-# ---------------------------------------------------------------------------
 
 
 def _sha256(data: bytes) -> str:
 	return hashlib.sha256(data).hexdigest()
 
 
-# ---------------------------------------------------------------------------
 # upload
-# ---------------------------------------------------------------------------
 
 
 class TestUploadFile:
@@ -122,9 +118,7 @@ class TestUploadFile:
 		assert body["private"]["checksum_sha256"] == _sha256(payload)
 
 
-# ---------------------------------------------------------------------------
 # download / content
-# ---------------------------------------------------------------------------
 
 
 class TestFileContent:
@@ -161,9 +155,7 @@ class TestFileContent:
 		assert resp.status_code == 401
 
 
-# ---------------------------------------------------------------------------
 # url endpoint
-# ---------------------------------------------------------------------------
 
 
 class TestFileUrl:
@@ -194,9 +186,7 @@ class TestFileUrl:
 		assert resp.status_code in {403, 404}
 
 
-# ---------------------------------------------------------------------------
 # CRUD - list, get, update, delete
-# ---------------------------------------------------------------------------
 
 
 class TestFileCRUD:
@@ -274,9 +264,7 @@ class TestFileCRUD:
 		assert resp.status_code in {403, 404}
 
 
-# ---------------------------------------------------------------------------
 # upload then download round-trip
-# ---------------------------------------------------------------------------
 
 
 class TestFileRoundTrip:
@@ -337,9 +325,7 @@ class TestFileRoundTrip:
 		assert dl_resp.content == b""
 
 
-# ---------------------------------------------------------------------------
 # metadata-only create (existing endpoint)
-# ---------------------------------------------------------------------------
 
 
 class TestMetadataCreateFile:
@@ -458,9 +444,7 @@ class TestMetadataCreateFile:
 		assert resp.status_code == 403
 
 
-# ---------------------------------------------------------------------------
 # service-level: store_file, read_content, delete_content
-# ---------------------------------------------------------------------------
 
 
 async def _collect(stream: AsyncIterator[bytes]) -> bytes:

@@ -509,9 +509,8 @@ class QdrantVectorstoreAdapter(BaseQdrantAdapter, BaseVectorstoreAdapter):
 					lt=_to_number_bound(match.lt),
 				),
 			)
-		# FieldMatch - MatchValue only accepts str | int | bool, not float.
-		# for integral floats, coerce to int. for non-integral floats, use a
-		# Range condition (gte=lte) to do exact numeric matching.
+		# MatchValue takes str | int | bool but not float: integral floats coerce
+		# to int, non-integral ones use a Range condition (gte=lte) for exactness.
 		if isinstance(match.value, float):
 			if match.value == int(match.value):
 				return FieldCondition(

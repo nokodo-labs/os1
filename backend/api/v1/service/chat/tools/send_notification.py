@@ -101,10 +101,8 @@ class SendNotificationTool(Tool):
 		# if any DB operation fails, only this session is affected.
 		try:
 			async with async_session_local() as tool_session:
-				# every argument here is model-generated, and a model reads
-				# untrusted text (search results, attachments, other people's
-				# messages), so the recipient set is always the chat's - who
-				# started the run does not widen it.
+				# every argument is model-generated from untrusted text, so the
+				# recipient set is always the chat's, not whoever started the run.
 				accessible_user_ids: list[TypeID] | None = (
 					await list_resource_access_user_ids_for_resources(
 						[(ResourceType.THREAD, ctx.thread_id)], tool_session
@@ -139,7 +137,7 @@ class SendNotificationTool(Tool):
 					return self.error("no recipients", __tool_call_context__)
 
 				tool_event = Event(
-					id=TypeID(new_typeid("event")),
+					id=new_typeid("event"),
 					scope=EventScope.THREAD if thread_id else EventScope.USER,
 					scope_id=thread_id or ctx.user_id,
 					type=EventType.TOOL_NOTIFICATION,

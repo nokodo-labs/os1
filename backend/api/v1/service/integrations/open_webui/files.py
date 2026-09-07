@@ -519,13 +519,8 @@ async def _append_file_parts(
 	summary: ImportSummary,
 ) -> None:
 	"""import a message's file entries, healing and deduplicating its content parts."""
-	# rebuild content keeping one slot per stable identity (Open WebUI file id,
-	# byte checksum, then our file id). older buggy imports could append several
-	# parts for one logical file, so collapse those down first; then a re-import
-	# heals the surviving slot in place - pointing it at the canonical row -
-	# instead of leaving a stale reference and appending yet another duplicate.
-	# _import_file_entry still runs for every entry so its heal/collapse path
-	# repairs the File rows behind those parts.
+	# keep one slot per stable identity (Open WebUI file id, byte checksum,
+	# then our file id) so a re-import heals in place instead of duplicating.
 	original = list(message.content or [])
 	content: list[Any] = []
 	index_by_key: dict[str, int] = {}
@@ -569,9 +564,8 @@ async def _append_file_parts(
 
 def _content_part_dedup_key(content_part: Any) -> str | None:
 	"""build a stable identity key for a message content part, or None when absent."""
-	# priority orders identity by stability across re-imports: the Open WebUI id
-	# and byte checksum survive buggy imports that minted several local rows,
-	# while our local file id is per-row and so least stable for healing.
+	# ordered by stability across re-imports: the Open WebUI id and checksum
+	# survive imports that minted several local rows; our file id is per-row.
 	if not isinstance(content_part, dict):
 		return None
 	metadata = content_part.get("metadata")

@@ -189,9 +189,6 @@ async def test_init_db_masks_url_credentials(
 
 	# Verify the log message contains the masked URL
 	assert "initializing database" in caplog.text
-	# The extra dict is not directly in caplog.text usually,
-	# but the formatter might put it there.
-	# However, we can check the records.
 	assert len(caplog.records) > 0
 	record = caplog.records[0]
 	assert record.message == "initializing database"

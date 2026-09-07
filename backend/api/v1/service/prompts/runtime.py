@@ -27,10 +27,8 @@ if TYPE_CHECKING:
 	from api.schemas.runs import ClientContext
 
 
-# sentinel markers for filter injection points.
-# jinja2 renders {{ variable_name }} into these sentinels at template time.
-# filters find-and-replace the sentinel with actual content.
-# if the sentinel is absent from the rendered prompt, the filter is a no-op.
+# filter injection points: jinja2 renders {{ variable_name }} into these
+# and filters replace them; an absent sentinel makes the filter a no-op.
 SENTINEL_USER_MEMORIES = "<<FILTER:user_memories>>"
 SENTINEL_CHAT_CONTEXT = "<<FILTER:chat_context>>"
 SENTINEL_CHAT_WINDOW_INFO = "<<FILTER:chat_window_info>>"

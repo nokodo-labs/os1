@@ -61,9 +61,8 @@ async def update(
 	process to do the same, then drops derived state belonging to features the
 	patch turned off.
 	"""
-	# exclude_unset=True: only include fields present in the request body.
-	# this lets callers explicitly send null to clear a nullable field,
-	# while omitted fields stay default (None) and are excluded.
+	# exclude_unset=True so callers can send null to clear a nullable field
+	# while omitted fields stay untouched.
 	raw_updates = patch.model_dump(exclude_unset=True)
 	affected_access_types: list[ResourceType] = []
 	patched_default_permissions = settings.default_permissions

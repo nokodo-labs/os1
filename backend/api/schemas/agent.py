@@ -40,9 +40,8 @@ class AgentListFilters(ResourceAccessListFilters):
 	q: str | None = Field(default=None, min_length=1, max_length=500)
 
 
-# typed config sub-models
-# storage stays as JSONB so the admin console can persist arbitrary
-# (unknown keys round-trip via ``extra``).
+# typed config sub-models. storage stays JSONB so unknown keys round-trip
+# via ``extra``.
 
 
 class SteeringFeature(BaseModel):

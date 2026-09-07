@@ -23,9 +23,8 @@ MODEL_ID_KEY = "_model_id"
 E2B_SANDBOX_ID_KEY = "_e2b_sandbox_id"
 
 
-# keys the ORM→SDK fold injects on top of the persisted metadata column
-# (identity mirrors + citations/attachments column projections); the SDK→ORM
-# unfold strips exactly this set so they never double-write into the column.
+# keys the ORM -> SDK fold injects on top of the persisted metadata column;
+# the unfold strips exactly this set so they never double-write into it.
 ROUND_TRIP_IDENTITY_KEYS: frozenset[str] = frozenset(
 	{MESSAGE_ID_KEY, CREATED_AT_KEY, SENDER_USER_ID_KEY}
 )

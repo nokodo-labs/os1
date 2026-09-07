@@ -9,14 +9,12 @@ from math import ceil
 
 # -- constants --
 
-# approximate tokens-per-char ratio. english text averages ~4 chars per
-# token across most LLM tokenizers (BPE). multiplied by a safety margin
-# to avoid underestimates on structured/code content.
+# approximate tokens-per-char ratio: english text averages ~4 chars per
+# token across most BPE tokenizers.
 CHARS_PER_TOKEN: float = 4.0
 
-# safety margin applied to heuristic estimates. compensates for the
-# chars/4 heuristic undercounting on non-english, structured, or
-# code-heavy content.
+# safety margin for the chars/4 heuristic, which undercounts on
+# non-english, structured, or code-heavy content.
 SAFETY_MARGIN: float = 1.2
 
 # fallback context window when model metadata is unavailable.
