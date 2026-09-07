@@ -3,6 +3,7 @@
 from api.database.main import (
 	async_session_local,
 	get_db,
+	has_uncommitted_writes,
 	init_db,
 	safe_rollback,
 	session_scope,
@@ -13,6 +14,7 @@ from api.database.search import build_cursor_page, decode_cursor, encode_cursor
 __all__ = [
 	"async_session_local",
 	"get_db",
+	"has_uncommitted_writes",
 	"init_db",
 	"session_scope",
 	"safe_rollback",

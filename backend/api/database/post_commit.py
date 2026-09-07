@@ -2,8 +2,10 @@
 
 enqueue only work whose loss is repaired from durable state, such as committed
 event rows, cache TTLs, or staleness scans. permanently lossy work does not
-belong in this queue. actions run on a fresh read-only session and cannot enqueue
-more actions.
+belong in this queue. actions run on a fresh session that is READ ONLY at the
+database (`SET TRANSACTION READ ONLY`, so a write raises where it happens
+rather than being silently rolled back afterwards) and cannot enqueue more
+actions.
 
 an action belongs to the commit that produced it, not to the request that
 enqueued it: the session's ``after_commit`` event promotes queued actions to a
@@ -29,7 +31,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from weakref import finalize
 
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -101,7 +103,20 @@ def enqueue_post_commit_action(
 	session: AsyncSession,
 	action: PostCommitAction,
 ) -> None:
-	"""enqueue an async action for the session's next successful commit."""
+	"""enqueue an async action for the session's next successful commit.
+
+	the action receives a FRESH, READ-ONLY session - not the one passed here,
+	which is already closing. the read-only part is enforced with
+	``SET TRANSACTION READ ONLY``, so an action that tries to write raises at
+	the statement rather than having its work silently rolled back afterwards.
+
+	it also may not enqueue further actions: draining is not re-entrant, and a
+	queue that could grow while being drained would have no fixed point.
+
+	enqueue only work whose loss is REPAIRABLE from durable state - a cache
+	invalidation, a fanout backed by a committed event row, a staleness scan.
+	permanently lossy work does not belong here.
+	"""
 	if session.info.get(_DRAINING_KEY) is True:
 		raise RuntimeError("post-commit actions cannot enqueue more actions")
 	queue = _queue(session, True)
@@ -129,6 +144,9 @@ async def run_post_commit_actions(session: AsyncSession) -> None:
 		db.info[_DRAINING_KEY] = True
 		for action in actions:
 			try:
+				# the session is rolled back after every action, so a write here would
+				# be silently discarded; failing at the write surfaces it instead.
+				await db.execute(text("SET TRANSACTION READ ONLY"))
 				await action(db)
 			except Exception as exc:
 				errors.append(exc)

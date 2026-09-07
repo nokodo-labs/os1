@@ -76,9 +76,8 @@ class RedisClient:
 			health_check_interval=30,
 			client_name=settings.cache.redis.client_name,
 		)
-		# separate pool for pub/sub. blocking listen() reads use redis-py's
-		# math.inf opt-in to block indefinitely regardless of socket_timeout,
-		# so the default read timeout only bounds the subscribe handshake.
+		# separate pool for pub/sub: blocking listen() reads opt into redis-py's
+		# math.inf, so the read timeout only bounds the subscribe handshake.
 		pubsub_conn = redis_async.from_url(
 			target_url,
 			max_connections=max_connections,
@@ -86,11 +85,8 @@ class RedisClient:
 			decode_responses=False,
 			client_name=settings.cache.redis.client_name,
 		)
-		# TODO(observability): once OpenTelemetry is wired up, add
-		# opentelemetry-instrumentation-redis to instrument every op
-		# with spans + metrics.
-		# redis-py types ``ping`` as a union of sync/async to share the
-		# class hierarchy; the async client always returns an awaitable.
+		# TODO(observability): instrument every redis op with spans + metrics.
+		# redis-py types ``ping`` as a sync/async union; async returns an awaitable.
 		await cast("Awaitable[bool]", conn.ping())
 		self._conn = conn
 		self._pubsub_conn = pubsub_conn
@@ -146,3 +142,46 @@ class RedisClient:
 
 
 redis_client = RedisClient()
+
+#: eviction policies this instance may run under: the accessible-user
+#: version counters carry NO TTL, and an evicted counter restarts at 0.
+_ALLOWED_MAXMEMORY_POLICIES: Final[frozenset[str]] = frozenset(
+	{
+		"noeviction",
+		"volatile-lru",
+		"volatile-lfu",
+		"volatile-random",
+		"volatile-ttl",
+	}
+)
+
+
+async def require_safe_eviction_policy() -> None:
+	"""refuse to boot against an instance that could evict version counters.
+
+	we own this instance, so we require it to be configured correctly rather
+	than documenting the requirement and hoping. an unreadable config is a
+	refusal too: an unverified policy is not a safe one.
+	"""
+	try:
+		config = await cast(
+			"Awaitable[dict[str, str]]",
+			redis_client.get().config_get("maxmemory-policy"),
+		)
+	except Exception as exc:
+		raise RuntimeError(
+			"could not read the redis maxmemory-policy; the accessible-user cache "
+			"requires a verified non-evicting policy "
+			f"(one of: {', '.join(sorted(_ALLOWED_MAXMEMORY_POLICIES))})"
+		) from exc
+	raw_policy = config.get("maxmemory-policy")
+	policy = (
+		raw_policy.decode() if isinstance(raw_policy, bytes) else str(raw_policy or "")
+	).lower()
+	if policy not in _ALLOWED_MAXMEMORY_POLICIES:
+		raise RuntimeError(
+			f"redis maxmemory-policy is {policy!r}; the accessible-user cache stores "
+			"TTL-less version counters whose eviction would resurrect invalidated "
+			"entries. configure the instance with one of: "
+			f"{', '.join(sorted(_ALLOWED_MAXMEMORY_POLICIES))}"
+		)

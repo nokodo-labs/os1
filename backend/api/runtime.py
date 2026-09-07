@@ -14,7 +14,12 @@ from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from inspect import isawaitable
 
-from api.redis import on_invalidation, redis_client, start_invalidation_subscriber
+from api.redis import (
+	on_invalidation,
+	redis_client,
+	require_safe_eviction_policy,
+	start_invalidation_subscriber,
+)
 from api.settings import settings
 from api.storage import close_all as close_storage
 from api.storage import configure_storage_backends
@@ -56,6 +61,9 @@ async def start_process_runtime() -> None:
 	"""open the per-process dependencies shared by API and worker processes."""
 	global _invalidation_task
 	await redis_client.connect()
+	# before anything reads or writes the cache: an instance that may evict the
+	# accessible-user version counters cannot serve an authorization gate.
+	await require_safe_eviction_policy()
 	await configure_storage_backends()
 	if _invalidation_task is None or _invalidation_task.done():
 		_invalidation_task = await start_invalidation_subscriber()

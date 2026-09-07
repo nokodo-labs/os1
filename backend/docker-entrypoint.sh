@@ -15,7 +15,15 @@
 set -e
 
 if [ "${RUN_MIGRATIONS:-0}" = "1" ]; then
-	alembic -c api/migrations/alembic.ini upgrade head
+	# mirror BootSettings.coerce_bool's truthy set and init_db's target
+	# selection. this is the primary migration runner now, so disagreeing with
+	# init_db about BRANCHING_MIGRATIONS would take the whole stack down on a
+	# setting meant to make deployment more permissive.
+	migration_target=head
+	case "$(printf '%s' "${BRANCHING_MIGRATIONS:-}" | tr '[:upper:]' '[:lower:]')" in
+	1 | true | yes | on) migration_target=heads ;;
+	esac
+	alembic -c api/migrations/alembic.ini upgrade "${migration_target}"
 fi
 
 exec "$@"

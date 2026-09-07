@@ -32,7 +32,11 @@ from api.redis.cache_invalidation import (
 	publish_invalidation,
 	start_invalidation_subscriber,
 )
-from api.redis.client import RedisClient, redis_client
+from api.redis.client import (
+	RedisClient,
+	redis_client,
+	require_safe_eviction_policy,
+)
 from api.redis.pubsub import PubSubChannel, make_run_channel, make_task_channel
 from api.redis.sse_bus import SseFrameBus
 
@@ -48,5 +52,6 @@ __all__ = [
 	"on_invalidation",
 	"publish_invalidation",
 	"redis_client",
+	"require_safe_eviction_policy",
 	"start_invalidation_subscriber",
 ]

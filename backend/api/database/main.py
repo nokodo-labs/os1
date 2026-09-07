@@ -41,6 +41,42 @@ class AppSession(Session):
 register_post_commit_promotion(AppSession)
 
 
+_FLUSHED_KEY = "nokodo-ai:session:flushed"
+
+
+@event.listens_for(AppSession, "after_flush")
+def _mark_session_flushed(session: Session, flush_context: Any) -> None:
+	_ = flush_context
+	session.info[_FLUSHED_KEY] = True
+
+
+@event.listens_for(AppSession, "after_commit")
+@event.listens_for(AppSession, "after_rollback")
+@event.listens_for(AppSession, "after_soft_rollback")
+def _clear_session_flushed(session: Session, *args: Any) -> None:
+	_ = args
+	session.info.pop(_FLUSHED_KEY, None)
+
+
+def has_uncommitted_writes(session: AsyncSession) -> bool:
+	"""whether this session holds writes no other transaction can see yet.
+
+	both halves matter. the identity map covers work not yet flushed; the
+	flushed flag covers work already sent to the database inside the open
+	transaction, which the identity map no longer reports and which a rollback
+	will still undo. callers that PUBLISH a derived answer - to a cache, a
+	search index, another process - must not do so from a session that returns
+	True here, because the rows the answer was computed from may never land.
+	"""
+	sync_session = session.sync_session
+	return bool(
+		sync_session.new
+		or sync_session.dirty
+		or sync_session.deleted
+		or sync_session.info.get(_FLUSHED_KEY)
+	)
+
+
 class AppAsyncSession(AsyncSession):
 	"""application session that always drains its own post-commit actions.
 
@@ -62,7 +98,7 @@ class AppAsyncSession(AsyncSession):
 		await super().close()
 
 
-# Create async engine
+# create async engine
 engine = create_async_engine(
 	boot_settings.DATABASE_URL,
 	echo=boot_settings.DEBUG,
@@ -74,9 +110,8 @@ engine = create_async_engine(
 	pool_recycle=boot_settings.DB_POOL_RECYCLE,
 )
 
-# Async session factory - accessed via async_session_local() so that test
-# fixtures can swap it at runtime and all consumers (even those that did
-# ``from api.database import async_session_local``) pick up the change.
+# accessed via async_session_local() so tests can swap the factory at
+# runtime and consumers that imported the name still pick up the change.
 _async_session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
 	engine,
 	class_=AppAsyncSession,
