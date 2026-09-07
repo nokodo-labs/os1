@@ -7,6 +7,7 @@ by its full path.
 
 from api.v1.service.authorization.cache import (
 	enqueue_accessible_users_invalidation_for_subject,
+	enqueue_accessible_users_version_drop,
 	invalidate_accessible_users_for_refs,
 	invalidate_accessible_users_for_resource,
 	invalidate_accessible_users_for_resource_types,
@@ -23,7 +24,6 @@ from api.v1.service.authorization.changes import (
 	AccessChangeSnapshot,
 	PreparedAccessChange,
 	ResolvedAccessShape,
-	ResourceRef,
 	build_access_change_events,
 	capture_access_change,
 	current_access_revision,
@@ -76,6 +76,9 @@ from api.v1.service.authorization.resolve import (
 	require_self_or_permission,
 	require_thread_access,
 )
+from api.v1.service.authorization.types import (
+	ResourceRef,
+)
 
 
 __all__ = [
@@ -98,6 +101,7 @@ __all__ = [
 	"VECTOR_CHUNK_PARENT_RESOURCE_TYPES",
 	"VECTOR_CHUNK_ACCESS_RESOURCE_TYPES",
 	"enqueue_accessible_users_invalidation_for_subject",
+	"enqueue_accessible_users_version_drop",
 	"allowed_levels",
 	"apply_metadata_write",
 	"apply_resource_access_list_filters",

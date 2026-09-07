@@ -1,6 +1,16 @@
-"""SQL predicates for resource authorization."""
+"""SQL predicates for resource authorization.
+
+recursion here is bounded by DEPTH ALONE - ``inherited_resource_access_predicate``
+returns None at ``MAX_INHERITANCE_DEPTH`` and there is no cycle guard. that is
+sound because a predicate is a pure tree: unlike the two resolvers, nothing is
+memoised across depths in a way a repeat could truncate, and the depth bound
+terminates the build. it does mean a cycle in the transitive link graph would
+build an exhaustive fan-out rather than break, which is what
+``test_the_depth_bound_is_slack_not_a_live_limit`` exists to keep unreachable.
+"""
 
 from collections.abc import Callable
+from typing import NamedTuple
 
 from sqlalchemy import and_, exists, false, not_, or_, select, true
 from sqlalchemy.sql import ColumnElement, Select
@@ -31,10 +41,31 @@ from api.v1.service.authorization.inheritance import (
 from api.v1.service.authorization.types import AccessSubject
 
 
-type PrincipalPredicateMemo = dict[
-	tuple[bool, bool, ResourceType, AccessLevel, AccessTraversalState],
-	ColumnElement[bool],
-]
+class PredicateMemoKey(NamedTuple):
+	"""memo key for one built predicate.
+
+	a NamedTuple rather than a bare tuple because the two leading booleans are
+	independent flags whose order is not recoverable from a call site: swapping
+	them silently hands back the wrong cached predicate, with no error and no
+	visible symptom.
+
+	the key carries ``traversal``, which carries the depth. that is deliberate:
+	``inherited_resource_access_predicate`` truncates at
+	``MAX_INHERITANCE_DEPTH``, so a predicate built with 2 hops of budget left
+	is not the predicate a caller with 14 would get.
+	"""
+
+	#: resource-derived access only, excluding the operator override. matches
+	#: ``resource_derived_access_predicate`` vs ``resource_access_predicate``.
+	derived_only: bool
+	#: whether subjectless (link) rules are attached. inert above READER.
+	include_link_access: bool
+	resource_type: ResourceType
+	required_level: AccessLevel
+	traversal: AccessTraversalState
+
+
+type PrincipalPredicateMemo = dict[PredicateMemoKey, ColumnElement[bool]]
 
 
 def direct_resource_access_predicate(
@@ -57,10 +88,8 @@ def direct_resource_access_predicate(
 		group_match = AccessRule.subject_group_id.in_(subject.group_ids)
 		role_match = AccessRule.subject_role_id.in_(subject.role_ids)
 	else:
-		# a column subject needs correlated EXISTS: an id subquery re-enters
-		# the users table and matches every membership row instead. the
-		# correlation is explicit because auto-correlation reaches only the
-		# immediately enclosing select, and the subject can sit deeper.
+		# a column subject needs correlated EXISTS, explicit because
+		# auto-correlation reaches only the immediately enclosing select.
 		group_match = exists(
 			select(1)
 			.where(
@@ -191,13 +220,26 @@ def resource_access_predicate(
 	memo: PrincipalPredicateMemo | None = None,
 	include_link_access: bool = False,
 ) -> ColumnElement[bool]:
-	"""return a SQL predicate limiting resources to those accessible by subject."""
+	"""return a SQL predicate limiting resources to those accessible by subject.
+
+	``include_link_access`` is IGNORED above READER. a subjectless rule grants
+	READER and nothing more, so the arm is attached only at
+	``required_level == AccessLevel.READER``, and the inherited arms carry the
+	same requirement to parents. passing it at EDITOR or ADMIN cannot change
+	the result.
+	"""
 	if isinstance(subject, Principal):
 		if subject.is_resource_operator(resource_type):
 			return true()
 		if memo is None:
 			memo = {}
-		key = (False, include_link_access, resource_type, required_level, traversal)
+		key = PredicateMemoKey(
+			derived_only=False,
+			include_link_access=include_link_access,
+			resource_type=resource_type,
+			required_level=required_level,
+			traversal=traversal,
+		)
 		if key in memo:
 			return memo[key]
 		predicate = _direct_and_inherited_predicate(
@@ -238,11 +280,20 @@ def resource_derived_access_predicate(
 	the SQL twin of ``resolve_resource_access_user_ids``: owner, rules and
 	defaults on the resource plus whatever a parent confers, but never the
 	superuser/manage override - an operator is not a participant.
+
+	``include_link_access`` is IGNORED above READER, for the reason given on
+	``resource_access_predicate``.
 	"""
 	if isinstance(subject, Principal):
 		if memo is None:
 			memo = {}
-		key = (True, include_link_access, resource_type, required_level, traversal)
+		key = PredicateMemoKey(
+			derived_only=True,
+			include_link_access=include_link_access,
+			resource_type=resource_type,
+			required_level=required_level,
+			traversal=traversal,
+		)
 		if key in memo:
 			return memo[key]
 		predicate = _direct_and_inherited_predicate(

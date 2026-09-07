@@ -92,19 +92,15 @@ class AccessRuleEventChange(ORMModel):
 
 
 class AccessLevelResolveRequest(ForbidExtraModel):
-	"""request explicit effective access levels for a resource."""
+	"""request explicit effective access levels for a resource.
 
-	subject_user_ids: list[TypeID] = Field(default_factory=list, max_length=100)
-	link: bool = False
+	users only. link-share EXISTENCE is sharing configuration, and
+	configuration is read from the rule list under ``acl_list_visibility`` -
+	not from here, where any caller with any access at all would have learned
+	it. a link visitor learns their OWN level by resolving themselves.
+	"""
 
-	@model_validator(mode="after")
-	def _require_subject(self) -> AccessLevelResolveRequest:
-		if not self.subject_user_ids and not self.link:
-			raise PydanticCustomError(
-				"access_level_resolve_subject",
-				"at least one user or link must be requested",
-			)
-		return self
+	subject_user_ids: list[TypeID] = Field(min_length=1, max_length=100)
 
 
 class AccessLevelResolution(ORMModel):
@@ -112,6 +108,6 @@ class AccessLevelResolution(ORMModel):
 
 	resource_type: ResourceType
 	resource_id: TypeID
-	subject: Literal["user", "link"] = "user"
+	subject: Literal["user"] = "user"
 	user_id: TypeID | None = None
 	level: AccessLevel | None = None

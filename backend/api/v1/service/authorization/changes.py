@@ -13,7 +13,6 @@ from api.models.event_types import EventType
 from api.permissions import (
 	AccessLevel,
 	ResourceType,
-	access_level_index,
 )
 from api.v1.service.authorization.cache import (
 	resolve_accessible_user_ids,
@@ -33,12 +32,25 @@ type _ResolvedUserIds = dict[
 	tuple[ResourceType, TypeID, AccessLevel, bool, bool], frozenset[TypeID]
 ]
 type _ResolvingAccess = set[tuple[ResourceType, TypeID, AccessLevel, bool, bool]]
-type ResolvedAccessShape = tuple[
-	frozenset[TypeID],
-	frozenset[TypeID],
-	frozenset[TypeID],
-	frozenset[TypeID],
-]
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedAccessShape:
+	"""who could reach one resource, at each level, at one point in time.
+
+	NAMED, not a positional tuple indexed by an access level's rank. the two
+	members answer different questions and the second is not a level at all, so
+	an index arithmetic mistake - or a fourth `AccessLevel` member shifting the
+	ranks - would silently hand the writer set to a security-relevant event
+	audience with no visible symptom.
+	"""
+
+	#: accessible users per level, INCLUDING resource operators. the
+	#: access-event audience is drawn from here at ``acl_list_visibility``.
+	by_level: dict[AccessLevel, frozenset[TypeID]]
+	#: users with resource-derived EDITOR, EXCLUDING operators: the "is this
+	#: thread multi-writer" question, not an access level.
+	derived_writers: frozenset[TypeID]
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,12 +121,6 @@ def register_access_change_hook(hook: AccessChangeHook) -> None:
 		_hooks.append(hook)
 
 
-def unregister_access_change_hook(hook: AccessChangeHook) -> None:
-	"""remove one resolved-access event enrichment hook."""
-	if hook in _hooks:
-		_hooks.remove(hook)
-
-
 async def capture_access_change(
 	resource_refs: list[ResourceRef],
 	session: AsyncSession,
@@ -170,11 +176,27 @@ async def build_access_change_events(
 	actor_user_id: TypeID | None = None,
 	data_by_resource: dict[ResourceRef, dict[str, JSONValue]] | None = None,
 	after_access: dict[ResourceRef, ResolvedAccessShape] | None = None,
+	forced_resource_refs: set[ResourceRef] | None = None,
 ) -> list[PreparedAccessChange]:
-	"""build revisioned events for changed resolved-access facets."""
+	"""build revisioned events for changed resolved-access facets.
+
+	``data_by_resource`` supplies event PAYLOAD and nothing more; it does not
+	decide whether an event happens. that separation matters because an event
+	here costs an `AccessRevision` bump, which invalidates the ACL stamp on
+	every vector chunk of the resource AND of every descendant - so a caller
+	with a payload to attach must not accidentally schedule a subtree-wide
+	resync for a change that moved nobody's access.
+
+	``forced_resource_refs`` is the explicit opt-in for callers that know
+	something changed which resolved access cannot see.
+	"""
 	resource_ref_set = set(snapshot.captured_resource_refs)
 	if data_by_resource is not None and not set(data_by_resource) <= resource_ref_set:
 		raise ValueError("access event data contains an uncaptured resource")
+	if forced_resource_refs is not None and not (
+		forced_resource_refs <= resource_ref_set
+	):
+		raise ValueError("forced access event contains an uncaptured resource")
 	enrichment_by_resource: dict[ResourceRef, AccessChangeEventEnrichment] = {}
 	if after_access is None:
 		resolved_user_ids: _ResolvedUserIds = {}
@@ -212,8 +234,8 @@ async def build_access_change_events(
 		for resource_ref in snapshot.captured_resource_refs
 		if snapshot.resolved_access[resource_ref] != after_access[resource_ref]
 	}
-	if data_by_resource is not None:
-		changed_resources.update(data_by_resource)
+	if forced_resource_refs is not None:
+		changed_resources.update(forced_resource_refs)
 	for resource_ref in snapshot.captured_resource_refs:
 		if resource_ref not in changed_resources:
 			continue
@@ -261,15 +283,16 @@ async def build_access_change_events(
 		)
 		session.add(event)
 		visibility = RESOURCE_CONFIG[resource_type].acl_list_visibility
-		visibility_index = access_level_index(visibility)
 		prepared.append(
 			PreparedAccessChange(
 				event=event,
 				recipient_ids=list(
 					dict.fromkeys(
 						[
-							*snapshot.resolved_access[resource_ref][visibility_index],
-							*after_access[resource_ref][visibility_index],
+							*snapshot.resolved_access[resource_ref].by_level[
+								visibility
+							],
+							*after_access[resource_ref].by_level[visibility],
 						]
 					)
 				),
@@ -286,38 +309,21 @@ async def _resolved_access_shape(
 ) -> ResolvedAccessShape:
 	"""resolve access-level user sets for one resource."""
 	resource_type, resource_id = resource_ref
-	return (
-		frozenset(
-			await resolve_accessible_user_ids(
-				resource_type,
-				resource_id,
-				session,
-				required_level=AccessLevel.READER,
-				resolved_user_ids=resolved_user_ids,
-				resolving_access=resolving_access,
+	return ResolvedAccessShape(
+		by_level={
+			level: frozenset(
+				await resolve_accessible_user_ids(
+					resource_type,
+					resource_id,
+					session,
+					required_level=level,
+					resolved_user_ids=resolved_user_ids,
+					resolving_access=resolving_access,
+				)
 			)
-		),
-		frozenset(
-			await resolve_accessible_user_ids(
-				resource_type,
-				resource_id,
-				session,
-				required_level=AccessLevel.EDITOR,
-				resolved_user_ids=resolved_user_ids,
-				resolving_access=resolving_access,
-			)
-		),
-		frozenset(
-			await resolve_accessible_user_ids(
-				resource_type,
-				resource_id,
-				session,
-				required_level=AccessLevel.ADMIN,
-				resolved_user_ids=resolved_user_ids,
-				resolving_access=resolving_access,
-			)
-		),
-		frozenset(
+			for level in AccessLevel
+		},
+		derived_writers=frozenset(
 			await resolve_resource_access_user_ids(
 				resource_type,
 				resource_id,

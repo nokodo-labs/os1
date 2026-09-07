@@ -84,6 +84,29 @@ def _rule_changes(
 	]
 
 
+def _is_access_relevant(change: AccessRuleEventChange) -> bool:
+	"""whether one rule delta can move who can do what.
+
+	a rule appearing or disappearing always can. otherwise only the level and
+	the subject columns matter - `order_index` is display order, and
+	`resolve_effective_level` reads every matching rule and takes the highest,
+	so their sequence changes nothing.
+	"""
+	if change.before is None or change.after is None:
+		return True
+	return (
+		change.before.level,
+		change.before.subject_user_id,
+		change.before.subject_group_id,
+		change.before.subject_role_id,
+	) != (
+		change.after.level,
+		change.after.subject_user_id,
+		change.after.subject_group_id,
+		change.after.subject_role_id,
+	)
+
+
 async def _begin_rules_mutation(
 	resource_type: ResourceType,
 	resource_id: TypeID,
@@ -91,9 +114,8 @@ async def _begin_rules_mutation(
 ) -> tuple[list[AccessRule], list[AccessRuleEventSnapshot], AccessChangeSnapshot]:
 	"""serialize one resource's ACL mutation and capture its canonical baseline."""
 	_acl_resource_config(resource_type)
-	# root only: descendants inherit from this resource, so their cached answers
-	# and vector payloads are repaired by ancestor validation and the ACL
-	# staleness sweep rather than by walking the subtree on every ACL edit.
+	# root only: descendants are repaired by ancestor validation and the ACL
+	# staleness sweep rather than by walking the subtree on every edit.
 	access_change = await capture_access_change(
 		[(resource_type, resource_id)],
 		session,
@@ -257,46 +279,62 @@ async def resolve_access_levels(
 	subject_user_ids: list[TypeID],
 	session: AsyncSession,
 	principal: Principal,
-	include_link: bool = False,
 ) -> list[AccessLevelResolution]:
-	"""resolve effective access levels for explicit users and link access."""
-	owner_id = await _get_resource_owner_id(resource_type, resource_id, session)
+	"""resolve effective access levels for explicit users on a resource.
+
+	this endpoint answers EFFECTIVE ACCESS - "what can user X actually do
+	here" - with inheritance and the link arm included, because that is the
+	truth about X. it is deliberately NOT the place to read sharing
+	configuration: who was granted what, and whether a link share exists, are
+	answered by ``list_access_rules`` under ``acl_list_visibility``. a share
+	sheet that needs to tell "alice was granted reader" from "alice is a reader
+	because the resource is link-shared" reads the RULE LIST for that, never
+	this.
+
+	the gate: the caller holds a named grant, or asks only about themselves.
+	the PAYLOAD never depends on which of those is true - a level is the same
+	level whoever asks - only the gate does.
+
+	accepted disclosure, stated because it is a real one: on a link-shared
+	resource, a named-grant holder gets ``reader`` for an existing active user
+	id and ``null`` for a nonexistent or inactive one, which confirms a known
+	id exists. ids are TypeIDs, so enumeration is impractical and confirming a
+	known id is the whole of it.
+	"""
 	requested_user_ids = _unique_typeids(subject_user_ids)
-	rules = await _list_rules_for_resource(resource_type, resource_id, session)
-	if requested_user_ids:
-		# naming users requires a NAMED grant: the link arm is excluded, so a
-		# link-only visitor can never resolve levels for other people.
-		requester_level = await get_effective_access_level(
-			session,
-			principal,
-			resource_type,
-			resource_id,
-			owner_id=owner_id,
-			rules=rules,
+	if not requested_user_ids:
+		# refused here, not by the request schema: an empty request would skip
+		# every authorization check while the owner lookup still leaks 200 vs 404.
+		raise HTTPException(
+			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+			detail="at least one user must be requested",
 		)
-		if requester_level is None:
-			# two tracks: a caller who can already see the resource is refused a
-			# capability (403); a caller who cannot must not learn it exists (404).
-			link_level = await get_effective_access_level(
-				session,
-				principal,
-				resource_type,
-				resource_id,
-				owner_id=owner_id,
-				rules=rules,
-				include_link_access=True,
-			)
-			if link_level is None:
-				raise HTTPException(
-					status_code=status.HTTP_404_NOT_FOUND,
-					detail=f"{resource_type.value} not found",
-				)
+	# self-only requests are gated by identity alone, so the existence probe
+	# below must not run first for them either.
+	self_only = set(requested_user_ids) <= {principal.user.id}
+
+	owner_id = await _get_resource_owner_id(resource_type, resource_id, session)
+	rules = await _list_rules_for_resource(resource_type, resource_id, session)
+	# naming OTHER users requires a NAMED grant (the link arm is excluded),
+	# while asking only about yourself needs no grant at all.
+	requester_level = await get_effective_access_level(
+		session,
+		principal,
+		resource_type,
+		resource_id,
+		owner_id=owner_id,
+		rules=rules,
+		include_link_access=self_only,
+	)
+	if requester_level is None:
+		if self_only:
 			raise HTTPException(
-				status_code=status.HTTP_403_FORBIDDEN,
-				detail="forbidden",
+				status_code=status.HTTP_404_NOT_FOUND,
+				detail=f"{resource_type.value} not found",
 			)
-	elif include_link:
-		requester_level = await get_effective_access_level(
+		# two tracks: a caller who can already see the resource is refused a
+		# capability (403); a caller who cannot must not learn it exists (404).
+		link_level = await get_effective_access_level(
 			session,
 			principal,
 			resource_type,
@@ -305,11 +343,15 @@ async def resolve_access_levels(
 			rules=rules,
 			include_link_access=True,
 		)
-		if requester_level is None:
+		if link_level is None:
 			raise HTTPException(
 				status_code=status.HTTP_404_NOT_FOUND,
 				detail=f"{resource_type.value} not found",
 			)
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail="forbidden",
+		)
 
 	target_principals: dict[TypeID, Principal] = {principal.user.id: principal}
 	other_user_ids = [
@@ -327,7 +369,7 @@ async def resolve_access_levels(
 	)
 	target_principals.update(await build_principals(users, session))
 	graph_cache = AccessGraphCache()
-	resolutions = [
+	return [
 		AccessLevelResolution(
 			resource_type=resource_type,
 			resource_id=resource_id,
@@ -350,20 +392,6 @@ async def resolve_access_levels(
 		)
 		for user_id in requested_user_ids
 	]
-	if include_link:
-		resolutions.append(
-			AccessLevelResolution(
-				resource_type=resource_type,
-				resource_id=resource_id,
-				subject="link",
-				level=(
-					AccessLevel.READER
-					if any(_is_link_rule(rule) for rule in rules)
-					else None
-				),
-			)
-		)
-	return resolutions
 
 
 async def _get_resource_owner_id(
@@ -783,7 +811,7 @@ async def update_access_rule(
 		resource_type,
 		required_level=AccessLevel.ADMIN,
 	)
-	# Fail fast before the potentially blocking lock; the locked snapshot below
+	# fail fast before the potentially blocking lock; the locked snapshot below
 	# remains authoritative if another writer changes the rule meanwhile.
 	requested_rule = await _get_rule_for_resource(
 		resource_type, resource_id, rule_id, session
@@ -843,7 +871,7 @@ async def delete_access_rule(
 		resource_type,
 		required_level=AccessLevel.ADMIN,
 	)
-	# Fail fast before the potentially blocking lock; the locked snapshot below
+	# fail fast before the potentially blocking lock; the locked snapshot below
 	# remains authoritative if another writer changes the rule meanwhile.
 	requested_rule = await _get_rule_for_resource(
 		resource_type, resource_id, rule_id, session
@@ -1031,6 +1059,13 @@ async def _commit_rules_mutation(
 						],
 					},
 				},
+				# only ACCESS-RELEVANT deltas force an event: `order_index` is
+				# display order, so a reorder must not bump the revision and resync.
+				forced_resource_refs=(
+					{(resource_type, resource_id)}
+					if any(_is_access_relevant(change) for change in changes)
+					else set()
+				),
 			)
 	except IntegrityError as exc:
 		constraint_name = (
@@ -1055,7 +1090,9 @@ async def _commit_rules_mutation(
 			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
 			detail="invalid access rule reference",
 		) from exc
-	if not changes:
+	# an order-only edit changes nobody's access, so it earns neither a cache
+	# invalidation nor a vector ACL resync.
+	if not any(_is_access_relevant(change) for change in changes):
 		return
 
 	async def invalidate_after_commit(db: AsyncSession) -> None:

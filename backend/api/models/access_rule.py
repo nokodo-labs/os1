@@ -190,7 +190,7 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 	)
 
 	__table_args__ = (
-		# The current link-share model allows one subjectless rule per resource.
+		# the current link-share model allows one subjectless rule per resource.
 		UniqueConstraint(
 			"subject_user_id",
 			"subject_group_id",
@@ -236,5 +236,14 @@ class AccessRule(TypeIDPrimaryKeyMixin, TimestampMixin, MetadataJSONMixin, Base)
 			"subject_group_id IS NULL OR group_id IS NULL "
 			"OR subject_group_id != group_id",
 			name="ck_access_rules_no_self_group",
+		),
+		# a subjectless rule is a link share and both engines grant exactly READER;
+		# without this the serialised level could disagree with what is granted.
+		CheckConstraint(
+			"subject_user_id IS NOT NULL "
+			"OR subject_group_id IS NOT NULL "
+			"OR subject_role_id IS NOT NULL "
+			"OR level = 'reader'",
+			name="ck_access_rules_link_is_reader",
 		),
 	)

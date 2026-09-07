@@ -134,7 +134,6 @@ def create_resource_access_router(
 			request.subject_user_ids,
 			db,
 			principal=principal,
-			include_link=request.link,
 		)
 
 	@router.get("/rules/{rule_id}", response_model=AccessRuleResponse)

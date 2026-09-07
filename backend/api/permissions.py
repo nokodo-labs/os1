@@ -1,8 +1,12 @@
 """permission type definitions - canonical source of truth.
 
-enums and the DefaultPermissions model live here so both
+the enums and the shared permission types live here so both
 ``api.models`` and ``api.settings`` can import them without
-introducing a cross-layer dependency.
+introducing a cross-layer dependency. the pieces ``api.settings``
+actually takes are ``ActionPermission``, ``PermissionGrant`` and
+``DefaultResourceAccess``; it holds its own
+``DefaultPermissionsSettings`` rather than the ``DefaultPermissions``
+below.
 
 design rules:
 - resources with an access-rule system do NOT get read action
@@ -63,9 +67,8 @@ class ActionPermission(StrEnum):
 	USER_BLOCKS_CREATE = "user.blocks:create"
 	USER_BLOCKS_MANAGE = "user.blocks:manage"
 
-	# settings
-	# currently unenforced: the public settings dump is anonymous (login /
-	# bootstrap need it) and the private dump is gated by settings:manage.
+	# settings - currently unenforced: the public dump is anonymous and the
+	# private dump is gated by settings:manage.
 	SETTINGS_READ = "settings:read"
 	SETTINGS_MANAGE = "settings:manage"
 
@@ -76,9 +79,8 @@ class ActionPermission(StrEnum):
 	# notifications
 	NOTIFICATIONS_MANAGE = "notifications:manage"
 
-	# resource creation (for types governed by access rules).
-	# a domain permission covers every resource type in that domain, so
-	# reminders also covers reminder lists and calendar also covers events.
+	# resource creation (for types governed by access rules). a domain
+	# permission covers every type in it: reminders also covers reminder lists.
 	THREADS_CREATE = "threads:create"
 	PROJECTS_CREATE = "projects:create"
 	NOTES_CREATE = "notes:create"
@@ -229,31 +231,16 @@ def highest_access(levels: Iterable[AccessLevel | None]) -> AccessLevel | None:
 	return result
 
 
-def lowest_access(levels: Iterable[AccessLevel]) -> AccessLevel | None:
-	"""return the lowest access level in an iterable, or None if empty."""
-	result: AccessLevel | None = None
-	for level in levels:
-		if result is None or _LEVEL_RANK[level] < _LEVEL_RANK[result]:
-			result = level
-	return result
-
-
 def level_satisfies(granted: AccessLevel, required: AccessLevel) -> bool:
 	"""check whether one access level satisfies another."""
 	return _LEVEL_RANK[granted] >= _LEVEL_RANK[required]
-
-
-def access_level_index(level: AccessLevel) -> int:
-	"""return the canonical index of an access level."""
-	return _LEVEL_RANK[level]
 
 
 # default resource access - typed model, one field per resource type
 
 
 # resource types that support default resource access (user-owned content).
-# admin-only resources (agent, plugin, prompt, memory, task) are governed
-# solely by action permissions and explicit access rules.
+# admin-only types are governed by action permissions and explicit rules.
 DEFAULT_ACCESS_RESOURCE_TYPES: frozenset[ResourceType] = frozenset(
 	{
 		ResourceType.THREAD,
@@ -397,8 +384,13 @@ def permission_grant(value: str) -> PermissionGrant:
 
 class DefaultPermissions(BaseModel):
 	"""
-	default permissions model for both global settings and
-	role-scoped defaults.
+	role-scoped default permissions, held on the role row.
+
+	the global equivalent is ``settings.DefaultPermissionsSettings``, which is
+	a separate model over the same ``PermissionGrant`` union - it differs in
+	holding ``action_permissions`` as an ordered list, because it round-trips
+	through a settings document. this one is used by ``models.role`` and
+	``schemas.role`` only.
 
 	resource_access: per-resource-type access level defaults.
 	action_permissions: set of action permissions granted by

@@ -30,7 +30,14 @@ from nokodo_ai.types.sentinels import MISSING, MissingType
 from nokodo_ai.utils.typeid import TypeID
 
 
+#: memo key. the depth is part of it on purpose: the walk truncates at
+#: ``MAX_INHERITANCE_DEPTH``, so a deeper caller's answer is not a shallower one's.
 type _ResolutionKey = tuple[ResourceType, TypeID, bool, int]
+
+#: in-flight key for the cycle guard, with NO depth: every frame increments
+#: it, so a depth-keyed guard could never fire on a cycle.
+type _InFlightKey = tuple[ResourceType, TypeID, bool]
+
 type _ResourceKey = tuple[ResourceType, TypeID]
 
 
@@ -55,7 +62,7 @@ async def get_effective_access_level(
 	owner_id: TypeID | None | MissingType = MISSING,
 	rules: list[AccessRule] | None = None,
 	resolved_levels: dict[_ResolutionKey, AccessLevel | None] | None = None,
-	resolving_resource_refs: set[_ResolutionKey] | None = None,
+	resolving_resource_refs: set[_InFlightKey] | None = None,
 	non_transitive_used: bool = False,
 	include_link_access: bool = False,
 	traversal_depth: int = 0,
@@ -70,17 +77,20 @@ async def get_effective_access_level(
 		resolving_resource_refs = set()
 	if graph_cache is None:
 		graph_cache = AccessGraphCache()
-	resource_ref = (
+	memo_key: _ResolutionKey = (
 		resource_type,
 		resource_id,
 		non_transitive_used,
 		traversal_depth,
 	)
-	if resource_ref in resolved_levels:
-		return resolved_levels[resource_ref]
-	if resource_ref in resolving_resource_refs:
+	# depth-free, so a resource reached twice on one path is recognised as a
+	# cycle. see the two key aliases above for why they differ.
+	in_flight_key: _InFlightKey = (resource_type, resource_id, non_transitive_used)
+	if memo_key in resolved_levels:
+		return resolved_levels[memo_key]
+	if in_flight_key in resolving_resource_refs:
 		return None
-	resolving_resource_refs.add(resource_ref)
+	resolving_resource_refs.add(in_flight_key)
 	try:
 		level = await _resolve_effective_access_level(
 			session,
@@ -97,8 +107,8 @@ async def get_effective_access_level(
 			graph_cache,
 		)
 	finally:
-		resolving_resource_refs.remove(resource_ref)
-	resolved_levels[resource_ref] = level
+		resolving_resource_refs.remove(in_flight_key)
+	resolved_levels[memo_key] = level
 	return level
 
 
@@ -110,7 +120,7 @@ async def _resolve_effective_access_level(
 	owner_id: TypeID | None | MissingType,
 	rules: list[AccessRule] | None,
 	resolved_levels: dict[_ResolutionKey, AccessLevel | None],
-	resolving_resource_refs: set[_ResolutionKey],
+	resolving_resource_refs: set[_InFlightKey],
 	non_transitive_used: bool,
 	include_link_access: bool,
 	traversal_depth: int,
@@ -197,7 +207,7 @@ async def _get_inherited_effective_access_level(
 	resource_type: ResourceType,
 	resource_id: TypeID,
 	resolved_levels: dict[_ResolutionKey, AccessLevel | None],
-	resolving_resource_refs: set[_ResolutionKey],
+	resolving_resource_refs: set[_InFlightKey],
 	non_transitive_used: bool,
 	include_link_access: bool,
 	traversal_depth: int,

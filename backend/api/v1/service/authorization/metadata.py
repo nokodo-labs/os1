@@ -1,5 +1,7 @@
 """ACL principal metadata used by vector indexing and search."""
 
+import hashlib
+from collections.abc import Iterable
 from typing import TypedDict
 
 from sqlalchemy import select
@@ -24,19 +26,53 @@ from nokodo_ai.utils.typeid import TypeID
 
 ACL_REVISION_KEY = "acl_revision"
 
+#: the stamp is folded to this many bits so it stays a JSON-safe signed
+#: integer in every vector-store payload.
+_ACL_STAMP_BITS = 62
+
 
 class ACLPrincipalMetadata(TypedDict):
 	"""filterable ACL snapshot stored on vector chunks.
 
-	``acl_revision`` aggregates the resource's own access revision with every
-	ancestor revision that fed the snapshot, so an ACL change anywhere on the
-	inheritance path makes the stamp differ and the staleness sweep repairs it.
+	``acl_revision`` fingerprints the resource's own access revision together
+	with the IDENTITY and revision of every ancestor that fed the snapshot, so
+	an ACL change anywhere on the inheritance path - and equally a change to
+	WHICH ancestors there are - makes the stamp differ and the staleness sweep
+	repairs it.
+
+	the identities are what make this a fingerprint rather than a sum. summing
+	ancestor revisions collides on any ancestor-set change with an equal total:
+	moving a file from thread A (revision 3) to thread B (revision 3) leaves
+	the sum untouched while the flattened ``allowed_user_ids`` should have been
+	replaced wholesale.
 	"""
 
 	allowed_user_ids: list[str]
 	allowed_group_ids: list[str]
 	allowed_role_ids: list[str]
 	acl_revision: int
+
+
+def acl_revision_stamp(components: Iterable[tuple[str, str, int]]) -> int:
+	"""fold (kind, id, revision) triples into one order-independent stamp.
+
+	order independence is required: the ancestor walk yields a SET, and two
+	runs over the same graph may visit it in different orders. so the triples
+	are sorted before hashing rather than combined with an order-sensitive
+	fold.
+
+	the digest is truncated, so collisions are possible in principle - at 62
+	bits, not in practice, and unlike the sum they are not REACHABLE BY
+	CONSTRUCTION from an ordinary reparent.
+	"""
+	digest = hashlib.blake2b(
+		b"\x00".join(
+			f"{kind}:{identifier}:{revision}".encode()
+			for kind, identifier, revision in sorted(components)
+		),
+		digest_size=8,
+	).digest()
+	return int.from_bytes(digest, "big") >> (64 - _ACL_STAMP_BITS)
 
 
 VECTOR_CHUNK_ACCESS_RESOURCE_TYPES: dict[VectorChunkResourceType, ResourceType] = {
@@ -153,17 +189,20 @@ async def fetch_bulk_acl_metadata(
 			)
 		)
 	).all()
-	for resource_id, revision in revisions:
-		acl_data[str(resource_id)][ACL_REVISION_KEY] = revision
-	inherited_acl_data = await _fetch_bulk_inherited_acl_metadata(
+	own_revisions = {str(resource_id): revision for resource_id, revision in revisions}
+	inherited_acl_data, ancestor_components = await _fetch_bulk_inherited_acl_metadata(
 		unique_resource_ids,
 		resource_type,
 		session,
 	)
 	for resource_id in unique_resource_ids:
-		inherited = inherited_acl_data[resource_id]
-		merge_acl_metadata(acl_data[resource_id], inherited)
-		acl_data[resource_id][ACL_REVISION_KEY] += inherited[ACL_REVISION_KEY]
+		merge_acl_metadata(acl_data[resource_id], inherited_acl_data[resource_id])
+		acl_data[resource_id][ACL_REVISION_KEY] = acl_revision_stamp(
+			[
+				("self", resource_id, own_revisions.get(resource_id, 0)),
+				*ancestor_components[resource_id],
+			]
+		)
 	return acl_data
 
 
@@ -236,7 +275,13 @@ async def _fetch_bulk_inherited_acl_metadata(
 	resource_ids: list[str],
 	resource_type: ResourceType,
 	session: AsyncSession,
-) -> dict[str, ACLPrincipalMetadata]:
+) -> tuple[dict[str, ACLPrincipalMetadata], dict[str, list[tuple[str, str, int]]]]:
+	"""return inherited principals and each resource's ancestor fingerprint parts.
+
+	the components are returned rather than folded here so the caller can add
+	the resource's OWN revision to the same fingerprint - the stamp has to
+	cover both, and folding twice would lose the identities.
+	"""
 	acl_data = {resource_id: empty_acl_metadata() for resource_id in resource_ids}
 	ancestors_by_origin: dict[str, set[tuple[ResourceType, str]]] = {
 		resource_id: set() for resource_id in resource_ids
@@ -305,7 +350,7 @@ async def _fetch_bulk_inherited_acl_metadata(
 				for parent_id, origin_ids in origin_ids_by_parent_id.items():
 					parent_metadata = empty_acl_metadata()
 					owner_id = parent_owner_ids.get(parent_id)
-					# A chunk's owner_id covers its own owner; only parent owners
+					# a chunk's owner_id covers its own owner; only parent owners
 					# flatten here.
 					if owner_id is not None:
 						parent_metadata["allowed_user_ids"].append(owner_id)
@@ -334,12 +379,20 @@ async def _fetch_bulk_inherited_acl_metadata(
 		},
 		session,
 	)
+	# ancestor IDENTITIES ride along with their revisions: revisions alone
+	# cannot see an ancestor swapped for another whose revision matches.
+	components_by_origin: dict[str, list[tuple[str, str, int]]] = {}
 	for origin_id, ancestors in ancestors_by_origin.items():
-		acl_data[origin_id][ACL_REVISION_KEY] = sum(
-			ancestor_revisions.get(ancestor, 0) for ancestor in ancestors
-		)
+		components_by_origin[origin_id] = [
+			(
+				ancestor_type.value,
+				ancestor_id,
+				ancestor_revisions.get((ancestor_type, ancestor_id), 0),
+			)
+			for ancestor_type, ancestor_id in ancestors
+		]
 
-	return acl_data
+	return acl_data, components_by_origin
 
 
 async def _fetch_ancestor_revisions(

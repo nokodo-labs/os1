@@ -10,7 +10,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from api.database.main import session_scope
+from api.database.main import has_uncommitted_writes, session_scope
 from api.database.post_commit import enqueue_post_commit_action
 from api.models.access_rule import AccessRule
 from api.models.role import Role
@@ -168,6 +168,15 @@ async def _list_user_ids(
 	re-read after: an ancestor bumped while the resolve was in flight would
 	otherwise be stamped with its new version, leaving an entry computed from
 	stale data validating as fresh. any movement discards the entry instead.
+
+	a FILL only ever reads committed state. a borrowed session may hold flushed
+	but uncommitted rows - a caller that reparented a resource and then asks who
+	can reach it is the ordinary shape - and an entry computed from work that
+	later rolls back would survive the rollback under an unbumped version key
+	for the full TTL. so a borrowed session serves the cached-hit path and the
+	caller's own answer, and the resolve that gets STORED runs on a fresh
+	session. the ancestor-version machinery defends against ancestors moving
+	during a resolve; it has no defence against data that never lands.
 	"""
 	async with session_scope(session) as db:
 		versions = await _cache_versions(resource_type, resource_id)
@@ -183,9 +192,12 @@ async def _list_user_ids(
 			current = await _current_ancestor_versions(list(cached.ancestor_versions))
 			if current is not None and current == cached.ancestor_versions:
 				return cached.user_ids
-		# the resolver records each ancestor's version as it consults it, before
-		# reading that ancestor's rows, so the stamp always predates the data it
-		# describes.
+		if session is not None and has_uncommitted_writes(db):
+			# the caller gets the answer their own transaction implies, and
+			# nothing is published from it.
+			return await resolver(resource_type, resource_id, db, required_level, None)
+		# the resolver records each ancestor's version before reading its rows, so
+		# the stamp always predates the data it describes.
 		consulted: dict[ResourceRef, int] = {}
 		result = await resolver(
 			resource_type,
@@ -194,12 +206,11 @@ async def _list_user_ids(
 			required_level,
 			consulted,
 		)
+		# no sorting: this dict is compared with `!=` and round-tripped through
+		# JSON as an object, so key order never participates in any decision.
 		snapshot = {
 			_accessible_users_version_key(ancestor_type, ancestor_id): version
-			for (ancestor_type, ancestor_id), version in sorted(
-				consulted.items(),
-				key=lambda item: (item[0][0].value, str(item[0][1])),
-			)
+			for (ancestor_type, ancestor_id), version in consulted.items()
 			if (ancestor_type, ancestor_id) != (resource_type, resource_id)
 		}
 		after = await _current_ancestor_versions(list(snapshot))
@@ -403,6 +414,41 @@ async def invalidate_accessible_users_for_refs(
 	await _invalidate_resource_refs(resource_refs)
 
 
+def enqueue_accessible_users_version_drop(
+	resource_type: ResourceType,
+	resource_id: TypeID,
+	session: AsyncSession,
+) -> None:
+	"""reap a deleted resource's version counter after the delete commits.
+
+	these counters carry no TTL by design - an expiring counter resets to 0 and
+	makes an entry invalidated at version N addressable again - so a resource
+	that is gone for good would otherwise leave its key behind forever.
+
+	POST-COMMIT, not inline, and that ordering is load-bearing: deleting the
+	key resets the resource's version to 0, which is safe only once the row is
+	actually gone. dropping it inline and then rolling back would leave a live
+	resource whose old cached entries are addressable again.
+
+	a failed drop is a leak, not a correctness fault - the row is gone, so
+	every resolve for it returns empty - so unlike an invalidation this one
+	does not retry.
+	"""
+
+	async def drop_after_commit(db: AsyncSession) -> None:
+		_ = db
+		if not await cache.delete(
+			_accessible_users_version_key(resource_type, resource_id)
+		):
+			logger.warning(
+				"accessible-user version key delete failed for %s %s",
+				resource_type.value,
+				resource_id,
+			)
+
+	enqueue_post_commit_action(session, drop_after_commit)
+
+
 async def resource_refs_for_subject(
 	subject_kind: Literal["user", "group", "role"],
 	subject_id: TypeID,
@@ -455,13 +501,13 @@ async def invalidate_accessible_users_for_resource_types(
 	resource_types: list[ResourceType],
 ) -> None:
 	"""invalidate whole resource types through bounded generation increments."""
-	if not await cache.increment_many(
+	await _increment_versions_until_written(
 		[
 			_accessible_users_type_version_key(resource_type)
 			for resource_type in affected_resource_types(resource_types)
-		]
-	):
-		logger.error("accessible-user type version increment failed")
+		],
+		"resource types",
+	)
 
 
 async def invalidate_accessible_users_for_role_defaults(
@@ -482,30 +528,75 @@ async def invalidate_accessible_users_for_role_defaults(
 	await invalidate_accessible_users_for_resource_types(resource_types)
 
 
+#: retries before an invalidation write is declared a critical fault. the
+#: 24h TTL is only correct because this cache is perfectly invalidated.
+_INVALIDATION_ATTEMPTS = 5
+
+#: seconds before the first retry, doubled each attempt: ~1.5s total, short
+#: enough for a post-commit drain, long enough to ride out a failover.
+_INVALIDATION_BACKOFF_SECONDS = 0.05
+
+
+async def _increment_versions_until_written(
+	keys: list[str],
+	described_as: str,
+) -> None:
+	"""increment version keys, retrying until the write lands.
+
+	this cache is an AUTHORIZATION GATE (`collaborative_documents` joins on it)
+	and the fanout audience for resource events, and its entries live for a
+	day. the mutation that triggered this has already committed, so a dropped
+	increment cannot be rolled back and nothing else retries it - it would
+	simply leave revoked principals admitted for the full TTL.
+
+	so this path is not fail-open. it retries with backoff, and exhausting the
+	retries is a critical fault to be alerted on, not a warning to move past.
+	"""
+	if not keys:
+		return
+	delay = _INVALIDATION_BACKOFF_SECONDS
+	for attempt in range(1, _INVALIDATION_ATTEMPTS + 1):
+		if await cache.increment_many(keys):
+			if attempt > 1:
+				logger.warning(
+					"accessible-user cache invalidation for %s landed on attempt %d",
+					described_as,
+					attempt,
+				)
+			return
+		if attempt < _INVALIDATION_ATTEMPTS:
+			await asyncio.sleep(delay)
+			delay *= 2
+	logger.critical(
+		"accessible-user cache invalidation for %s FAILED after %d attempts; "
+		"revoked access may still be served from cache for up to %d seconds",
+		described_as,
+		_INVALIDATION_ATTEMPTS,
+		settings.cache.accessible_users_ttl_seconds,
+		extra={"keys": keys},
+	)
+
+
 async def _invalidate_resource_refs(
 	resource_refs: list[ResourceRef],
 ) -> None:
-	"""orphan cached values by incrementing concrete resource versions."""
-	if resource_refs:
-		versions = await asyncio.gather(
-			*(
-				cache.increment(
-					_accessible_users_version_key(resource_type, resource_id)
-				)
-				for resource_type, resource_id in resource_refs
-			)
+	"""orphan cached values by incrementing concrete resource versions.
+
+	one transactional pipeline for the whole set rather than one round trip
+	per ref: this path receives a whole subject's grant list, which is
+	unbounded.
+	"""
+	await _increment_versions_until_written(
+		[
+			_accessible_users_version_key(resource_type, resource_id)
+			for resource_type, resource_id in resource_refs
+		],
+		", ".join(
+			f"{resource_type.value} {resource_id}"
+			for resource_type, resource_id in resource_refs[:10]
 		)
-		for (resource_type, resource_id), version in zip(
-			resource_refs,
-			versions,
-			strict=True,
-		):
-			if version is None:
-				logger.warning(
-					"accessible-user cache version increment failed for %s %s",
-					resource_type.value,
-					resource_id,
-				)
+		+ (f" (+{len(resource_refs) - 10} more)" if len(resource_refs) > 10 else ""),
+	)
 
 
 async def _resolve_accessible_user_ids(
@@ -534,9 +625,8 @@ async def _resolve_accessible_user_ids(
 	if cycle_truncated is None:
 		cycle_truncated = set()
 	if traversal_depth >= MAX_INHERITANCE_DEPTH:
-		# same class as the cycle break below: `[]` is a truncation, not an
-		# answer. the callers still on the stack fold it in, so none of them may
-		# be memoised or a shallower ref would later read the truncated set.
+		# `[]` is a truncation, not an answer: the callers folding it in must not
+		# be memoised, or a shallower ref would later read the truncated set.
 		cycle_truncated.update(resolving_access)
 		return []
 	await _record_versions([(resource_type, resource_id)], consulted_refs)
@@ -550,9 +640,8 @@ async def _resolve_accessible_user_ids(
 	if access_key in resolved_user_ids:
 		return list(resolved_user_ids[access_key])
 	if access_key in resolving_access:
-		# cycle break: `[]` is a truncation, not an answer. every frame still on
-		# the stack folds it in, so none of them may be memoised - a shared memo
-		# would otherwise publish the truncated set to later top-level refs.
+		# cycle break: `[]` is a truncation, not an answer, so no frame folding it
+		# in may be memoised.
 		cycle_truncated.update(resolving_access)
 		return []
 	resolving_access.add(access_key)
