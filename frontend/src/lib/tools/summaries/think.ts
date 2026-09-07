@@ -4,6 +4,9 @@ import { isRecord, readNonEmptyString, readNumberField } from '$lib/utils/record
 import type { ToolExecution, ToolSummary } from '../types'
 import { getToolSummaryState, parseToolOutput } from './summaryState'
 
+/** generic label of a running thought, the one the row rotates verbs over. */
+export const THINK_ACTIVE_LABEL = 'thinking'
+
 /** returns server-reported or client-measured think duration. */
 export function getThinkElapsed(execution: ToolExecution): string | null {
 	const output = parseToolOutput(execution)
@@ -43,7 +46,7 @@ export function summarizeThink(execution: ToolExecution): ToolSummary {
 	if (isFailed) return { title: 'thinking failed' }
 	if (thinkTitle) return { title: thinkTitle }
 	if (status === 'completed' && elapsed !== null) return { title: `thought for ${elapsed}s` }
-	return { title: 'thinking' }
+	return { title: THINK_ACTIVE_LABEL }
 }
 
 /** extracts a string field from partial streamed json arguments. */

@@ -15,14 +15,13 @@ export {
 	type CreateAndRunStreamDelta,
 	type CreateAndRunStreamOptions,
 	type CreateAndRunThread,
+	type MessageSplice,
 	type ResourceAttachment,
 	type ResumeRunStreamOptions,
 	type RunAttachmentType,
 	type RunInput,
 	type StreamedMessage,
 	type StreamError,
-	type TextDelta,
-	type ToolResultDelta,
 	type UnknownSseEvent,
 } from './chatStream'
 export {
@@ -37,7 +36,6 @@ export {
 	searchStream,
 	type SearchResourceType,
 	type SearchResult,
-	type SearchResultParent,
 	type SearchResultType,
 	type SearchStreamOptions,
 } from './searchStream'

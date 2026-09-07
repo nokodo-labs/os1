@@ -22,9 +22,10 @@ import { BackendUnreachableError, refreshAccessToken } from '$lib/api/client'
 import { apiOriginReady } from '$lib/api/origin'
 import { eventStreamClient } from '$lib/api/streaming'
 import { getAccessToken, markAuthReady } from '$lib/auth/session.svelte'
-import { apiCacheStores } from '$lib/stores/apiCacheRegistry'
+import { startSessionRevocationWatch } from '$lib/auth/sessionRevocation'
+import { apiCacheStores, resumeRefreshStores } from '$lib/stores/apiCacheRegistry'
 import { appReadiness } from '$lib/stores/appReadiness.svelte'
-import { invalidateApiCacheStores } from '$lib/stores/cacheLifecycle'
+import { invalidateApiCacheStores, refreshLifecycleStores } from '$lib/stores/cacheLifecycle'
 import { initDevice, requestGeolocation } from '$lib/stores/device.svelte'
 import { initInstallPrompt } from '$lib/stores/installPrompt.svelte'
 import { initNetwork } from '$lib/stores/network.svelte'
@@ -41,43 +42,81 @@ export interface InitResult {
 	backendUnreachable?: boolean
 }
 
-const EXECUTION_GAP_STALE_MS = 15_000
+const EXECUTION_TICK_MS = 5_000
+/** a tick this late means the event loop was frozen (device sleep, app switch). */
+const EXECUTION_TICK_JUMP_MS = EXECUTION_TICK_MS * 2
 let cacheLifecycleStarted = false
 let authSessionStarted = false
 let lastExecutionTick = Date.now()
+let missedLiveEvents = false
 
 function hasSession(): boolean {
 	return Boolean(getAccessToken())
 }
 
-function invalidateCachedData(): void {
+/** a gap where live events could have been missed: the socket was not delivering. */
+function markMissedLiveEvents(): void {
+	missedLiveEvents = true
 	if (!hasSession()) return
 	invalidateApiCacheStores(apiCacheStores)
 }
 
+/**
+ * re-read what stayed on screen across the gap.
+ *
+ * invalidation only marks caches stale, and a view that already loaded never
+ * re-reads on its own - so the chat sidebar and the open thread would keep
+ * rendering pre-gap data until the reader navigates. every registered store
+ * swaps its data in place and leaves `hasLoaded` alone, so this shows no
+ * skeletons; `shouldRefresh()` keeps it off the stores nothing has read yet.
+ * `resumeRefreshStores` covers the stores nothing marks stale (preferences),
+ * whose cross-session updates only ever arrive on the stream.
+ */
+function resumeLiveData(): void {
+	if (!missedLiveEvents || !hasSession()) return
+	missedLiveEvents = false
+	void refreshLifecycleStores([...apiCacheStores, ...resumeRefreshStores])
+}
+
+/**
+ * the cache is stale exactly when the socket could not deliver, so the socket
+ * itself is the only thing that opens or closes a gap: any drop off `connected`
+ * (close, or a pong timeout forcing a reconnect) opens one, and the reconnect
+ * closes it. resume signals never decide staleness on their own - they only
+ * probe, because the OS can kill a socket without a close event and leave a
+ * zombie whose `readyState` still reads OPEN. the probe's pong timeout turns
+ * that zombie into a real drop, which is what marks the gap.
+ */
 function startCacheLifecycle(): void {
 	if (cacheLifecycleStarted || !browser) return
 	cacheLifecycleStarted = true
 
 	eventStreamClient.onStatusChange((newStatus, prevStatus) => {
 		if (prevStatus === 'connected' && newStatus !== 'connected') {
-			invalidateCachedData()
+			markMissedLiveEvents()
+			return
 		}
+		// only a RE-connect closes a gap: the first connect of a boot has
+		// nothing to catch up on, and resuming there would re-run the boot.
+		if (newStatus === 'connected' && prevStatus !== 'connected') resumeLiveData()
 	})
 
-	window.addEventListener('online', invalidateCachedData)
+	const probeLiveStream = () => eventStreamClient.probe()
+
+	window.addEventListener('online', probeLiveStream)
 	window.addEventListener('pageshow', (event) => {
-		if (event.persisted) invalidateCachedData()
+		if (event.persisted) probeLiveStream()
 	})
 	document.addEventListener('visibilitychange', () => {
-		invalidateCachedData()
+		if (document.visibilityState === 'visible') probeLiveStream()
 	})
 
 	setInterval(() => {
 		const now = Date.now()
-		if (now - lastExecutionTick > EXECUTION_GAP_STALE_MS) invalidateCachedData()
+		const frozen = now - lastExecutionTick > EXECUTION_TICK_JUMP_MS
 		lastExecutionTick = now
-	}, 5_000)
+		if (frozen) probeLiveStream()
+	}, EXECUTION_TICK_MS)
 }
 
 /**
@@ -105,11 +144,12 @@ export async function initAuthenticatedSession(): Promise<void> {
 
 	// event stream + preferences (needs user data from the load above)
 	eventStreamClient.connect()
+	startSessionRevocationWatch()
 	preferences.startSync()
 	initUserClient()
 	initPushNotifications()
 
-	// invalidate all caches when WS drops (missed events = stale data)
+	// track live-stream gaps: caches go stale on a WS drop, refresh on reconnect
 	startCacheLifecycle()
 
 	// request geolocation if user has useLocation enabled

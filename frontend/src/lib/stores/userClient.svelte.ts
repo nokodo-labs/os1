@@ -35,7 +35,7 @@ function createClientKey(): string {
 	return `cli_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`
 }
 
-function getOrCreateClientKey(): string | null {
+export function getOrCreateClientKey(): string | null {
 	if (!browser) return null
 	const existing = window.localStorage.getItem(CLIENT_KEY_STORAGE_KEY)
 	if (existing) {

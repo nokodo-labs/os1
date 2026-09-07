@@ -21,7 +21,35 @@ shared superclass, because stores may be classes, object literals, or adapters.
 | `refresh()`    | explicit refetch for already-loaded cache scopes, then swap fresh data in place   |
 | `clear()`      | immediately wipe all local state (full reset, revokes blob URLs where applicable) |
 
-stores: `activeRuns`, `agents`, `chat`, `files`, `friends`, `groups`, `notes`, `notifications`, `permissions`, `projects`, `reminders`, `resourceAccess`, `settings`
+stores: `activeRuns`, `agents`, `chat`, `files`, `friends`, `groups`, `mcpServers`, `notes`, `notifications`, `permissions`, `projects`, `reminders`, `resourceAccess`, `settings`
+
+#### state signals (loaded vs loading vs empty)
+
+every list/collection cache store exposes **`hasLoaded`** so consumers never
+render an empty state before the first load resolves. it flips `true` after the
+first successful load and resets in `clear()`. this is the single canonical name
+(no `isReady`/`ready`/`initialized` variants).
+
+render the three states as:
+
+- `items.length === 0 && !store.hasLoaded` -> loader
+- `items.length === 0` -> empty state
+- otherwise -> the list
+
+a transient failure (error, missing token, expired cache) must keep prior data
+and leave `hasLoaded` untouched - it must never present as empty.
+
+two optional, separate signals (do not conflate with `hasLoaded`):
+
+- `isLoading` / `loading` - a fetch is in flight; for refetch spinners. starts
+  `false`, so it must not be the sole gate for the empty state.
+- `hydrated` - the in-memory cache is currently populated (`fetchedAt != null`);
+  unlike `hasLoaded` it can flip back when the cache is dropped (e.g. notes on
+  sort change). used to pick loader-vs-stale-data during a refetch.
+
+`shouldRefresh()` is required on every registered store: list stores return
+`hasLoaded`; stores with no loaded-once collection (`activeRuns`,
+`resourceAccess`) return `true`.
 
 composite resources track their own loaded scopes behind the same top-level API:
 `projects.refresh()` refreshes loaded project counts, `reminders.refresh()` refreshes
@@ -31,8 +59,9 @@ counts, and `resourceAccess.refresh()` refreshes loaded access levels/rules.
 **lifecycle wiring** is centralized in `src/lib/stores/apiCacheRegistry.ts` and consumed by `src/lib/init.ts`:
 
 - `cleanup()` and `clear()` are called on logout / token change
-- `invalidate()` is called on WS disconnect, blur/hidden, resume, and execution gaps
-- lifecycle invalidation never refetches by itself; owning pages/components call `load()`, `ensure()`, or `refresh()` when the data is actually needed again
+- `invalidate()` is called only when the WS actually drops (close or pong timeout): that is the one moment live data could have been missed
+- when the WS re-connects (not the first connect of a boot), `refreshLifecycleStores()` runs every registered store's `shouldRefresh()` and refreshes the ones that say yes, in place; `hasLoaded` never resets, so nothing shows a skeleton
+- visibility, online, bfcache restore, and event-loop freezes only send a heartbeat probe; a zombie socket then times out and takes the drop -> reconnect -> refresh path above. no hidden-duration heuristics
 
 ### websocket event contract
 
@@ -48,6 +77,7 @@ event handling policy depends on resource shape:
 - item refetch: event only identifies the resource or processing status (`files`)
 - full refetch: small relationship caches where partial state is easy to get wrong (`friends`, `groups`, permissions, settings)
 - scoped invalidation: composite or derived caches (`projects` counts, scheduled item windows, resource access)
+- stale marker only: caches with no push events of their own (`mcpServers` has no `mcp.*` events, so its mutations patch the list and `settings.updated` marks it stale)
 
 `eventStreamClient.subscribeTypes()` and `subscribePrefixes()` route typed groups before handlers run. global `subscribe()` is reserved for generic stream consumers outside store caches.
 

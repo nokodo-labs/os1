@@ -15,7 +15,7 @@ import { summarizeRevealAttachment, summarizeSendNotification } from './notifica
 import { summarizeProjectGet } from './project'
 import { summarizeReminderGet, summarizeReminderWrite } from './reminder'
 import { summarizeResourceSearch } from './resourceSearch'
-import { getThinkElapsed, getThinkTitle, summarizeThink } from './think'
+import { getThinkElapsed, getThinkTitle, summarizeThink, THINK_ACTIVE_LABEL } from './think'
 import { summarizeAgenticWebSearch, summarizeFetchUrl } from './web'
 
 type ToolSummaryHandler = (execution: ToolExecution) => ToolSummary
@@ -45,7 +45,7 @@ const summaryHandlers = new Map<string, ToolSummaryHandler>([
 	['reveal_attachment', summarizeRevealAttachment],
 ])
 
-export { getThinkElapsed, getThinkTitle }
+export { getThinkElapsed, getThinkTitle, THINK_ACTIVE_LABEL }
 
 /** returns the compact title/subtitle/resource summary for a tool execution. */
 export function getToolSummary(execution: ToolExecution): ToolSummary {

@@ -3,7 +3,7 @@
 import { files } from '$lib/stores/files.svelte'
 import { readNonEmptyString, readNumberField, readStringField } from '$lib/utils/records'
 import type { ToolExecution, ToolSummary } from '../types'
-import { countTitle, getToolSummaryState, parseToolOutput } from './summaryState'
+import { countTitle, getToolSummaryState, listedTitle, parseToolOutput } from './summaryState'
 
 /** summarizes file search, list, and read executions. */
 export function summarizeFileGet(execution: ToolExecution): ToolSummary {
@@ -19,13 +19,14 @@ export function summarizeFileGet(execution: ToolExecution): ToolSummary {
 
 	const output = parseToolOutput(execution)
 	const count = readNumberField(output, 'count')
-	if (count !== null) {
-		return {
-			title: countTitle(count, 'file', 'files', 'no files found'),
-			subtitle: query ?? undefined,
+	if (query) {
+		if (count !== null) {
+			return { title: countTitle(count, 'file', 'files', 'no files found'), subtitle: query }
 		}
+		return { title: 'searched files', subtitle: query }
 	}
-	return query ? { title: 'searched files', subtitle: query } : { title: 'listed files' }
+	if (count !== null) return { title: listedTitle(count, 'file', 'files', 'no files') }
+	return { title: 'listed files' }
 }
 
 /** summarizes file create, update, and delete executions. */

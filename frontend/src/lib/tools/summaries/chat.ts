@@ -7,7 +7,7 @@ import {
 	readStringField,
 } from '$lib/utils/records'
 import type { ToolExecution, ToolSummary } from '../types'
-import { countTitle, getToolSummaryState, parseToolOutput } from './summaryState'
+import { countTitle, getToolSummaryState, listedTitle, parseToolOutput } from './summaryState'
 
 /** summarizes chat search, list, and direct read executions. */
 export function summarizeChatGet(execution: ToolExecution): ToolSummary {
@@ -23,7 +23,7 @@ export function summarizeChatGet(execution: ToolExecution): ToolSummary {
 
 	const output = parseToolOutput(execution)
 	const count = readNumberField(output, 'count')
-	if (count !== null) return { title: countTitle(count, 'chat', 'chats', 'no chats found') }
+	if (count !== null) return { title: listedTitle(count, 'chat', 'chats', 'no chats') }
 	return { title: 'listed chats' }
 }
 

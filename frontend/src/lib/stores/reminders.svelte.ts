@@ -91,12 +91,6 @@ class RemindersCache {
 	/** event stream subscription cleanup */
 	#unsubscribe: (() => void) | null = null
 
-	/** state: last visited list id for navigation continuity */
-	lastVisitedListId = $state<string | null>(null)
-
-	/** state: last visited reminders pathname for navigation continuity */
-	lastVisitedPath = $state<string | null>(null)
-
 	/** sort mode for reminder lists */
 	listsSortMode = $state<ReminderListsSortMode>('position:asc')
 
@@ -619,8 +613,6 @@ class RemindersCache {
 
 			const created = toListWithCounts(data as ReminderListWithCounts)
 			this.#listsCache?.data.set(created.id, created)
-			this.lastVisitedListId = created.id
-			this.lastVisitedPath = `/reminders/lists/${created.id}`
 			return created
 		} catch {
 			showError('could not create list')

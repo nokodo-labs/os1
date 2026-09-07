@@ -12,13 +12,18 @@ import {
 
 export type Agent = components['schemas']['Agent']
 
+const CACHE_TTL_MS = 5 * 60 * 1000
+
 class AgentsStore {
 	list = $state<Agent[]>([])
 	byId = $state<Record<string, Agent>>({})
 	error = $state<string | null>(null)
 
-	#loading = false
 	#hasLoaded = $state(false)
+	// plain fields on purpose: an $effect calling load() must not subscribe to the
+	// freshness stamp, or every invalidation would re-run it into /v1/agents.
+	#fetchedAt = 0
+	#inFlight: Promise<void> | null = null
 	#pending: string[] = []
 	#unsubscribe: (() => void) | null = null
 
@@ -28,35 +33,51 @@ class AgentsStore {
 
 	get = (agentId: string): Agent | null => this.byId[agentId] ?? null
 
-	load = async (): Promise<void> => {
+	load = async (options?: { force?: boolean }): Promise<void> => {
 		if (!getAccessToken()) {
 			this.error = null
 			this.list = []
 			this.byId = {}
 			this.#hasLoaded = false
+			this.#fetchedAt = 0
 			return
 		}
-		if (this.#loading) return
-		this.#loading = true
-		this.error = null
-		try {
-			const { data, error } = await api.GET('/v1/agents')
-			if (error || !data) {
+		const force = options?.force ?? false
+		if (!force && this.#isFresh()) return
+		if (this.#inFlight) return await this.#inFlight
+
+		this.#inFlight = (async () => {
+			this.error = null
+			try {
+				const { data, error } = await api.GET('/v1/agents')
+				if (error || !data) {
+					if (this.list.length === 0) {
+						this.error = 'failed to load agents'
+					}
+					return
+				}
+				this.list = data
+				this.byId = Object.fromEntries(data.map((a) => [a.id, a]))
+				this.#hasLoaded = true
+			} catch {
 				if (this.list.length === 0) {
 					this.error = 'failed to load agents'
 				}
-				return
+			} finally {
+				// a failed attempt is stamped too, so a remount does not retry at once
+				this.#fetchedAt = Date.now()
 			}
-			this.list = data
-			this.byId = Object.fromEntries(data.map((a) => [a.id, a]))
-			this.#hasLoaded = true
-		} catch {
-			if (this.list.length === 0) {
-				this.error = 'failed to load agents'
-			}
+		})()
+
+		try {
+			await this.#inFlight
 		} finally {
-			this.#loading = false
+			this.#inFlight = null
 		}
+	}
+
+	#isFresh(): boolean {
+		return this.#fetchedAt !== 0 && Date.now() - this.#fetchedAt < CACHE_TTL_MS
 	}
 
 	ensure = async (agentId: string): Promise<Agent | null> => {
@@ -128,20 +149,21 @@ class AgentsStore {
 	}
 
 	invalidate = (): void => {
-		this.#loading = false
+		this.#fetchedAt = 0
 		// purposefully do not clear list and byId to avoid showing empty state / error
 		// will fetch fresh data on next load
 	}
 
 	refresh = async (): Promise<void> => {
-		await this.load()
+		await this.load({ force: true })
 	}
 
 	clear = (): void => {
 		this.list = []
 		this.byId = {}
 		this.error = null
-		this.#loading = false
+		this.#fetchedAt = 0
+		this.#inFlight = null
 		this.#hasLoaded = false
 	}
 }

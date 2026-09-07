@@ -147,26 +147,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/auth/change-password": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Change Password
-         * @description change the authenticated user's password.
-         */
-        post: operations["change_password_v1_auth_change_password_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/auth/logout": {
         parameters: {
             query?: never;
@@ -178,7 +158,7 @@ export interface paths {
         put?: never;
         /**
          * Logout
-         * @description clear refresh token cookie to log out.
+         * @description revoke the current session and clear the refresh token cookie.
          */
         post: operations["logout_v1_auth_logout_post"];
         delete?: never;
@@ -507,6 +487,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/users/sessions/purge/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Session Purge
+         * @description manually purge one batch of expired user sessions.
+         */
+        post: operations["run_session_purge_v1_users_sessions_purge_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/{user_id}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read User Sessions
+         * @description list active and historical login sessions for a user.
+         */
+        get: operations["read_user_sessions_v1_users__user_id__sessions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/{user_id}/sessions/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke User Sessions
+         * @description revoke all active sessions for a user.
+         */
+        post: operations["revoke_user_sessions_v1_users__user_id__sessions_revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/{user_id}/sessions/{session_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke User Session
+         * @description revoke one login session while retaining its history.
+         */
+        post: operations["revoke_user_session_v1_users__user_id__sessions__session_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/users": {
         parameters: {
             query?: never;
@@ -679,6 +739,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/users/{user_id}/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change User Password
+         * @description change a user's password. self-service requires the current password.
+         */
+        post: operations["change_user_password_v1_users__user_id__change_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/users/{user_id}/change-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change User Email
+         * @description change a user's email address.
+         */
+        post: operations["change_user_email_v1_users__user_id__change_email_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/threads/{thread_id}/access/rules": {
         parameters: {
             query?: never;
@@ -803,6 +903,262 @@ export interface paths {
         patch: operations["update_thread_summary_v1_threads__thread_id__summaries__summary_id__patch"];
         trace?: never;
     };
+    "/v1/threads/{thread_id}/passages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Thread Passages
+         * @description list stored passage records for a thread. thread admin only.
+         */
+        get: operations["list_thread_passages_v1_threads__thread_id__passages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/passages/{passage_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Thread Passage
+         * @description fetch one stored passage record. thread admin only.
+         */
+        get: operations["get_thread_passage_v1_threads__thread_id__passages__passage_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Thread Passage
+         * @description override or clear a passage enrichment. thread admin only.
+         */
+        patch: operations["update_thread_passage_v1_threads__thread_id__passages__passage_id__patch"];
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/passages/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reconcile Thread Passages
+         * @description converge stored passages and their vectors. thread admin only.
+         */
+        post: operations["reconcile_thread_passages_v1_threads__thread_id__passages_reconcile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/passages/enrich": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enrich Thread Passages
+         * @description generate search context for unenriched passages. thread admin only.
+         */
+        post: operations["enrich_thread_passages_v1_threads__thread_id__passages_enrich_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/participants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Thread Participants
+         * @description list the thread roster: members (humans + groups) plus agents.
+         */
+        get: operations["list_thread_participants_v1_threads__thread_id__participants_get"];
+        put?: never;
+        /**
+         * Add Thread Participants
+         * @description add user, group, and agent participants through their policies.
+         */
+        post: operations["add_thread_participants_v1_threads__thread_id__participants_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/participants/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Thread User Participant
+         * @description remove a user through thread membership policy.
+         */
+        delete: operations["remove_thread_user_participant_v1_threads__thread_id__participants_users__user_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Thread Participant
+         * @description update a user's per-thread state (mute / pin / archive).
+         */
+        patch: operations["update_thread_participant_v1_threads__thread_id__participants_users__user_id__patch"];
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/participants/groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Thread Group Participant
+         * @description remove a group through thread membership policy.
+         */
+        delete: operations["remove_thread_group_participant_v1_threads__thread_id__participants_groups__group_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/participants/agents/{agent_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Thread Agent
+         * @description remove an agent's presence from the thread.
+         */
+        delete: operations["remove_thread_agent_v1_threads__thread_id__participants_agents__agent_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Thread Agent Participant
+         * @description update an agent's participation in this thread.
+         */
+        patch: operations["update_thread_agent_participant_v1_threads__thread_id__participants_agents__agent_id__patch"];
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/participants/users/{user_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Thread Read
+         * @description mark all messages in a thread as read for a user.
+         */
+        post: operations["mark_thread_read_v1_threads__thread_id__participants_users__user_id__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/participants/users/{user_id}/invite/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Thread Invite
+         * @description accept a pending invitation for the named user.
+         */
+        post: operations["accept_thread_invite_v1_threads__thread_id__participants_users__user_id__invite_accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/participants/users/{user_id}/invite/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decline Thread Invite
+         * @description decline a pending invitation for the named user.
+         */
+        post: operations["decline_thread_invite_v1_threads__thread_id__participants_users__user_id__invite_decline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/participants/users/{user_id}/invite/block": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Block Thread Invite
+         * @description block the initiator and decline the named user's invitation.
+         */
+        post: operations["block_thread_invite_v1_threads__thread_id__participants_users__user_id__invite_block_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/threads": {
         parameters: {
             query?: never;
@@ -812,13 +1168,24 @@ export interface paths {
         };
         /**
          * List Threads
-         * @description list threads optionally filtered by owner.
+         * @description list accessible threads matching the filters.
+         *
+         *     the listing is principal-agnostic beyond access itself. per-user views are
+         *     requested through the user-addressed state filters (``not_archived_by``,
+         *     ``invite_pending_for``, ...), each gated self-or-users:read.
+         *
+         *     ``include_last_message`` costs one extra query for the page; ask for it
+         *     only when the rows actually render a message preview.
          */
         get: operations["list_threads_v1_threads_get"];
         put?: never;
         /**
          * Create Thread
-         * @description create a new thread.
+         * @description create a thread of any kind.
+         *
+         *     the shape follows the payload: no members yields a solo AI chat, one member
+         *     a 1:1 DM (reused if one exists), several (or ``from_group_id``) a group.
+         *     agents and a per-thread auto-reply agent can be set at creation.
          */
         post: operations["create_thread_v1_threads_post"];
         delete?: never;
@@ -860,7 +1227,7 @@ export interface paths {
         };
         /**
          * Count Threads
-         * @description count threads matching the list filters.
+         * @description count threads matching the list filters (see the list endpoint).
          */
         get: operations["count_threads_v1_threads_count_get"];
         put?: never;
@@ -902,7 +1269,7 @@ export interface paths {
         put?: never;
         /**
          * Revectorize Threads
-         * @description vectorize all threads into qdrant. admin only.
+         * @description vectorize all thread points and due passages. threads operators only.
          */
         post: operations["revectorize_threads_v1_threads_revectorize_post"];
         delete?: never;
@@ -924,8 +1291,9 @@ export interface paths {
          * Run Thread Maintenance Backfill
          * @description manually run one batch of the retroactive thread maintenance sweep.
          *
-         *     admin-only. this intentionally ignores the scheduled backfill enabled flag
-         *     so admins can spot-check the sweep without leaving the periodic schedule on.
+         *     threads operators only. this intentionally ignores the scheduled backfill
+         *     enabled flag so operators can spot-check the sweep without leaving the
+         *     periodic schedule on.
          */
         post: operations["run_thread_maintenance_backfill_v1_threads_maintenance_backfill_run_post"];
         delete?: never;
@@ -934,7 +1302,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/threads/unread-counts": {
+    "/v1/threads/unread-counts/{user_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -943,9 +1311,12 @@ export interface paths {
         };
         /**
          * Get Unread Counts
-         * @description return unread message counts for the current user's threads.
+         * @description return unread message counts for a user's threads (self or users:read).
+         *
+         *     counts are computed against that user's own access and read cursors, not
+         *     the caller's.
          */
-        get: operations["get_unread_counts_v1_threads_unread_counts_get"];
+        get: operations["get_unread_counts_v1_threads_unread_counts__user_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -971,6 +1342,9 @@ export interface paths {
         /**
          * Delete Thread
          * @description delete a thread. pass permanent=true (admin only) to hard-delete.
+         *
+         *     resources that originated in this thread survive unless
+         *     delete_originated_resources is true; attached resources are never deleted.
          */
         delete: operations["delete_thread_v1_threads__thread_id__delete"];
         options?: never;
@@ -1041,7 +1415,7 @@ export interface paths {
         put?: never;
         /**
          * Create Message
-         * @description append a message to a thread.
+         * @description append a message to a thread, and run the agents it invokes.
          */
         post: operations["create_message_v1_threads__thread_id__messages_post"];
         delete?: never;
@@ -1078,10 +1452,39 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Current Branch
-         * @description return the current root→leaf branch for this thread.
+         * Get Branch Page
+         * @description return one page of a thread branch.
+         *
+         *     without an anchor this pages the active branch from its newest message. an
+         *     anchor selects the branch containing it - the active branch for a canon
+         *     anchor, the anchor's own sub-thread chain otherwise - and returns the page
+         *     holding the anchor, or an exact window around it via before/after. scroll
+         *     with the returned cursors rather than skip: they survive concurrent writes.
          */
-        get: operations["get_current_branch_v1_threads__thread_id__branch_get"];
+        get: operations["get_branch_page_v1_threads__thread_id__branch_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/messages/{message_id}/siblings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Message Siblings
+         * @description page the branches hanging off one message.
+         *
+         *     the continuation for a message named in a branch page's
+         *     ``sibling_overflow``, which carries only the first few.
+         */
+        get: operations["get_message_siblings_v1_threads__thread_id__messages__message_id__siblings_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1099,7 +1502,10 @@ export interface paths {
         };
         /**
          * Get Message Tree
-         * @description return all messages for this thread as a flat list.
+         * @description return all messages for this thread as a flat list. threads operators only.
+         *
+         *     unbounded: loads the entire thread in one call, so it is an operator
+         *     debugging surface, never a client loading path - clients page.
          */
         get: operations["get_message_tree_v1_threads__thread_id__tree_get"];
         put?: never;
@@ -1125,7 +1531,9 @@ export interface paths {
          * @description delete a user message and its generated response(s).
          *
          *     this deletes the user message and all subsequent messages on the active
-         *     branch until (but not including) the next user message, if any.
+         *     branch until (but not including) the next user message, if any. resources
+         *     that originated in those messages survive unless
+         *     delete_originated_resources is true; attached resources are never deleted.
          */
         delete: operations["delete_user_message_turn_v1_threads__thread_id__messages__message_id__delete"];
         options?: never;
@@ -1151,26 +1559,6 @@ export interface paths {
          * @description switch the active branch to the subtree rooted at message_id.
          */
         post: operations["switch_branch_v1_threads__thread_id__switch_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/threads/{thread_id}/read": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Mark Thread Read
-         * @description mark all messages in a thread as read for the current user.
-         */
-        post: operations["mark_thread_read_v1_threads__thread_id__read_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1262,17 +1650,17 @@ export interface paths {
         put?: never;
         /**
          * Steer Run
-         * @description inject a user message into a running agent loop between iterations.
+         * @description put a message into a running agent loop between iterations.
          *
-         *     the message is persisted immediately with ``metadata.steering_state='queued'``
-         *     so the frontend can render an optimistic ghost bubble. the agent loop
-         *     drains the inbox at the next iteration boundary (after any in-flight tool
-         *     calls), updates the message to ``steering_state='injected'``, and
-         *     broadcasts ``run.steering.injected``.
+         *     two forms, one mechanism. ``text`` sends a NEW message: it is persisted
+         *     immediately with ``metadata.steering_state='queued'`` so the frontend can
+         *     render an optimistic ghost bubble, and flips to ``injected`` (or
+         *     ``dropped``) as the loop drains it. ``invocation`` names a message that
+         *     already exists in the conversation and hands the run everything it has not
+         *     read up to that point, writing nothing.
          *
-         *     if the run terminates before the loop drains it, the message is marked
-         *     ``steering_state='dropped'`` and a ``run.steering.dropped`` event is
-         *     broadcast.
+         *     either way the agent sees it at the next iteration boundary, after any
+         *     in-flight tool calls. ``dropped`` means the run ended first.
          */
         post: operations["steer_run_v1_runs__run_id__steer_post"];
         delete?: never;
@@ -1587,7 +1975,7 @@ export interface paths {
         put?: never;
         /**
          * Revectorize Calendar Events
-         * @description vectorize all calendar events into qdrant. admin only.
+         * @description vectorize all calendar events into qdrant. calendar operators only.
          */
         post: operations["revectorize_calendar_events_v1_calendars_events_revectorize_post"];
         delete?: never;
@@ -1747,7 +2135,7 @@ export interface paths {
         put?: never;
         /**
          * Create Notifications
-         * @description create ad hoc notification(s) for admin testing and management.
+         * @description create ad hoc notification(s) for testing and management.
          */
         post: operations["create_notifications_v1_notifications_post"];
         delete?: never;
@@ -2202,7 +2590,7 @@ export interface paths {
         put?: never;
         /**
          * Revectorize Notes
-         * @description vectorize all notes into qdrant. admin only.
+         * @description vectorize all notes into qdrant. notes operators only.
          */
         post: operations["revectorize_notes_v1_notes_revectorize_post"];
         delete?: never;
@@ -2826,7 +3214,7 @@ export interface paths {
         put?: never;
         /**
          * Revectorize Files
-         * @description vectorize all described files into qdrant. admin only.
+         * @description vectorize all described files into qdrant. files operators only.
          */
         post: operations["revectorize_files_v1_files_revectorize_post"];
         delete?: never;
@@ -2848,9 +3236,9 @@ export interface paths {
          * Run File Maintenance Backfill
          * @description manually run one batch of the retroactive file maintenance sweep.
          *
-         *     admin-only. this intentionally ignores the scheduled maintenance enabled
-         *     flag so admins can spot-check the sweep (currently description backfill for
-         *     imported files) without leaving the periodic schedule on.
+         *     files operators only. this intentionally ignores the scheduled maintenance
+         *     enabled flag so operators can spot-check the sweep (deferred content
+         *     vectorization and description backfill) without leaving the schedule on.
          */
         post: operations["run_file_maintenance_backfill_v1_files_maintenance_backfill_run_post"];
         delete?: never;
@@ -3002,7 +3390,7 @@ export interface paths {
         put?: never;
         /**
          * Revectorize Reminders
-         * @description vectorize all reminders into qdrant. admin only.
+         * @description vectorize all reminders into qdrant. reminders operators only.
          */
         post: operations["revectorize_reminders_v1_reminders_revectorize_post"];
         delete?: never;
@@ -3381,13 +3769,23 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Revectorize Preview
+         * @description count provenance-stale vectors per pipeline without rebuilding. admin only.
+         *
+         *     repeat `by` to narrow to specific causes (OR); omit for all causes.
+         */
+        get: operations["revectorize_preview_v1_search_revectorize_get"];
         put?: never;
         /**
-         * Revectorize All
-         * @description vectorize all searchable resources into qdrant. admin only.
+         * Revectorize
+         * @description rebuild vectors across every pipeline. admin only.
+         *
+         *     without `by`, rebuilds everything: every resource point plus a passage
+         *     reconcile per thread. with `by` (repeatable, OR), rebuilds only resources
+         *     provenance-stale by those causes.
          */
-        post: operations["revectorize_all_v1_search_revectorize_post"];
+        post: operations["revectorize_v1_search_revectorize_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4510,6 +4908,16 @@ export interface components {
              * @default 6
              */
             post_processing_turns: number;
+            /**
+             * Post Processing Prompt
+             * @description custom system prompt for the memory maintenance agent. null uses the built-in default prompt.
+             */
+            post_processing_prompt?: string | null;
+            /**
+             * @description reasoning effort for the memory maintenance agent.
+             * @default medium
+             */
+            post_processing_reasoning_effort: components["schemas"]["ReasoningEffort"];
         };
         /** AIMemorySettingsPatch */
         AIMemorySettingsPatch: {
@@ -4528,6 +4936,21 @@ export interface components {
              * @description number of relevant memories to retrieve
              */
             top_k?: number;
+            /**
+             * Post Processing Turns
+             * @description number of recent conversation turns fed to the memory maintenance agent
+             */
+            post_processing_turns?: number;
+            /**
+             * Post Processing Prompt
+             * @description custom system prompt for the memory maintenance agent; null uses the built-in default
+             */
+            post_processing_prompt?: string | null;
+            /**
+             * Post Processing Reasoning Effort
+             * @description reasoning effort for the memory maintenance agent
+             */
+            post_processing_reasoning_effort?: components["schemas"]["ReasoningEffort"];
         };
         /**
          * AIPreferences
@@ -4634,7 +5057,7 @@ export interface components {
         };
         /**
          * AITaskSettings
-         * @description per-task model overrides for background AI tasks.
+         * @description settings for background AI tasks.
          *
          *     resolution order: per-task model_id -> default_model_id -> error.
          */
@@ -4665,6 +5088,11 @@ export interface components {
              */
             summarization_model_id?: string | null;
             /**
+             * Passage Enrichment Model Id
+             * @description model for thread passage search context enrichment
+             */
+            passage_enrichment_model_id?: string | null;
+            /**
              * Memory Post Processing Model Id
              * @description model for memory post-processing (dedup, update, delete)
              */
@@ -4684,6 +5112,31 @@ export interface components {
              * @description model for asset file, document, and media text extraction
              */
             asset_text_extraction_model_id?: string | null;
+            /**
+             * Thread Maintenance Prompt
+             * @description prompt for inactive thread maintenance
+             */
+            thread_maintenance_prompt?: string | null;
+            /**
+             * Passage Enrichment Prompt
+             * @description prompt for thread passage context enrichment
+             */
+            passage_enrichment_prompt?: string | null;
+            /**
+             * Summarization Prompt
+             * @description prompt for thread context summarization
+             */
+            summarization_prompt?: string | null;
+            /**
+             * Summary Condensation Prompt
+             * @description prompt for thread summary condensation
+             */
+            summary_condensation_prompt?: string | null;
+            /**
+             * Asset Description Prompt
+             * @description prompt for asset description
+             */
+            asset_description_prompt?: string | null;
             /**
              * Maintenance Max Chars Per Message
              * @description max characters per message in thread maintenance transcripts. null for unlimited
@@ -4719,6 +5172,11 @@ export interface components {
              */
             summarization_model_id?: string | null;
             /**
+             * Passage Enrichment Model Id
+             * @description model for thread passage search context enrichment
+             */
+            passage_enrichment_model_id?: string | null;
+            /**
              * Memory Post Processing Model Id
              * @description model for memory post-processing (dedup, update, delete)
              */
@@ -4738,6 +5196,31 @@ export interface components {
              * @description model for asset file, document, and media text extraction
              */
             asset_text_extraction_model_id?: string | null;
+            /**
+             * Thread Maintenance Prompt
+             * @description prompt for inactive thread maintenance
+             */
+            thread_maintenance_prompt?: string | null;
+            /**
+             * Passage Enrichment Prompt
+             * @description prompt for thread passage context enrichment
+             */
+            passage_enrichment_prompt?: string | null;
+            /**
+             * Summarization Prompt
+             * @description prompt for thread context summarization
+             */
+            summarization_prompt?: string | null;
+            /**
+             * Summary Condensation Prompt
+             * @description prompt for thread summary condensation
+             */
+            summary_condensation_prompt?: string | null;
+            /**
+             * Asset Description Prompt
+             * @description prompt for asset description
+             */
+            asset_description_prompt?: string | null;
             /**
              * Maintenance Max Chars Per Message
              * @description max characters per message in thread maintenance transcripts
@@ -4781,7 +5264,8 @@ export interface components {
          * @description payload for creating/updating access rules on a resource.
          */
         AccessRuleCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            /** Metadata */
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Subject User Id */
             subject_user_id?: string | null;
             /** Subject Group Id */
@@ -4790,11 +5274,8 @@ export interface components {
             subject_role_id?: string | null;
             /** @default reader */
             level: components["schemas"]["AccessLevel"];
-            /**
-             * Order Index
-             * @default 0
-             */
-            order_index: number;
+            /** Order Index */
+            order_index?: number;
         };
         /**
          * AccessRuleResponse
@@ -4811,7 +5292,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -4856,10 +5337,11 @@ export interface components {
          * @description payload for updating one access rule on a resource.
          */
         AccessRuleUpdate: {
+            /** Metadata */
+            metadata?: components["schemas"]["JSONObject-Input"];
             level?: components["schemas"]["AccessLevel"] | null;
             /** Order Index */
             order_index?: number | null;
-            metadata_?: components["schemas"]["JSONObject-Input"] | null;
         };
         /**
          * AccessibilityPreferences
@@ -4904,7 +5386,7 @@ export interface components {
          *     naming convention: {domain}:{action}
          * @enum {string}
          */
-        ActionPermission: "roles:read" | "roles:manage" | "users:read" | "users:manage" | "user.friendships:create" | "user.friendships:manage" | "user.blocks:create" | "user.blocks:manage" | "settings:read" | "settings:manage" | "events:read" | "events:manage" | "threads:create" | "projects:create" | "notes:create" | "groups:create" | "reminders:create" | "calendar:create" | "memories:create" | "tasks:create" | "agents:create" | "files:create" | "agents:manage" | "plugins:read" | "plugins:manage" | "prompts:read" | "prompts:manage" | "models:read" | "models:manage" | "providers:read" | "providers:manage" | "mcp:manage" | "user.mcp:manage" | "frontend:access" | "console:access";
+        ActionPermission: "roles:read" | "roles:manage" | "users:read" | "users:manage" | "user.friendships:create" | "user.friendships:manage" | "user.blocks:create" | "user.blocks:manage" | "settings:read" | "settings:manage" | "events:read" | "events:manage" | "notifications:manage" | "threads:create" | "projects:create" | "notes:create" | "groups:create" | "reminders:create" | "calendar:create" | "memories:create" | "tasks:create" | "agents:create" | "files:create" | "threads:manage" | "projects:manage" | "notes:manage" | "groups:manage" | "reminders:manage" | "calendar:manage" | "files:manage" | "agents:manage" | "tasks:manage" | "memories:manage" | "plugins:read" | "plugins:manage" | "prompts:read" | "prompts:manage" | "models:read" | "models:manage" | "providers:read" | "providers:manage" | "mcp:manage" | "user.mcp:manage" | "frontend:access" | "console:access";
         /**
          * ActiveRunOut
          * @description lightweight snapshot of an in-memory active run.
@@ -4979,7 +5461,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Description */
@@ -5015,7 +5497,6 @@ export interface components {
          * @description payload for agent creation.
          */
         AgentCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Description */
@@ -5031,6 +5512,7 @@ export interface components {
             profile_image_file_id?: string | null;
             /** Profile Image Url */
             profile_image_url?: string | null;
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * AgentFeatures
@@ -5039,8 +5521,65 @@ export interface components {
         AgentFeatures: {
             steering?: components["schemas"]["SteeringFeature"];
             user_mcp_tools?: components["schemas"]["UserMCPToolsFeature"];
+            invoke_on_mention?: components["schemas"]["InvokeOnMentionFeature"];
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * AgentParticipantUpdate
+         * @description fields that may be changed on an agent's thread participation.
+         */
+        AgentParticipantUpdate: {
+            /**
+             * Invoke On Mention
+             * @description null inherits the agent's own setting.
+             */
+            invoke_on_mention: boolean | null;
+        };
+        /**
+         * AgentSummary
+         * @description minimal agent identity for embedding (e.g. thread participants).
+         */
+        AgentSummary: {
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Profile Image Url */
+            profile_image_url?: string | null;
+        };
+        /**
+         * AgentThreadParticipant
+         * @description an AI agent present in the thread.
+         */
+        AgentThreadParticipant: {
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /**
+             * Thread Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            thread_id: string;
+            access_level?: components["schemas"]["AccessLevel"] | null;
+            /**
+             * Is Owner
+             * @default false
+             */
+            is_owner: boolean;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "agent";
+            agent: components["schemas"]["AgentSummary"];
+            /** Invoke On Mention */
+            invoke_on_mention?: boolean | null;
         };
         /**
          * AgentUpdate
@@ -5048,7 +5587,7 @@ export interface components {
          */
         AgentUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string;
             /** Description */
@@ -5354,6 +5893,10 @@ export interface components {
             storage?: components["schemas"]["StorageSettings"];
             /** @description asset content vectorization resource limits */
             content_vectorization?: components["schemas"]["AssetContentVectorizationSettings"];
+            /** @description thread transcript passage vectorization and enrichment */
+            thread_passages?: components["schemas"]["ThreadPassageSettings"];
+            /** @description per-pipeline automatic revectorization triggers */
+            revectorize?: components["schemas"]["RevectorizeSettings"];
             /** @description asset description and summary limits */
             descriptions?: components["schemas"]["AssetDescriptionSettings"];
         };
@@ -5376,9 +5919,13 @@ export interface components {
             storage?: components["schemas"]["StorageSettingsPatch"];
             /** Content Vectorization */
             content_vectorization?: components["schemas"]["AssetContentVectorizationSettingsPatch"];
+            /** Thread Passages */
+            thread_passages?: components["schemas"]["ThreadPassageSettingsPatch"];
             /** Descriptions */
             descriptions?: components["schemas"]["AssetDescriptionSettingsPatch"];
         };
+        /** @enum {string} */
+        AttachableResourceType: "file" | "note" | "thread" | "project" | "reminder" | "reminder_list" | "calendar_event" | "calendar";
         /**
          * AudioGenerationSettings
          * @description audio generation engine configuration (scaffold).
@@ -5486,8 +6033,43 @@ export interface components {
              * @default []
              */
             project_ids: string[];
-            /** @default upload */
-            source: components["schemas"]["FileSource"];
+        };
+        /**
+         * BranchLeaf
+         * @description an off-canon branch becomes current at the spliced message.
+         */
+        BranchLeaf: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "branch";
+            /**
+             * Root Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            root_id: string;
+        };
+        /** BranchPageOut[Message] */
+        BranchPageOut_Message_: {
+            /** Messages */
+            messages: components["schemas"]["Message"][];
+            /** Total */
+            total: number;
+            /** Skip */
+            skip: number;
+            /** Has Toward Root */
+            has_toward_root: boolean;
+            /** Has Toward Leaf */
+            has_toward_leaf: boolean;
+            /** Siblings */
+            siblings: components["schemas"]["Message"][];
+            /** Sibling Counts */
+            sibling_counts: components["schemas"]["SiblingBranchCountOut"][];
+            /** Cursor Toward Root */
+            cursor_toward_root?: string | null;
+            /** Cursor Toward Leaf */
+            cursor_toward_leaf?: string | null;
         };
         /** BrandingSettings */
         BrandingSettings: {
@@ -5669,6 +6251,18 @@ export interface components {
              * @default 86400
              */
             mcp_snapshot_ttl_seconds: number;
+            /**
+             * Principal Ttl Seconds
+             * @description TTL for principal snapshot cache entries
+             * @default 300
+             */
+            principal_ttl_seconds: number;
+            /**
+             * Session Validity Ttl Seconds
+             * @description TTL for session validity cache entries
+             * @default 300
+             */
+            session_validity_ttl_seconds: number;
         };
         /** CacheSettingsPatch */
         CacheSettingsPatch: {
@@ -5689,6 +6283,16 @@ export interface components {
              * @description TTL for accessible user recipient cache entries
              */
             accessible_users_ttl_seconds?: number;
+            /**
+             * Principal Ttl Seconds
+             * @description TTL for principal snapshot cache entries
+             */
+            principal_ttl_seconds?: number;
+            /**
+             * Session Validity Ttl Seconds
+             * @description TTL for session validity cache entries
+             */
+            session_validity_ttl_seconds?: number;
         };
         /**
          * Calendar
@@ -5705,7 +6309,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Description */
@@ -5739,13 +6343,14 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             owner_id: string;
+            /** Origin Message Id */
+            origin_message_id?: string | null;
         };
         /**
          * CalendarCreate
          * @description payload to create a calendar.
          */
         CalendarCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Description */
@@ -5769,6 +6374,7 @@ export interface components {
             timezone?: string | null;
             /** Project Ids */
             project_ids?: string[];
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * CalendarEvent
@@ -5785,7 +6391,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Title */
             title: string;
             /** Description */
@@ -5831,6 +6437,8 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             calendar_id: string;
+            /** Origin Message Id */
+            origin_message_id?: string | null;
             /** Recurrence Until */
             recurrence_until?: string | null;
             /** Series Origin Id */
@@ -5841,7 +6449,6 @@ export interface components {
          * @description payload to create a calendar event.
          */
         CalendarEventCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title: string;
             /** Description */
@@ -5872,6 +6479,7 @@ export interface components {
             virtual_url?: string | null;
             /** Labels */
             labels?: string[];
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * CalendarEventUpdate
@@ -5879,7 +6487,7 @@ export interface components {
          */
         CalendarEventUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title?: string;
             /** Description */
@@ -5983,7 +6591,7 @@ export interface components {
          */
         CalendarUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string;
             /** Description */
@@ -6302,6 +6910,18 @@ export interface components {
         };
         /** @enum {string} */
         CommonSortBy: "created_at" | "updated_at";
+        /** CursorPage[Event] */
+        CursorPage_Event_: {
+            /** Items */
+            items: components["schemas"]["Event"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
+        };
         /**
          * DebugPreferences
          * @description user debug preferences (admin-only section).
@@ -6427,11 +7047,11 @@ export interface components {
              */
             vector_size: number;
             /**
-             * Batch Size
-             * @description batch size for embedding generation during vectorization
-             * @default 64
+             * Batch Token Budget
+             * @description max estimated tokens packed into one embedding request during vectorization
+             * @default 100000
              */
-            batch_size: number;
+            batch_token_budget: number;
             /**
              * Max Concurrency
              * @description max embedding batches sent concurrently during vectorization; null means unbounded (all batches at once)
@@ -6459,7 +7079,7 @@ export interface components {
         };
         /**
          * Event
-         * @description Event response.
+         * @description event response.
          */
         Event: {
             /**
@@ -6472,7 +7092,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** @default system */
             scope: components["schemas"]["EventScope"];
             /** Scope Id */
@@ -6490,6 +7110,8 @@ export interface components {
              * @default 1
              */
             version: number;
+            /** Resource Revision */
+            resource_revision?: number | null;
             /** User Id */
             user_id?: string | null;
             /** Thread Id */
@@ -6506,10 +7128,9 @@ export interface components {
         };
         /**
          * EventCreate
-         * @description Payload to emit a new event.
+         * @description payload to emit a new event.
          */
         EventCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** @default system */
             scope: components["schemas"]["EventScope"];
             /** Scope Id */
@@ -6527,6 +7148,8 @@ export interface components {
              * @default 1
              */
             version: number;
+            /** Resource Revision */
+            resource_revision?: number | null;
             /** User Id */
             user_id?: string | null;
             /** Thread Id */
@@ -6535,6 +7158,7 @@ export interface components {
             message_id?: string | null;
             /** Task Id */
             task_id?: string | null;
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * EventScope
@@ -6544,18 +7168,26 @@ export interface components {
         EventScope: "system" | "user" | "thread" | "message" | "task" | "project" | "file";
         /**
          * EventsByMessageIDsRequest
-         * @description Request payload to fetch events for a set of messages.
+         * @description request payload to fetch events for a set of messages.
          */
         EventsByMessageIDsRequest: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Message Ids */
             message_ids?: string[];
+            /**
+             * Limit
+             * @default 500
+             */
+            limit: number;
+            /** Cursor */
+            cursor?: string | null;
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * File
          * @description file response schema.
          */
         File: {
+            private?: components["schemas"]["FilePrivate"] | null;
             /**
              * Created At
              * Format: date-time
@@ -6566,7 +7198,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Filename */
             filename?: string | null;
             /** Mime Type */
@@ -6580,23 +7212,14 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             id: string;
-            /**
-             * Owner Id
-             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
-             */
-            owner_id: string;
+            /** Owner Id */
+            owner_id?: string | null;
             source: components["schemas"]["FileSource"];
-            /** Storage Backend */
-            storage_backend: string;
-            /** Storage Key */
-            storage_key: string;
             /** Size Bytes */
             size_bytes?: number | null;
-            /** Checksum Sha256 */
-            checksum_sha256?: string | null;
             status: components["schemas"]["FileStatus"];
-            /** Message Id */
-            message_id?: string | null;
+            /** Origin Message Id */
+            origin_message_id?: string | null;
             /** Origin Thread Id */
             origin_thread_id?: string | null;
             /** Deleted At */
@@ -6659,9 +7282,11 @@ export interface components {
         /**
          * FileCreate
          * @description payload to register a new file record.
+         *
+         *     no ``size_bytes``: it is measured from the stored object, not declared. a
+         *     stray flat `storage_key` (its pre-facet home) must 422, not be dropped.
          */
         FileCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Filename */
             filename?: string | null;
             /** Mime Type */
@@ -6670,16 +7295,8 @@ export interface components {
             description?: string | null;
             /** Project Ids */
             project_ids?: string[];
-            /** @default upload */
-            source: components["schemas"]["FileSource"];
-            /** Storage Backend */
-            storage_backend: string;
-            /** Storage Key */
-            storage_key: string;
-            /** Size Bytes */
-            size_bytes?: number | null;
-            /** Checksum Sha256 */
-            checksum_sha256?: string | null;
+            private: components["schemas"]["FilePrivateCreate"];
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * FileMaintenanceSettings
@@ -6743,11 +7360,81 @@ export interface components {
             batch_size?: number;
         };
         /**
+         * FilePrivate
+         * @description operator-only view of a file.
+         */
+        FilePrivate: {
+            metadata?: components["schemas"]["JSONObject-Output"];
+            /**
+             * Storage Backend
+             * @description name of the storage backend holding the file bytes.
+             */
+            storage_backend: string;
+            /**
+             * Storage Key
+             * @description key identifying the file bytes within the storage backend.
+             */
+            storage_key: string;
+            /**
+             * Checksum Sha256
+             * @description SHA-256 checksum of the file bytes.
+             */
+            checksum_sha256?: string | null;
+        };
+        /**
+         * FilePrivateCreate
+         * @description operator-only fields when registering a file for existing bytes.
+         *
+         *     only the coordinates are submitted: size and checksum are read back off the
+         *     stored object, never taken from the caller.
+         */
+        FilePrivateCreate: {
+            /** Metadata */
+            metadata?: components["schemas"]["JSONObject-Input"];
+            /**
+             * Storage Backend
+             * @description name of the storage backend holding the file bytes.
+             */
+            storage_backend: string;
+            /**
+             * Storage Key
+             * @description key identifying the file bytes within the storage backend.
+             */
+            storage_key: string;
+        };
+        /**
+         * FilePrivateInput
+         * @description operator-only fields on a file update.
+         *
+         *     same fields as ``_FilePrivateFields`` with every one optional: an update
+         *     submits only what changes, so the types and defaults both differ from the
+         *     read/create facets and cannot share the class.
+         */
+        FilePrivateInput: {
+            /** Metadata */
+            metadata?: components["schemas"]["JSONObject-Input"];
+            /**
+             * Storage Backend
+             * @description name of the storage backend holding the file bytes.
+             */
+            storage_backend?: string;
+            /**
+             * Storage Key
+             * @description key identifying the file bytes within the storage backend.
+             */
+            storage_key?: string;
+            /**
+             * Checksum Sha256
+             * @description SHA-256 checksum of the file bytes.
+             */
+            checksum_sha256?: string | null;
+        };
+        /**
          * FileSource
-         * @description How a file entered the system.
+         * @description how a file entered the system, and what it is.
          * @enum {string}
          */
-        FileSource: "upload" | "generated" | "import";
+        FileSource: "user_uploaded" | "agent_generated" | "user_imported" | "text_extraction" | "thumbnail";
         /**
          * FileStatus
          * @description Lifecycle status for a file pointer.
@@ -6759,8 +7446,10 @@ export interface components {
          * @description payload to update a file record.
          */
         FileUpdate: {
+            /** Private */
+            private?: components["schemas"]["FilePrivateInput"];
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Filename */
             filename?: string | null;
             /** Description */
@@ -6892,7 +7581,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Description */
@@ -6918,11 +7607,11 @@ export interface components {
          * @description schema for creating a group.
          */
         GroupCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Description */
             description?: string | null;
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * GroupMemberRole
@@ -6961,12 +7650,53 @@ export interface components {
             role: components["schemas"]["GroupMemberRole"];
         };
         /**
+         * GroupSummary
+         * @description minimal group identity for embedding (e.g. thread participants).
+         */
+        GroupSummary: {
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * GroupThreadParticipant
+         * @description a group shared into the thread (its live members inherit access).
+         */
+        GroupThreadParticipant: {
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /**
+             * Thread Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            thread_id: string;
+            access_level?: components["schemas"]["AccessLevel"] | null;
+            /**
+             * Is Owner
+             * @default false
+             */
+            is_owner: boolean;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "group";
+            group: components["schemas"]["GroupSummary"];
+        };
+        /**
          * GroupUpdate
          * @description schema for updating a group.
          */
         GroupUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string;
             /** Description */
@@ -7142,6 +7872,24 @@ export interface components {
             /** Searxng */
             searxng?: components["schemas"]["SearxngSettingsPatch"];
         };
+        /**
+         * InvokeOnMentionFeature
+         * @description whether addressing this agent also asks it to answer.
+         *
+         *     off by default: mentioning and invoking are separate acts, and a client that
+         *     can express both should say which one it means. turning this on is how a
+         *     client that cannot (a chat bridge) still gets an answer. overridable per
+         *     thread on the agent's participant row.
+         */
+        InvokeOnMentionFeature: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+        } & {
+            [key: string]: unknown;
+        };
         "JSONObject-Input": {
             [key: string]: components["schemas"]["JSONValue-Input"];
         };
@@ -7173,6 +7921,7 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        LeafTarget: components["schemas"]["ThreadLeaf"] | components["schemas"]["BranchLeaf"];
         /** LimitsSettings */
         LimitsSettings: {
             /**
@@ -7257,10 +8006,22 @@ export interface components {
             rate_limit_requests_per_minute?: number;
         };
         /**
-         * LocalStorageConfig
-         * @description local filesystem storage configuration.
+         * LocalStorageBackendConfig
+         * @description configuration of the local filesystem storage backend.
          */
-        LocalStorageConfig: {
+        LocalStorageBackendConfig: {
+            /**
+             * Name
+             * @description identifier of this backend, referenced by stored files
+             * @default local
+             * @constant
+             */
+            name: "local";
+            /**
+             * @description discriminator selecting the local filesystem backend (enum property replaced by openapi-typescript)
+             * @enum {string}
+             */
+            type: "local";
             /**
              * Root Path
              * @description root directory for local file storage
@@ -7268,13 +8029,24 @@ export interface components {
              */
             root_path: string;
         };
-        /** LocalStorageConfigPatch */
-        LocalStorageConfigPatch: {
+        /** LocalStorageBackendConfigPatch */
+        LocalStorageBackendConfigPatch: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "local";
+            /**
+             * Name
+             * @default local
+             * @constant
+             */
+            name: "local";
             /**
              * Root Path
              * @description root directory for local file storage
              */
-            root_path?: string;
+            root_path: string;
         };
         /**
          * MCPAuthType
@@ -7574,7 +8346,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -7618,7 +8390,6 @@ export interface components {
          * @description payload for creating an MCP server.
          */
         MCPServerCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Description */
@@ -7646,6 +8417,7 @@ export interface components {
             config?: components["schemas"]["JSONObject-Input"];
             /** Access Token */
             access_token?: string | null;
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * MCPServerScope
@@ -7665,7 +8437,7 @@ export interface components {
          */
         MCPServerUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string;
             /** Description */
@@ -7824,6 +8596,7 @@ export interface components {
          * @description response schema.
          */
         Memory: {
+            private?: components["schemas"]["MemoryPrivate"] | null;
             /**
              * Created At
              * Format: date-time
@@ -7834,7 +8607,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Content */
             content: string;
             /** Source Message Id */
@@ -7853,8 +8626,6 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             user_id: string;
-            /** Embedding */
-            embedding?: string | null;
             /** Last Accessed At */
             last_accessed_at?: string | null;
         };
@@ -7863,7 +8634,6 @@ export interface components {
          * @description payload to capture a memory.
          */
         MemoryCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Content */
             content: string;
             /** Source Message Id */
@@ -7877,6 +8647,19 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             user_id: string;
+            metadata?: components["schemas"]["JSONObject-Input"];
+        };
+        /**
+         * MemoryPrivate
+         * @description operator-only view of a memory: its embedding and private metadata.
+         */
+        MemoryPrivate: {
+            metadata?: components["schemas"]["JSONObject-Output"];
+            /**
+             * Embedding
+             * @description raw embedding vector bytes for the memory content.
+             */
+            embedding?: string | null;
         };
         /**
          * MemoryUpdate
@@ -7884,7 +8667,7 @@ export interface components {
          */
         MemoryUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Content */
             content?: string;
             /** Confidence */
@@ -7893,10 +8676,20 @@ export interface components {
             tags?: string[] | null;
         };
         /**
+         * MentionableSubjectType
+         * @description kinds of subject a message can address.
+         *
+         *     not a ``ResourceType`` subset: a user is a principal rather than an owned
+         *     resource, so mentionable subjects are their own closed set.
+         * @enum {string}
+         */
+        MentionableSubjectType: "agent" | "user" | "group";
+        /**
          * Message
          * @description response schema.
          */
         Message: {
+            private?: components["schemas"]["MessagePrivate"] | null;
             /**
              * Created At
              * Format: date-time
@@ -7907,7 +8700,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** @default user */
             type: components["schemas"]["MessageType"];
             /** Content */
@@ -7920,12 +8713,14 @@ export interface components {
             tool_calls?: {
                 [key: string]: unknown;
             }[];
-            /** Read By */
-            read_by?: string[];
+            /** Finish Reason */
+            finish_reason?: ("stop" | "length" | "tool_calls" | "content_filter" | "error" | "cancelled") | null;
             /** Citations */
             citations?: components["schemas"]["Citation"][];
             /** Attachments */
             attachments?: components["schemas"]["ResourceAttachment"][];
+            /** Mentions */
+            mentions?: components["schemas"]["MessageMention"][];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -7938,6 +8733,10 @@ export interface components {
             thread_id: string;
             /** Parent Id */
             parent_id?: string | null;
+            /** Reply To Message Id */
+            reply_to_message_id?: string | null;
+            /** Branch Current Message Id */
+            branch_current_message_id?: string | null;
             /** Task Id */
             task_id?: string | null;
             /** Sender Agent Id */
@@ -7947,21 +8746,20 @@ export interface components {
         };
         /**
          * MessageCreate
-         * @description payload for creating a message within a thread.
+         * @description payload for creating a message within a thread. HTTP-only.
          *
-         *     content can be provided as:
-         *     - a string (converted to [TextContent(text=...)])
-         *     - a list of ContentPart objects (validated via discriminated union)
+         *     the wire never carries the private facet: backend-owned metadata reaches
+         *     the column through a ``MessageDraft``, which this type cannot express and
+         *     ``extra="forbid"`` refuses to accept.
+         *
+         *     content accepts a string (converted to one text part) or a list of
+         *     ContentPart objects; either way it normalizes to a list.
          */
         MessageCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** @default user */
             type: components["schemas"]["MessageType"];
-            /**
-             * Content
-             * @default
-             */
-            content: string | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"])[];
+            /** Content */
+            content?: (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"])[];
             /** Tool Call Id */
             tool_call_id?: string | null;
             /** Is Error */
@@ -7974,20 +8772,79 @@ export interface components {
             usage?: {
                 [key: string]: unknown;
             } | null;
-            /** Read By */
-            read_by?: string[];
             /** Citations */
             citations?: components["schemas"]["Citation"][];
             /** Attachments */
             attachments?: components["schemas"]["ResourceAttachment"][];
-            /** Parent Id */
-            parent_id?: string | null;
+            /** Originated Resources */
+            originated_resources?: components["schemas"]["ResourceAttachment"][];
+            splice?: components["schemas"]["MessageSplice"] | null;
+            /** Reply To Message Id */
+            reply_to_message_id?: string | null;
+            /** Mentions */
+            mentions?: components["schemas"]["MessageMention"][];
             /** Task Id */
             task_id?: string | null;
             /** Sender Agent Id */
             sender_agent_id?: string | null;
             /** Sender User Id */
             sender_user_id?: string | null;
+            metadata?: components["schemas"]["JSONObject-Input"];
+        };
+        /**
+         * MessageMention
+         * @description a subject a message addresses.
+         *
+         *     addressing only. whether an addressed agent also ACTS is decided by
+         *     invocation, never by the mention itself.
+         */
+        MessageMention: {
+            type: components["schemas"]["MentionableSubjectType"];
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+        };
+        /**
+         * MessagePrivate
+         * @description operator-only view of a message: its private metadata.
+         *
+         *     carries the backend-owned keys (provider payloads, citation state, sandbox
+         *     ids). no private columns yet, so the inherited ``metadata`` is the whole
+         *     facet; it is still a named type so the generated client schema does not
+         *     have to be renamed when a private column is added.
+         */
+        MessagePrivate: {
+            metadata?: components["schemas"]["JSONObject-Output"];
+        };
+        /**
+         * MessageRange
+         * @description contiguous message range replaced by a splice.
+         */
+        MessageRange: {
+            /**
+             * Head Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            head_id: string;
+            /**
+             * Tail Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            tail_id: string;
+        };
+        /**
+         * MessageSplice
+         * @description structural effect of inserting one message into a thread tree.
+         */
+        MessageSplice: {
+            /** Parent Id */
+            parent_id: string | null;
+            /** Reparent Message Ids */
+            reparent_message_ids?: string[];
+            replaces?: components["schemas"]["ReplacementTarget"] | null;
+            leaf?: components["schemas"]["LeafTarget"] | null;
         };
         /**
          * MessageType
@@ -7998,12 +8855,18 @@ export interface components {
         /**
          * MessageUpdate
          * @description payload for updating a user message's content in place.
+         *
+         *     no ``private`` facet, and none needed: no producer, internal or wire,
+         *     patches private metadata through a message update (see ``MessageCreate``
+         *     for why the wire type must not carry the facet).
          */
         MessageUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Content */
-            content: string | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"])[];
+            content?: string | (components["schemas"]["TextContent"] | components["schemas"]["JsonContent"] | components["schemas"]["ImageContent"] | components["schemas"]["FileContent"] | components["schemas"]["RefusalContent"])[];
+            /** Attachments */
+            attachments?: components["schemas"]["ResourceAttachment"][];
         };
         /**
          * MilvusVectorDatabaseSettings
@@ -8049,7 +8912,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Display Name */
@@ -8080,9 +8943,15 @@ export interface components {
             is_autofetched: boolean;
             /** Input Modalities */
             input_modalities: components["schemas"]["InputModality"][];
-            /** Id */
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
             id: string;
-            /** Provider Id */
+            /**
+             * Provider Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
             provider_id: string;
         };
         /**
@@ -8090,7 +8959,6 @@ export interface components {
          * @description payload to register a model.
          */
         ModelCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Display Name */
@@ -8121,22 +8989,26 @@ export interface components {
             is_autofetched: boolean;
             /** Input Modalities */
             input_modalities?: components["schemas"]["InputModality"][] | null;
-            /** Provider Id */
+            /**
+             * Provider Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
             provider_id: string;
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * ModelType
          * @description Supported model categories.
          * @enum {string}
          */
-        ModelType: "chat_model" | "embedding" | "image" | "audio" | "video";
+        ModelType: "chat_model" | "embedding" | "contextualized_embedding" | "reranker" | "image" | "audio" | "video";
         /**
          * ModelUpdate
          * @description payload to update a model.
          */
         ModelUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string;
             /** Display Name */
@@ -8177,7 +9049,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Title */
             title: string;
             /**
@@ -8202,6 +9074,8 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             user_id: string;
+            /** Origin Message Id */
+            origin_message_id?: string | null;
             /** Deleted At */
             deleted_at?: string | null;
         };
@@ -8210,7 +9084,6 @@ export interface components {
          * @description payload to create a note.
          */
         NoteCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title: string;
             /**
@@ -8227,6 +9100,7 @@ export interface components {
             project_ids: string[];
             /** User Id */
             user_id?: string | null;
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * NoteUpdate
@@ -8234,7 +9108,7 @@ export interface components {
          */
         NoteUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title?: string;
             /** Content */
@@ -8967,14 +9841,16 @@ export interface components {
             has_more: boolean;
         };
         /**
-         * PasswordChange
-         * @description payload for self-service password change.
+         * ParticipantsAddRequest
+         * @description participants to add to a thread in one operation.
          */
-        PasswordChange: {
-            /** Current Password */
-            current_password: string;
-            /** New Password */
-            new_password: string;
+        ParticipantsAddRequest: {
+            /** User Ids */
+            user_ids?: string[];
+            /** Group Ids */
+            group_ids?: string[];
+            /** Agent Ids */
+            agent_ids?: string[];
         };
         /**
          * PerplexitySettings
@@ -9117,7 +9993,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /**
              * Name
              * @description unique plugin name/identifier
@@ -9156,7 +10032,6 @@ export interface components {
          * @description payload for plugin creation.
          */
         PluginCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /**
              * Name
              * @description unique plugin name/identifier
@@ -9184,6 +10059,7 @@ export interface components {
              * @description python module source containing the plugin class
              */
             source_code: string;
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * PluginInfo
@@ -9230,7 +10106,7 @@ export interface components {
          */
         PluginUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string;
             /** Description */
@@ -9328,7 +10204,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Description */
@@ -9343,6 +10219,8 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             owner_id: string;
+            /** Origin Message Id */
+            origin_message_id?: string | null;
             /** Thread Ids */
             thread_ids?: string[];
         };
@@ -9351,11 +10229,11 @@ export interface components {
          * @description Schema for creating a project.
          */
         ProjectCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Description */
             description?: string | null;
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * ProjectResourceCounts
@@ -9399,7 +10277,7 @@ export interface components {
          */
         ProjectUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string;
             /** Description */
@@ -9420,7 +10298,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /**
              * Command
              * @description prompt identifier, e.g. 'my-prompt'
@@ -9442,7 +10320,6 @@ export interface components {
          * @description payload for prompt creation.
          */
         PromptCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /**
              * Command
              * @description prompt identifier, e.g. 'my-prompt'
@@ -9450,6 +10327,7 @@ export interface components {
             command: string;
             /** Content */
             content: string;
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * PromptUpdate
@@ -9457,7 +10335,7 @@ export interface components {
          */
         PromptUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Command */
             command?: string;
             /** Content */
@@ -9478,7 +10356,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Adapter Type */
@@ -9500,7 +10378,10 @@ export interface components {
              * @default true
              */
             is_autofetch_enabled: boolean;
-            /** Id */
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
             id: string;
             /** Last Synced At */
             last_synced_at?: string | null;
@@ -9510,7 +10391,6 @@ export interface components {
          * @description payload to create a provider.
          */
         ProviderCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Adapter Type */
@@ -9534,6 +10414,7 @@ export interface components {
             is_autofetch_enabled: boolean;
             /** Api Key */
             api_key?: string | null;
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * ProviderStatus
@@ -9553,7 +10434,7 @@ export interface components {
          */
         ProviderUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string;
             /** Adapter Type */
@@ -9717,6 +10598,8 @@ export interface components {
              */
             api_key?: string | null;
         };
+        /** @enum {string} */
+        ReasoningEffort: "none" | "minimal" | "low" | "medium" | "high" | "max";
         /**
          * Recurrence
          * @description structured recurrence value for schedule-capable masters.
@@ -9798,7 +10681,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Title */
             title: string;
             /** Description */
@@ -9812,8 +10695,6 @@ export interface components {
             status: components["schemas"]["ReminderStatus"];
             /** Parent Id */
             parent_id?: string | null;
-            /** Source Thread Id */
-            source_thread_id?: string | null;
             /**
              * Position
              * @default 0
@@ -9834,6 +10715,8 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             list_id: string;
+            /** Origin Message Id */
+            origin_message_id?: string | null;
             /** Completed At */
             completed_at?: string | null;
             /** Recurrence Until */
@@ -9846,7 +10729,6 @@ export interface components {
          * @description schema for creating a reminder.
          */
         ReminderCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title: string;
             /** Description */
@@ -9860,12 +10742,11 @@ export interface components {
             status: components["schemas"]["ReminderStatus"];
             /** Parent Id */
             parent_id?: string | null;
-            /** Source Thread Id */
-            source_thread_id?: string | null;
             /** Position */
             position?: number;
             /** List Id */
             list_id?: string | null;
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * ReminderList
@@ -9882,7 +10763,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Description */
@@ -9913,13 +10794,14 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             owner_id: string;
+            /** Origin Message Id */
+            origin_message_id?: string | null;
         };
         /**
          * ReminderListCreate
          * @description schema for creating a reminder list.
          */
         ReminderListCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Description */
@@ -9940,6 +10822,7 @@ export interface components {
             is_default: boolean;
             /** Project Ids */
             project_ids?: string[];
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * ReminderListUpdate
@@ -9947,7 +10830,7 @@ export interface components {
          */
         ReminderListUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string;
             /** Description */
@@ -9978,7 +10861,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Description */
@@ -10009,6 +10892,8 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             owner_id: string;
+            /** Origin Message Id */
+            origin_message_id?: string | null;
             /**
              * Total Count
              * @default 0
@@ -10071,7 +10956,7 @@ export interface components {
          */
         ReminderUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title?: string;
             /** Description */
@@ -10109,7 +10994,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Title */
             title: string;
             /** Description */
@@ -10123,8 +11008,6 @@ export interface components {
             status: components["schemas"]["ReminderStatus"];
             /** Parent Id */
             parent_id?: string | null;
-            /** Source Thread Id */
-            source_thread_id?: string | null;
             /**
              * Position
              * @default 0
@@ -10145,6 +11028,8 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             list_id: string;
+            /** Origin Message Id */
+            origin_message_id?: string | null;
             /** Completed At */
             completed_at?: string | null;
             /** Recurrence Until */
@@ -10154,6 +11039,7 @@ export interface components {
             /** Subtasks */
             subtasks?: components["schemas"]["Reminder"][];
         };
+        ReplacementTarget: components["schemas"]["MessageRange"] | components["schemas"]["RunBlockRef"];
         /**
          * RerankSettings
          * @description default reranking behavior.
@@ -10165,6 +11051,11 @@ export interface components {
              * @default native
              */
             default_strategy: string;
+            /**
+             * Default Model Id
+             * @description default reranker model id (Model.id)
+             */
+            default_model_id?: string | null;
             /**
              * Top K
              * @description number of results to keep after reranking
@@ -10181,6 +11072,11 @@ export interface components {
              */
             default_strategy?: "none" | "native" | "external";
             /**
+             * Default Model Id
+             * @description default reranker model id (Model.id)
+             */
+            default_model_id?: string | null;
+            /**
              * Top K
              * @description rerank top-k
              */
@@ -10191,11 +11087,7 @@ export interface components {
          * @description reference to an attached resource.
          */
         ResourceAttachment: {
-            /**
-             * Type
-             * @enum {string}
-             */
-            type: "file" | "note" | "thread" | "project" | "reminder" | "reminder_list" | "calendar_event" | "calendar";
+            type: components["schemas"]["AttachableResourceType"];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -10207,7 +11099,41 @@ export interface components {
          * @description supported resource types for access control.
          * @enum {string}
          */
-        ResourceType: "thread" | "project" | "agent" | "note" | "memory" | "task" | "file" | "calendar" | "plugin" | "prompt" | "group" | "reminder_list";
+        ResourceType: "thread" | "message" | "project" | "agent" | "note" | "memory" | "task" | "file" | "calendar" | "calendar_event" | "plugin" | "prompt" | "group" | "reminder" | "reminder_list";
+        /**
+         * RevectorizeSettings
+         * @description per-pipeline automatic revectorization triggers.
+         */
+        RevectorizeSettings: {
+            /** @description triggers for the generic single-tier resource pipeline */
+            resources?: components["schemas"]["RevectorizeTriggers"];
+            /** @description triggers for the thread transcript passage pipeline */
+            thread_passages?: components["schemas"]["RevectorizeTriggers"];
+            /** @description triggers for the file content pipeline */
+            file_contents?: components["schemas"]["RevectorizeTriggers"];
+        };
+        /**
+         * RevectorizeTriggers
+         * @description automatic revectorization triggers for one vectorization pipeline.
+         *
+         *     content changes always revectorize; these knobs govern whether stored
+         *     vectors built by an older pipeline version or different configuration
+         *     are rebuilt automatically. explicit admin triggers bypass the knobs.
+         */
+        RevectorizeTriggers: {
+            /**
+             * On Pipeline Version
+             * @description automatically revectorize when the pipeline version changes
+             * @default false
+             */
+            on_pipeline_version: boolean;
+            /**
+             * On Config Change
+             * @description automatically revectorize when the vectorization configuration changes
+             * @default false
+             */
+            on_config_change: boolean;
+        };
         /**
          * Role
          * @description role response schema.
@@ -10223,7 +11149,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Name */
             name: string;
             /** Description */
@@ -10249,7 +11175,6 @@ export interface components {
          * @description schema for creating a role.
          */
         RoleCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name: string;
             /** Description */
@@ -10264,6 +11189,7 @@ export interface components {
              */
             priority: number;
             default_permissions?: components["schemas"]["DefaultPermissions"];
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * RoleUpdate
@@ -10271,7 +11197,7 @@ export interface components {
          */
         RoleUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Name */
             name?: string;
             /** Description */
@@ -10286,22 +11212,20 @@ export interface components {
             default_permissions?: components["schemas"]["DefaultPermissions"];
         };
         /**
-         * RunInput
-         * @description structured input for an agent run.
-         *
-         *     supports plain text, resource attachments, or both.
+         * RunBlockRef
+         * @description run block replaced by a splice.
          */
-        RunInput: {
+        RunBlockRef: {
             /**
-             * Text
-             * @description user message text content
+             * Run Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
-            text?: string | null;
+            run_id: string;
             /**
-             * Attachments
-             * @description resource references to attach to the message.
+             * Run Head Message Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
-            attachments?: components["schemas"]["ResourceAttachment"][];
+            run_head_message_id: string;
         };
         /**
          * RunRequest
@@ -10322,8 +11246,8 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             agent_id: string;
-            /** @description structured user input with text and/or attachment IDs. omit for regeneration/retry on an existing thread. */
-            input?: components["schemas"]["RunInput"] | null;
+            /** @description the message this run answers, written before it starts. omit for regeneration/retry on an existing thread. */
+            input?: components["schemas"]["MessageCreate"] | null;
             /**
              * Tool Choice
              * @description optional tool choice override for this run. only specific tools can be forced.
@@ -10334,18 +11258,22 @@ export interface components {
              * @description extra tool plugin ids to include for this run only.
              */
             extra_plugins?: string[];
+            /** @description optional device/environment context from the client */
+            clientContext?: components["schemas"]["ClientContext"] | null;
             /**
              * Stream
              * @description when true (default) the response is an SSE stream; when false a JSON response is returned (not yet implemented).
              * @default true
              */
             stream: boolean;
-            /** @description optional device/environment context from the client */
-            clientContext?: components["schemas"]["ClientContext"] | null;
             /** Thread Id */
             thread_id?: string | null;
-            /** Parent Id */
-            parent_id?: string | null;
+            splice?: components["schemas"]["MessageSplice"] | null;
+            /**
+             * Invoking Message Id
+             * @description persisted message whose mention starts this run. the run answers that message, so ``input`` must be omitted.
+             */
+            invoking_message_id?: string | null;
             /**
              * Persist
              * @default true
@@ -10353,13 +11281,23 @@ export interface components {
             persist: boolean;
         };
         /**
-         * S3StorageConfig
-         * @description S3-compatible storage configuration.
+         * S3StorageBackendConfig
+         * @description configuration of an S3-compatible storage backend.
          *
          *     defaults target the dev MinIO container from the compose stack.
          *     for production, override via environment variables or DB settings.
          */
-        S3StorageConfig: {
+        S3StorageBackendConfig: {
+            /**
+             * Name
+             * @description identifier of this backend, referenced by stored files
+             */
+            name: string;
+            /**
+             * @description discriminator selecting the S3-compatible backend (enum property replaced by openapi-typescript)
+             * @enum {string}
+             */
+            type: "s3";
             /**
              * Endpoint Url
              * @description S3-compatible endpoint (MinIO, R2, etc.). set to None for AWS S3.
@@ -10428,8 +11366,18 @@ export interface components {
              */
             retry_mode: "legacy" | "standard" | "adaptive";
         };
-        /** S3StorageConfigPatch */
-        S3StorageConfigPatch: {
+        /** S3StorageBackendConfigPatch */
+        S3StorageBackendConfigPatch: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "s3";
+            /**
+             * Name
+             * @description identifier of this backend, referenced by stored files
+             */
+            name: string;
             /**
              * Endpoint Url
              * @description S3-compatible endpoint url (None for AWS S3)
@@ -10439,12 +11387,13 @@ export interface components {
              * Bucket
              * @description S3 bucket name
              */
-            bucket?: string;
+            bucket: string;
             /**
              * Region
              * @description AWS region
+             * @default us-east-1
              */
-            region?: string;
+            region: string;
             /**
              * Access Key Id
              * @description S3 access key id
@@ -10458,34 +11407,40 @@ export interface components {
             /**
              * Prefix
              * @description key prefix within the bucket
+             * @default
              */
-            prefix?: string;
+            prefix: string;
             /**
              * Presigned Url Ttl
              * @description presigned URL expiration in seconds
+             * @default 3600
              */
-            presigned_url_ttl?: number;
+            presigned_url_ttl: number;
             /**
              * Multipart Threshold
              * @description bytes above which multipart upload kicks in
+             * @default 104857600
              */
-            multipart_threshold?: number;
+            multipart_threshold: number;
             /**
              * Multipart Chunk Size
              * @description multipart upload chunk size in bytes
+             * @default 10485760
              */
-            multipart_chunk_size?: number;
+            multipart_chunk_size: number;
             /**
              * Max Retries
              * @description max retry attempts
+             * @default 3
              */
-            max_retries?: number;
+            max_retries: number;
             /**
              * Retry Mode
              * @description botocore retry mode
+             * @default adaptive
              * @enum {string}
              */
-            retry_mode?: "legacy" | "standard" | "adaptive";
+            retry_mode: "legacy" | "standard" | "adaptive";
         };
         /** @enum {string} */
         ScheduledEventStatus: "scheduled" | "cancelled";
@@ -10585,10 +11540,22 @@ export interface components {
          * @description known resource types that can be referenced by search result context.
          * @enum {string}
          */
-        SearchResourceReferenceType: "thread" | "note" | "reminder" | "reminder_list" | "project" | "file" | "calendar_event" | "calendar";
+        SearchResourceReferenceType: "thread" | "note" | "reminder" | "reminder_list" | "project" | "file" | "calendar_event" | "calendar" | "message";
+        /**
+         * SearchResultAnchor
+         * @description resource to focus (scroll to, highlight) after routing to the result
+         */
+        SearchResultAnchor: {
+            type: components["schemas"]["SearchResourceReferenceType"];
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+        };
         /**
          * SearchResultItem
-         * @description a single search result across any searchable entity.
+         * @description a single search result; always a routable container.
          */
         SearchResultItem: {
             type: components["schemas"]["SearchResultType"];
@@ -10603,7 +11570,7 @@ export interface components {
             preview?: string | null;
             /** Score */
             score?: number | null;
-            parent?: components["schemas"]["SearchResultParent"] | null;
+            anchor?: components["schemas"]["SearchResultAnchor"] | null;
             metadata?: components["schemas"]["JSONObject-Output"];
             /**
              * Created At
@@ -10617,22 +11584,11 @@ export interface components {
             updated_at: string;
         };
         /**
-         * SearchResultParent
-         * @description immediate parent resource needed to display or route a nested result.
-         */
-        SearchResultParent: {
-            type: components["schemas"]["SearchResourceReferenceType"];
-            /**
-             * Id
-             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
-             */
-            id: string;
-        };
-        /**
          * SearchResultType
+         * @description routable containers a search result can be.
          * @enum {string}
          */
-        SearchResultType: "thread" | "reminder" | "calendar_event" | "note" | "memory" | "project" | "file";
+        SearchResultType: "thread" | "reminder_list" | "calendar" | "note" | "memory" | "project" | "file";
         /**
          * SearxngSettings
          * @description searxng-specific settings for web search.
@@ -10987,6 +11943,19 @@ export interface components {
             tasks: number;
         };
         /**
+         * SiblingBranchCountOut
+         * @description wire shape of one message's branch count.
+         */
+        SiblingBranchCountOut: {
+            /**
+             * Parent Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            parent_id: string;
+            /** Total */
+            total: number;
+        };
+        /**
          * SoftDeleteSettings
          * @description per-resource soft-delete toggles.
          *
@@ -11032,24 +12001,30 @@ export interface components {
             files?: boolean;
         };
         /**
-         * SteerRunRequest
-         * @description inject a user message into a running agent loop.
-         *
-         *     the message is persisted immediately and queued for delivery at the
-         *     next iteration boundary of the SDK loop.
+         * StaleBy
+         * @description non-content staleness causes an explicit revectorize can target.
+         * @enum {string}
          */
-        SteerRunRequest: {
-            input: components["schemas"]["RunInput"];
+        StaleBy: "pipeline_version" | "config";
+        /**
+         * SteerInvocationRequest
+         * @description steer a run with a message that already exists.
+         *
+         *     the run receives the conversation it has not read yet, up to and including
+         *     that message. nothing is written.
+         */
+        SteerInvocationRequest: {
             /**
-             * Parent Id
-             * @description parent message id for the persisted user message. defaults to the current branch tip if omitted.
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
-            parent_id?: string | null;
+            form: "invocation";
             /**
-             * Client Steering Id
-             * @description client-generated id used to reconcile optimistic queued messages.
+             * Invoking Message Id
+             * @description persisted message addressed to this run's agent.
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
-            client_steering_id?: string | null;
+            invoking_message_id: string;
         };
         /**
          * SteerRunResponse
@@ -11069,6 +12044,31 @@ export interface components {
             state: "queued" | "dropped";
         };
         /**
+         * SteerTextRequest
+         * @description steer a run with a new message.
+         *
+         *     the message does not exist yet: it is persisted immediately and queued for
+         *     delivery at the next iteration boundary of the SDK loop.
+         */
+        SteerTextRequest: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            form: "text";
+            input: components["schemas"]["MessageCreate"];
+            /**
+             * Parent Id
+             * @description parent message id for the persisted user message. defaults to the current branch tip if omitted.
+             */
+            parent_id?: string | null;
+            /**
+             * Client Steering Id
+             * @description client-generated id used to reconcile optimistic queued messages.
+             */
+            client_steering_id?: string | null;
+        };
+        /**
          * SteeringFeature
          * @description runtime-steering toggle for an agent.
          */
@@ -11081,36 +12081,40 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        StorageBackendConfig: components["schemas"]["LocalStorageBackendConfig"] | components["schemas"]["S3StorageBackendConfig"];
+        StorageBackendConfigPatch: components["schemas"]["LocalStorageBackendConfigPatch"] | components["schemas"]["S3StorageBackendConfigPatch"];
         /**
          * StorageSettings
          * @description file storage backend configuration.
          *
-         *     set `backend` to choose which storage system is active.
-         *     only the selected backend is instantiated at startup.
+         *     every configured backend is instantiated, so files written to a backend
+         *     stay readable after `active_backend` moves on to another one.
          */
         StorageSettings: {
             /**
-             * Backend
-             * @description active storage backend: 'local' or 's3'
+             * Active Backend
+             * @description name of the backend new files are written to
              * @default local
-             * @enum {string}
              */
-            backend: "local" | "s3";
-            local?: components["schemas"]["LocalStorageConfig"];
-            s3?: components["schemas"]["S3StorageConfig"];
+            active_backend: string;
+            /**
+             * Backends
+             * @description all storage backends files may be read from or written to
+             */
+            backends?: components["schemas"]["StorageBackendConfig"][];
         };
         /** StorageSettingsPatch */
         StorageSettingsPatch: {
             /**
-             * Backend
-             * @description active storage backend: 'local' or 's3'
-             * @enum {string}
+             * Active Backend
+             * @description name of the backend new files are written to
              */
-            backend?: "local" | "s3";
-            /** Local */
-            local?: components["schemas"]["LocalStorageConfigPatch"];
-            /** S3 */
-            s3?: components["schemas"]["S3StorageConfigPatch"];
+            active_backend?: string;
+            /**
+             * Backends
+             * @description all storage backends files may be read from or written to
+             */
+            backends?: components["schemas"]["StorageBackendConfigPatch"][];
         };
         /**
          * SummaryPurpose
@@ -11133,7 +12137,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** @default custom */
             task_type: components["schemas"]["TaskType"];
             /** @default running */
@@ -11177,7 +12181,6 @@ export interface components {
          * @description payload to start a task.
          */
         TaskCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** @default custom */
             task_type: components["schemas"]["TaskType"];
             /** @default running */
@@ -11194,6 +12197,7 @@ export interface components {
             user_id: string;
             /** Spawned Thread Id */
             spawned_thread_id?: string | null;
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /** @enum {string} */
         TaskStateFilter: "active" | "ended";
@@ -11215,7 +12219,7 @@ export interface components {
          */
         TaskUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Status */
             status?: components["schemas"]["TaskStatus"];
             /** Progress */
@@ -11275,6 +12279,8 @@ export interface components {
             maintenance_backfill?: components["schemas"]["ThreadMaintenanceBackfillSettings"];
             /** @description retroactive file maintenance settings. off by default; controls an optional periodic sweep that dispatches deferred processing (content vectorization and description) for imported files in paced batches so bulk imports never flood the providers. */
             file_maintenance?: components["schemas"]["FileMaintenanceSettings"];
+            /** @description historical user session purge settings. */
+            user_session_purge?: components["schemas"]["UserSessionPurgeSettings"];
         };
         /** TasksSettingsPatch */
         TasksSettingsPatch: {
@@ -11286,6 +12292,8 @@ export interface components {
             maintenance_backfill?: components["schemas"]["ThreadMaintenanceBackfillSettingsPatch"];
             /** File Maintenance */
             file_maintenance?: components["schemas"]["FileMaintenanceSettingsPatch"];
+            /** User Session Purge */
+            user_session_purge?: components["schemas"]["UserSessionPurgeSettingsPatch"];
         };
         /**
          * TavilySettings
@@ -11355,6 +12363,7 @@ export interface components {
          * @description detailed response schema.
          */
         Thread: {
+            private?: components["schemas"]["ThreadPrivate"] | null;
             /**
              * Created At
              * Format: date-time
@@ -11365,16 +12374,11 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /** Title */
             title?: string | null;
             /** Tags */
             tags?: string[];
-            /**
-             * Is Archived
-             * @default false
-             */
-            is_archived: boolean;
             /**
              * Is Temporary
              * @default false
@@ -11392,6 +12396,8 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             owner_id: string;
+            /** Origin Message Id */
+            origin_message_id?: string | null;
             /** Current Message Id */
             current_message_id?: string | null;
             /**
@@ -11403,22 +12409,26 @@ export interface components {
             deleted_at?: string | null;
             /** Projects */
             projects?: components["schemas"]["Project"][];
+            /** Participants */
+            participants?: (components["schemas"]["UserThreadParticipant"] | components["schemas"]["AgentThreadParticipant"] | components["schemas"]["GroupThreadParticipant"])[];
+            /** @description the thread's current message, when the caller asked for it. */
+            last_message?: components["schemas"]["Message"] | null;
         };
         /**
          * ThreadCreate
-         * @description payload for creating a thread.
+         * @description payload for creating a thread of any kind.
+         *
+         *     a thread's nature is emergent from who is in it: pass no members for a solo
+         *     AI chat, one member for a 1:1 DM (reused if one already exists), or several
+         *     for a group. groups can be added as live participants (their current members
+         *     get access continuously). agents can be added at creation, with an optional
+         *     per-thread auto-reply agent.
          */
         ThreadCreate: {
-            metadata_?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title?: string | null;
             /** Tags */
             tags?: string[];
-            /**
-             * Is Archived
-             * @default false
-             */
-            is_archived: boolean;
             /**
              * Is Temporary
              * @default false
@@ -11431,6 +12441,13 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             owner_id: string;
+            /** Member User Ids */
+            member_user_ids?: string[];
+            /** Agent Ids */
+            agent_ids?: string[];
+            /** Group Ids */
+            group_ids?: string[];
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * ThreadCreateAndRunRequest
@@ -11450,8 +12467,8 @@ export interface components {
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             agent_id: string;
-            /** @description structured user input with text and/or attachment IDs. omit for regeneration/retry on an existing thread. */
-            input?: components["schemas"]["RunInput"] | null;
+            /** @description the message this run answers, written before it starts. omit for regeneration/retry on an existing thread. */
+            input?: components["schemas"]["MessageCreate"] | null;
             /**
              * Tool Choice
              * @description optional tool choice override for this run. only specific tools can be forced.
@@ -11462,14 +12479,14 @@ export interface components {
              * @description extra tool plugin ids to include for this run only.
              */
             extra_plugins?: string[];
+            /** @description optional device/environment context from the client */
+            clientContext?: components["schemas"]["ClientContext"] | null;
             /**
              * Stream
              * @description when true (default) the response is an SSE stream; when false a JSON response is returned (not yet implemented).
              * @default true
              */
             stream: boolean;
-            /** @description optional device/environment context from the client */
-            clientContext?: components["schemas"]["ClientContext"] | null;
             /** Thread Id */
             thread_id?: string | null;
             /**
@@ -11481,6 +12498,17 @@ export interface components {
             tags?: string[];
             /** Project Ids */
             project_ids?: string[];
+        };
+        /**
+         * ThreadLeaf
+         * @description the canon thread branch becomes current at the spliced message.
+         */
+        ThreadLeaf: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "thread";
         };
         /**
          * ThreadMaintenanceBackfillSettings
@@ -11632,35 +12660,215 @@ export interface components {
             stale_task_cleanup_after_minutes?: number;
         };
         /**
-         * ThreadParticipant
-         * @description response schema for a thread participant.
+         * ThreadPassageEnrichResponse
+         * @description result of running the passage enrichment pass for a thread.
          */
-        ThreadParticipant: {
+        ThreadPassageEnrichResponse: {
+            /**
+             * Thread Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            thread_id: string;
+            /**
+             * Enriched
+             * @default 0
+             */
+            enriched: number;
+        };
+        /**
+         * ThreadPassageEnrichmentSettings
+         * @description model-written search context generated for passages during thread
+         *     maintenance. the chat model is `ai.tasks.passage_enrichment_model_id`.
+         */
+        ThreadPassageEnrichmentSettings: {
+            /**
+             * Enabled
+             * @description generate search context for passages during maintenance
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Lookbehind
+             * @description preceding passages given to the enrichment model as context
+             * @default 2
+             */
+            lookbehind: number;
+            /**
+             * Lookahead
+             * @description following passages given to the enrichment model as context
+             * @default 1
+             */
+            lookahead: number;
+            /**
+             * Max Per Run
+             * @description maximum passages enriched per maintenance run
+             * @default 32
+             */
+            max_per_run: number;
+        };
+        /** ThreadPassageEnrichmentSettingsPatch */
+        ThreadPassageEnrichmentSettingsPatch: {
+            /** Enabled */
+            enabled?: boolean;
+            /** Lookbehind */
+            lookbehind?: number;
+            /** Lookahead */
+            lookahead?: number;
+            /** Max Per Run */
+            max_per_run?: number;
+        };
+        /**
+         * ThreadPassageReconcileResponse
+         * @description result of reconciling a thread's persisted passages and vectors.
+         */
+        ThreadPassageReconcileResponse: {
+            /**
+             * Thread Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            thread_id: string;
+            /**
+             * Passages
+             * @default 0
+             */
+            passages: number;
+            /**
+             * Built
+             * @default 0
+             */
+            built: number;
+            /**
+             * Deleted
+             * @default 0
+             */
+            deleted: number;
+            /**
+             * Purged
+             * @default false
+             */
+            purged: boolean;
+            /**
+             * Skipped
+             * @default false
+             */
+            skipped: boolean;
+        };
+        /**
+         * ThreadPassageRecord
+         * @description stored transcript passage record for a thread.
+         */
+        ThreadPassageRecord: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
             id: string;
             /**
-             * Thread Id
+             * First Message Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
-            thread_id: string;
-            /** User Id */
-            user_id?: string | null;
-            /** Agent Id */
-            agent_id?: string | null;
-            /** Membership Role */
-            membership_role?: string | null;
+            first_message_id: string;
             /**
-             * Joined At
-             * Format: date-time
+             * Last Message Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
              */
-            joined_at: string;
-            /** Left At */
-            left_at?: string | null;
-            /** Last Read Message Id */
-            last_read_message_id?: string | null;
+            last_message_id: string;
+            /**
+             * Anchor Message Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            anchor_message_id: string;
+            /** Part Index */
+            part_index: number;
+            /** Content Hash */
+            content_hash: string;
+            /** Content */
+            content: string;
+            /** Enrichment */
+            enrichment?: string | null;
+            /** Enrichment Model Id */
+            enrichment_model_id?: string | null;
+            /** Enriched At */
+            enriched_at?: string | null;
+            /** Enrichment Pipeline V */
+            enrichment_pipeline_v?: number | null;
+        };
+        /**
+         * ThreadPassageSettings
+         * @description thread transcript passage vectorization.
+         *
+         *     target_tokens and overlap_ratio bound the embedding input per passage;
+         *     enrichment governs the separate chat model context generation.
+         */
+        ThreadPassageSettings: {
+            /**
+             * Enabled
+             * @description persist and index thread transcript passages; disabling removes stored passages and their vectors
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Target Tokens
+             * @description embedding token budget one transcript passage is packed toward
+             * @default 2000
+             */
+            target_tokens: number;
+            /**
+             * Overlap Ratio
+             * @description fraction of target_tokens carried from the end of one passage into the next as embedding context
+             * @default 0.12
+             */
+            overlap_ratio: number;
+            /** @description model-written passage search context generation */
+            enrichment?: components["schemas"]["ThreadPassageEnrichmentSettings"];
+        };
+        /** ThreadPassageSettingsPatch */
+        ThreadPassageSettingsPatch: {
+            /** Enabled */
+            enabled?: boolean;
+            /** Target Tokens */
+            target_tokens?: number;
+            /** Overlap Ratio */
+            overlap_ratio?: number;
+            /** Enrichment */
+            enrichment?: components["schemas"]["ThreadPassageEnrichmentSettingsPatch"];
+        };
+        /**
+         * ThreadPassageUpdate
+         * @description payload for overriding or clearing a stored passage enrichment.
+         */
+        ThreadPassageUpdate: {
+            /** Enrichment */
+            enrichment?: string | null;
+        };
+        /**
+         * ThreadPrivate
+         * @description operator-only view of a thread: its private metadata (content/state vectors).
+         *
+         *     no private columns yet, so the inherited ``metadata`` is the whole facet.
+         *     it is still a named type so the generated client schema does not have to be
+         *     renamed when a private column is added.
+         */
+        ThreadPrivate: {
+            metadata?: components["schemas"]["JSONObject-Output"];
+        };
+        /**
+         * ThreadPrivateInput
+         * @description operator-only fields on a thread write (see ``ThreadPrivate``).
+         */
+        ThreadPrivateInput: {
+            /** Metadata */
+            metadata?: components["schemas"]["JSONObject-Input"];
         };
         /**
          * ThreadSummaryRecord
@@ -11677,7 +12885,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            metadata_?: components["schemas"]["JSONObject-Output"];
+            metadata?: components["schemas"]["JSONObject-Output"];
             /**
              * Id
              * @example user_01h5fskfsk4fpeqwnsyz5hj55t
@@ -11712,7 +12920,7 @@ export interface components {
          */
         ThreadSummaryUpdate: {
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Content */
             content?: string;
         };
@@ -11755,14 +12963,14 @@ export interface components {
          * @description payload for updating a thread.
          */
         ThreadUpdate: {
+            /** Private */
+            private?: components["schemas"]["ThreadPrivateInput"];
             /** Metadata */
-            metadata_?: components["schemas"]["JSONObject-Input"];
+            metadata?: components["schemas"]["JSONObject-Input"];
             /** Title */
             title?: string | null;
             /** Tags */
             tags?: string[];
-            /** Is Archived */
-            is_archived?: boolean;
             /** Is Temporary */
             is_temporary?: boolean;
             /** Project Ids */
@@ -11774,6 +12982,56 @@ export interface components {
             owner_id?: string;
             /** Current Message Id */
             current_message_id?: string | null;
+        };
+        /**
+         * ThreadUserState
+         * @description a user's private per-thread state, distinct from the ACL roster.
+         *
+         *     this is the caller's own relationship to a thread - read cursor, mute / pin
+         *     / archive flags, and whether they still have a pending invite. a READER on a
+         *     thread need not have a pending invite, so invite status lives here (state),
+         *     not on the roster (membership). only ever delivered to the user it concerns.
+         */
+        ThreadUserState: {
+            /**
+             * Thread Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            thread_id: string;
+            /** Invite Status */
+            invite_status?: string | null;
+            /** Last Read Message Id */
+            last_read_message_id?: string | null;
+            /**
+             * Muted
+             * @default false
+             */
+            muted: boolean;
+            /**
+             * Pinned
+             * @default false
+             */
+            pinned: boolean;
+            /**
+             * Archived
+             * @default false
+             */
+            archived: boolean;
+        };
+        /**
+         * ThreadUserStateUpdate
+         * @description payload to update the caller's private per-thread state.
+         *
+         *     each flag is optional; omitted flags are left unchanged. these are personal
+         *     to the user (mute / pin / archive their own view), distinct from membership.
+         */
+        ThreadUserStateUpdate: {
+            /** Muted */
+            muted?: boolean | null;
+            /** Pinned */
+            pinned?: boolean | null;
+            /** Archived */
+            archived?: boolean | null;
         };
         /** Token */
         Token: {
@@ -12025,6 +13283,19 @@ export interface components {
             is_superuser?: boolean | null;
         };
         /**
+         * UserEmailChange
+         * @description payload for changing a user's email address.
+         */
+        UserEmailChange: {
+            /** Current Password */
+            current_password?: string | null;
+            /**
+             * New Email
+             * Format: email
+             */
+            new_email: string;
+        };
+        /**
          * UserMCPToolsFeature
          * @description user-managed MCP tool toggle for an agent.
          */
@@ -12036,6 +13307,16 @@ export interface components {
             enabled: boolean;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * UserPasswordChange
+         * @description payload for changing a user's password.
+         */
+        UserPasswordChange: {
+            /** Current Password */
+            current_password?: string | null;
+            /** New Password */
+            new_password: string;
         };
         /**
          * UserPermissions
@@ -12148,6 +13429,102 @@ export interface components {
             avatar_url?: string | null;
         };
         /**
+         * UserSession
+         * @description server-side login session response.
+         */
+        UserSession: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /**
+             * User Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            user_id: string;
+            /** Client Id */
+            client_id?: string | null;
+            /** Rotated At */
+            rotated_at?: string | null;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /** User Agent */
+            user_agent?: string | null;
+            /** Is Active */
+            is_active: boolean;
+        };
+        /**
+         * UserSessionPurgeSettings
+         * @description scheduled retention policy for historical user sessions.
+         */
+        UserSessionPurgeSettings: {
+            /**
+             * Enabled
+             * @description whether periodic user session purging is enabled.
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Cron
+             * @description UTC cron expression used to schedule user session purging.
+             * @default 0 4 * * *
+             */
+            cron: string;
+            /**
+             * Batch Size
+             * @description maximum number of historical user sessions purged per run.
+             * @default 1000
+             */
+            batch_size: number;
+            /**
+             * Grace Period Days
+             * @description days to retain expired user sessions before purging them.
+             * @default 30
+             */
+            grace_period_days: number;
+        };
+        /** UserSessionPurgeSettingsPatch */
+        UserSessionPurgeSettingsPatch: {
+            /**
+             * Enabled
+             * @description whether periodic user session purging is enabled
+             */
+            enabled?: boolean;
+            /**
+             * Cron
+             * @description UTC cron expression used to schedule user session purging
+             */
+            cron?: string;
+            /**
+             * Batch Size
+             * @description maximum number of historical user sessions purged per run
+             */
+            batch_size?: number;
+            /**
+             * Grace Period Days
+             * @description days to retain expired user sessions before purging them
+             */
+            grace_period_days?: number;
+        };
+        /**
          * UserSummary
          * @description minimal user identity for allowed lookup results.
          */
@@ -12165,17 +13542,38 @@ export interface components {
             avatar_url?: string | null;
         };
         /**
+         * UserThreadParticipant
+         * @description a human in the thread (resolved from a user AccessRule or the owner).
+         */
+        UserThreadParticipant: {
+            /**
+             * Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            id: string;
+            /**
+             * Thread Id
+             * @example user_01h5fskfsk4fpeqwnsyz5hj55t
+             */
+            thread_id: string;
+            access_level?: components["schemas"]["AccessLevel"] | null;
+            /**
+             * Is Owner
+             * @default false
+             */
+            is_owner: boolean;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "user";
+            user: components["schemas"]["UserSummary"];
+        };
+        /**
          * UserUpdate
          * @description schema for updating a user.
          */
         UserUpdate: {
-            /**
-             * Email
-             * Format: email
-             */
-            email?: string;
-            /** Password */
-            password?: string;
             /**
              * Username
              * @example johndoe
@@ -12678,7 +14076,10 @@ export interface operations {
     login_access_token_v1_auth_login_access_token_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Client-Key"?: string | null;
+                "user-agent"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -12867,100 +14268,6 @@ export interface operations {
             };
         };
     };
-    change_password_v1_auth_change_password_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PasswordChange"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
     logout_v1_auth_logout_post: {
         parameters: {
             query?: never;
@@ -12968,7 +14275,9 @@ export interface operations {
                 origin?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                "nokodo:refresh_token"?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -14974,6 +16283,386 @@ export interface operations {
             };
         };
     };
+    run_session_purge_v1_users_sessions_purge_run_post: {
+        parameters: {
+            query?: {
+                batch_size?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JSONObject-Output"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    read_user_sessions_v1_users__user_id__sessions_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSession"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    revoke_user_sessions_v1_users__user_id__sessions_revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": number;
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    revoke_user_session_v1_users__user_id__sessions__session_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSession"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     read_users_v1_users_get: {
         parameters: {
             query?: {
@@ -15945,6 +17634,200 @@ export interface operations {
                     "application/json": {
                         [key: string]: number;
                     };
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    change_user_password_v1_users__user_id__change_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserPasswordChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    change_user_email_v1_users__user_id__change_email_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserEmailChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
                 };
             };
             /** @description bad request */
@@ -17080,6 +18963,1545 @@ export interface operations {
             };
         };
     };
+    list_thread_passages_v1_threads__thread_id__passages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadPassageRecord"][];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_thread_passage_v1_threads__thread_id__passages__passage_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                passage_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadPassageRecord"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_thread_passage_v1_threads__thread_id__passages__passage_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                passage_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThreadPassageUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadPassageRecord"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    reconcile_thread_passages_v1_threads__thread_id__passages_reconcile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadPassageReconcileResponse"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    enrich_thread_passages_v1_threads__thread_id__passages_enrich_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadPassageEnrichResponse"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_thread_participants_v1_threads__thread_id__participants_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": (components["schemas"]["UserThreadParticipant"] | components["schemas"]["AgentThreadParticipant"] | components["schemas"]["GroupThreadParticipant"])[];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    add_thread_participants_v1_threads__thread_id__participants_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ParticipantsAddRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": (components["schemas"]["UserThreadParticipant"] | components["schemas"]["AgentThreadParticipant"] | components["schemas"]["GroupThreadParticipant"])[];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    remove_thread_user_participant_v1_threads__thread_id__participants_users__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_thread_participant_v1_threads__thread_id__participants_users__user_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThreadUserStateUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadUserState"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    remove_thread_group_participant_v1_threads__thread_id__participants_groups__group_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                group_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    remove_thread_agent_v1_threads__thread_id__participants_agents__agent_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                agent_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_thread_agent_participant_v1_threads__thread_id__participants_agents__agent_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                agent_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentParticipantUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentThreadParticipant"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    mark_thread_read_v1_threads__thread_id__participants_users__user_id__read_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadUserState"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    accept_thread_invite_v1_threads__thread_id__participants_users__user_id__invite_accept_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Thread"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    decline_thread_invite_v1_threads__thread_id__participants_users__user_id__invite_decline_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    block_thread_invite_v1_threads__thread_id__participants_users__user_id__invite_block_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-session-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     list_threads_v1_threads_get: {
         parameters: {
             query?: {
@@ -17087,11 +20509,21 @@ export interface operations {
                 limit?: number;
                 sort_by?: components["schemas"]["CommonSortBy"] | ("last_activity_at" | "title");
                 sort_dir?: "asc" | "desc";
+                include_last_message?: boolean;
                 owner_id?: string | null;
+                project_id?: string | null;
                 include_hidden?: boolean;
-                is_archived?: boolean | null;
                 include_deleted?: boolean;
                 q?: string | null;
+                participant_scope?: "solo" | "people" | "all";
+                archived_by?: string | null;
+                not_archived_by?: string | null;
+                pinned_by?: string | null;
+                not_pinned_by?: string | null;
+                muted_by?: string | null;
+                not_muted_by?: string | null;
+                invite_pending_for?: string | null;
+                not_invite_pending_for?: string | null;
             };
             header?: never;
             path?: never;
@@ -17382,10 +20814,19 @@ export interface operations {
         parameters: {
             query?: {
                 owner_id?: string | null;
+                project_id?: string | null;
                 include_hidden?: boolean;
-                is_archived?: boolean | null;
                 include_deleted?: boolean;
                 q?: string | null;
+                participant_scope?: "solo" | "people" | "all";
+                archived_by?: string | null;
+                not_archived_by?: string | null;
+                pinned_by?: string | null;
+                not_pinned_by?: string | null;
+                muted_by?: string | null;
+                not_muted_by?: string | null;
+                invite_pending_for?: string | null;
+                not_invite_pending_for?: string | null;
             };
             header?: never;
             path?: never;
@@ -17484,9 +20925,19 @@ export interface operations {
                 offset?: number;
                 mode?: components["schemas"]["SearchMode"];
                 owner_id?: string | null;
-                is_archived?: boolean | null;
+                project_id?: string | null;
                 include_hidden?: boolean;
                 include_deleted?: boolean;
+                participant_scope?: "solo" | "people" | "all";
+                include_all_branches?: boolean;
+                archived_by?: string | null;
+                not_archived_by?: string | null;
+                pinned_by?: string | null;
+                not_pinned_by?: string | null;
+                muted_by?: string | null;
+                not_muted_by?: string | null;
+                invite_pending_for?: string | null;
+                not_invite_pending_for?: string | null;
             };
             header?: never;
             path?: never;
@@ -17767,13 +21218,15 @@ export interface operations {
             };
         };
     };
-    get_unread_counts_v1_threads_unread_counts_get: {
+    get_unread_counts_v1_threads_unread_counts__user_id__get: {
         parameters: {
             query?: {
                 thread_id?: string[] | null;
             };
             header?: never;
-            path?: never;
+            path: {
+                user_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -17961,6 +21414,7 @@ export interface operations {
         parameters: {
             query?: {
                 permanent?: boolean;
+                delete_originated_resources?: boolean;
             };
             header?: {
                 "x-session-id"?: string | null;
@@ -18573,7 +22027,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Event"][];
+                    "application/json": components["schemas"]["CursorPage_Event_"];
                 };
             };
             /** @description bad request */
@@ -18650,13 +22104,116 @@ export interface operations {
             };
         };
     };
-    get_current_branch_v1_threads__thread_id__branch_get: {
+    get_branch_page_v1_threads__thread_id__branch_get: {
         parameters: {
             query?: {
-                include_hidden?: boolean;
+                skip?: number;
+                limit?: number;
+                anchor_message_id?: string | null;
+                before?: number | null;
+                after?: number | null;
+                cursor?: string | null;
             };
             header?: never;
             path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BranchPageOut_Message_"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_message_siblings_v1_threads__thread_id__messages__message_id__siblings_get: {
+        parameters: {
+            query?: {
+                skip?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                message_id: string;
                 thread_id: string;
             };
             cookie?: never;
@@ -18844,7 +22401,9 @@ export interface operations {
     };
     delete_user_message_turn_v1_threads__thread_id__messages__message_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                delete_originated_resources?: boolean;
+            };
             header?: {
                 "x-session-id"?: string | null;
             };
@@ -19062,102 +22621,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ThreadSwitchResponse"];
-                };
-            };
-            /** @description bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationProblemDetails"];
-                };
-            };
-            /** @description too many requests */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    mark_thread_read_v1_threads__thread_id__read_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-session-id"?: string | null;
-            };
-            path: {
-                thread_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ThreadParticipant"];
                 };
             };
             /** @description bad request */
@@ -19625,7 +23088,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SteerRunRequest"];
+                "application/json": components["schemas"]["SteerTextRequest"] | components["schemas"]["SteerInvocationRequest"];
             };
         };
         responses: {
@@ -26019,6 +29482,7 @@ export interface operations {
                 offset?: number;
                 mode?: components["schemas"]["SearchMode"];
                 owner_id?: string | null;
+                project_id?: string | null;
                 include_deleted?: boolean;
             };
             header?: never;
@@ -34359,9 +37823,11 @@ export interface operations {
             };
         };
     };
-    revectorize_all_v1_search_revectorize_post: {
+    revectorize_preview_v1_search_revectorize_get: {
         parameters: {
-            query?: never;
+            query?: {
+                by?: components["schemas"]["StaleBy"][] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -34374,9 +37840,101 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
+                    "application/json": components["schemas"]["JSONObject-Output"];
+                };
+            };
+            /** @description bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationProblemDetails"];
+                };
+            };
+            /** @description too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    revectorize_v1_search_revectorize_post: {
+        parameters: {
+            query?: {
+                by?: components["schemas"]["StaleBy"][] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JSONObject-Output"];
                 };
             };
             /** @description bad request */
@@ -39252,9 +42810,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
+                    "application/json": components["schemas"]["JSONObject-Output"];
                 };
             };
             /** @description bad request */

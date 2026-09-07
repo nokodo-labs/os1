@@ -15,7 +15,7 @@ export {
 	isResolverTool,
 } from './registry'
 export type { NativeToolDefinition } from './registry'
-export { getThinkElapsed, getThinkTitle, getToolSummary } from './summaries'
+export { getThinkElapsed, getThinkTitle, getToolSummary, THINK_ACTIVE_LABEL } from './summaries'
 export { ToolExecutionTracker } from './toolExecutionTracker.svelte'
 export type {
 	ApiMessage,

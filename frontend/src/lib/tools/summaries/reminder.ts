@@ -7,7 +7,7 @@ import {
 	readStringField,
 } from '$lib/utils/records'
 import type { ToolExecution, ToolSummary } from '../types'
-import { countTitle, getToolSummaryState, parseToolOutput } from './summaryState'
+import { countTitle, getToolSummaryState, listedTitle, parseToolOutput } from './summaryState'
 
 /** summarizes reminder fetch, list fetch, list, and search executions. */
 export function summarizeReminderGet(execution: ToolExecution): ToolSummary {
@@ -81,7 +81,8 @@ function summarizeReminderListRead(
 /** summarizes reminder search output or reminder-list listing output. */
 function summarizeReminderSearchOrList(execution: ToolExecution, isActive: boolean): ToolSummary {
 	const query = readNonEmptyString(execution.toolCall.arguments.query)
-	if (isActive) return { title: 'searching reminders', subtitle: query ?? undefined }
+	if (!query) return summarizeReminderListListing(execution, isActive)
+	if (isActive) return { title: 'searching reminders', subtitle: query }
 
 	const output = parseToolOutput(execution)
 	const listCount = readNumberField(output, 'list_count')
@@ -90,15 +91,19 @@ function summarizeReminderSearchOrList(execution: ToolExecution, isActive: boole
 		const total = (listCount ?? 0) + (reminderCount ?? 0)
 		return {
 			title: countTitle(total, 'reminder result', 'reminder results', 'no reminders found'),
-			subtitle: query ?? undefined,
+			subtitle: query,
 		}
 	}
+	return { title: 'searched reminders', subtitle: query }
+}
 
+/** summarizes a plain reminder-list listing, which fetched rather than searched. */
+function summarizeReminderListListing(execution: ToolExecution, isActive: boolean): ToolSummary {
+	if (isActive) return { title: 'listing reminder lists' }
+	const output = parseToolOutput(execution)
 	const count = readNumberField(output, 'count')
 	if (count !== null) {
-		return {
-			title: countTitle(count, 'reminder list', 'reminder lists', 'no reminder lists found'),
-		}
+		return { title: listedTitle(count, 'reminder list', 'reminder lists', 'no reminder lists') }
 	}
-	return { title: 'searched reminders', subtitle: query ?? undefined }
+	return { title: 'listed reminder lists' }
 }

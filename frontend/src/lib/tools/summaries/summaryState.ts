@@ -27,8 +27,22 @@ export function parseToolOutput(execution: ToolExecution): Record<string, unknow
 	return parseJsonRecord(execution.result.output)
 }
 
-/** formats a count result with singular, plural, and empty labels. */
+/** formats the count of a search result with singular, plural, and empty labels. */
 export function countTitle(count: number, singular: string, plural: string, empty: string): string {
 	if (count === 0) return empty
 	return `found ${count} ${count === 1 ? singular : plural}`
+}
+
+/**
+ * formats the count of a plain listing. a listing fetched what was already
+ * there, so it never claims to have "found" anything.
+ */
+export function listedTitle(
+	count: number,
+	singular: string,
+	plural: string,
+	empty: string
+): string {
+	if (count === 0) return empty
+	return `listed ${count} ${count === 1 ? singular : plural}`
 }

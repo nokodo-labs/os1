@@ -6,6 +6,8 @@ import { chat } from '$lib/stores/chat.svelte'
 import { files } from '$lib/stores/files.svelte'
 import { friends } from '$lib/stores/friends.svelte'
 import { groups } from '$lib/stores/groups.svelte'
+import { mcpServers } from '$lib/stores/mcpServers.svelte'
+import { messages } from '$lib/stores/messages.svelte'
 import { notes } from '$lib/stores/notes.svelte'
 import { notifications } from '$lib/stores/notifications.svelte'
 import { permissions } from '$lib/stores/permissions.svelte'
@@ -13,8 +15,7 @@ import { preferences } from '$lib/stores/preferences.svelte'
 import { projects } from '$lib/stores/projects.svelte'
 import { reminders } from '$lib/stores/reminders.svelte'
 import { resourceAccess } from '$lib/stores/resourceAccess.svelte'
-import { session } from '$lib/stores/session.svelte'
-import { settingsCache } from '$lib/stores/settings.svelte'
+import { settingsCache, settingsState } from '$lib/stores/settings.svelte'
 
 export const apiCacheStores = [
 	{
@@ -27,19 +28,29 @@ export const apiCacheStores = [
 	{
 		id: 'notifications',
 		invalidate: () => notifications.invalidate(),
-		shouldRefresh: () => notifications.initialized,
+		shouldRefresh: () => notifications.hasLoaded,
 		refresh: () => notifications.refresh(),
 		clear: () => notifications.clear(),
 	},
 	{
 		id: 'chat',
 		invalidate: () => chat.invalidate(),
+		shouldRefresh: () => chat.hasLoaded,
 		refresh: () => chat.refresh(),
 		clear: () => chat.clear(),
 	},
 	{
+		id: 'messages',
+		invalidate: () => messages.invalidate(),
+		shouldRefresh: () => messages.hasLoaded,
+		refresh: () => messages.refresh(),
+		clear: () => messages.clear(),
+	},
+	{
 		id: 'activeRuns',
 		invalidate: () => activeRunsStore.invalidate(),
+		// live run map, no loaded-once collection: always safe to refetch.
+		shouldRefresh: () => true,
 		refresh: () => activeRunsStore.refresh(),
 		clear: () => activeRunsStore.clear(),
 	},
@@ -88,6 +99,7 @@ export const apiCacheStores = [
 	{
 		id: 'settings',
 		invalidate: () => settingsCache.invalidate(),
+		shouldRefresh: () => settingsState.hasLoaded,
 		refresh: () => settingsCache.refresh(),
 		clear: () => settingsCache.clear(),
 	},
@@ -101,7 +113,7 @@ export const apiCacheStores = [
 	{
 		id: 'friends',
 		invalidate: () => friends.invalidate(),
-		shouldRefresh: () => friends.isReady,
+		shouldRefresh: () => friends.hasLoaded,
 		refresh: () => friends.refresh(),
 		clear: () => friends.clear(),
 	},
@@ -113,21 +125,39 @@ export const apiCacheStores = [
 		clear: () => groups.clear(),
 	},
 	{
+		id: 'mcpServers',
+		invalidate: () => mcpServers.invalidate(),
+		shouldRefresh: () => mcpServers.hasLoaded,
+		refresh: () => mcpServers.refresh(),
+		clear: () => mcpServers.clear(),
+	},
+	{
 		id: 'permissions',
 		invalidate: () => permissions.invalidate(),
-		shouldRefresh: () => permissions.list !== null,
+		shouldRefresh: () => permissions.hasLoaded,
 		refresh: () => permissions.refresh(),
 		clear: () => permissions.clear(),
 	},
 	{
 		id: 'resourceAccess',
 		invalidate: () => resourceAccess.invalidate(),
+		// per-resource on-demand cache, no loaded-once collection: refetch reloads
+		// whatever scopes are currently held.
+		shouldRefresh: () => true,
 		refresh: () => resourceAccess.refresh(),
 		clear: () => resourceAccess.clear(),
 	},
 ] satisfies readonly ApiCacheStore[]
 
+/**
+ * stores the resume path re-reads after a gap where live events were missed.
+ * these are not `apiCacheStores`: nothing marks them stale, so they are refetched
+ * directly. preferences is the only one that needs it - its cross-session updates
+ * arrive as `user.preferences_updated` on the stream, which is exactly what a gap
+ * drops. `preferences.refresh()` re-reads `GET /v1/users/{id}` and writes the
+ * fresh user back onto the session, so adding `session.refresh()` here would only
+ * repeat that same request.
+ */
 export const resumeRefreshStores = [
-	{ id: 'session', refresh: () => session.refresh() },
 	{ id: 'preferences', refresh: () => preferences.refresh() },
 ] satisfies readonly RefreshableStore[]

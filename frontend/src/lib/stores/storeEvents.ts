@@ -8,14 +8,16 @@ export const STORE_EVENT_TYPES = {
 		'thread.created',
 		'thread.updated',
 		'thread.deleted',
-		'thread.read',
+		// participant state, shared (read cursors) or private (mute/pin/archive).
+		// a row's first appearance is `added`, every later change is `updated`.
+		'thread.participants.added',
+		'thread.participants.updated',
 		'message.created',
 		'message.updated',
 		'message.deleted',
 		'runs.active',
 		'run.started',
 		'run.error',
-		'run.failed',
 		'run.completed',
 		'task.created',
 		'task.updated',
@@ -86,9 +88,11 @@ export const STORE_EVENT_TYPES = {
 		'settings.updated',
 	],
 	resourceAccessResource: ['access.updated', 'resource.access.updated'],
-	runs: ['runs.active', 'run.started', 'run.completed', 'run.error', 'run.failed'],
+	runs: ['runs.active', 'run.started', 'run.completed', 'run.error'],
 	settings: ['settings.updated'],
-	typing: ['typing.user.start', 'typing.user.stop'],
+	// the WS fans typing out as `typing.start` / `typing.stop`; the backend event
+	// enum also declares the `typing.user.*` spelling, so both are listened for.
+	typing: ['typing.start', 'typing.stop', 'typing.user.start', 'typing.user.stop'],
 } as const
 
 export type StoreEventType = (typeof STORE_EVENT_TYPES)[keyof typeof STORE_EVENT_TYPES][number]

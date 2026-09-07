@@ -11,7 +11,6 @@ import { getSessionId } from '../sessionId'
 import type { components } from '../types'
 
 export type SearchResultType = components['schemas']['SearchResultType']
-export type SearchResultParent = components['schemas']['SearchResultParent']
 export type SearchResult = components['schemas']['SearchResultItem']
 
 export type SearchResourceType = Exclude<SearchResultType, 'memory'>
@@ -19,8 +18,8 @@ export type SearchResourceType = Exclude<SearchResultType, 'memory'>
 export const SEARCH_RESOURCE_TYPES: SearchResourceType[] = [
 	'thread',
 	'note',
-	'reminder',
-	'calendar_event',
+	'reminder_list',
+	'calendar',
 	'file',
 ]
 

@@ -37,15 +37,12 @@ export interface StreamedMessage {
 	parent_id?: string | null
 	type: 'user' | 'assistant' | 'tool' | 'system' | string
 	content: ContentPart[]
-	metadata_?: Record<string, unknown>
+	metadata?: Record<string, unknown>
 	sender_agent_id?: string | null
 	sender_user_id?: string | null
 	created_at?: string | null
-}
-
-/** text_delta event payload. */
-export interface TextDelta {
-	text: string
+	/** the structural mutation the backend applied when inserting this message. */
+	splice?: MessageSplice | null
 }
 
 /** error event payload. */
@@ -54,19 +51,12 @@ export interface StreamError {
 	run_id?: string
 }
 
-/** tool_result event payload. */
-export interface ToolResultDelta {
-	tool_call_id: string
-	is_error: boolean
-	completed: boolean
-}
-
 /** delta event envelope (faithfully forwards backend AgentDelta). */
 export interface AgentDeltaEnvelope {
 	run_id: string
 	agent_id?: string | null
 	message_id: string | null
-	parent_id: string | null
+	splice: MessageSplice | null
 	delta: unknown
 }
 
@@ -76,25 +66,20 @@ export interface UnknownSseEvent {
 	rawData: string
 }
 
-/** discriminated union for all SSE events from the chat stream. */
+/**
+ * discriminated union for all SSE events from the chat stream.
+ *
+ * agent text and tool output both arrive through the single `delta` event.
+ */
 export type ChatStreamDelta =
 	| { event: 'delta'; data: AgentDeltaEnvelope }
 	| { event: 'message_created'; data: StreamedMessage }
-	| { event: 'text_delta'; data: TextDelta }
-	| { event: 'tool_result'; data: ToolResultDelta }
 	| { event: 'done'; data: null }
 	| { event: 'error'; data: StreamError }
 	| { event: 'unknown'; data: UnknownSseEvent }
 
 // known event types for run streams
-const KNOWN_RUN_EVENTS = new Set([
-	'error',
-	'done',
-	'message_created',
-	'delta',
-	'text_delta',
-	'tool_result',
-])
+const KNOWN_RUN_EVENTS = new Set(['error', 'done', 'message_created', 'delta'])
 
 // known event types for create_and_run streams (includes thread_created)
 const KNOWN_CREATE_AND_RUN_EVENTS = new Set([...KNOWN_RUN_EVENTS, 'thread_created'])
@@ -135,14 +120,6 @@ function parseRunFrame(
 			const parsed = JSON.parse(dataStr) as AgentDeltaEnvelope
 			return { delta: { event: 'delta', data: parsed }, terminal: false }
 		}
-		case 'text_delta': {
-			const parsed = JSON.parse(dataStr) as TextDelta
-			return { delta: { event: 'text_delta', data: parsed }, terminal: false }
-		}
-		case 'tool_result': {
-			const parsed = JSON.parse(dataStr) as ToolResultDelta
-			return { delta: { event: 'tool_result', data: parsed }, terminal: false }
-		}
 		default:
 			// should not reach here if knownEvents is maintained correctly
 			return {
@@ -153,6 +130,16 @@ function parseRunFrame(
 }
 
 // shared streaming transport
+
+/** error thrown when an SSE stream request fails with a non-2xx status. */
+export class StreamHttpError extends Error {
+	status: number
+	constructor(status: number, message?: string) {
+		super(message ?? `stream request failed: ${status}`)
+		this.name = 'StreamHttpError'
+		this.status = status
+	}
+}
 
 async function streamSseFrames(opts: {
 	url: string
@@ -186,7 +173,10 @@ async function streamSseFrames(opts: {
 	}
 
 	if (!response.ok || !response.body) {
-		throw new Error(await streamErrorMessage(response, 'stream request failed'))
+		throw new StreamHttpError(
+			response.status,
+			await streamErrorMessage(response, 'stream request failed')
+		)
 	}
 
 	return response.body.getReader()
@@ -203,16 +193,6 @@ async function streamErrorMessage(response: Response, fallback: string): Promise
 		// fall through to status-only message.
 	}
 	return `${fallback}: ${response.status}`
-}
-
-/** error thrown when an SSE stream request fails with a non-2xx status. */
-export class StreamHttpError extends Error {
-	status: number
-	constructor(status: number, message?: string) {
-		super(message ?? `stream request failed: ${status}`)
-		this.name = 'StreamHttpError'
-		this.status = status
-	}
 }
 
 async function streamSseGet(opts: {
@@ -306,7 +286,12 @@ async function* readSseFrames(
 
 export type ResourceAttachment = components['schemas']['ResourceAttachment']
 export type RunAttachmentType = ResourceAttachment['type']
-export type RunInput = components['schemas']['RunInput']
+
+/** a run's own user message is an ordinary message; there is no weaker run-only DTO. */
+export type RunInput = components['schemas']['MessageCreate']
+
+/** structural placement of the message a write inserts into the thread tree. */
+export type MessageSplice = components['schemas']['MessageSplice']
 
 // run chat stream
 
@@ -314,7 +299,8 @@ export interface ChatStreamOptions {
 	threadId?: string | null
 	agentId: string
 	input: RunInput | null
-	parentId?: string | null
+	/** omit entirely to continue from the thread head; null roots a new tree. */
+	splice?: MessageSplice | null
 	persist?: boolean
 	toolChoice?: ToolChoiceValue | null
 	extraPlugins?: string[]
@@ -341,10 +327,14 @@ export async function* runChatStream(
 
 	const body: Record<string, unknown> = {
 		agent_id: opts.agentId,
-		input: opts.input,
-		parent_id: opts.parentId,
 		stream: true,
 	}
+	// a regeneration/retry answers an existing message, so it carries no input.
+	// omit the key rather than sending null: with input present the splice is
+	// the INPUT's placement, without it the splice places the run's own output.
+	if (opts.input) body.input = opts.input
+	// tri-state: absent means "continue from the head", so only send it when set.
+	if (opts.splice !== undefined) body.splice = opts.splice
 	if (opts.threadId) body.thread_id = opts.threadId
 	if (opts.persist === false) body.persist = false
 	if (opts.toolChoice) body.tool_choice = opts.toolChoice

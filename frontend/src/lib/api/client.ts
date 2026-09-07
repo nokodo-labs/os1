@@ -178,13 +178,20 @@ export async function getAuthHeaders(): Promise<HeadersInit> {
 	return headers
 }
 
-export async function logout(): Promise<void> {
+let logoutRequestInFlight: Promise<void> | null = null
+
+export function logout(): Promise<void> {
+	if (logoutRequestInFlight) return logoutRequestInFlight
 	logoutInProgress = true
 	authGeneration += 1
-	try {
-		await rawApi.POST('/v1/auth/logout', {}).catch(() => {})
-	} finally {
-		clearAccessToken()
-		logoutInProgress = false
-	}
+	logoutRequestInFlight = (async () => {
+		try {
+			await rawApi.POST('/v1/auth/logout', {}).catch(() => {})
+		} finally {
+			clearAccessToken()
+			logoutInProgress = false
+			logoutRequestInFlight = null
+		}
+	})()
+	return logoutRequestInFlight
 }

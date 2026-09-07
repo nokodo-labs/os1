@@ -25,7 +25,7 @@ function parseToolArguments(args: unknown): Record<string, unknown> {
 /** extracts a tool result from a persisted tool message. */
 export function parseToolResult(message: ApiMessage): ToolResult | null {
 	if (message.type !== 'tool') return null
-	const metadata = isRecord(message.metadata_) ? message.metadata_ : undefined
+	const metadata = isRecord(message.metadata) ? message.metadata : undefined
 	const metadataToolCallId = readNonEmptyString(metadata?.tool_call_id)
 	const toolCallId = readNonEmptyString(message.tool_call_id) ?? metadataToolCallId
 	if (!toolCallId) return null

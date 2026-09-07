@@ -420,7 +420,7 @@ class CalendarEventsStore {
 		const doRollback = options?.rollback ?? true
 		const optimistic: CalendarEvent = {
 			...existing,
-			metadata_: updates.metadata_ ?? existing.metadata_ ?? {},
+			metadata: updates.metadata ?? existing.metadata ?? {},
 			title: updates.title ?? existing.title,
 			description: 'description' in updates ? updates.description : existing.description,
 			start_at: updates.start_at ?? existing.start_at,
@@ -525,7 +525,7 @@ class CalendarEventsStore {
 		const now = new SvelteDate().toISOString()
 		return {
 			...data,
-			metadata_: data.metadata_ ?? {},
+			metadata: data.metadata ?? {},
 			all_day: data.all_day ?? false,
 			calendar_id: calendarId,
 			notification_offsets: data.notification_offsets ?? [],

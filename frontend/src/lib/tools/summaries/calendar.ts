@@ -22,12 +22,14 @@ export function summarizeCalendarEventGet(execution: ToolExecution): ToolSummary
 
 	const output = parseToolOutput(execution)
 	const count = readNumberField(output, 'count')
-	if (count !== null) {
-		return {
-			title: countTitle(count, 'scheduled item', 'scheduled items', 'nothing coming up'),
-		}
-	}
+	if (count !== null) return { title: upcomingTitle(count) }
 	return { title: 'checked calendar' }
+}
+
+/** titles the upcoming window, which listed a schedule rather than searching it. */
+function upcomingTitle(count: number): string {
+	if (count === 0) return 'nothing coming up'
+	return `${count} scheduled ${count === 1 ? 'item' : 'items'} coming up`
 }
 
 /** summarizes calendar event create, update, and delete executions. */

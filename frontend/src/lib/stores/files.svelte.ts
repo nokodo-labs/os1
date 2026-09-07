@@ -60,7 +60,7 @@ export interface FileResource {
 		mime_type: string
 		category: AttachmentMediaCategory
 		source: string
-		owner_id: string
+		owner_id: string | null
 		project_ids: string[]
 	}
 }
@@ -243,7 +243,7 @@ export function apiFileToResource(file: ApiFile): FileResource {
 			mime_type: mime,
 			category,
 			source: file.source,
-			owner_id: file.owner_id,
+			owner_id: file.owner_id ?? null,
 			project_ids: file.project_ids ?? [],
 		},
 	}
@@ -304,7 +304,11 @@ export const files = {
 		const cached = filesMap.get(fileId)
 		const force = options?.force ?? false
 		const resolveOrigin = options?.resolveOrigin ?? false
-		if (cached && !force && (!resolveOrigin || cached.origin_thread_id || !cached.message_id)) {
+		if (
+			cached &&
+			!force &&
+			(!resolveOrigin || cached.origin_thread_id || !cached.origin_message_id)
+		) {
 			return cached
 		}
 		const file = await fetchSingleFile(fileId, resolveOrigin)

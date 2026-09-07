@@ -15,6 +15,7 @@ import type { components } from '$lib/api/types'
 import { getAccessToken, onAccessTokenChanged } from '$lib/auth/session.svelte'
 import { showError } from '$lib/stores/notifications.svelte'
 import { STORE_EVENT_TYPES, subscribeToStoreEvents } from '$lib/stores/storeEvents'
+import { untrack } from 'svelte'
 import { SvelteMap } from 'svelte/reactivity'
 
 export type Project = components['schemas']['Project']
@@ -264,7 +265,11 @@ class ProjectsCache {
 	async load(options?: { force?: boolean }): Promise<Project[]> {
 		const force = options?.force ?? false
 
-		if (!force && this.isFresh) return this.list
+		// the freshness stamp is reactive state, so reading it plainly would
+		// subscribe the caller to it: an $effect that calls load() then refetches
+		// every time the lifecycle marks the cache stale, which turns each
+		// invalidation into a poll (the chat sidebar hit /projects on a loop).
+		if (!force && untrack(() => this.isFresh)) return untrack(() => this.list)
 		if (this.#inFlight) return this.#inFlight
 
 		this.#inFlight = (async () => {
