@@ -85,9 +85,8 @@ async def create_run(
 			detail="output placement requires a persisted thread",
 		)
 
-	# ephemeral run - no thread, no persistence. routes through the same
-	# producer-task path as persisted runs so it is cancellable and
-	# observable in the run registry.
+	# ephemeral run - no thread, no persistence. routed through the same
+	# producer path as persisted runs so it stays cancellable and observable.
 	if req.input is None:
 		raise HTTPException(
 			status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

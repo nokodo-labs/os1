@@ -54,15 +54,15 @@ def same_container(left: TypeID | None, right: TypeID | None) -> bool:
 	return (left or None) == (right or None)
 
 
-type KeyedLockRegistry = dict[TypeID, tuple[asyncio.Lock, int]]
+type KeyedLockRegistry[K] = dict[K, tuple[asyncio.Lock, int]]
 """per-key locks with the number of holders and waiters currently on each."""
 
 
 @contextlib.asynccontextmanager
-async def keyed_lock(
-	registry: KeyedLockRegistry,
+async def keyed_lock[K](
+	registry: KeyedLockRegistry[K],
 	guard: asyncio.Lock,
-	key: TypeID,
+	key: K,
 ) -> AsyncIterator[None]:
 	"""hold one lock per key, refcounted so idle keys leave nothing behind.
 
@@ -123,6 +123,31 @@ BUS_UNAVAILABLE_REASON = "bus unavailable"
 the one value `classify_failure` maps onto ``UNAVAILABLE``, so "retry later"
 is distinguishable from "we hit a bug" without naming which backend it was.
 """
+
+
+def run_failure_payload(
+	thread_id: TypeID | None,
+	agent_id: TypeID | None,
+	reason: RunFailureReason,
+	run_id: TypeID | None,
+	partial_message_id: TypeID | None = None,
+) -> dict[str, str | None]:
+	"""build the one payload every channel reports a failed run with.
+
+	the live SSE ``error`` frame and the durable ``run.error`` event are the
+	same failure seen from two places, so they are the same object: a second
+	shape would let the two channels disagree about why a run stopped. every
+	field is a closed value or an id - no free text reaches a client.
+	"""
+	return {
+		"thread_id": str(thread_id) if thread_id is not None else None,
+		"agent_id": str(agent_id) if agent_id is not None else None,
+		"reason": reason.value,
+		"run_id": str(run_id) if run_id is not None else None,
+		"partial_message_id": (
+			str(partial_message_id) if partial_message_id is not None else None
+		),
+	}
 
 
 def classify_failure(reason: str | None) -> RunFailureReason:

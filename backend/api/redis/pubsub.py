@@ -38,12 +38,14 @@ class PubSubChannel:
 	"""bind to a single pub/sub channel name."""
 
 	def __init__(self, channel: str) -> None:
+		"""bind to one channel name; it is fixed for this object's lifetime."""
 		if not channel:
 			raise ValueError("channel name must be non-empty")
 		self._channel = channel
 
 	@property
 	def channel(self) -> str:
+		"""the redis channel this object publishes to and subscribes on."""
 		return self._channel
 
 	async def publish(self, payload: dict[str, Any]) -> int:

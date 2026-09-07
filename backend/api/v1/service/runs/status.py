@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -22,6 +23,7 @@ from api.v1.service.events import broadcast_to_resource
 from api.v1.service.runs.bus import (
 	PENDING_RUN_SLOT_TTL_SECONDS,
 	RUN_LOG_MAX_FRAMES,
+	RunBusUnavailableError,
 	RunSlotActive,
 	RunSlotPending,
 	abandon_run_slot,
@@ -37,8 +39,11 @@ from api.v1.service.runs.bus import (
 	wait_run_slot,
 )
 from api.v1.service.runs.contracts import (
+	KeyedLockRegistry,
 	SteeringInjection,
 	classify_failure,
+	keyed_lock,
+	run_failure_payload,
 	same_container,
 )
 from nokodo_ai.utils.sse import sse_encode
@@ -52,7 +57,11 @@ class ActiveRunSignal(TypedDict):
 	"""one active run, as a client needs to find and resume it."""
 
 	thread_id: TypeID | None
-	"""conversation the run answers in; None for an ephemeral run."""
+	"""conversation the run answers in.
+
+	the type admits None for an ephemeral run, but ``get_active_runs_signal``
+	drops every run without a thread, so the wire never carries one.
+	"""
 	run_id: TypeID
 	"""the run to resume."""
 	agent_id: TypeID
@@ -287,11 +296,14 @@ class RunStatus:
 	cancellation_reason: str | None = None
 	"""terminal reason requested by the run's cancellation owner."""
 
-	sse_log: list[bytes] = field(default_factory=list)
+	sse_log: deque[bytes] = field(
+		default_factory=lambda: deque(maxlen=RUN_LOG_MAX_FRAMES)
+	)
 	"""accumulated SSE frames for catchup (raw bytes, ready to send).
 
 	bounded to the same newest-frame window as Redis so local and remote resume
-	have one catchup contract.
+	have one catchup contract. a deque because this is appended on every frame
+	of every active run, under the store lock.
 	"""
 	sse_truncated: bool = False
 	"""whether older catchup frames fell outside the retained window."""
@@ -431,7 +443,8 @@ class RunSnapshot:
 
 
 class RunStore:
-	"""shared state behind the run lifecycle, stream, conversation, and inbox stores.
+	"""shared state behind the run lifecycle, stream, conversation, inbox, and
+	startup-slot stores.
 
 	thread-safe via asyncio.Lock. keyed by run_id.
 	a background cleanup task evicts orphaned runs after _STALE_TTL_SECONDS.
@@ -472,7 +485,14 @@ class RunStore:
 		self._mirror_tasks: dict[TypeID, asyncio.Task[None]] = {}
 		# agent slots being started: (thread, container, agent) -> slot
 		self._agent_slots: dict[tuple[str, str, str], AgentSlot] = {}
-		self._agent_slot_claim_lock = asyncio.Lock()
+		self._agent_slot_claim_locks: KeyedLockRegistry[tuple[str, str, str]] = {}
+		"""one claim lock per slot, so unrelated conversations never queue.
+
+		the claim does a redis round trip inside its critical section, and two
+		different slots share no state - the map itself is already guarded by
+		``_lock`` and the distributed claim is keyed per slot in redis.
+		"""
+		self._agent_slot_claim_guard = asyncio.Lock()
 		self._on_stale_run: Callable[[TypeID], Awaitable[None]] | None = None
 
 	def on_stale_run(self, handler: Callable[[TypeID], Awaitable[None]]) -> None:
@@ -668,9 +688,9 @@ class RunStore:
 			rs = self._runs.get(run_id)
 			if rs is None:
 				return
+			retained = len(rs.sse_log)
 			rs.sse_log.append(frame)
-			if len(rs.sse_log) > RUN_LOG_MAX_FRAMES:
-				del rs.sse_log[:-RUN_LOG_MAX_FRAMES]
+			if len(rs.sse_log) == retained:
 				rs.sse_truncated = True
 			rs.touch()
 			queues = list(self._subscribers.get(run_id, {}))
@@ -925,7 +945,11 @@ class RunStore:
 		yet, which is how two invocations both conclude "nobody is answering".
 		"""
 		key = self._slot_key(thread_id, agent_id, container_root_id)
-		async with self._agent_slot_claim_lock:
+		async with keyed_lock(
+			self._agent_slot_claim_locks,
+			self._agent_slot_claim_guard,
+			key,
+		):
 			expired: AgentSlot | None = None
 			async with self._lock:
 				active = self._active_run_for_invocation(
@@ -1007,11 +1031,20 @@ class RunStore:
 				)
 			)
 			return
-		promoted = await promote_run_slot(
-			slot.distributed_key,
-			slot.distributed_token,
-			run_id,
-		)
+		try:
+			promoted = await promote_run_slot(
+				slot.distributed_key,
+				slot.distributed_token,
+				run_id,
+			)
+		except RunBusUnavailableError:
+			# unreachable and replaced are the same outcome: ownership was never
+			# published, so a second invocation can start a duplicate.
+			logger.error(
+				"run bus unreachable while publishing run slot ownership",
+				extra={"run_id": str(run_id)},
+			)
+			promoted = False
 		if not promoted:
 			logger.error(
 				"distributed run slot was replaced before registration",
@@ -1300,11 +1333,8 @@ class RunStore:
 		if rs.steering_task is not None:
 			rs.steering_task.cancel()
 		self._send(subscribers, None, run_id)
-		# tell remote subscribers (other workers) that the stream is done, then
-		# mark the catchup log for short-grace expiry. cleanup_run_log uses
-		# EXPIRE rather than DELETE so a late cross-worker subscriber landing
-		# within the grace window still sees the catchup; subsequent
-		# subscribers find the key expired and get a lone terminal frame.
+		# cleanup_run_log EXPIREs rather than DELETEs, so a late cross-worker
+		# subscriber inside the grace window still sees the catchup.
 		await self._flush_mirrors(run_id)
 		await mark_run_end(run_id)
 		await best_effort_teardown(partial(cleanup_run_log, run_id))
@@ -1318,12 +1348,11 @@ class RunStore:
 	) -> RunSnapshot | None:
 		"""mark a run as errored, push the error frame, and close subscribers.
 
-		the public error frame carries only ``run_id`` and a ``RunFailureReason``
-		so late/resume subscribers do not receive provider, model, status, code,
-		or internal reason details. that closed set is the same value the
-		durable ``run.error`` fans out, so the live and durable channels never
-		disagree about why one run stopped. the terminal ``done`` event is
-		synthesized by subscribe_run_stream from the ``None`` sentinel.
+		the error frame is literally the durable ``run.error`` payload, built by
+		the one builder both channels share, so a late or resuming subscriber
+		reads the same closed set the conversation records and neither carries
+		free text. the terminal ``done`` event is synthesized by
+		subscribe_run_stream from the ``None`` sentinel.
 
 		idempotent: if the run is already gone (e.g. concurrent fail/complete)
 		this returns ``None`` and is otherwise a no-op.
@@ -1332,30 +1361,32 @@ class RunStore:
 			rs = self._runs.pop(run_id, None)
 			if rs is None:
 				return None
-			# the run is out of the map, so this only marks the snapshot the
-			# caller gets back - but `complete_run` sets COMPLETED on its own
-			# snapshot, and a failed run reading RUNNING is a lie to anyone
-			# holding it.
+			# the run is out of the map, so this only marks the snapshot the caller
+			# gets back - but a failed run reading RUNNING is a lie to whoever holds it.
 			rs.state = RunState.ERROR
 			rs.touch()
 			if rs.steering_task is not None:
 				rs.steering_task.cancel()
-			# detach under the lock so a concurrent unsubscribe or
-			# _close_subscribers (e.g. from cleanup_loop) can't yank the set out
-			# from under us; the post-lock pass is purely best-effort delivery.
+			# detach under the lock so a concurrent unsubscribe cannot yank the set
+			# away; the post-lock pass is purely best-effort delivery.
 			subscribers = self._detach_subscribers(run_id)
-		err_payload = {"run_id": str(run_id), "reason": classify_failure(reason).value}
-		err_frame = sse_encode(event="error", data=err_payload)
-		# mirror the error frame to redis so cross-worker late subscribers
-		# see the sanitized failure via the catchup LRANGE; without this they
-		# only see the end sentinel and lose the terminal error state.
+		err_frame = sse_encode(
+			event="error",
+			data=run_failure_payload(
+				thread_id=rs.thread_id,
+				agent_id=rs.agent_id,
+				reason=classify_failure(reason),
+				run_id=run_id,
+			),
+		)
+		# mirrored to redis so cross-worker late subscribers see the sanitized
+		# failure via the catchup LRANGE instead of only the end sentinel.
 		self._send(subscribers, err_frame, run_id)
 		self._send(subscribers, None, run_id)
 		await self._flush_mirrors(run_id)
 		await mirror_frame(run_id, err_frame)
-		# tell remote subscribers the stream ended; cleanup_run_log uses
-		# a short EXPIRE so late cross-worker subscribers within the grace
-		# window still get the catchup + the mirrored error frame.
+		# cleanup_run_log uses a short EXPIRE so late cross-worker subscribers
+		# inside the grace window still get the catchup and the error frame.
 		await mark_run_end(run_id)
 		await best_effort_teardown(partial(cleanup_run_log, run_id))
 		await best_effort_teardown(partial(release_run_slot, run_id))

@@ -24,6 +24,8 @@ from api.models.message import MessageType
 from api.permissions import MentionableSubjectType, ResourceType
 from api.schemas.message import MessageCreate, MessageSplice
 from api.v1.service.authentication import Principal
+from api.v1.service.chat.context import AppContext
+from api.v1.service.chat.filters.base import Filter
 from api.v1.service.chat.message_metadata import (
 	CLIENT_STEERING_ID_KEY,
 	CREATED_AT_KEY,
@@ -78,7 +80,6 @@ from api.v1.service.threads.common import message_event_data, message_load_optio
 from nokodo_ai import Agent as SDKAgent
 from nokodo_ai.agents import AgentIterationState
 from nokodo_ai.context import AgentContext
-from nokodo_ai.filters import Filter
 from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import UserMessage as SDKUserMessage
 from nokodo_ai.utils.typeid import TypeID
@@ -86,7 +87,7 @@ from nokodo_ai.utils.typeid import TypeID
 
 logger = logging.getLogger(__name__)
 
-_catch_up_locks: KeyedLockRegistry = {}
+_catch_up_locks: KeyedLockRegistry[TypeID] = {}
 """per-run locks serializing catch-up reservations for one run."""
 _catch_up_locks_guard = asyncio.Lock()
 """guards the catch-up lock registry itself."""
@@ -116,7 +117,7 @@ SteeringInjectedCallback = Callable[
 """settles a drained batch and returns what actually entered the thread."""
 
 
-class SteeringFilter[AppContextT = None](Filter[AppContextT]):
+class SteeringFilter(Filter):
 	"""drain externally enqueued messages between agent iterations."""
 
 	name: str = "steering"
@@ -135,12 +136,12 @@ class SteeringFilter[AppContextT = None](Filter[AppContextT]):
 	ready: SkipValidation[SteeringReady | None] = Field(default=None)
 	"""whether the run can take an injection right now."""
 
-	async def process(
+	async def run(
 		self,
-		state: AgentIterationState[AppContextT],
+		state: AgentIterationState[AppContext],
 		agent_context: AgentContext,
-		app_context: AppContextT | None,
-	) -> AgentIterationState[AppContextT]:
+		app_context: AppContext | None,
+	) -> AgentIterationState[AppContext]:
 		"""drain the run's inbox into the thread between two iterations.
 
 		the settlement is shielded so a cancel cannot tear a half-written
@@ -154,7 +155,7 @@ class SteeringFilter[AppContextT = None](Filter[AppContextT]):
 		if not drained:
 			return state
 
-		async def _settle_and_append() -> AgentIterationState[AppContextT]:
+		async def _settle_and_append() -> AgentIterationState[AppContext]:
 			"""persist the batch, then append what it accepted to the thread."""
 			accepted = (
 				await self.on_injected(drained)
@@ -345,14 +346,11 @@ async def enqueue_run_steering(
 		draft,
 		db,
 		principal,
-		# intentionally NOT passing origin_session_id: the originating client
-		# needs to receive the message.created event since the /steer http
-		# response races the WS event for tree updates.
+		# NOT passing origin_session_id: the originating client still needs the
+		# message.created event, since the /steer response races it.
 		origin_session_id=None,
-		# the row exists so clients can render the queued message, but the
-		# agent has not read it: it is not conversation yet, so the write must
-		# not move the head. moving it and undoing that afterwards would leave
-		# a window where another writer chains onto a message nobody has seen.
+		# the agent has not read this row yet, so it is not conversation and must
+		# not move the head, or another writer could chain onto an unseen message.
 		advances_head=False,
 		originated_resources=run_input.originated_resources,
 	)
@@ -381,9 +379,8 @@ async def enqueue_run_steering(
 			),
 		)
 	if delivered == 0:
-		# the local inbox IS the delivery: the run that just refused this
-		# message lives here. publishing would reach our own subscriber, fail
-		# to enqueue again, and report success for a message it never took.
+		# the run that refused this message lives here, so publishing would loop
+		# back to our own subscriber and report success for a message never taken.
 		create_background_task(
 			_settle_drop(
 				message_id=user_msg_id,
@@ -674,10 +671,8 @@ async def drop_run_steering(
 	inbox, persists the metadata as dropped, and broadcasts the
 	``run.steering.dropped`` event. clients reconcile via the broadcast.
 	"""
-	# the run is the usual subject, but it is in-memory and may be gone (ended,
-	# evicted, or never real). the row itself is durable, so it identifies the
-	# conversation when the run cannot - never skip the check just because the
-	# run lookup missed.
+	# the run is in-memory and may be gone; the row is durable, so it
+	# identifies the conversation when the run cannot.
 	resolved = await find_run(run_id)
 	stored_message = await db.get(MessageORM, message_id)
 	if stored_message is None or str(
@@ -715,9 +710,8 @@ async def drop_run_steering(
 	await authorize_run(resolved, principal, db, required_level=AccessLevel.EDITOR)
 
 	if not resolved.is_local:
-		# the run lives on another worker (or nowhere): the command bus is the
-		# only way to reach it, and zero subscribers means it is unreachable
-		# rather than gone.
+		# the run lives on another worker or nowhere: zero subscribers means
+		# unreachable, not gone.
 		delivered = await publish_steering_command(
 			run_id,
 			DropSteeringCommand(
@@ -934,8 +928,7 @@ async def persist_injected_steering(
 	injected_at = consumed_at or datetime.now(UTC)
 	async with async_session_local() as session:
 		# taken before anything is read or written: this moves rows within the
-		# tree, which is the same class of edit every other writer takes it
-		# for, and the head move at the end reads the chain back.
+		# tree, the same class of edit every other writer takes it for.
 		await acquire_resource_write_lock(session, "thread", thread_id)
 		thread = await session.get(Thread, thread_id)
 		if thread is None:
@@ -1009,9 +1002,9 @@ async def _is_steering_enabled(agent_id: TypeID | None, db: AsyncSession) -> boo
 	return agent.parsed_config.features.steering.enabled
 
 
-async def prepare_steering[AppContextT](
+async def prepare_steering(
 	run_id: TypeID,
-	sdk_agent: SDKAgent[AppContextT],
+	sdk_agent: SDKAgent[AppContext],
 	thread_id: TypeID | None,
 	agent_id: TypeID,
 	principal: Principal,
@@ -1019,7 +1012,7 @@ async def prepare_steering[AppContextT](
 	require_processed: SteeringRequireProcessed | None = None,
 	advance_parent: SteeringAdvanceParent | None = None,
 	ready: SteeringReady | None = None,
-) -> SDKAgent[AppContextT]:
+) -> SDKAgent[AppContext]:
 	"""set up steering for a single agent run.
 
 	the filter is always installed: an agent that opts out of manual steering
@@ -1112,10 +1105,8 @@ async def prepare_steering[AppContextT](
 				consumed_at=injected_at,
 			)
 		except Exception:
-			# the write can fail on its own (a busy thread 409s on the write
-			# lock). the rows are still `queued`, and nothing is tracking them
-			# any more, so without this they would sit queued forever with no
-			# event ever explaining it.
+			# the write can fail on its own (a busy thread 409s on the lock), leaving
+			# rows `queued` with nothing tracking them and no event explaining it.
 			logger.exception(
 				"failed to persist injected steering",
 				extra={"run_id": str(run_id), "thread_id": str(thread_id)},
@@ -1130,14 +1121,15 @@ async def prepare_steering[AppContextT](
 				name="settle_steering_inject_failed",
 			)
 			return []
+		# settled either way: a row that lost the `queued` guard was resolved by
+		# whoever dropped it, so leaving its id claimed owes a resolution twice.
+		await run_inbox.mark_steering_injected(run_id, injected_ids)
 		if not injected:
-			# every row lost the `queued` guard - a drop got there first, and
-			# it already announced itself. saying "injected" too would send
-			# clients two contradictory events for one message.
+			# every row lost the `queued` guard: the drop already announced itself,
+			# and "injected" too would send two contradictory events for one message.
 			return []
 		if advance_parent is not None:
 			await advance_parent(injected[-1])
-		await run_inbox.mark_steering_injected(run_id, injected_ids)
 		create_background_task(
 			broadcast_steering_event(
 				event_type=EventType.RUN_STEERING_INJECTED,

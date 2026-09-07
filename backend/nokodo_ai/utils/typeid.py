@@ -34,9 +34,8 @@ def _encode_base32_uuid_suffix(uuid_bytes: bytes) -> str:
 		raise ValueError("uuid must be 16 bytes")
 
 	uuid_int = int.from_bytes(uuid_bytes, byteorder="big", signed=False)
-	# base32 encoding per spec v0.3.0:
-	# treat uuid as 128 bits, prepend two zero bits on the left => 130 bits.
-	# then emit 26 groups of 5 bits from most-significant to least.
+	# base32 per spec v0.3.0: 128 uuid bits plus two zero bits on the left =
+	# 130, emitted as 26 groups of 5 from most-significant to least.
 	chars: list[str] = []
 	for group_index in range(TYPEID_SUFFIX_LENGTH):
 		shift = 125 - (group_index * 5)
@@ -95,7 +94,13 @@ def new_typeid(prefix: str) -> TypeID:
 	return TypeID(f"{prefix}{TYPEID_SEPARATOR}{suffix}")
 
 
-def is_typeid(value: str, prefix: str | None = None) -> bool:
+def is_typeid(value: object, prefix: str | None = None) -> bool:
+	"""whether a value is a typeid, optionally of one specific kind.
+
+	takes ``object`` because its callers are trust boundaries decoding
+	arbitrary payloads: a non-string is simply not a typeid, and answering
+	that here is what keeps every call site from restating the type check.
+	"""
 	if not isinstance(value, str):
 		return False
 

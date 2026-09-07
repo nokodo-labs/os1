@@ -723,10 +723,18 @@ async def enqueue_started_task(
 	)
 
 
-async def subscribe_task_stream(task_id: TypeID) -> AsyncGenerator[bytes]:
-	"""subscribe to a task SSE stream with Redis catchup."""
+async def subscribe_task_stream(
+	task_id: TypeID,
+	subscriber_id: TypeID,
+) -> AsyncGenerator[bytes]:
+	"""subscribe to a task SSE stream with Redis catchup.
+
+	``subscriber_id`` is the user the caller was authorized as, recorded so a
+	revocation landing mid-stream can end this stream without touching the
+	task.
+	"""
 	if await _bus.log_known(task_id):
-		async for frame in _bus.subscribe(task_id):
+		async for frame in _bus.subscribe(task_id, str(subscriber_id)):
 			yield frame
 		yield sse_encode(event="done", data={})
 		return
@@ -740,6 +748,6 @@ async def subscribe_task_stream(task_id: TypeID) -> AsyncGenerator[bytes]:
 			yield sse_encode(event="done", data={})
 			return
 
-	async for frame in _bus.subscribe(task_id):
+	async for frame in _bus.subscribe(task_id, str(subscriber_id)):
 		yield frame
 	yield sse_encode(event="done", data={})

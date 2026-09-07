@@ -235,9 +235,8 @@ async def claim_run_slot(
 				return value
 			if value == "pending":
 				return RunSlotPending(key=key)
-	# two full rounds of losing the SET and then finding the key gone means
-	# something is churning this slot; a third would be guessing. the bus
-	# answered every time, so this is contention, not an outage.
+	# the bus answered every round, so this is contention, not an outage; a
+	# third attempt would be guessing.
 	logger.warning("run slot changed under every claim attempt: %s", key)
 	raise RunSlotContendedError(key)
 
@@ -404,11 +403,16 @@ async def read_run_route(run_id: TypeID) -> RunRoute | None:
 	agent_id = payload.get("agent_id")
 	user_id = payload.get("user_id")
 	persist = payload.get("persist")
+	# prefix-checked: a well-formed id of the wrong kind would otherwise be
+	# routed and queried as if it named the resource it does not.
 	if (
-		(thread_id is not None and not isinstance(thread_id, str))
-		or (container_root_id is not None and not isinstance(container_root_id, str))
-		or not isinstance(agent_id, str)
-		or not isinstance(user_id, str)
+		(thread_id is not None and not is_typeid(thread_id, prefix="thread"))
+		or (
+			container_root_id is not None
+			and not is_typeid(container_root_id, prefix="msg")
+		)
+		or not is_typeid(agent_id, prefix="agent")
+		or not is_typeid(user_id, prefix="user")
 		or not isinstance(persist, bool)
 	):
 		return None
@@ -438,9 +442,20 @@ async def mark_run_end(run_id: TypeID) -> None:
 	await _bus.mark_end(str(run_id))
 
 
-def subscribe_remote_run(run_id: TypeID) -> AsyncIterator[bytes]:
-	"""subscribe to a run owned by another worker."""
-	return _bus.subscribe(str(run_id))
+def subscribe_remote_run(
+	run_id: TypeID,
+	subscriber_id: TypeID,
+) -> AsyncIterator[bytes]:
+	"""subscribe to a run owned by another worker, as one authorized user."""
+	return _bus.subscribe(str(run_id), str(subscriber_id))
+
+
+async def retain_remote_run_subscribers(
+	run_id: TypeID,
+	user_ids: set[TypeID],
+) -> None:
+	"""end other workers' streams on one run except these users'."""
+	await _bus.retain_subjects(str(run_id), {str(user_id) for user_id in user_ids})
 
 
 async def cleanup_run_log(run_id: TypeID) -> None:

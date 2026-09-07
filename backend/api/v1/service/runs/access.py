@@ -3,21 +3,18 @@
 import asyncio
 import logging
 
-from fastapi import HTTPException
-
 from api.database import async_session_local
-from api.models.access_rule import AccessLevel
 from api.permissions import ResourceType
-from api.v1.service.authentication import load_principal_for_user
 from api.v1.service.authorization import (
+	list_accessible_user_ids_for_resources,
 	read_access_change_batch,
-	require_thread_access,
 )
 from api.v1.service.runs.access_cursors import (
 	access_revision_cursor,
 	drop_access_revision_cursor,
 	set_access_revision_cursor,
 )
+from api.v1.service.runs.bus import retain_remote_run_subscribers
 from api.v1.service.runs.contracts import KeyedLockRegistry, keyed_lock
 from api.v1.service.runs.failures import terminate_run
 from api.v1.service.runs.status import run_registry, run_streams
@@ -27,7 +24,7 @@ from nokodo_ai.utils.typeid import TypeID, is_typeid
 
 logger = logging.getLogger(__name__)
 
-_access_replay_locks: KeyedLockRegistry = {}
+_access_replay_locks: KeyedLockRegistry[TypeID] = {}
 """per-thread locks serializing ACL replays for one thread."""
 _access_replay_locks_guard = asyncio.Lock()
 """guards the replay lock registry itself."""
@@ -114,10 +111,15 @@ async def terminate_local_thread_runs(thread_id: TypeID) -> None:
 
 
 def _is_writer_model_transition(transition: object) -> bool:
-	"""whether one access record crossed the thread's writer model."""
-	return isinstance(transition, dict) and transition.get(
-		"before"
-	) is not transition.get("after")
+	"""whether one access record crossed the thread's writer model.
+
+	the producing hook writes this key only when the value changed, so a
+	present record is already a transition; the comparison keeps that from
+	being load-bearing.
+	"""
+	return isinstance(transition, dict) and transition.get("before") != transition.get(
+		"after"
+	)
 
 
 async def replay_thread_acl_updates(thread_id: TypeID) -> None:
@@ -156,16 +158,13 @@ async def _replay_thread_acl_updates(thread_id: TypeID) -> None:
 		await terminate_local_thread_runs(thread_id)
 		return
 
-	# the writer model picks the thread's topology, so a run that crossed it
-	# is answering into a conversation shaped differently from the one it was
-	# built for. every other ACL revision leaves the topology alone - most of
-	# them only widen access - and a live answer survives it.
+	# the writer model picks the thread's topology, so a run that crossed the
+	# change is answering into a differently shaped conversation.
 	if writer_model_changed:
 		await terminate_local_thread_runs(thread_id)
 		return
-	# the run survives, but the people watching it are re-checked: access was
-	# resolved once when each stream attached, so a revocation since then is
-	# only enforced here.
+	# access was resolved once when each stream attached, so a revocation
+	# since then is only enforced here.
 	await detach_unauthorized_subscribers(thread_id)
 	set_access_revision_cursor(thread_id, batch.current_revision)
 
@@ -176,23 +175,27 @@ async def detach_unauthorized_subscribers(thread_id: TypeID) -> None:
 	resolved per user rather than per stream: one person watching a run from
 	three tabs is one access question, and the answer is the same for all
 	three.
+
+	the local map only knows watchers attached to this worker, so the run's own
+	frame channel carries the revocation to the rest of the fleet: a stream
+	that reads a run from a worker that does not own it is only reachable
+	there.
 	"""
-	watchers = await run_streams.subscribed_user_ids(thread_id)
-	if not watchers:
+	local_watchers = await run_streams.subscribed_user_ids(thread_id)
+	local_run_ids = await run_registry.local_run_ids(thread_id)
+	if not local_watchers and not local_run_ids:
 		return
-	revoked: set[TypeID] = set()
-	async with async_session_local() as session:
-		for user_id in watchers:
-			principal = await load_principal_for_user(user_id, session)
-			try:
-				await require_thread_access(
-					thread_id,
-					session,
-					principal,
-					required_level=AccessLevel.READER,
-				)
-			except HTTPException:
-				revoked.add(user_id)
+	# the same cached question `broadcast_to_resource` asks, rather than a
+	# principal load and an ACL walk per watcher.
+	allowed = set(
+		await list_accessible_user_ids_for_resources(
+			[(ResourceType.THREAD, thread_id)],
+			None,
+		)
+	)
+	for run_id in local_run_ids:
+		await retain_remote_run_subscribers(run_id, allowed)
+	revoked = local_watchers - allowed
 	detached = await run_streams.detach_thread_subscribers(thread_id, revoked)
 	if detached:
 		logger.info(

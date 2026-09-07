@@ -10,7 +10,7 @@ from api.local_tasks import create_background_task
 from api.redis import make_run_channel
 from nokodo_ai.messages import Message as SDKMessage
 from nokodo_ai.messages import MessageAdapter
-from nokodo_ai.utils.typeid import TypeID
+from nokodo_ai.utils.typeid import TypeID, is_typeid
 
 
 logger = logging.getLogger(__name__)
@@ -130,7 +130,13 @@ def _decode_command(payload: dict[str, object]) -> SteeringCommand | None:
 	message_id = payload.get("message_id")
 	thread_id = payload.get("thread_id")
 	agent_id = payload.get("agent_id")
-	if not all(isinstance(value, str) for value in (message_id, thread_id, agent_id)):
+	# the prefix is checked, not just the type: a well-formed id of the wrong
+	# kind would otherwise reach the message and branch queries as its own.
+	if not (
+		is_typeid(message_id, prefix="msg")
+		and is_typeid(thread_id, prefix="thread")
+		and is_typeid(agent_id, prefix="agent")
+	):
 		return None
 	if operation == "drop":
 		return DropSteeringCommand(

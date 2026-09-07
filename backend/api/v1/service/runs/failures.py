@@ -25,7 +25,11 @@ from api.models.event import Event, EventScope
 from api.models.event_types import EventType
 from api.v1.service.events import persist_and_fanout_event
 from api.v1.service.runs.access_cursors import release_thread_access_cursor
-from api.v1.service.runs.contracts import RunFailureReason, classify_failure
+from api.v1.service.runs.contracts import (
+	RunFailureReason,
+	classify_failure,
+	run_failure_payload,
+)
 from api.v1.service.runs.status import (
 	RunSnapshot,
 	broadcast_run_event,
@@ -59,15 +63,13 @@ async def broadcast_run_failure(
 	durable record can express, since there is no run to attach an error to and
 	no stream anyone could have been watching.
 	"""
-	data: dict[str, object] = {
-		"thread_id": str(thread_id),
-		"agent_id": str(agent_id),
-		"reason": reason.value,
-		"run_id": str(run_id) if run_id is not None else None,
-		"partial_message_id": (
-			str(partial_message_id) if partial_message_id is not None else None
-		),
-	}
+	data = run_failure_payload(
+		thread_id=thread_id,
+		agent_id=agent_id,
+		reason=reason,
+		run_id=run_id,
+		partial_message_id=partial_message_id,
+	)
 	try:
 		async with async_session_local() as session:
 			await persist_and_fanout_event(

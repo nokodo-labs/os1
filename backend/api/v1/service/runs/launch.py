@@ -17,7 +17,6 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.database import async_session_local
 from api.database.advisory_locks import acquire_resource_write_lock
 from api.database.post_commit import discard_uncommitted_post_commit_actions
 from api.local_tasks import create_background_task
@@ -50,6 +49,7 @@ from api.v1.service.runs.contracts import (
 	BUS_UNAVAILABLE_REASON,
 	PersistedRunInput,
 	RunFailureReason,
+	run_failure_payload,
 )
 from api.v1.service.runs.execution import run_agent
 from api.v1.service.runs.failures import terminate_run
@@ -261,16 +261,18 @@ async def subscribe_run_stream(
 		logger.warning("run bus unreachable while attaching stream for %s", run_id)
 		yield sse_encode(
 			event="error",
-			data={
-				"run_id": str(run_id),
-				"reason": RunFailureReason.UNAVAILABLE.value,
-			},
+			data=run_failure_payload(
+				thread_id=None,
+				agent_id=None,
+				reason=RunFailureReason.UNAVAILABLE,
+				run_id=run_id,
+			),
 		)
 		yield sse_encode(event="done", data={})
 		return
 
 	if route is not None:
-		async for frame in subscribe_remote_run(run_id):
+		async for frame in subscribe_remote_run(run_id, subscriber_id):
 			yield frame
 			await _stream_delivery_checkpoint()
 		# remote path ends naturally; synthesize the done event so the wire
@@ -472,7 +474,7 @@ async def launch_thread_run(
 			)
 		splice = None
 
-	prospective_message_id = TypeID(new_typeid("msg")) if persist and input else None
+	prospective_message_id = new_typeid("msg") if persist and input else None
 	placement: PreparedPlacement | None = None
 	if prospective_message_id is not None:
 		# the slot names the conversation this run answers, and the message
@@ -719,6 +721,9 @@ async def create_thread_and_run_stream(
 	the first SSE event is ``thread_created`` with the full thread payload.
 	subsequent events are normal run deltas.
 
+	the run must start before the response does, so a refusal raises here and
+	the client reads it as an HTTP error rather than as a frame inside a 200.
+
 	the caller is responsible for wrapping the iterator in ``sse_response()``.
 	"""
 	validate_message_input(input)
@@ -744,8 +749,9 @@ async def create_thread_and_run_stream(
 				override_id=thread_id,
 			)
 		except IntegrityError:
-			# the rolled-back attempt already enqueued its post-commit actions;
-			# without this the retry's commit would promote and run both sets.
+			# the conflict surfaces on the creation's flush, and the rolled-back
+			# attempt already queued its fanout; without this the retry's commit
+			# would promote and run both sets.
 			discard_uncommitted_post_commit_actions(session)
 			await session.rollback()
 			logger.info("client thread id %s conflicted, generating new id", thread_id)
@@ -764,39 +770,70 @@ async def create_thread_and_run_stream(
 		)
 
 	final_thread_id = thread.id
-	await session.commit()
+
+	# the run is launched before the response, on the SAME uncommitted session:
+	# a refusal is an HTTP error the client already handles, and rolls the
+	# thread back with it rather than leaving an empty one nobody asked for.
+	# the input-message write inside commits the thread and the message
+	# together. a stream that opens is a stream that has a run.
+	try:
+		run_id = await launch_thread_run(
+			session,
+			final_thread_id,
+			agent_id,
+			principal,
+			input=input,
+			client_context=client_context,
+			origin_session_id=origin_session_id,
+			tool_choice=tool_choice,
+			extra_plugins=extra_plugins or [],
+		)
+	except BaseException:
+		discard_uncommitted_post_commit_actions(session)
+		await session.rollback()
+		raise
+	thread_schema = public_payload(ThreadSchema.model_validate(thread))
 
 	async def _stream() -> AsyncIterator[bytes]:
-		"""announce the new thread, then stream the run started inside it.
-
-		the launch happens here rather than before the generator so a failure
-		reaches the client as an SSE error on an open stream, after it already
-		knows the thread id.
-		"""
-		thread_schema = public_payload(ThreadSchema.model_validate(thread))
+		"""announce the new thread, then stream the run already started in it."""
 		yield sse_encode(event="thread_created", data=thread_schema)
-
+		# the status line and thread_created are already on the wire, so a
+		# failure here closes the way a run failure does rather than truncating
+		# the body with neither an error nor a done.
 		try:
-			async with async_session_local() as run_session:
-				run_id = await launch_thread_run(
-					run_session,
-					final_thread_id,
-					agent_id,
-					principal,
-					input=input,
-					client_context=client_context,
-					origin_session_id=origin_session_id,
-					tool_choice=tool_choice,
-					extra_plugins=extra_plugins or [],
-				)
-		except HTTPException as exc:
+			async for chunk in subscribe_run_stream(run_id, principal.user.id):
+				yield chunk
+		except RunBusUnavailableError as exc:
+			# a backend we could not reach is worth retrying, and saying
+			# "internal_error" would ask the client to report a bug instead.
+			logger.warning(
+				"create-and-run stream lost the run bus",
+				extra={"run_id": str(run_id), "operation": exc.operation},
+			)
 			yield sse_encode(
 				event="error",
-				data={"message": str(exc.detail)},
+				data=run_failure_payload(
+					thread_id=final_thread_id,
+					agent_id=agent_id,
+					reason=RunFailureReason.UNAVAILABLE,
+					run_id=run_id,
+				),
 			)
 			yield sse_encode(event="done", data={})
-			return
-		async for chunk in subscribe_run_stream(run_id, principal.user.id):
-			yield chunk
+		except Exception:
+			logger.exception(
+				"create-and-run stream failed while delivering frames",
+				extra={"run_id": str(run_id), "thread_id": str(final_thread_id)},
+			)
+			yield sse_encode(
+				event="error",
+				data=run_failure_payload(
+					thread_id=final_thread_id,
+					agent_id=agent_id,
+					reason=RunFailureReason.INTERNAL_ERROR,
+					run_id=run_id,
+				),
+			)
+			yield sse_encode(event="done", data={})
 
 	return _stream()

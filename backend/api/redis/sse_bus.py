@@ -50,6 +50,7 @@ class SseFrameBus:
 		cleanup_grace_seconds: int,
 		truncated_marker: bytes | None = None,
 	) -> None:
+		"""configure one resource kind's key namespace and retention bounds."""
 		self._key_prefix = key_prefix
 		self._end_marker = end_marker
 		self._channel_factory = channel_factory
@@ -59,20 +60,12 @@ class SseFrameBus:
 		self._truncated_marker = truncated_marker
 
 	def _log_key(self, resource_id: str) -> str:
+		"""key holding one resource's replayable frame log."""
 		return f"{self._key_prefix}{resource_id}:log"
 
 	def _channel(self, resource_id: str) -> PubSubChannel:
+		"""channel carrying one resource's live frames."""
 		return self._channel_factory(resource_id, _CHANNEL_SUFFIX)
-
-	async def _append(self, resource_id: str, entry: bytes) -> None:
-		"""append to the capped catchup log and refresh its TTL."""
-		conn = redis_client.get()
-		log_key = self._log_key(resource_id)
-		pipe = conn.pipeline(transaction=False)
-		pipe.rpush(log_key, entry)
-		pipe.ltrim(log_key, -self._max_frames, -1)
-		pipe.expire(log_key, self._log_ttl_seconds)
-		await pipe.execute()
 
 	async def _append_and_publish(
 		self,
@@ -161,8 +154,45 @@ class SseFrameBus:
 				exc,
 			)
 
-	async def subscribe(self, resource_id: str) -> AsyncIterator[bytes]:
-		"""yield the catchup log, then live frames, until the stream ends."""
+	async def retain_subjects(self, resource_id: str, subject_ids: set[str]) -> None:
+		"""end every remote stream on this resource except these subjects'.
+
+		says who may STAY rather than who must go: the producer's worker knows
+		the full authorized set but has no way to learn who is watching from
+		another worker, so an exclusion list could never be complete.
+
+		channel-only, never logged: this ends the streams open right now, and a
+		subscriber attaching later resolves access at attach time anyway.
+		"""
+		try:
+			conn = redis_client.get()
+			channel = self._channel(resource_id)
+			body = json.dumps(
+				{"retain": sorted(subject_ids)},
+				separators=(",", ":"),
+			).encode("utf-8")
+			await conn.publish(channel.channel, body)
+		except (RedisError, RuntimeError, OSError) as exc:
+			logger.warning(
+				"redis sse retain failed for %s%s: %s",
+				self._key_prefix,
+				resource_id,
+				exc,
+			)
+
+	async def subscribe(
+		self,
+		resource_id: str,
+		subscriber_id: str,
+	) -> AsyncIterator[bytes]:
+		"""yield the catchup log, then live frames, until the stream ends.
+
+		``subscriber_id`` is who this stream was authorized as, and is
+		required: a retain envelope that omits it ends the stream the way the
+		end sentinel does, which is how a revocation reaches a subscriber on a
+		worker that does not own the producer. a stream that named nobody
+		could never be shown to be retained, so there is no such stream.
+		"""
 		channel = self._channel(resource_id)
 		# attached, not subscribe: the SUBSCRIBE must land BEFORE the catchup
 		# read, or frames published while it is in flight are lost. a frame
@@ -191,6 +221,11 @@ class SseFrameBus:
 			async for envelope in live:
 				if envelope.get("end") is True:
 					return
+				retained = envelope.get("retain")
+				if isinstance(retained, list):
+					if subscriber_id not in retained:
+						return
+					continue
 				raw_b64 = envelope.get("frame_b64")
 				if not isinstance(raw_b64, str):
 					continue

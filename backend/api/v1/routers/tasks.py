@@ -119,12 +119,15 @@ async def stream_task(
 ) -> StreamingResponse:
 	"""stream task lifecycle events with Redis-backed catchup."""
 	await get_task_service(task_id, db, principal=principal)
-	return sse_response(_stream_task(task_id))
+	return sse_response(_stream_task(task_id, principal.user.id))
 
 
-async def _stream_task(task_id: TypeID) -> AsyncIterator[bytes]:
+async def _stream_task(
+	task_id: TypeID,
+	subscriber_id: TypeID,
+) -> AsyncIterator[bytes]:
 	try:
-		async for chunk in subscribe_task_stream(task_id):
+		async for chunk in subscribe_task_stream(task_id, subscriber_id):
 			yield chunk
 	except UnknownTaskError as exc:
 		raise HTTPException(

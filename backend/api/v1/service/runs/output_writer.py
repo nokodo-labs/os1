@@ -198,7 +198,7 @@ class MessageCommitTracker:
 		"""reserve a message id and its commit signal."""
 		if self._failure is not None:
 			raise self._failure
-		message_id = TypeID(new_typeid("msg"))
+		message_id = new_typeid("msg")
 		future = asyncio.get_running_loop().create_future()
 		future.add_done_callback(observe_future_completion)
 		processed = asyncio.get_running_loop().create_future()
@@ -271,9 +271,8 @@ class MessageCommitTracker:
 		except asyncio.CancelledError:
 			raise
 		except TimeoutError:
-			# unreachable while the stream loop awaits each commit before the
-			# next delta; it stops being true the moment a caller emits
-			# without that guarantee.
+			# unreachable while the stream loop awaits each commit before the next
+			# delta; it stops being true the moment a caller emits without that.
 			logger.error(
 				"timed out resolving a run event anchor",
 				extra={"event_type": event.type, "message_id": str(message_id)},

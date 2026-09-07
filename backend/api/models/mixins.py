@@ -39,7 +39,7 @@ class TypeIDPrimaryKeyMixin:
 		return mapped_column(
 			String(TYPEID_LENGTH),
 			primary_key=True,
-			default=lambda: TypeID(new_typeid(prefix)),
+			default=lambda: new_typeid(prefix),
 		)
 
 

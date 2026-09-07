@@ -171,10 +171,8 @@ async def run_agent(
 		conversation_container_root_id: TypeID | None = None
 		resolved_input_message: SDKUserMessage | None = None
 
-		# register run in status store + (when on a thread) broadcast
-		# run.started. ``persist`` only gates DB writes (messages, metadata);
-		# every run lives in the registry so it is cancellable, observable,
-		# and resumable regardless of whether we persist its outputs.
+		# ``persist`` only gates DB writes: every run lives in the registry so it
+		# stays cancellable, observable and resumable either way.
 		async def _handle_steering_command(command: SteeringCommand) -> None:
 			if isinstance(command, CancelRunCommand):
 				await run_registry.cancel_run(run_id, reason=command.reason)
@@ -224,26 +222,30 @@ async def run_agent(
 					name=f"settle-refused-remote-steering:{run_id}",
 				)
 
-		await run_registry.start_run(
-			run_id=run_id,
-			agent_id=agent_id,
-			user_id=principal.user.id,
-			thread_id=thread_id,
-			persist=persist,
-		)
-		if registered_event is not None:
-			registered_event.set()
+		# seeded before the run is visible: an unseeded thread reads from revision
+		# 0, the whole ACL history, and terminates a run nothing changed under.
 		if thread_id is not None:
 			await initialize_thread_access_cursor(thread_id)
-		# self-attach the producer task so cancel_run works from the very
-		# first microsecond the run is visible. when this generator is
-		# being driven by a background task (the normal path), current_task()
-		# IS that producer; when it is driven inline by an HTTP request
-		# (legacy / tests), there is no producer to cancel and the attach
-		# becomes a no-op via cancel_run's task.done() guard.
+		try:
+			await run_registry.start_run(
+				run_id=run_id,
+				agent_id=agent_id,
+				user_id=principal.user.id,
+				thread_id=thread_id,
+				persist=persist,
+			)
+		except BaseException:
+			# the terminal path only releases the cursor for a REGISTERED run, so
+			# this seed would otherwise outlive every run it was taken for.
+			await release_thread_access_cursor(thread_id)
+			raise
+		# self-attach the producer so cancel_run works from the first microsecond
+		# the run is visible; driven inline there is none and the attach is inert.
 		current = asyncio.current_task()
 		if current is not None:
 			await run_registry.attach_task(run_id, current)
+		if registered_event is not None:
+			registered_event.set()
 		if persist and persisted_input is not None:
 			assert thread_id is not None  # persist=True requires a thread_id
 			resolved_input_message = persisted_input.sdk_message
@@ -279,12 +281,8 @@ async def run_agent(
 				resolved_input_message = build_run_input_sdk_user_message(input)
 			initial_parent_id = unwrap_missing(parent_id)
 			if persist and thread_id is not None:
-				# regeneration answers no message, but it still starts from a
-				# snapshot: without that boundary the first mention would hand
-				# the agent the entire branch it was just loaded with. the
-				# snapshot is knowable here without loading it - resolving it
-				# after the branch load would leave the whole startup window
-				# accepting catch-ups measured from nothing.
+				# regeneration answers no message but still needs a snapshot boundary,
+				# or the first mention hands the agent the entire branch it loaded.
 				container_message_id = (
 					replacement_head_id
 					if replacement_head_id is not None
@@ -324,9 +322,8 @@ async def run_agent(
 				if context_message_id is not None
 				else None
 			)
-			# writing nothing does not mean failing invisibly: this run answers
-			# a real conversation, so its durable failure needs the same anchor
-			# a persisted run's would have.
+			# writing nothing is not failing invisibly: this run answers a real
+			# conversation, so its durable failure needs the same anchor.
 			await run_conversations.bind(
 				run_id,
 				container_root_id=conversation_container_root_id,
@@ -352,9 +349,8 @@ async def run_agent(
 			),
 		)
 
-		# announced only once the run knows which conversation it answers and
-		# where it starts reading: a waiter released earlier would steer a run
-		# with no container and no catch-up boundary.
+		# announced only once the run knows what it answers and where it starts
+		# reading: a waiter released earlier would steer a run with no boundary.
 		if thread_id is not None:
 			create_background_task(
 				broadcast_run_event(
@@ -396,9 +392,8 @@ async def run_agent(
 			)
 			citations = []
 		else:
-			# ephemeral means nothing durable, not nothing visible: the
-			# requester still watches its own run work, so tool progress and
-			# activity reach their sockets and are never written down.
+			# ephemeral means nothing durable, not nothing visible: progress still
+			# reaches the requester's sockets, it is just never written down.
 			emitter = build_live_user_event_emitter(principal.user.id)
 			citations = []
 
@@ -485,9 +480,8 @@ async def run_agent(
 		if persist and resolved_head is not None:
 			initial_parent_id = resolved_head
 
-		# build retrieval context explicitly before the agent/filter loop.
-		# filters read from ctx.retrieval rather than computing their own.
-		# when retrieval_pre_build is False, each filter builds its own query.
+		# built before the agent/filter loop so filters read ctx.retrieval; with
+		# retrieval_pre_build off each filter builds its own query instead.
 		if app_settings.ai.retrieval_pre_build:
 			turns = thread.recent_turns(app_settings.ai.retrieval_turns)
 			if turns:
@@ -655,9 +649,8 @@ async def run_agent(
 				try:
 					result = await asyncio.wait_for(asyncio.shield(task), remaining)
 				except asyncio.CancelledError:
-					# the finalizer is shielded so it can land, but a cancel
-					# aimed at this run still ends it: absorbing one here
-					# reports a clean completion for a run asked to stop.
+					# the finalizer is shielded so it can land, but a cancel aimed at
+					# this run still ends it rather than reporting a clean completion.
 					cancelled = True
 					if task.done():
 						raise
@@ -745,7 +738,7 @@ async def run_agent(
 				"""allocate a streamed message id."""
 				if output_writer is not None:
 					return output_writer.reserve()
-				return MessageReservation(message_id=TypeID(new_typeid("msg")))
+				return MessageReservation(message_id=new_typeid("msg"))
 
 			def _delta_envelope(
 				message_id: TypeID | None,
@@ -969,7 +962,14 @@ async def run_agent(
 
 		rs_terminated = await run_registry.complete_run(run_id)
 		await release_thread_access_cursor(thread_id)
-		dropped = list(rs_terminated.in_flight_steering) if rs_terminated else []
+		if rs_terminated is None:
+			# somebody else already settled this run: a second terminal event
+			# would say it both failed and completed.
+			return
 		schedule_terminate_broadcast(
-			thread_id, agent_id, run_id, error=False, dropped_steering=dropped
+			thread_id,
+			agent_id,
+			run_id,
+			error=False,
+			dropped_steering=list(rs_terminated.in_flight_steering),
 		)

@@ -100,16 +100,21 @@ class RedisCache:
 
 		``ttl`` is in seconds. tags enable group invalidation. ``nx`` only
 		writes when the key is absent, so racing cache fills cannot clobber
-		an authoritative write-through. returns False when the write failed
-		(fail-open), so security-critical callers can escalate.
+		an authoritative write-through.
+
+		returns False when the write failed. a failed FILL is harmless - the
+		caller already holds the freshly resolved answer. a failed
+		INVALIDATION is not: this layer reports the failure and the caller
+		decides, and callers whose entries gate authorization must retry
+		until the write lands rather than proceed (see
+		``authorization.cache._increment_versions_until_written``).
 		"""
 		full_key = f"{_PREFIX}{key}"
 		try:
 			conn = self._conn()
 			if tags:
-				# single transaction: a fault between the value write and the
-				# tag registration would otherwise leave an entry invisible
-				# to tag invalidation until its TTL expires.
+				# single transaction: a fault between the value write and the tag
+				# registration would hide the entry from tag invalidation until its TTL.
 				pipe = conn.pipeline(transaction=True)
 				pipe.set(full_key, json.dumps(value), ex=ttl, nx=nx)
 				for tag in tags:

@@ -139,8 +139,7 @@ async def _answer_invocation(
 	thought, so it is caught up rather than started a second time.
 	"""
 	# a run that ends between being named and being handed the message leaves
-	# the invocation unanswered, so each attempt re-resolves rather than
-	# assuming the previous answer still holds.
+	# the invocation unanswered, so each attempt re-resolves.
 	reached_a_run = False
 	reached_run_id: TypeID | None = None
 	try:
@@ -151,10 +150,8 @@ async def _answer_invocation(
 				)
 			match await agent_slots.claim(thread_id, agent_id, container_root_id):
 				case AwaitPendingRun(slot=pending):
-					# another invocation is mid-start for this agent: its run
-					# is the one to catch up, so wait rather than starting a
-					# second. bounded, because waiting forever on a slot that
-					# never resolves is worse than a duplicate run.
+					# another invocation is mid-start for this agent, so wait for
+					# its run. bounded: waiting forever is worse than a duplicate run.
 					try:
 						started_id = await agent_slots.wait(pending)
 					except TimeoutError:
@@ -166,10 +163,8 @@ async def _answer_invocation(
 								"message_id": str(message_id),
 							},
 						)
-						# the slot exists, so a run for this agent IS mid-start:
-						# we could not hand it the message in time, which is not
-						# the same as the agent never having started.
-						reached_run_id = pending.run_id
+						# the slot exists, so a run IS mid-start; the id stays None
+						# because a slot that timed out was never published.
 						reached_a_run = True
 						break
 					if started_id is not None:
@@ -213,9 +208,8 @@ async def _answer_invocation(
 		)
 		reason = RunFailureReason.UNAVAILABLE
 	except RunSlotContendedError:
-		# the bus answered every round and another worker won each one, so a
-		# run for this agent IS being started; ours is only the message that
-		# never reached it.
+		# the bus answered every round and another worker won each one, so a run
+		# IS being started; ours is only the message that never reached it.
 		logger.warning(
 			"invocation lost every race for the agent's startup slot",
 			extra={
@@ -312,9 +306,8 @@ async def _start(
 			},
 		)
 	finally:
-		# finally, not except: cancellation is a BaseException, and an
-		# unreleased slot never sets `ready`, so every later invocation for
-		# this agent would wait on it forever.
+		# finally, not except: cancellation is a BaseException, and an unreleased
+		# slot never sets `ready`, so later invocations would wait forever.
 		await agent_slots.release(thread_id, agent_id, container_root_id, slot, run_id)
 	return handled
 
