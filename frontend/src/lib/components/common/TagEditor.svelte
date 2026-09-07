@@ -1,5 +1,6 @@
 <script lang="ts">
 	import XMark from '$lib/components/icons/XMark.svelte'
+	import type { Component } from 'svelte'
 
 	interface Props {
 		value?: string[]
@@ -7,6 +8,8 @@
 		placeholder?: string
 		inputId?: string
 		class?: string
+		/** leading glyph, for surfaces that do not put an icon beside the label. */
+		icon?: Component<{ class?: string }>
 	}
 
 	let {
@@ -15,6 +18,7 @@
 		placeholder = 'add tag',
 		inputId,
 		class: className = '',
+		icon: Icon,
 	}: Props = $props()
 
 	let draft = $state('')
@@ -78,6 +82,9 @@
 <div
 	class="border-foreground/12 bg-foreground/4 focus-within:bg-foreground/6 col-span-full flex min-h-10 min-w-0 flex-wrap items-center gap-2 rounded-xl border px-2 py-2 transition-colors duration-150 focus-within:border-[color-mix(in_oklch,var(--accent-primary)_48%,transparent)] {className}"
 >
+	{#if Icon}
+		<Icon class="text-foreground/35 ml-0.5 size-4 shrink-0" />
+	{/if}
 	{#each value as tag (tag)}
 		<button
 			type="button"

@@ -11,6 +11,9 @@
 	type SortKind = 'alpha' | 'created' | 'updated' | 'manual' | 'length' | 'generic'
 	type SortDirection = 'asc' | 'desc'
 
+	// every sort glyph is built from strokes (letterforms, bars, an arrow) with nothing to
+	// fill, so this icon is outline-only and takes no `variant`: a menu row that selects a
+	// sort asks for solid (F115) and gets this same drawing, never a faked heavier stroke.
 	let {
 		value = '',
 		class: className = 'size-4',
@@ -72,8 +75,8 @@
 		aria-hidden="true"
 		{...rest}
 	>
-		<path d="M7 18V6m0 0L4 9m3-3 3 3" />
-		<path d="M17 6v12m0 0-3-3m3 3 3-3" />
+		<path d="M5.969 19.237V4.763m0 0L2.35 8.381m3.619-3.619l3.619 3.619" />
+		<path d="M18.031 4.763v14.475m0 0l-3.619-3.619m3.619 3.619l3.619-3.619" />
 	</svg>
 {:else}
 	<svg

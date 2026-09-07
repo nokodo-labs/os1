@@ -26,9 +26,9 @@
 	height="24"
 	viewBox="0 0 22 22"
 	{...rest}
-	><path d="M9.5 14.5L3 21" stroke-linecap="round" stroke-linejoin="round"></path><path
-		d="M7.67602 7.8896L6.69713 7.78823L5.00007 9.48528L14.1925 18.6777L15.8895 16.9806L15.7879 16M11.4847 7L15.1568 2.67141L21.0065 8.5211L16.6991 12.175"
+	><path d="M8.5 13.5L2 20" stroke-linecap="round" stroke-linejoin="round"></path><path
+		d="M6.676 6.89L5.697 6.788L4 8.485L13.193 17.678L14.89 15.981L14.788 15M10.485 6L14.157 1.671L20.007 7.521L15.699 11.175"
 		stroke-linecap="round"
 		stroke-linejoin="round"
-	></path><path d="M3 3L21 21" stroke-linecap="round" stroke-linejoin="round"></path></svg
+	></path><path d="M2 2L20 20" stroke-linecap="round" stroke-linejoin="round"></path></svg
 >

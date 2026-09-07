@@ -6,8 +6,14 @@
 	/**
 	 * master/detail scaffold for apps like reminders, settings, etc.
 	 *
-	 * desktop: fixed master sidebar on left + content area on right.
-	 * mobile: content fills screen; master is a separate route.
+	 * REGULAR (split view): fixed master sidebar on the left + content area on the right.
+	 * COMPACT (one column): the content area fills the screen; the master is its own route.
+	 *
+	 * COMPACT master routes pass `mobileFullBleed` and get the whole viewport box: no island
+	 * padding and no page padding on the scroll area, so the page's own scroll area is exactly
+	 * as tall as the screen. those pages clear the island themselves (MasterSidebarHeader), and
+	 * their content scrolls under it. any island/page padding here would instead shorten the
+	 * height every child `h-full` resolves against, which is what left master lists short.
 	 *
 	 * API:
 	 * - master: snippet for the master sidebar content (receives { isMobile } for layout adjustments)
@@ -42,6 +48,9 @@
 
 	const chrome = useSystemChrome()
 
+	// compact master route: the page owns the full viewport box
+	const compactFullBleed = $derived(device.isMobile && mobileFullBleed)
+
 	// register/unregister layout insets with chrome context
 	$effect(() => {
 		if (device.isMobile) {
@@ -69,7 +78,7 @@
 	>
 		<div
 			class="relative h-full"
-			style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x); --master-detail-header-top: var(--chrome-island-top, clamp(12px, 4vw, 32px)); --master-detail-header-height: calc(var(--chrome-island-offset, 0px) - var(--master-detail-header-top));"
+			style="--master-detail-header-top: var(--chrome-island-top, clamp(12px, 4vw, 32px)); --master-detail-header-height: calc(var(--chrome-island-offset, 0px) - var(--master-detail-header-top));"
 		>
 			{@render master({ isMobile: false })}
 			<!-- separator (doesn't reach top/bottom) -->
@@ -83,17 +92,16 @@
 
 <!-- content area: scrollbar at edge, padding inside content -->
 <div
-	class="absolute inset-0 box-border flex h-full min-h-0 flex-col {device.isMobile &&
-	mobileFullBleed
-		? 'overflow-hidden'
-		: 'overflow-y-auto'}"
-	style="padding-top: calc(var(--chrome-island-offset, 0px) + var(--spacing-island-content)); view-transition-name: master-detail-content;"
+	class="absolute inset-0 box-border flex h-full min-h-0 flex-col overflow-y-auto"
+	style="padding-top: {compactFullBleed
+		? '0px'
+		: 'calc(var(--chrome-island-offset, 0px) + var(--spacing-island-content))'}; padding-bottom: var(--safe-area-bottom); view-transition-name: master-detail-content;"
 >
 	<div
-		class="flex min-w-0 flex-1 flex-col {device.isMobile && mobileFullBleed
+		class="flex min-w-0 flex-1 flex-col {compactFullBleed
 			? 'h-full min-h-0'
 			: `min-h-full ${detailBottomPaddingClass}`}"
-		style={device.isMobile && mobileFullBleed
+		style={compactFullBleed
 			? 'padding-left: 0; padding-right: 0;'
 			: 'padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);'}
 	>

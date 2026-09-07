@@ -3,8 +3,9 @@
 </script>
 
 <script lang="ts">
-	import { portal } from '$lib/actions/portal'
+	import { portal } from '$lib/attachments/portal'
 	import LiquidMetal from '$lib/components/effects/LiquidMetal.svelte'
+	import { fitInside, placeBelow } from '$lib/components/primitives/menuPlacement'
 	import type { Snippet } from 'svelte'
 	import { tick } from 'svelte'
 	import { scale } from 'svelte/transition'
@@ -12,6 +13,8 @@
 	interface Props {
 		open: boolean
 		anchorEl: HTMLElement | null
+		/** viewport point to open at instead of the anchor, for right-click / hold menus. */
+		anchorPoint?: { x: number; y: number } | null
 		onClose: () => void
 		class?: string
 		estimatedHeight?: number
@@ -22,6 +25,7 @@
 	let {
 		open,
 		anchorEl,
+		anchorPoint = null,
 		onClose,
 		class: className = '',
 		estimatedHeight = 200,
@@ -29,24 +33,41 @@
 		...rest
 	}: Props = $props()
 
+	/** distance between the anchor and the menu it opens. */
+	const ANCHOR_GAP = 4
+
 	let menuEl = $state<HTMLDivElement | null>(null)
 	let posTop = $state(0)
 	let posLeft = $state(0)
 	let usesLeft = $state(true)
 
+	/** a point anchors as a zero-size rect, so both paths share the flip logic. */
+	function anchorRect(): { top: number; bottom: number; left: number; right: number } | null {
+		if (anchorPoint) {
+			return {
+				top: anchorPoint.y,
+				bottom: anchorPoint.y,
+				left: anchorPoint.x,
+				right: anchorPoint.x,
+			}
+		}
+		return anchorEl?.getBoundingClientRect() ?? null
+	}
+
 	function updatePosition(): void {
-		if (!anchorEl) return
-		const rect = anchorEl.getBoundingClientRect()
-		const mh = menuEl ? menuEl.offsetHeight : estimatedHeight
-		const screenCx = window.innerWidth / 2
-		posTop =
-			rect.bottom + mh < window.innerHeight ? rect.bottom + 4 : Math.max(4, rect.top - mh - 4)
-		usesLeft = rect.left < screenCx
-		posLeft = usesLeft ? rect.left : window.innerWidth - rect.right
+		const rect = anchorRect()
+		if (!rect) return
+		const menuHeight = menuEl ? menuEl.offsetHeight : estimatedHeight
+		const menuWidth = menuEl ? menuEl.offsetWidth : 0
+		posTop = placeBelow(rect, menuHeight, window.innerHeight, ANCHOR_GAP)
+		// the menu grows away from the nearer edge, so it is offset from that edge
+		usesLeft = rect.left < window.innerWidth / 2
+		const offset = usesLeft ? rect.left : window.innerWidth - rect.right
+		posLeft = fitInside(offset, menuWidth, window.innerWidth)
 	}
 
 	$effect(() => {
-		if (!open || !anchorEl) return
+		if (!open || (!anchorPoint && !anchorEl)) return
 		void tick().then(updatePosition)
 	})
 
@@ -100,7 +121,7 @@
 
 {#if open}
 	<div
-		use:portal
+		{@attach portal()}
 		bind:this={menuEl}
 		role="menu"
 		data-popup-menu
@@ -111,7 +132,7 @@
 	>
 		<LiquidMetal
 			tag="div"
-			class="rounded-popup border-foreground/12 bg-background/80 max-w-[min(calc(100vw-1rem),22rem)] min-w-44 overflow-hidden border p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55),inset_0_1px_0_rgb(255_255_255/0.12)] backdrop-blur-[18px] {className}"
+			class="rounded-popup border-foreground/12 bg-background/80 flex max-w-[min(calc(100vw-1rem),22rem)] min-w-44 flex-col overflow-hidden border p-2 shadow-[0_24px_48px_rgba(12,10,30,0.55),inset_0_1px_0_rgb(255_255_255/0.12)] backdrop-blur-[18px] {className}"
 		>
 			{@render children()}
 		</LiquidMetal>

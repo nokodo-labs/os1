@@ -23,5 +23,5 @@
 	stroke-width={strokeWidth}
 	{...rest}
 >
-	<rect x="6" y="6" width="12" height="12" rx="2" />
+	<rect x="4.5" y="4.5" width="15" height="15" rx="2.5" />
 </svg>

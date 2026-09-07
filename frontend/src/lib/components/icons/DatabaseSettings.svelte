@@ -25,20 +25,23 @@
 	viewBox="0 0 24 24"
 	{...rest}
 	><path
-		d="M4 6V12C4 12 4 15 11 15C18 15 18 12 18 12V6"
+		d="M3 5.5V11.5C3 11.5 3 14.5 10 14.5C17 14.5 17 11.5 17 11.5V5.5"
 		stroke-linecap="round"
 		stroke-linejoin="round"
 	></path><path
-		d="M11 3C18 3 18 6 18 6C18 6 18 9 11 9C4 9 4 6 4 6C4 6 4 3 11 3Z"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-	></path><path d="M11 21C4 21 4 18 4 18V12" stroke-linecap="round" stroke-linejoin="round"
-	></path><path
-		d="M19 21C20.1046 21 21 20.1046 21 19C21 17.8954 20.1046 17 19 17C18.6357 17 18.2942 17.0974 18 17.2676C17.4022 17.6134 17 18.2597 17 19C17 19.7403 17.4022 20.3866 18 20.7324C18.2942 20.9026 18.6357 21 19 21Z"
+		d="M10 2.5C17 2.5 17 5.5 17 5.5C17 5.5 17 8.5 10 8.5C3 8.5 3 5.5 3 5.5C3 5.5 3 2.5 10 2.5Z"
 		stroke-linecap="round"
 		stroke-linejoin="round"
 	></path><path
-		d="M19 22C20.6569 22 22 20.6569 22 19C22 17.3431 20.6569 16 19 16C17.3431 16 16 17.3431 16 19C16 20.6569 17.3431 22 19 22Z"
+		d="M10 20.5C3 20.5 3 17.5 3 17.5V11.5"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	></path><path
+		d="M18 20.5C19.105 20.5 20 19.605 20 18.5C20 17.395 19.105 16.5 18 16.5C17.636 16.5 17.294 16.597 17 16.768C16.402 17.113 16 17.76 16 18.5C16 19.24 16.402 19.887 17 20.232C17.294 20.403 17.636 20.5 18 20.5Z"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	></path><path
+		d="M18 21.5C19.657 21.5 21 20.157 21 18.5C21 16.843 19.657 15.5 18 15.5C16.343 15.5 15 16.843 15 18.5C15 20.157 16.343 21.5 18 21.5Z"
 		stroke-linecap="round"
 		stroke-linejoin="round"
 		stroke-dasharray="0.3 2"

@@ -7,6 +7,7 @@
 		strokeWidth?: string | number
 	}
 
+	// fill-only glyph: no outline twin has been drawn for it, so it takes no `variant`.
 	let {
 		class: className = 'size-4',
 		color = 'currentColor',

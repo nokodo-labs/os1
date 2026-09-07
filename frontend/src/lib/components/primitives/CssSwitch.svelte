@@ -11,11 +11,6 @@
 		ariaLabel?: string
 		ariaLabelledbyId?: string
 		tooltip?: boolean | string
-		glassThickness?: number
-		bezelWidth?: number
-		blur?: number
-		specularOpacity?: number
-		specularSaturation?: number
 	}
 
 	const SIZES = {

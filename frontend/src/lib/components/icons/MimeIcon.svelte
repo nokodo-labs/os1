@@ -12,13 +12,16 @@
 
 	interface Props {
 		mimeType?: string | null
+		variant?: 'outline' | 'solid'
 		class?: string
 	}
 
-	let { mimeType = null, class: className = '' }: Props = $props()
+	/** the props every icon in the set accepts; one-drawing ones just ignore `variant` */
+	type IconComponent = Component<{ class?: string; variant?: 'outline' | 'solid' }>
 
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const Icon: Component<any> = $derived.by(() => {
+	let { mimeType = null, variant = 'outline', class: className = '' }: Props = $props()
+
+	const Icon: IconComponent = $derived.by(() => {
 		if (!mimeType) return Document
 		const lower = mimeType.toLowerCase()
 		const [primary, sub] = lower.split('/')
@@ -81,4 +84,4 @@
 	})
 </script>
 
-<Icon class={className} />
+<Icon class={className} {variant} />

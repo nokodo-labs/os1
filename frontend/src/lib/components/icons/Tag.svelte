@@ -25,8 +25,8 @@
 	{...rest}
 >
 	<!-- Tag body with pointed end -->
-	<path d="M4 12 L8 7 H21 V17 H8 L4 12 Z" stroke={color} fill="none" />
+	<path d="M2.4 12L6.918 6.353H21.6V17.647H6.918L2.4 12Z" stroke={color} fill="none" />
 
 	<!-- Tag hole -->
-	<circle cx="10" cy="12" r="0.75" fill={color} stroke={color} />
+	<circle cx="9.176" cy="12" r="0.847" fill={color} stroke={color} />
 </svg>

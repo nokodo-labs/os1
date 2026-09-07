@@ -48,20 +48,14 @@
 		return () => observer.disconnect()
 	})
 
+	// offset metrics, not rects: they ignore the hover/press scale on the tabs,
+	// so the lens never inherits a transformed size.
 	$effect(() => {
 		const container = navContainerEl
 		const activeEl = tabEls[activeId]
 		if (!container || !activeEl) return
 
-		const containerRect = container.getBoundingClientRect()
-		const tabRect = activeEl.getBoundingClientRect()
-
-		const left = tabRect.left - containerRect.left
-		const width = tabRect.width
-		const height = tabRect.height
-		const top = tabRect.top - containerRect.top
-
-		highlightStyle = `left: ${left}px; top: ${top}px; width: ${width}px; height: ${height}px;`
+		highlightStyle = `left: ${activeEl.offsetLeft}px; top: ${activeEl.offsetTop}px; width: ${activeEl.offsetWidth}px; height: ${activeEl.offsetHeight}px;`
 	})
 
 	const bottomPad = $derived(islandHeight + 24 + 16)
@@ -81,12 +75,15 @@
 	class="fixed bottom-6 left-1/2 z-50 -translate-x-1/2"
 	aria-label="section navigation"
 >
-	<LiquidGlass class="flex items-center gap-1 rounded-full px-2 py-1.5">
+	<LiquidGlass
+		class="flex items-center gap-1 rounded-full px-2 py-1.5"
+		style="--island-accent: var(--accent-primary, currentColor); --island-motion: 150ms cubic-bezier(0.4, 0, 0.2, 1);"
+	>
 		<div bind:this={navContainerEl} class="relative flex items-center gap-1">
 			<!-- sliding highlight lens -->
 			{#if highlightStyle}
 				<div
-					class="pointer-events-none absolute rounded-full bg-(--accent-primary)/15 transition-all duration-300 ease-in-out"
+					class="tab-island-lens pointer-events-none absolute rounded-full bg-(--island-accent)/15 transition-all duration-300 ease-in-out"
 					style={highlightStyle}
 				></div>
 			{/if}
@@ -98,8 +95,8 @@
 				<a
 					bind:this={tabEls[section.id]}
 					href={link}
-					class="relative z-1 flex flex-col items-center gap-0.5 rounded-full px-5 py-1.5 transition-colors duration-200
-						{active ? 'text-(--accent-primary)' : 'text-foreground/50 hover:text-foreground/75'}"
+					class="tab-island-option relative z-1 flex flex-col items-center gap-0.5 rounded-full px-5 py-1.5 hover:scale-[1.06] active:scale-[0.97]
+						{active ? 'text-(--island-accent)' : 'text-foreground/50 hover:text-foreground/75'}"
 					aria-current={active ? 'page' : undefined}
 				>
 					<Icon class="h-5 w-5" variant={active ? 'solid' : 'outline'} />
@@ -111,6 +108,25 @@
 </nav>
 
 <style>
+	/* same motion language as the island controls and the dock. the scale
+	   utilities set the `scale` property, so the transition has to name it -
+	   listing only colours or `transform` leaves the sizes snapping. */
+	.tab-island-option {
+		transition:
+			scale var(--island-motion),
+			color var(--island-motion);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.tab-island-option {
+			scale: 1;
+			transition-duration: 0.01ms;
+		}
+		.tab-island-lens {
+			transition-duration: 0.01ms;
+		}
+	}
+
 	/* cross-fade page content during view transitions */
 	@keyframes tab-fade-in {
 		from {

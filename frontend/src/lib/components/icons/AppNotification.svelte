@@ -22,16 +22,16 @@
 		class={className}
 		aria-hidden="true"
 		xmlns="http://www.w3.org/2000/svg"
-		fill="none"
+		fill={color}
 		stroke={color}
 		stroke-width={strokeWidth}
 		viewBox="0 0 24 24"
 		{...rest}
 	>
-		<circle cx="19" cy="5" r="3" fill={color} stroke="none" />
+		<circle cx="19" cy="5" r="3" />
+		<!-- tile notched around the dot so both stay readable -->
 		<path
-			d="M21 12V15C21 18.3137 18.3137 21 15 21H9C5.68629 21 3 18.3137 3 15V9C3 5.68629 5.68629 3 9 3H12"
-			stroke-linecap="round"
+			d="M9 3h5.15a5.25 5.25 0 0 0 6.85 6.85V15a6 6 0 0 1-6 6H9a6 6 0 0 1-6-6V9a6 6 0 0 1 6-6Z"
 			stroke-linejoin="round"
 		/>
 	</svg>

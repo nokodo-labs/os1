@@ -14,13 +14,13 @@
 	let { options, value, onchange, class: className = '' }: RadioGroupProps<string> = $props()
 </script>
 
-<div class="flex gap-2 {className}">
+<div class="flex flex-wrap gap-2 {className}">
 	{#each options as option (option.value)}
 		{@const isSelected = value === option.value}
 		<button
 			type="button"
 			onclick={() => onchange(option.value)}
-			class="rounded-pill flex flex-1 cursor-pointer items-center justify-center gap-2.5 border px-4 py-2.5 text-sm font-medium transition-all duration-200
+			class="rounded-pill flex min-w-fit flex-1 cursor-pointer items-center justify-center gap-2.5 border px-4 py-2.5 text-sm font-medium transition-all duration-200
 				{isSelected
 				? 'border-foreground/20 bg-foreground/12 text-foreground'
 				: 'border-foreground/10 bg-foreground/5 text-foreground/60 hover:border-foreground/15 hover:bg-foreground/8 hover:text-foreground'}"

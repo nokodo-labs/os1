@@ -20,18 +20,19 @@
 {#if variant === 'solid'}
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
-		viewBox="0 0 16 16"
+		viewBox="0 0 24 24"
 		fill={color}
+		stroke={color}
+		stroke-width={strokeWidth}
 		class={className}
 		aria-hidden="true"
 		{...rest}
 	>
-		<path d="M8 7c3.314 0 6-1.343 6-3s-2.686-3-6-3-6 1.343-6 3 2.686 3 6 3Z" />
+		<!-- cylinder silhouette with the two tier separators knocked out -->
 		<path
-			d="M8 8.5c1.84 0 3.579-.37 4.914-1.037A6.33 6.33 0 0 0 14 6.78V8c0 1.657-2.686 3-6 3S2 9.657 2 8V6.78c.346.273.72.5 1.087.683C4.42 8.131 6.16 8.5 8 8.5Z"
-		/>
-		<path
-			d="M8 12.5c1.84 0 3.579-.37 4.914-1.037.366-.183.74-.41 1.086-.684V12c0 1.657-2.686 3-6 3s-6-1.343-6-3v-1.22c.346.273.72.5 1.087.683C4.42 12.131 6.16 12.5 8 12.5Z"
+			fill-rule="evenodd"
+			d="M12 3C19 3 19 6 19 6V18C19 18 19 21 12 21C5 21 5 18 5 18V6C5 6 5 3 12 3ZM5 6C5 6 5 9 12 9C19 9 19 6 19 6V9C19 9 19 12 12 12C5 12 5 9 5 9V6ZM5 12C5 12 5 15 12 15C19 15 19 12 19 12V15C19 15 19 18 12 18C5 18 5 15 5 15V12Z"
+			stroke-linejoin="round"
 		/>
 	</svg>
 {:else}

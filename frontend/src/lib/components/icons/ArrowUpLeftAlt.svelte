@@ -24,9 +24,9 @@
 	stroke={color}
 	viewBox="0 0 24 24"
 	{...rest}
-	><path d="M10.25 4.75L6.75 8.25L10.25 11.75" stroke-linecap="round" stroke-linejoin="round"
+	><path d="M10.138 3L5.793 7.345L10.138 11.69" stroke-linecap="round" stroke-linejoin="round"
 	></path><path
-		d="M6.75 8.25L12.75 8.25C14.9591 8.25 16.75 10.0409 16.75 12.25V19.25"
+		d="M5.793 7.345L13.241 7.345C15.984 7.345 18.207 9.568 18.207 12.31V21"
 		stroke-linecap="round"
 		stroke-linejoin="round"
 	></path></svg

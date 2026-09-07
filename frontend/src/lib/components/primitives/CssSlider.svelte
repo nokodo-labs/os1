@@ -8,8 +8,6 @@
 		onchange?: (value: number) => void
 		disabled?: boolean
 		forceActive?: boolean
-		glassThickness?: number
-		bezelWidth?: number
 	}
 
 	const SIZES = {

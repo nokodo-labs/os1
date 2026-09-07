@@ -68,11 +68,6 @@
 		{size}
 		{forceActive}
 		{ariaLabel}
-		{glassThickness}
-		{bezelWidth}
-		{blur}
-		{specularOpacity}
-		{specularSaturation}
 		{tooltip}
 	/>
 {/if}

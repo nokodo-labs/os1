@@ -24,12 +24,16 @@
 	class={className}
 	{...rest}
 >
-	<path stroke-linecap="round" stroke-linejoin="round" d="M3 8h13M3 12h10M3 16h7" />
+	<path
+		stroke-linecap="round"
+		stroke-linejoin="round"
+		d="M4.716 6.759h17.034M4.716 12h13.103M4.716 17.241h9.172"
+	/>
 	<line
-		x1="1.5"
-		y1="6"
-		x2="1.5"
-		y2="18"
+		x1="2.75"
+		y1="4.138"
+		x2="2.75"
+		y2="19.862"
 		stroke={color}
 		stroke-width="2.5"
 		stroke-linecap="round"

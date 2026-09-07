@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { portal } from '$lib/actions/portal'
+	import { portal } from '$lib/attachments/portal'
 	import Check from '$lib/components/icons/Check.svelte'
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte'
 	import type { Component } from 'svelte'
@@ -113,7 +113,7 @@
 	</button>
 	{#if open}
 		<div
-			use:portal
+			{@attach portal()}
 			bind:this={popupEl}
 			class="rounded-popup border-foreground/12 bg-background/95 shadow-soft fixed z-100 overflow-auto border p-1 backdrop-blur-xl"
 			style="top: {pos.top}px; left: {pos.left}px; width: {pos.width}px; max-height: {pos.maxHeight}px;{pos.openUp

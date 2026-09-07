@@ -27,7 +27,7 @@
 	stroke-linejoin="round"
 	{...rest}
 >
-	<circle cx="12" cy="12" r="8.5"></circle>
-	<path d="M12 12V7.5"></path>
-	<path d="M12 12L15.5 14"></path>
+	<circle cx="12" cy="12" r="8.875"></circle>
+	<path d="M12 12V7.301"></path>
+	<path d="M12 12L15.654 14.088"></path>
 </svg>

@@ -23,6 +23,9 @@
 	stroke={color}
 	class={className}
 	{...rest}
-	><path d="M6 12H12M18 12H12M12 12V6M12 12V18" stroke-linecap="round" stroke-linejoin="round"
+	><path
+		d="M4.5 12H12M19.5 12H12M12 12V4.5M12 12V19.5"
+		stroke-linecap="round"
+		stroke-linejoin="round"
 	></path></svg
 >

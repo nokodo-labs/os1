@@ -44,16 +44,5 @@
 		{bezelWidth}
 	/>
 {:else}
-	<CssSlider
-		{size}
-		{min}
-		{max}
-		{step}
-		bind:value
-		{onchange}
-		{disabled}
-		{forceActive}
-		{glassThickness}
-		{bezelWidth}
-	/>
+	<CssSlider {size} {min} {max} {step} bind:value {onchange} {disabled} {forceActive} />
 {/if}

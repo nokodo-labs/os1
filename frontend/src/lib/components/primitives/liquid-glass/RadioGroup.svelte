@@ -32,7 +32,10 @@
 	}
 </script>
 
-<div class="flex gap-2 {className}" role="radiogroup">
+<!-- options share each row equally (flex-1) but never squeeze below their own
+	 width (min-w-fit), so a row that cannot hold them all wraps instead of
+	 running out of a narrow viewport. -->
+<div class="flex flex-wrap gap-2 {className}" role="radiogroup">
 	{#each options as option (option.value)}
 		{@const isSelected = value === option.value}
 		<LiquidGlass
@@ -41,9 +44,8 @@
 			role="radio"
 			aria-checked={isSelected}
 			onclick={() => choose(option)}
-			class="rounded-pill flex flex-1 cursor-pointer items-center justify-center gap-2.5 border px-4 py-2.5 text-sm font-medium
-				transition-[transform,box-shadow,ring-color,background-color,color] duration-300
-				ease-in-out hover:scale-[1.06] active:scale-[1.1]
+			class="rounded-pill flex min-w-fit flex-1 cursor-pointer items-center justify-center gap-2.5 border px-4 py-2.5 text-sm font-medium
+				hover:scale-[1.06] active:scale-[1.1]
 				{isSelected
 				? (option.selectedClass ??
 					'border-foreground/25 bg-foreground/14 text-foreground shadow-[0_14px_30px_rgba(12,10,30,0.25)]')
@@ -69,3 +71,16 @@
 		</LiquidGlass>
 	{/each}
 </div>
+
+<style>
+	/* the unlayered .liquid-glass transition shorthand outranks the utility, so
+	   scale has to be named here or the hover / press growth snaps. */
+	div :global(.liquid-glass) {
+		transition:
+			background var(--lg-transition),
+			box-shadow var(--lg-transition),
+			scale var(--lg-transition),
+			color var(--lg-transition),
+			border-color var(--lg-transition);
+	}
+</style>
