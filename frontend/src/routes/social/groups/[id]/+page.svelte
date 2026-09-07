@@ -4,6 +4,7 @@
 	import { page } from '$app/state'
 	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
 	import EmptyState from '$lib/components/EmptyState.svelte'
+	import ChatBubble from '$lib/components/icons/ChatBubble.svelte'
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte'
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte'
 	import Pencil from '$lib/components/icons/Pencil.svelte'
@@ -12,12 +13,13 @@
 	import UserGroup from '$lib/components/icons/UserGroup.svelte'
 	import GroupAddMemberModal from '$lib/components/modals/GroupAddMemberModal.svelte'
 	import GroupPropertiesModal from '$lib/components/modals/GroupPropertiesModal.svelte'
-	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
-	import { MenuItem, PopupMenu } from '$lib/components/primitives'
+	import { MenuItem, PopupMenu, Skeleton } from '$lib/components/primitives'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { groups, type Group } from '$lib/stores/groups.svelte'
+	import { messages } from '$lib/stores/messages.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
+	import { showError } from '$lib/stores/notifications.svelte'
 	import { session } from '$lib/stores/session.svelte'
 
 	const chrome = useSystemChrome()
@@ -28,6 +30,7 @@
 	let removingUserId = $state<string | null>(null)
 	let isPropertiesOpen = $state(false)
 	let isAddMemberOpen = $state(false)
+	let isMessagingGroup = $state(false)
 	let isGroupMenuOpen = $state(false)
 	let groupMenuButtonEl: HTMLButtonElement | null = $state(null)
 	let memberMenuUserId = $state<string | null>(null)
@@ -94,6 +97,24 @@
 		isPropertiesOpen = true
 	}
 
+	async function messageGroup() {
+		if (!group || isMessagingGroup) return
+		isGroupMenuOpen = false
+		isMessagingGroup = true
+		try {
+			const thread = await messages.createThread({
+				group_ids: [group.id],
+				title: group.name,
+			})
+			if (thread) await goto(resolve(`/c/${thread.id}`))
+			else showError('could not start group conversation')
+		} catch {
+			showError('could not start group conversation')
+		} finally {
+			isMessagingGroup = false
+		}
+	}
+
 	async function removeMember(userId: string) {
 		if (!group || removingUserId) return
 		memberMenuUserId = null
@@ -145,9 +166,24 @@
 		style="padding-left: var(--spacing-page-x); padding-right: var(--spacing-page-x);"
 	>
 		{#if isLoading}
-			<div class="flex min-h-[45vh] items-center justify-center">
-				<NokodoLoader className="opacity-70" expanded={false} />
+			<div class="mb-8 flex flex-col gap-5 py-2">
+				<div
+					class="liquid-glass liquid-glass--frosted flex items-start gap-4 rounded-[22px] p-4"
+				>
+					<Skeleton shape="avatar" width="3.5rem" height="3.5rem" class="shrink-0" />
+					<div class="flex min-w-40 flex-1 flex-col gap-2.5">
+						<Skeleton shape="pill" width="55%" height="1.75rem" />
+						<Skeleton shape="lines" lines={2} />
+					</div>
+				</div>
 			</div>
+
+			<section class="flex flex-col gap-3">
+				<Skeleton shape="lines" lines={1} width="7rem" />
+				<div class="flex flex-col gap-2">
+					<Skeleton shape="row" count={5} lines={2} height="3.75rem" radius="lg" />
+				</div>
+			</section>
 		{:else if !group}
 			<div class="bg-foreground/5 rounded-2xl p-6 text-center">
 				<p class="text-foreground/50 text-sm">group not found</p>
@@ -168,7 +204,9 @@
 					<div class="flex min-w-40 flex-1 flex-col gap-1">
 						<h1 class="text-foreground truncate text-xl font-bold">{group.name}</h1>
 						{#if group.description}
-							<p class="text-foreground/60 text-sm">{group.description}</p>
+							<p class="text-foreground/60 text-sm select-text">
+								{group.description}
+							</p>
 						{/if}
 						<div
 							class="text-foreground/45 mt-1 flex flex-wrap items-center gap-2 text-xs"
@@ -186,6 +224,17 @@
 					<div
 						class="ml-auto flex shrink-0 items-center gap-1 max-[430px]:basis-full max-[430px]:justify-end"
 					>
+						{#if currentMembership}
+							<button
+								type="button"
+								class="rounded-pill hover:bg-foreground/8 text-foreground/60 flex size-10 cursor-pointer items-center justify-center border-none bg-transparent transition-colors disabled:opacity-55"
+								onclick={messageGroup}
+								disabled={isMessagingGroup}
+								aria-label="message group"
+							>
+								<ChatBubble class="size-4" />
+							</button>
+						{/if}
 						<button
 							type="button"
 							class="rounded-pill hover:bg-foreground/8 text-foreground/60 flex size-10 cursor-pointer items-center justify-center border-none bg-transparent transition-colors"
@@ -226,19 +275,17 @@
 							anchorEl={groupMenuButtonEl}
 							onClose={() => (isGroupMenuOpen = false)}
 						>
-							<MenuItem onclick={shareGroup}>
-								{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
-								share
-							</MenuItem>
+							{#if currentMembership}
+								<MenuItem icon={ChatBubble} onclick={messageGroup}>
+									message group
+								</MenuItem>
+							{/if}
+							<MenuItem icon={Share} onclick={shareGroup}>share</MenuItem>
 							{#if canManageGroup}
-								<MenuItem onclick={openAddMember}>
-									{#snippet icon()}<Plus class="h-4 w-4" />{/snippet}
-									add people
-								</MenuItem>
-								<MenuItem onclick={openProperties}>
-									{#snippet icon()}<Pencil class="h-4 w-4" />{/snippet}
-									properties
-								</MenuItem>
+								<MenuItem icon={Plus} onclick={openAddMember}>add people</MenuItem>
+								<MenuItem icon={Pencil} onclick={openProperties}
+									>properties</MenuItem
+								>
 							{/if}
 						</PopupMenu>
 					</div>

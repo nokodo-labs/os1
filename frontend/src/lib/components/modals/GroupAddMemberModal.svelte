@@ -7,6 +7,9 @@
 	import Search from '$lib/components/icons/Search.svelte'
 	import User from '$lib/components/icons/User.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import ModalActions, {
+		modalPrimaryButtonClass,
+	} from '$lib/components/modals/ModalActions.svelte'
 	import { DropdownSelect } from '$lib/components/primitives'
 	import { resourceAccentStyle, resourceVisual } from '$lib/resources/resourceVisuals'
 	import { groups, type Group, type GroupMemberRole } from '$lib/stores/groups.svelte'
@@ -36,8 +39,6 @@
 		'border-foreground/13 bg-background/70 shadow-[inset_0_1px_0_rgb(255_255_255/0.08)] backdrop-blur-[16px] backdrop-saturate-[1.08]'
 	const inputClass =
 		'border-foreground/12 bg-foreground/4 text-foreground/90 placeholder:text-foreground/35 min-h-10 w-full min-w-0 rounded-xl border px-3 py-2 outline-none transition-colors duration-150 focus:border-[color-mix(in_oklch,var(--accent-primary)_48%,transparent)] focus:bg-foreground/6 disabled:cursor-not-allowed disabled:opacity-55'
-	const actionButtonClass =
-		'rounded-pill inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55'
 	const groupVisual = resourceVisual('group')
 	const roleOptions = [
 		{ value: 'member', label: 'member' },
@@ -187,10 +188,10 @@
 			/>
 		</div>
 
-		<div class="flex justify-end gap-2 pt-1">
+		<ModalActions class="pt-1">
 			<button
 				type="button"
-				class="{actionButtonClass} bg-(--accent-primary) text-white hover:brightness-[1.06]"
+				class={modalPrimaryButtonClass}
 				disabled={!selected || adding}
 				onclick={addMember}
 			>
@@ -199,6 +200,6 @@
 						>add</span
 					>{/if}
 			</button>
-		</div>
+		</ModalActions>
 	</div>
 </BaseModal>

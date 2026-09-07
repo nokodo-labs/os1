@@ -43,7 +43,8 @@ class FriendsStore {
 	list = $state<FriendResponse[]>([])
 	incoming = $state<FriendshipDetail[]>([])
 	outgoing = $state<FriendshipDetail[]>([])
-	isReady = $state(false)
+	hasLoaded = $state(false)
+	error = $state<string | null>(null)
 
 	#fetchedAt = 0
 	#inFlight: Promise<void> | null = null
@@ -78,7 +79,8 @@ class FriendsStore {
 		this.list = []
 		this.incoming = []
 		this.outgoing = []
-		this.isReady = false
+		this.hasLoaded = false
+		this.error = null
 		this.#fetchedAt = 0
 	}
 
@@ -120,6 +122,7 @@ class FriendsStore {
 		if (!userId) return
 
 		this.#inFlight = (async () => {
+			this.error = null
 			try {
 				const [friendsRes, incomingRes, outgoingRes] = await Promise.all([
 					api.GET('/v1/users/{user_id}/friends', {
@@ -132,12 +135,19 @@ class FriendsStore {
 						params: { path: { user_id: userId } },
 					}),
 				])
+				// a failed fetch keeps the lists it had: it must never present as
+				// "no friends", and only a successful load flips `hasLoaded`.
+				if (friendsRes.error || incomingRes.error || outgoingRes.error) {
+					this.error = 'failed to load friends'
+					return
+				}
 				this.list = friendsRes.data ?? []
 				this.incoming = incomingRes.data ?? []
 				this.outgoing = outgoingRes.data ?? []
 				this.#fetchedAt = Date.now()
-			} finally {
-				this.isReady = true
+				this.hasLoaded = true
+			} catch {
+				this.error = 'failed to load friends'
 			}
 		})()
 

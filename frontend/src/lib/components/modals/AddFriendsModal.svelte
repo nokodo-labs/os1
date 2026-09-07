@@ -6,8 +6,9 @@
 	import Check from '$lib/components/icons/Check.svelte'
 	import Search from '$lib/components/icons/Search.svelte'
 	import User from '$lib/components/icons/User.svelte'
-	import UserPlus from '$lib/components/icons/UserPlusSolid.svelte'
+	import UserPlus from '$lib/components/icons/UserPlus.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import { Skeleton } from '$lib/components/primitives'
 	import { friends, type UserSearchResult } from '$lib/stores/friends.svelte'
 	import { getUserInitials } from '$lib/utils'
 	import { userDisplayName, userHandleOrId } from '$lib/utils/resourceAuthors'
@@ -142,15 +143,7 @@
 	<div class="flex flex-col gap-1">
 		{#if isSearching}
 			<div class="flex flex-col gap-2 py-6">
-				{#each [0, 1, 2] as i (i)}
-					<div class="flex items-center gap-3 rounded-xl p-3">
-						<div class="bg-foreground/8 h-10 w-10 animate-pulse rounded-full"></div>
-						<div class="flex flex-1 flex-col gap-1.5">
-							<div class="bg-foreground/8 h-3.5 w-28 animate-pulse rounded"></div>
-							<div class="bg-foreground/8 h-3 w-40 animate-pulse rounded"></div>
-						</div>
-					</div>
-				{/each}
+				<Skeleton shape="row" count={3} />
 			</div>
 		{:else if results.length > 0}
 			{#each results as user (user.id)}

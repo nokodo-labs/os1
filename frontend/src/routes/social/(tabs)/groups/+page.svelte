@@ -10,9 +10,7 @@
 	import UserGroup from '$lib/components/icons/UserGroup.svelte'
 	import GroupAddMemberModal from '$lib/components/modals/GroupAddMemberModal.svelte'
 	import GroupPropertiesModal from '$lib/components/modals/GroupPropertiesModal.svelte'
-	import NokodoLoader from '$lib/components/NokodoLoader.svelte'
-	import PageTitle from '$lib/components/PageTitle.svelte'
-	import { MenuItem, PopupMenu } from '$lib/components/primitives'
+	import { MenuItem, PopupMenu, Skeleton } from '$lib/components/primitives'
 	import Timestamp from '$lib/components/Timestamp.svelte'
 	import { useSystemChrome } from '$lib/contexts/systemChromeContext.svelte'
 	import { groups, type Group } from '$lib/stores/groups.svelte'
@@ -155,32 +153,20 @@
 			anchorEl={menuButtonEl}
 			onClose={() => (menuGroupId = null)}
 		>
-			<MenuItem onclick={() => shareGroup(group)}>
-				{#snippet icon()}<Share class="h-4 w-4" />{/snippet}
-				share
-			</MenuItem>
+			<MenuItem icon={Share} onclick={() => shareGroup(group)}>share</MenuItem>
 			{#if canManageGroup(group)}
-				<MenuItem onclick={() => openAddMember(group)}>
-					{#snippet icon()}<Plus class="h-4 w-4" />{/snippet}
-					add people
-				</MenuItem>
-				<MenuItem onclick={() => openProperties(group)}>
-					{#snippet icon()}<Pencil class="h-4 w-4" />{/snippet}
-					properties
-				</MenuItem>
+				<MenuItem icon={Plus} onclick={() => openAddMember(group)}>add people</MenuItem>
+				<MenuItem icon={Pencil} onclick={() => openProperties(group)}>properties</MenuItem>
 			{/if}
 		</PopupMenu>
 	</div>
 {/snippet}
 
-<div class="flex flex-1 flex-col gap-6 py-4">
-	<div class="flex items-center" style="view-transition-name: social-page-header;">
-		<PageTitle icon={UserGroup} label="groups" />
-	</div>
-
+<div class="flex flex-1 flex-col gap-6">
 	{#if isLoading}
-		<div class="flex min-h-40 items-center justify-center">
-			<NokodoLoader className="opacity-70" expanded={false} />
+		<div class="flex flex-col gap-2">
+			<Skeleton shape="lines" lines={1} width="11rem" class="px-2 py-2" />
+			<Skeleton shape="row" count={5} lines={2} height="3.5rem" radius="pill" />
 		</div>
 	{:else if groups.list.length === 0}
 		<div class="flex flex-1 flex-col items-center justify-center">
@@ -188,7 +174,7 @@
 				label="no groups yet"
 				description="create your first group to start collaborating. share notes, reminders, and threads with your team"
 			>
-				{#snippet icon()}<UserGroup class="h-10 w-10" />{/snippet}
+				{#snippet icon()}<UserGroup variant="solid" class="size-6" />{/snippet}
 			</EmptyState>
 		</div>
 	{:else}

@@ -7,7 +7,7 @@
 	import User from '$lib/components/icons/User.svelte'
 	import UserGroup from '$lib/components/icons/UserGroup.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
-	import type { UserPick } from '$lib/components/resource-access/resourceAccessModal'
+	import type { UserPick } from '$lib/components/share/shareModal'
 	import { friends } from '$lib/stores/friends.svelte'
 	import { groups } from '$lib/stores/groups.svelte'
 	import { showError } from '$lib/stores/notifications.svelte'

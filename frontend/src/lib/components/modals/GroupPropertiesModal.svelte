@@ -1,9 +1,10 @@
 <script lang="ts">
-	import ShimmerText from '$lib/components/effects/ShimmerText.svelte'
-	import Check from '$lib/components/icons/Check.svelte'
 	import Info from '$lib/components/icons/Info.svelte'
 	import Share from '$lib/components/icons/Share.svelte'
 	import BaseModal from '$lib/components/modals/BaseModal.svelte'
+	import { ModalFormDirty } from '$lib/components/modals/formDirty.svelte'
+	import ModalActions, { modalQuietButtonClass } from '$lib/components/modals/ModalActions.svelte'
+	import ModalSaveButton from '$lib/components/modals/ModalSaveButton.svelte'
 	import { resourceAccentStyle, resourceVisual } from '$lib/resources/resourceVisuals'
 	import { groups, type Group } from '$lib/stores/groups.svelte'
 	import { modals } from '$lib/stores/modals.svelte'
@@ -27,24 +28,24 @@
 	const fieldClass = `${panelClass} grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 rounded-[16px] border p-3`
 	const inputClass =
 		'border-foreground/12 bg-foreground/4 text-foreground/90 placeholder:text-foreground/35 min-h-10 w-full min-w-0 rounded-xl border px-3 py-2 outline-none transition-colors duration-150 focus:border-[color-mix(in_oklch,var(--accent-primary)_48%,transparent)] focus:bg-foreground/6 disabled:cursor-not-allowed disabled:opacity-55'
-	const actionButtonClass =
-		'rounded-pill inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 px-4 text-sm font-semibold transition-all duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55'
 	const groupVisual = resourceVisual('group')
 	const GroupIcon = groupVisual.icon
 	const groupAccentStyle = resourceAccentStyle('group')
 	const previewTitle = $derived(name.trim() || group.name || 'untitled group')
 	const previewDescription = $derived(description.trim() || `${group.memberships.length} members`)
+	const form = new ModalFormDirty(() => ({ name, description }))
 
 	$effect(() => {
 		if (open) {
 			name = group.name
 			description = group.description ?? ''
 			saving = false
+			form.reset()
 		}
 	})
 
 	async function save(): Promise<void> {
-		if (saving || !canManage || !name.trim()) return
+		if (saving || !canManage || !name.trim() || !form.dirty) return
 		saving = true
 		try {
 			const saved = await groups.update(group.id, {
@@ -128,28 +129,25 @@
 			></textarea>
 		</div>
 
-		<div class="flex items-center gap-2 pt-1 max-[520px]:flex-wrap">
-			<button
-				type="button"
-				class="{actionButtonClass} border-foreground/12 text-foreground/80 hover:bg-foreground/6 border bg-transparent"
-				disabled={saving}
-				onclick={shareGroup}
-			>
-				<Share class="h-4 w-4" />
-				<span>share</span>
-			</button>
-			<div class="flex-1"></div>
-			{#if canManage}
+		<ModalActions class="pt-1">
+			{#snippet leading()}
 				<button
-					type="submit"
-					class="{actionButtonClass} bg-(--accent-primary) text-white hover:brightness-[1.06]"
-					disabled={saving || !name.trim()}
+					type="button"
+					class={modalQuietButtonClass}
+					disabled={saving}
+					onclick={shareGroup}
 				>
-					<Check class="h-4 w-4" />
-					{#if saving}<ShimmerText className="inline-block">saving</ShimmerText
-						>{:else}<span>save</span>{/if}
+					<Share class="h-4 w-4" />
+					<span>share</span>
 				</button>
+			{/snippet}
+			{#if canManage}
+				<ModalSaveButton
+					dirty={form.dirty}
+					{saving}
+					blockedReason={name.trim() ? null : 'name is required'}
+				/>
 			{/if}
-		</div>
+		</ModalActions>
 	</form>
 </BaseModal>
