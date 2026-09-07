@@ -25,6 +25,7 @@ from api.v1.service.authorization import (
 	build_access_change_events,
 	capture_access_change,
 	enqueue_accessible_users_invalidation_for_subject,
+	enqueue_accessible_users_version_drop,
 	list_accessible_user_ids_for_resources,
 	require_permission,
 	require_resource_access,
@@ -255,7 +256,14 @@ async def delete_group(
 		await resource_refs_for_subject("group", group_id, session),
 		session,
 	)
+	# two different key sets, so these do not race: the call above bumps every
+	# resource this group is a SUBJECT of, while the drop below reaps the
+	# group's own counter as a RESOURCE. a group cannot grant access to itself
+	# (`ck_access_rules_no_self_group`), so the sets cannot overlap.
 	await enqueue_accessible_users_invalidation_for_subject("group", group_id, session)
+	# the row is gone for good, so reap the counter rather than leave behind a
+	# key that any ACL mutation created and nothing will ever read again.
+	enqueue_accessible_users_version_drop(ResourceType.GROUP, group_id, session)
 	member_user_ids = [m.user_id for m in group.memberships]
 	await invalidate_principals(member_user_ids)
 	delete_recipients = await list_accessible_user_ids_for_resources(

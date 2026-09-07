@@ -28,6 +28,7 @@ from api.v1.service.authorization import (
 	apply_metadata_write,
 	build_access_change_events,
 	capture_access_change,
+	enqueue_accessible_users_version_drop,
 	fetch_bulk_acl_metadata,
 	invalidate_accessible_users_for_resource,
 	list_accessible_user_ids_for_resources,
@@ -370,8 +371,11 @@ async def update_thread(
 			recipient_ids=prepared.recipient_ids,
 		)
 	await invalidate_resource_payload_cache(ResourceType.THREAD, thread_id)
-	if owner_changed:
-		# owner recipients changed.
+	# both invalidations happen before the vector-store calls: those reach the
+	# network and can raise, rolling back a change whose bust was skipped.
+	if owner_changed or new_project_ids is not None:
+		# owner recipients changed, or the project set the thread inherits from
+		# did.
 		await invalidate_accessible_users_for_resource(ResourceType.THREAD, thread_id)
 
 	# re-index if searchable fields changed
@@ -394,7 +398,6 @@ async def update_thread(
 		await sync_resource_refs_vector_acl([(ResourceType.THREAD, thread_id)], session)
 
 	if new_project_ids is not None:
-		await invalidate_accessible_users_for_resource(ResourceType.THREAD, thread_id)
 		await _invalidate_project_payload_caches(changed_project_ids)
 
 	if (
@@ -493,10 +496,13 @@ async def execute_thread_deletion(
 			session,
 		)
 
-	await invalidate_accessible_users_for_resource(ResourceType.THREAD, thread_id)
 	if hard_delete:
+		# the row is gone for good, so reap the counter rather than bump a key
+		# nothing will read again; a soft delete keeps the row and only invalidates.
+		enqueue_accessible_users_version_drop(ResourceType.THREAD, thread_id, session)
 		await session.delete(thread)
 	else:
+		await invalidate_accessible_users_for_resource(ResourceType.THREAD, thread_id)
 		thread.soft_delete()
 	await session.flush()
 
@@ -525,8 +531,7 @@ async def execute_thread_deletion(
 		THREAD_SPEC, resource_id=str(thread_id), session=session
 	)
 	# transcript passages are a second tier keyed by their own resource_id, so
-	# the thread-point removal above never matches them. same shape as
-	# delete_file -> remove_file_vectors(include_content_vectors=True).
+	# the thread-point removal above never matches them.
 	await purge_thread_content_vectors(session, thread_ids=[thread_id])
 	await _invalidate_project_payload_caches(project_ids)
 

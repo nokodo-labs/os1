@@ -22,6 +22,7 @@ from api.v1.service.authentication import Principal
 from api.v1.service.authorization import (
 	apply_metadata_write,
 	apply_resource_access_list_filters,
+	enqueue_accessible_users_version_drop,
 	invalidate_accessible_users_for_resource,
 	list_accessible_user_ids_for_resources,
 	require_permission,
@@ -520,7 +521,9 @@ async def delete_reminder_list(
 		recipient_ids=delete_recipients,
 	)
 	await invalidate_reminder_list_scheduled_items(reminder_list.id)
-	await invalidate_accessible_users_for_resource(ResourceType.REMINDER_LIST, list_id)
+	# the row is gone for good, so reap the counter rather than bump a key
+	# nothing will ever read again.
+	enqueue_accessible_users_version_drop(ResourceType.REMINDER_LIST, list_id, session)
 	await invalidate_project_payload_caches(project_ids)
 	await session.delete(reminder_list)
 	await session.flush()

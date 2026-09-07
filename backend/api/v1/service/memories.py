@@ -36,6 +36,7 @@ from api.v1.service.authentication import Principal
 from api.v1.service.authorization import (
 	apply_metadata_write,
 	apply_resource_access_list_filters,
+	enqueue_accessible_users_version_drop,
 	list_accessible_user_ids_for_resources,
 	project_private,
 	require_permission,
@@ -440,9 +441,8 @@ async def _get_memory(
 	principal: Principal,
 ) -> Memory:
 	stmt = select(Memory).where(Memory.id == memory_id)
-	# operator is the platform's answer to cross-user visibility; a raw
-	# is_superuser check here would 404 for an operator that the listing
-	# predicate happily shows.
+	# operator, not is_superuser: a raw superuser check would 404 for an
+	# operator that the listing predicate happily shows.
 	if not principal.is_resource_operator(ResourceType.MEMORY):
 		stmt = stmt.where(Memory.user_id == principal.user.id)
 	result = await session.execute(stmt)
@@ -613,6 +613,9 @@ async def delete_memory(
 		[(ResourceType.MEMORY, memory_id)], session
 	)
 
+	# the row is gone for good, so reap the counter rather than leave behind a
+	# key that any ACL mutation created and nothing will ever read again.
+	enqueue_accessible_users_version_drop(ResourceType.MEMORY, memory_id, session)
 	await session.delete(memory)
 
 	event = Event(

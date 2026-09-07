@@ -40,7 +40,7 @@ from api.v1.service.authentication import Principal
 from api.v1.service.authorization import (
 	apply_metadata_write,
 	apply_resource_access_list_filters,
-	invalidate_accessible_users_for_resource,
+	enqueue_accessible_users_version_drop,
 	list_accessible_user_ids_for_resources,
 	require_permission,
 	require_resource_access,
@@ -642,7 +642,9 @@ async def delete_project(
 	delete_recipients = await list_accessible_user_ids_for_resources(
 		[(ResourceType.PROJECT, project_id)], session
 	)
-	await invalidate_accessible_users_for_resource(ResourceType.PROJECT, project_id)
+	# the row is gone for good, so reap the counter rather than bump a key
+	# nothing will ever read again.
+	enqueue_accessible_users_version_drop(ResourceType.PROJECT, project_id, session)
 	await session.delete(project)
 	event = Event(
 		scope=EventScope.USER,

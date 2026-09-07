@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import delete, func, insert, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
 
 from api.database.post_commit import run_post_commit_actions_safely
@@ -39,7 +40,7 @@ from api.schemas.user import (
 	UserUpdate,
 )
 from api.settings import settings
-from api.v1.service.authentication import Principal
+from api.v1.service.authentication import Principal, build_principal
 from api.v1.service.authentication.cache import (
 	invalidate_principals,
 	mark_sessions_revoked,
@@ -300,10 +301,6 @@ async def create_user(
 	is_bootstrap = (user_count or 0) == 0
 	actor = principal.subject if principal else None
 
-	# determine what privilege level the new user can have:
-	# - bootstrap (first user): must request superuser explicitly (console setup)
-	# - unauthenticated: regular user only (is_active=True, is_superuser=False)
-	# - authenticated superuser: can set any privileges
 	if is_bootstrap:
 		if user_in.is_superuser is not True:
 			console_origin_value = settings.branding.public_console_origin
@@ -412,9 +409,8 @@ async def create_user(
 		await session.rollback()
 		_raise_user_integrity_error(exc)
 	await session.refresh(user)
-	# auto-signup roles may grant access to existing resources via
-	# AccessRule.subject_role_id; bust those caches so the new user
-	# becomes visible to recipients without waiting for the TTL.
+	# auto-signup roles can grant access via AccessRule.subject_role_id, so
+	# bust those caches rather than waiting out the TTL.
 	if role_ids:
 		await invalidate_accessible_users_for_role_defaults(
 			[TypeID(rid) for rid in role_ids], session
@@ -709,6 +705,26 @@ async def change_email(
 	return user
 
 
+async def _operator_resource_types(
+	user: User,
+	session: AsyncSession,
+) -> list[ResourceType]:
+	"""resource types this user reaches through the operator arm, not by rule.
+
+	an operator is folded into every resource of the type's accessible-user
+	set without any access rule naming them, so a subject-scoped invalidation
+	cannot find those entries. a superuser operates everything.
+	"""
+	if user.is_superuser:
+		return list(ResourceType)
+	principal = await build_principal(user, session)
+	return [
+		resource_type
+		for resource_type in ResourceType
+		if principal.is_resource_operator(resource_type)
+	]
+
+
 async def delete_user(
 	user_id: TypeID,
 	session: AsyncSession,
@@ -724,7 +740,11 @@ async def delete_user(
 			detail="cannot delete your own account",
 		)
 
-	result = await session.execute(select(User).where(User.id == user_id))
+	result = await session.execute(
+		# roles are eager-loaded because `_operator_resource_types` below reads
+		# them to decide whether this user reaches resources as an operator.
+		select(User).options(selectinload(User.roles)).where(User.id == user_id)
+	)
 	user = result.scalar_one_or_none()
 	if user is None:
 		raise HTTPException(
@@ -753,7 +773,10 @@ async def delete_user(
 		session,
 	)
 	await enqueue_accessible_users_invalidation_for_subject("user", user.id, session)
-	await invalidate_accessible_users_for_resource_types(list(ResourceType))
+	if operator_resource_types := await _operator_resource_types(user, session):
+		# no access rule names an operator, so the rule-derived invalidation
+		# above misses every resource of the types they operate.
+		await invalidate_accessible_users_for_resource_types(operator_resource_types)
 	revoked_ids = await revoke_all_sessions(session, user.id)
 	await session.delete(user)
 	await session.flush()

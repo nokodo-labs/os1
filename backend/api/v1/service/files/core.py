@@ -49,6 +49,7 @@ from api.v1.service.authentication import Principal, load_principal_for_user
 from api.v1.service.authorization import (
 	apply_metadata_write,
 	apply_resource_access_list_filters,
+	enqueue_accessible_users_version_drop,
 	invalidate_accessible_users_for_resource,
 	list_accessible_user_ids_for_resources,
 	project_private,
@@ -221,11 +222,8 @@ async def store_file(
 	file_id = new_typeid("file")
 	key = new_storage_key(prefix=key_prefix)
 
-	# a declared (often client-supplied) content type can disagree with the
-	# actual bytes - e.g. a jpeg labeled image/png - which downstream model
-	# providers reject. trust the content signature when it is authoritative.
-	# for streamed uploads, peek the leading bytes and re-chain them so the
-	# stream is still written in full.
+	# a client-declared content type can disagree with the bytes, which
+	# providers reject; streamed uploads are peeked and re-chained in full.
 	if isinstance(data, (bytes, bytearray, memoryview)):
 		head = bytes(data[:4096])
 	else:
@@ -456,9 +454,8 @@ async def register_stored_file(
 		if file_in.project_ids
 		else []
 	)
-	# size and checksum describe the BYTES, so they are read off the stored
-	# object rather than trusted from the payload - a caller could otherwise
-	# register a 2GB blob declaring one byte, and Content-Length would lie.
+	# size and checksum are read off the stored object, never trusted from the
+	# payload: a caller could otherwise declare one byte for a 2GB blob.
 	backend = get_storage_backend(private.storage_backend)
 	info = await backend.stat(private.storage_key)
 	if info is None:
@@ -929,7 +926,12 @@ async def delete_file(
 		recipient_ids=delete_recipients,
 	)
 	await invalidate_resource_payload_cache(ResourceType.FILE, file_id)
-	await invalidate_accessible_users_for_resource(ResourceType.FILE, file_id)
+	if hard_delete:
+		# the row is gone for good, so reap the counter rather than bump a key
+		# nothing will read again; a soft delete keeps the row and only invalidates.
+		enqueue_accessible_users_version_drop(ResourceType.FILE, file_id, session)
+	else:
+		await invalidate_accessible_users_for_resource(ResourceType.FILE, file_id)
 	await invalidate_project_payload_caches(project_ids)
 	await remove_file_vectors(str(file_id), session=session)
 

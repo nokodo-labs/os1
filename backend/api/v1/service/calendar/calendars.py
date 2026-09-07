@@ -15,6 +15,7 @@ from api.v1.service.authentication import Principal
 from api.v1.service.authorization import (
 	apply_metadata_write,
 	apply_resource_access_list_filters,
+	enqueue_accessible_users_version_drop,
 	invalidate_accessible_users_for_resource,
 	require_permission,
 	resource_access_predicate,
@@ -285,7 +286,9 @@ async def delete_calendar(
 		origin_session_id=origin_session_id,
 	)
 	await invalidate_calendar_scheduled_items(calendar.id)
-	await invalidate_accessible_users_for_resource(ResourceType.CALENDAR, calendar_id)
+	# the row is gone for good, so reap the counter rather than bump a key
+	# nothing will ever read again.
+	enqueue_accessible_users_version_drop(ResourceType.CALENDAR, calendar_id, session)
 	await invalidate_project_payload_caches(project_ids)
 	await session.delete(calendar)
 	await session.flush()

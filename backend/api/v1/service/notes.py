@@ -30,6 +30,7 @@ from api.v1.service.authentication import Principal
 from api.v1.service.authorization import (
 	apply_metadata_write,
 	apply_resource_access_list_filters,
+	enqueue_accessible_users_version_drop,
 	fetch_bulk_acl_metadata,
 	invalidate_accessible_users_for_resource,
 	list_accessible_user_ids_for_resources,
@@ -420,7 +421,12 @@ async def delete_note(
 		recipient_ids=delete_recipients,
 	)
 	await invalidate_resource_payload_cache(ResourceType.NOTE, note_id)
-	await invalidate_accessible_users_for_resource(ResourceType.NOTE, note_id)
+	if hard_delete:
+		# the row is gone for good, so reap the counter rather than bump a key
+		# nothing will read again; a soft delete keeps the row and only invalidates.
+		enqueue_accessible_users_version_drop(ResourceType.NOTE, note_id, session)
+	else:
+		await invalidate_accessible_users_for_resource(ResourceType.NOTE, note_id)
 	await invalidate_project_payload_caches(project_ids)
 
 	await remove_vectorized_resource(
