@@ -67,7 +67,7 @@ jobs:
 
       - name: checkout repository
         if: steps.config.outputs.has_config == 'true' && steps.diff.outputs.has_diff == 'true'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -109,7 +109,7 @@ jobs:
 
       - name: setup Node.js
         if: steps.config.outputs.has_config == 'true' && steps.diff.outputs.has_diff == 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
 
