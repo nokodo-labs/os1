@@ -1,11 +1,53 @@
+> [!IMPORTANT]
+> **OS1 has moved to [gitlab.com/nokodo/os1](https://gitlab.com/nokodo/os1).**
+> this repository is a pointer: no issues, no pull requests, no code. the README is kept
+> current so you can still follow the project from here.
+>
+> source, issues and merge requests: <https://gitlab.com/nokodo/os1>
+> releases: <https://gitlab.com/nokodo/os1/-/releases>
+> container images: `registry.gitlab.com/nokodo/os1/{backend,frontend,console}`
+> community: [discord](https://discord.gg/VsYwyTqzDM) · [ko-fi](https://ko-fi.com/nokodo)
+
+## why we left
+
+on 27 april 2026 GitHub's terms of service changed. section D.4 now reads:
+
+> You grant GitHub and our Affiliates the right to store, host, archive, parse, display, and make
+> copies of Your Content as necessary to provide, develop, and improve the Service, including by
+> training AI Features, and for the purpose of training, developing, and improving artificial
+> intelligence and machine learning models and technologies of our Affiliates.
+>
+> For the avoidance of doubt, use of Your Content to develop, train, and improve artificial
+> intelligence and machine learning models and technologies of GitHub and our Affiliates is
+> within the scope of this license and does not constitute a sale or other restricted transfer
+> of Your Content.
+
+that clause has no opt-out. the toggle GitHub shipped next to it covers Copilot interaction data,
+not the repositories themselves. GitHub calls the wording a clarification; its own documentation
+says the Copilot completion model "was trained on a wide range of high quality public GitHub
+repositories", and the affiliate in question is Microsoft.
+
+OS1 is open source under the [OS1 License](https://gitlab.com/nokodo/os1/-/blob/dev/LICENSE):
+use it, modify it, sell it, credit the author. AI training use is reserved to the copyright
+holders and licensed only on terms that credit OS1 on the output. hosting the code on a platform
+whose terms of service take that exact right for itself, without asking, cannot be reconciled
+with the license we ask everyone else to respect. so we left.
+
+> [!NOTE]
+> same project, same people, same license, one hosting provider fewer.
+
+---
+
 <div align="center">
 
 <img src="https://nokodo.net/static/os1/sidebar-logo.svg" alt="nokodo" width=83% />
 <div style="height: 30px;"></div>
 
-[![Stars](https://img.shields.io/github/stars/nokodo-labs/os1?style=social)](https://github.com/nokodo-labs/os1/stargazers)
+[![GitLab stars](https://img.shields.io/gitlab/stars/nokodo%2Fos1?style=social)](https://gitlab.com/nokodo/os1/-/starrers)
+[![GitHub stars](https://img.shields.io/github/stars/nokodo-labs/os1?style=social)](https://github.com/nokodo-labs/os1/stargazers)
 [![Discord](https://img.shields.io/badge/discord-join-5865F2)](https://discord.gg/VsYwyTqzDM)
-[![Issues](https://img.shields.io/github/issues/nokodo-labs/os1)](https://github.com/nokodo-labs/os1/issues)
+[![Issues](https://img.shields.io/gitlab/issues/open/nokodo%2Fos1)](https://gitlab.com/nokodo/os1/-/issues)
+[![Ko-fi](https://img.shields.io/badge/ko--fi-support-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/nokodo)
 
 </div>
 
@@ -119,7 +161,7 @@ https://github.com/user-attachments/assets/ddedb7be-1b99-4d25-b2b0-6c2dcfb28a65
 
 ### 🖌️ self-hostable, no restrictions
 
-- **fully open source** - permissive for commercial use, see [LICENSE](LICENSE)
+- **open source** - free to use, modify and sell with attribution, see [LICENSE](LICENSE)
 - **rebrand-friendly** - swap logos and colors, make it yours
 - **complete data control** - all data stays in your infrastructure
 
@@ -130,7 +172,7 @@ https://github.com/user-attachments/assets/ddedb7be-1b99-4d25-b2b0-6c2dcfb28a65
 clone the repo and use the production-ready compose file in `.docker/`:
 
 ```bash
-git clone https://github.com/nokodo-labs/os1.git
+git clone https://gitlab.com/nokodo/os1.git
 cd os1/.docker
 docker compose up -d
 ```
@@ -153,9 +195,9 @@ contributions are welcome! see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
 
 ## 📄 license
 
-OS1 is open-source under a permissive attribution license built on AGPL-3.0 with
-additional permissions that allow commercial and closed-source use. see
-[LICENSE](LICENSE) for details.
+OS1 is open source under the OS1 License: an attribution permission over base
+terms adapted from the AGPL-3.0, allowing commercial and closed-source use with credit,
+and reserving AI training use. see [LICENSE](LICENSE) for details.
 
 ---
 
@@ -167,6 +209,6 @@ additional permissions that allow commercial and closed-source use. see
 | **backend**  | FastAPI, Python 3.13+, SQLAlchemy 2.0+, PostgreSQL 17, Alembic |
 | **frontend** | Svelte 5, Vite, Vercel Streamdown, Tailwind 4, TypeScript      |
 | **console**  | Svelte 5, Vite, shadcn-svelte, Tailwind 4, TypeScript          |
-| **infra**    | Docker Compose, Nginx, GitHub Actions, custom release tooling  |
+| **infra**    | Docker Compose, Nginx, GitLab CI/CD, custom release tooling  |
 
 </details>
