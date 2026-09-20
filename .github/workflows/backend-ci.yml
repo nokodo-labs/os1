@@ -81,17 +81,17 @@ jobs:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/postgres
       QDRANT_URL: ":memory:"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: set up Python (from file)
         if: ${{ matrix.python == 'file' }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version-file: backend/.python-version
 
       - name: set up Python (explicit)
         if: ${{ matrix.python != 'file' }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "${{ matrix.python }}"
           allow-prereleases: true
